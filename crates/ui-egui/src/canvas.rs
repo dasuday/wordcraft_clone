@@ -1140,7 +1140,7 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
     };
     let delta = wheel_delta + auto_delta + middle_delta;
     let mut scroll_area = egui::ScrollArea::both()
-        .id_salt("canvas_scroll")
+        .id_salt(("canvas_scroll", app.active_document_id()))
         .auto_shrink([false, false])
         // Bringing the caret into view glides there, or jumps with animation effects off.
         .animated(animate)

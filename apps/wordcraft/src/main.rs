@@ -476,9 +476,14 @@ fn main() -> eframe::Result {
             // on File › Home, as Word does (#766), unless the Start screen option is off. Files
             // macOS hands over later open on top of it and close it (`apple_events`).
             if files.is_empty() && other_files.is_empty() && !sample && template.is_none() && control_port.is_none() {
-                app.start_screen();
+                if app.ui.start_screen {
+                    app.start_screen();
+                } else {
+                    app.restore_workspace();
+                }
             }
             let windows = document_windows::Launcher::default();
+            let mut opened_initial_file = false;
             for (index, f) in files.into_iter().enumerate() {
                 // The first command-line file belongs in this window, even if the Start screen
                 // preference is off. Every later file gets its own process, including while the
@@ -490,9 +495,19 @@ fn main() -> eframe::Result {
                     }
                     continue;
                 }
-                if let Err(e) = app.run("file.open", serde_json::json!({"path": f})) {
-                    log::warn!("{f}: {e}");
-                    app.status(format!("Couldn't open {f}: {e}"));
+                match app.run("file.open", serde_json::json!({"path": f})) {
+                    Ok(_) => {
+                        // An explicit startup file takes the place of the unused initial blank
+                        // tab. Subsequent files stay open as their own tabs.
+                        if !opened_initial_file && !sample {
+                            let _ = app.close_document_tab(0);
+                        }
+                        opened_initial_file = true;
+                    }
+                    Err(e) => {
+                        log::warn!("{f}: {e}");
+                        app.status(format!("Couldn't open {f}: {e}"));
+                    }
                 }
             }
             app.services.document_window = Some(windows.hook());
