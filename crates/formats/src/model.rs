@@ -127,6 +127,9 @@ pub struct Spacing {
     pub right: Option<f32>,
     /// First-line indent; negative = hanging.
     pub first: Option<f32>,
+    /// HTML's automatic space before / after (see `ParaProps::space_before_auto`).
+    pub before_auto: bool,
+    pub after_auto: bool,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -151,6 +154,8 @@ pub struct Para {
     /// Tracked formatting change of the paragraph: the paragraph's formatting before it (kind,
     /// list, alignment, page break, spacing and borders of `old`; its inlines are unused).
     pub fmt_change: Option<Box<FmtChange<Para>>>,
+    /// Formatting of an empty paragraph's mark (what sizes its line), when the source gives it.
+    pub mark: Option<Box<Fmt>>,
 }
 
 impl Para {
@@ -244,11 +249,14 @@ pub struct Cell {
     pub shading: Option<Rgb>,
     /// The cell's own borders (RTF `\clbrdr…`), drawn whatever the table's style.
     pub borders: Option<wordcraft_doc::props::Borders>,
+    /// The width, points, the source gives a cell spanning one column (HTML): see
+    /// [`FTable::widths_from_cells`].
+    pub width: Option<f32>,
 }
 
 impl Default for Cell {
     fn default() -> Self {
-        Cell { blocks: Vec::new(), colspan: 1, rowspan: 1, covered: false, header: false, shading: None, borders: None }
+        Cell { blocks: Vec::new(), colspan: 1, rowspan: 1, covered: false, header: false, shading: None, borders: None, width: None }
     }
 }
 
@@ -281,6 +289,22 @@ impl FTable {
     }
     /// After an importer that gives `rowspan` but no placeholder cells (HTML): insert covered
     /// cells into the rows below each spanning cell.
+    /// Grid column widths from the cells that give one (after [`Self::insert_covered`], so a
+    /// cell's column counts those spanned from rows above), when every column has one.
+    pub fn widths_from_cells(&mut self) {
+        let mut widths = vec![None; self.cols()];
+        for row in &self.rows {
+            let mut g = 0;
+            for c in row {
+                if let (Some(w), Some(slot)) = (c.width, widths.get_mut(g)) {
+                    slot.get_or_insert(w);
+                }
+                g += c.colspan.clamp(1, 63) as usize;
+            }
+        }
+        self.widths = widths.into_iter().collect::<Option<Vec<f32>>>().unwrap_or_default();
+    }
+
     pub fn insert_covered(&mut self) {
         // Each spanning cell touches up to `rowspan - 1` rows below it; a table of many rows each
         // carrying a large rowspan would otherwise be O(rows × rowspan) covered cells, each of
@@ -462,6 +486,12 @@ fn para_props(p: &Para, list_num: Option<u32>) -> ParaProps {
     out.indent_left = sp.left;
     out.indent_right = sp.right;
     out.indent_first = sp.first;
+    if sp.before_auto {
+        out.space_before_auto = Some(true);
+    }
+    if sp.after_auto {
+        out.space_after_auto = Some(true);
+    }
     if p.page_break {
         out.page_break_before = Some(true);
     }
@@ -520,6 +550,9 @@ impl<'a> Builder<'a> {
             };
             let old = para_props(&c.old, old_num);
             out.props.fmt_change = PropChange::boxed(self.revision(RevisionKind::Format, &c.mark), old);
+        }
+        if let Some(f) = &p.mark {
+            out.mark = char_props(f);
         }
         if p.keep_next {
             out.props.keep_next = Some(true);
@@ -906,6 +939,7 @@ fn flow_paras_in(doc: &Document, p: &Paragraph, tracked: bool) -> Vec<Para> {
         mark_ins: None,
         mark_del: None,
         fmt_change: None,
+        mark: None,
     };
     let in_code = kind == Kind::Code;
     let mut k = 0usize;
@@ -937,6 +971,7 @@ fn flow_paras_in(doc: &Document, p: &Paragraph, tracked: bool) -> Vec<Para> {
                         mark_ins: None,
                         mark_del: None,
                         fmt_change: None,
+                        mark: None,
                     };
                     let prev = std::mem::replace(&mut out, next);
                     if prev.inlines.is_empty() {
@@ -1062,6 +1097,7 @@ fn flow_table(doc: &Document, t: &Table, depth: usize, tracked: bool) -> FTable 
                 header,
                 shading: c.props.shading,
                 borders: c.props.borders,
+                width: None,
             });
         }
         rows.push(cells);

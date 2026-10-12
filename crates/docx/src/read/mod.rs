@@ -1,6 +1,7 @@
 //! DOCX → [`Document`].
 
 pub(crate) mod chart;
+mod chunk;
 pub(crate) mod diagram;
 mod drawing_color;
 mod embed;
@@ -13,7 +14,7 @@ mod shape_style;
 mod story;
 mod wordart;
 
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use wordcraft_doc::graphic::{Graphic, GraphicKind};
@@ -35,6 +36,9 @@ use crate::units::{flag, int, on_off, tw, u32_of};
 use crate::xml::El;
 pub(crate) use props::PropCtx;
 use story::StoryCtx;
+
+use chunk::ChunkState;
+pub use chunk::{AltChunk, ChunkImporter, ReadOptions};
 
 /// Most fonts read from a font table, and the longest name (hostile files).
 const MAX_TABLE_FONTS: usize = 2000;
@@ -77,12 +81,12 @@ pub(crate) struct Reader<'p> {
     pub bookmarks: HashMap<String, String>,
     /// Restrict Editing exception ranges (`w:permStart`): the file's id → ours.
     pub perms: HashMap<String, u32>,
+    /// The next permission range id to give out (chunks' ranges take theirs from it too).
+    pub next_perm: u32,
     /// Chart and diagram parts by path, parsed once.
     graphic_parts: HashMap<String, Option<Arc<El>>>,
     /// Charts and diagrams by (kind, part path, width bits, height bits), built once.
     graphics: HashMap<(GraphicKind, String, u32, u32), Arc<Graphic>>,
-    /// Graphic work left before charts and diagrams are left empty (see [`MAX_GRAPHIC_WORK`]).
-    graphic_budget: usize,
     /// Drawing ids connectors are glued to (`a:stCxn`, `a:endCxn`), and whether any shape's id
     /// was kept while reading (those not glued to are dropped at the end).
     pub glued: HashSet<u32>,
@@ -93,6 +97,8 @@ pub(crate) struct Reader<'p> {
     content_types: Option<ContentTypes>,
     /// Parts kept for charts, diagrams and OLE objects (see `embed`).
     embedded: EmbeddedManifest,
+    /// What alternative format chunks may still bring in, and how (see [`chunk`]).
+    chunks: ChunkState<'p>,
     /// Linked text boxes as read: (`wps:txbx/@id` or `wps:linkedTxbx/@id`, `seq` (0 for the box
     /// holding the text), text box part). See [`link_text_boxes`].
     pub txbx_links: Vec<(u32, u32, u32)>,
@@ -111,17 +117,24 @@ pub fn read(bytes: &[u8]) -> Result<Document, DocxError> {
     if crate::is_encrypted(bytes) {
         return crate::read_with_password(bytes, None);
     }
-    read_package(bytes)
+    read_package(bytes, None)
 }
 
-/// [`read`] for bytes known not to be an encrypted package.
-pub(crate) fn read_package(bytes: &[u8]) -> Result<Document, DocxError> {
-    read_opened(&Package::open(bytes)?)
+/// [`read`] for bytes known not to be an encrypted package; `chunks` imports alternative format
+/// chunks in formats other than WordprocessingML.
+pub(crate) fn read_package(bytes: &[u8], chunks: Option<ChunkImporter>) -> Result<Document, DocxError> {
+    read_opened(&Package::open(bytes)?, chunks)
 }
 
 /// Read a package whose parts are already unpacked (from a zip, a Flat OPC file or a converted
 /// Word 2003 XML document).
-pub(crate) fn read_opened(pkg: &Package) -> Result<Document, DocxError> {
+pub(crate) fn read_opened(pkg: &Package, chunks: Option<ChunkImporter>) -> Result<Document, DocxError> {
+    read_opened_in(pkg, ChunkState::new(chunks)).map(|(doc, ..)| doc)
+}
+
+/// [`read_opened`] with what chunks may still bring in; also gives the chunks, chunk bytes and
+/// graphic work left of that.
+fn read_opened_in(pkg: &Package, chunks: ChunkState) -> Result<(Document, usize, u64, usize), DocxError> {
     let root_rels = pkg.rels("");
     let main = root_rels.by_type(rt::OFFICE_DOC).filter(|r| !r.external).map(|r| r.target.clone()).unwrap_or_else(|| "word/document.xml".to_string());
     let Some(root) = pkg.xml(&main)? else {
@@ -150,15 +163,16 @@ pub(crate) fn read_opened(pkg: &Package) -> Result<Document, DocxError> {
         comments_ended: HashSet::new(),
         bookmarks: HashMap::new(),
         perms: HashMap::new(),
+        next_perm: 0,
         graphic_parts: HashMap::new(),
         graphics: HashMap::new(),
-        graphic_budget: MAX_GRAPHIC_WORK,
         glued: HashSet::new(),
         shape_ids: false,
         main: main.clone(),
         content_types: None,
         embedded: EmbeddedManifest::default(),
         txbx_links: Vec::new(),
+        chunks,
     };
     r.pc.major_font = r.doc.settings.major_font.clone();
     r.pc.minor_font = r.doc.settings.minor_font.clone();
@@ -248,7 +262,7 @@ pub(crate) fn read_opened(pkg: &Package) -> Result<Document, DocxError> {
     if let Some(body) = root.child("w:body") {
         let mut sc = StoryCtx::default();
         let mut blocks = Blocks::new();
-        r.read_blocks(&mut sc, body, &rels, &mut blocks, 0);
+        r.read_blocks(&mut sc, body, &rels, &mut blocks, r.chunks.depth);
         r.flush_pending(&mut sc, &mut blocks);
         r.doc.body = blocks;
         unstyle_toc_links(&mut r.doc);
@@ -290,9 +304,10 @@ pub(crate) fn read_opened(pkg: &Package) -> Result<Document, DocxError> {
     if r.shape_ids {
         keep_glued_ids(&mut r.doc, &r.glued);
     }
+    let (left, bytes, graphic) = (r.chunks.left, r.chunks.bytes, r.chunks.graphic);
     let mut doc = r.doc;
     doc.ensure_nonempty();
-    Ok(doc)
+    Ok((doc, left, bytes, graphic))
 }
 
 /// Most move ranges open at once, and most move names tracked, per file.
@@ -682,7 +697,7 @@ impl Reader<'_> {
         sc.in_hf = true;
         let mut blocks = Blocks::new();
         self.hf_depth += 1;
-        self.read_blocks(&mut sc, &root, &rels, &mut blocks, 0);
+        self.read_blocks(&mut sc, &root, &rels, &mut blocks, self.chunks.depth);
         self.hf_depth = self.hf_depth.saturating_sub(1);
         self.flush_pending(&mut sc, &mut blocks);
         if let Some(p) = self.doc.parts.get_mut(&id)
@@ -1157,7 +1172,7 @@ impl Reader<'_> {
             let mut sc = StoryCtx::default();
             let mut blocks = Blocks::new();
             self.current_note = Some((kind, id));
-            self.read_blocks(&mut sc, n, &rels, &mut blocks, 0);
+            self.read_blocks(&mut sc, n, &rels, &mut blocks, self.chunks.depth);
             self.flush_pending(&mut sc, &mut blocks);
             self.current_note = None;
             if let Some(p) = self.doc.parts.get_mut(&id)
@@ -1189,7 +1204,7 @@ impl Reader<'_> {
         let mut sc = StoryCtx::default();
         let mut blocks = Blocks::new();
         self.in_note_sep = true;
-        self.read_blocks(&mut sc, n, rels, &mut blocks, 0);
+        self.read_blocks(&mut sc, n, rels, &mut blocks, self.chunks.depth);
         self.flush_pending(&mut sc, &mut blocks);
         self.in_note_sep = false;
         if blocks.is_empty() {
@@ -1225,7 +1240,7 @@ impl Reader<'_> {
         let rels = self.pkg.rels(path);
         let mut by_para: HashMap<String, u32> = HashMap::new();
         let mut next_id = 0u32;
-        let mut entries: BTreeMap<u32, Comment> = BTreeMap::new();
+        // Straight into the document, beside the comments chunks in notes brought in.
         for c in root.children("w:comment") {
             if self.doc.parts.len() >= MAX_PARTS {
                 break;
@@ -1235,23 +1250,25 @@ impl Reader<'_> {
                 continue;
             }
             let id = match file_id.parse::<u32>() {
-                Ok(v) if !entries.contains_key(&v) => v,
+                Ok(v) if !self.doc.comments.contains_key(&v) => v,
                 _ => {
-                    while entries.contains_key(&next_id) || self.comment_map.values().any(|v| *v == next_id) {
+                    while self.doc.comments.contains_key(&next_id) || self.comment_map.values().any(|v| *v == next_id) {
                         next_id += 1;
                     }
                     next_id
                 }
             };
+            // Taken before its text is read: a chunk there brings comments of its own.
+            self.doc.comments.insert(id, Comment::default());
             let mut sc = StoryCtx::default();
             let mut blocks = Blocks::new();
-            self.read_blocks(&mut sc, c, &rels, &mut blocks, 0);
+            self.read_blocks(&mut sc, c, &rels, &mut blocks, self.chunks.depth);
             self.flush_pending(&mut sc, &mut blocks);
             let part = self.doc.add_part(PartKind::Comment, blocks);
             if let Some(pid) = c.children("w:p").last().and_then(|p| p.attr("w14:paraId")) {
                 by_para.insert(pid.to_string(), id);
             }
-            entries.insert(
+            self.doc.comments.insert(
                 id,
                 Comment {
                     author: c.attr("w:author").unwrap_or("").to_string(),
@@ -1272,7 +1289,7 @@ impl Reader<'_> {
                 let Some(cid) = e.attr("w15:paraId").and_then(|p| by_para.get(p)).copied() else { continue };
                 let parent = e.attr("w15:paraIdParent").and_then(|p| by_para.get(p)).copied().filter(|p| *p != cid);
                 let done = e.attr("w15:done").is_some_and(|v| v == "1" || v == "true");
-                if let Some(c) = entries.get_mut(&cid) {
+                if let Some(c) = self.doc.comments.get_mut(&cid) {
                     c.parent = parent;
                     c.resolved = done;
                 }
@@ -1291,7 +1308,7 @@ impl Reader<'_> {
             for e in x.els().filter(|e| e.local() == "commentId") {
                 let Some(cid) = local(e, "paraId").and_then(|p| by_para.get(&p).copied()) else { continue };
                 let Some(durable) = local(e, "durableId").filter(|d| crate::write::durable_id_ok(d)) else { continue };
-                if let Some(c) = entries.get_mut(&cid) {
+                if let Some(c) = self.doc.comments.get_mut(&cid) {
                     c.durable_id = Some(durable.to_ascii_uppercase());
                     by_durable.insert(durable.to_ascii_uppercase(), cid);
                 }
@@ -1303,12 +1320,11 @@ impl Reader<'_> {
             for e in x.els().filter(|e| e.local() == "commentExtensible") {
                 let Some(cid) = local(e, "durableId").and_then(|d| by_durable.get(&d.to_ascii_uppercase()).copied()) else { continue };
                 let date = local(e, "dateUtc").filter(|d| d.len() <= 40 && d.chars().all(|c| c.is_ascii_alphanumeric() || ":-.+".contains(c)));
-                if let (Some(c), Some(date)) = (entries.get_mut(&cid), date) {
+                if let (Some(c), Some(date)) = (self.doc.comments.get_mut(&cid), date) {
                     c.date_utc = Some(date);
                 }
             }
         }
-        self.doc.comments = entries;
         Ok(())
     }
 

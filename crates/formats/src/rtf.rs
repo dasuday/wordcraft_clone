@@ -2354,7 +2354,15 @@ fn spacing(st: &St) -> model::Spacing {
     } else {
         Some(LineSpacing::AtLeast(pt(sl)))
     };
-    model::Spacing { before: gap(st.sb), after: gap(st.sa), line, left: st.li.map(pt), right: st.ri.map(pt), first: st.fi.map(pt) }
+    model::Spacing {
+        before: gap(st.sb),
+        after: gap(st.sa),
+        line,
+        left: st.li.map(pt),
+        right: st.ri.map(pt),
+        first: st.fi.map(pt),
+        ..Default::default()
+    }
 }
 
 /// The target of a `HYPERLINK "url"` (or `HYPERLINK "url" \l "bookmark"`, `HYPERLINK \l "bookmark"`) field instruction.

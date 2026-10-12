@@ -209,6 +209,7 @@ Imported Word 97–2003 `.doc`/`.dot` files now ask for a supported DOCX target 
 | 2026-10-15 | Font box: a Recently Used Fonts section at the top of the list (the fonts applied lately, most recent first, ten at most, kept between runs), then All Fonts, as in Word (#2068) |
 | 2026-10-15 | A missing Thai document font (TH Sarabun New, Angsana New, Cordia New, the UPC families…) is substituted by one Thai face for the whole run, Latin letters and digits included, as Word substitutes Cordia New; Thai no longer sits in one font next to larger Latin in another (#1549) |
 |---|---|
+| 2026-10-19 | Documents that keep content in another format (`w:altChunk`: a web page, RTF, text or another Word document, as generators and mail-merge tools write them) show it where it stands, as Word does, instead of leaving it out; one such file in the docxide-pdf corpus opened as an empty page and now matches Word's 8 pages. `.mht` web archives open, and web pages open the way Word opens them (style sheets, paragraph margins, Times New Roman, single lines, automatic spacing). Insert › Text from File keeps the inserted file's pictures |
 | 2026-10-17 | Paste from LibreOffice: a paragraph indented on both sides (HTML `<blockquote>` on the clipboard) pastes as an indented Normal paragraph with LibreOffice's margins, not centred and italic in the Quote style (#1270). |
 | 2026-10-17 | DrawingML shape outlines retain explicit preset/custom dashes on screen and in PDF, including zero-width path strokes. |
 | 2026-10-17 | Missing Arial Unicode MS tries Arial and its proportional substitutes before code-font heuristics. |
@@ -506,6 +507,7 @@ Footer page-table height and body wrapping are corrected. Other pagination gaps 
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-19 | trivial | Progress log: alternative format chunks and MHT open |
 | 2026-10-19 | trivial | Progress log: forms protection keeps its content controls: no inserting, Properties or Remove Content Control |
 | 2026-10-19 | trivial | Progress log: text typed into a content control takes the control's formatting; localized placeholder styles recognised |
 | 2026-10-18 | trivial | Progress log: long navigation headings wrap within the pane instead of ending in an ellipsis (#3015) |
