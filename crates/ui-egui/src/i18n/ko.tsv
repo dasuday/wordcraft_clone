@@ -4,6 +4,8 @@
 	(no suggestions)	(제안 없음)
 	1.5 Line Spacing	1.5줄 간격
 	A free, open-source word processor written from scratch in Rust.\nPart of the Crafting Apps from the ArtCraft team.	Rust로 처음부터 새로 만든 무료 오픈 소스 워드 프로세서입니다.\nArtCraft 팀의 Crafting Apps 제품군에 속합니다.
+	3D Models	3D Models
+	3D models need a path: 3D rendering isn't supported, the model is kept as a labelled placeholder	3D models need a path: 3D rendering isn't supported, the model is kept as a labelled placeholder
 	About	정보
 	About WordCraft	WordCraft 정보
 	Accept	수락
@@ -19,6 +21,7 @@
 	Add space between Asian text and numbers	아시아 문자와 숫자 사이에 간격 추가
 	Add tab stop at:	탭 위치 추가:
 	Add Text	텍스트 추가
+	Add-ins	Add-ins
 	Add to Dictionary	사전에 추가
 	Add to Style Gallery	스타일 갤러리에 추가
 	Address Block	주소 블록
@@ -103,6 +106,7 @@
 	Legal style numbering	법률 형식 번호 매기기
 	Link level to style:	수준을 스타일에 연결:
 	List Definition	목록 정의
+	Media	Media
 	Mark grammar errors as you type	입력할 때 문법 오류 표시
 	Measurement units:	측정 단위:
 	Millimeters	밀리미터
@@ -114,6 +118,7 @@
 	Number alignment:	번호 맞춤:
 	Number format	번호 서식
 	Number style for this level:	이 수준의 번호 스타일:
+	Online Pictures	Online Pictures
 	Outside border	바깥쪽 테두리
 	Overtype	겹쳐쓰기
 	Overtype (typing replaces the characters after the caret)	겹쳐쓰기(입력한 문자가 커서 뒤의 문자를 대체함)
@@ -159,6 +164,8 @@
 	Spelling	맞춤법
 	Spelling and grammar are checked in English (United States).	맞춤법과 문법은 영어(미국)로 검사합니다.
 	Tab characters	탭 문자
+	Screenshot	Screenshot
+	screenshot capture isn't available here: take one with your system tool, then paste it or use Insert › Pictures	screenshot capture isn't available here: take one with your system tool, then paste it or use Insert › Pictures
 	Tab stop position:	탭 위치:
 	Default tab stops:	기본 탭 위치:
 	Tab stops to be cleared:	지울 탭 위치:
@@ -423,6 +430,7 @@
 	Formatting at Selection	선택 영역의 서식
 	Formula	수식
 	General	일반
+	Get Add-ins	Get Add-ins
 	Go To	이동
 	Go to	이동
 	Go To (⌘⌥G)	이동(⌘⌥G)
@@ -1924,7 +1932,9 @@
 	Recolor Selected Ink	선택한 잉크 색 변경
 	Add Pen	펜 추가
 	Remove Pen	펜 제거
+	Ink Equation	Ink Equation
 	Ink to Shape	잉크를 도형으로 변환
+	Convert to Math	Convert to Math
 	Convert to Shapes	도형으로 변환
 	Ink Replay	잉크 재생
 	Add\nPen	펜\n추가
@@ -2488,3 +2498,8 @@ preview	Title	제목
 	Bottom Right Cell	오른쪽 아래 셀
 	Inside Horizontal Border	안쪽 가로 테두리
 	Inside Vertical Border	안쪽 세로 테두리
+	Online Video	Online Video
+	Online\nVideo	Online\nVideo
+	online video needs a url, a path or a poster frame: paste a poster or use Insert › Pictures	online video needs a url, a path or a poster frame: paste a poster or use Insert › Pictures
+	Get\nAdd-ins	Get\nAdd-ins
+	Ink to Math	Ink to Math

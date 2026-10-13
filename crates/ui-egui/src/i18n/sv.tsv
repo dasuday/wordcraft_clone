@@ -18,6 +18,8 @@
 	(no suggestions)	(inga förslag)
 	1.5 Line Spacing	Radavstånd 1,5
 	A free, open-source word processor written from scratch in Rust.\nPart of the Crafting Apps from the ArtCraft team.	En gratis ordbehandlare med öppen källkod, skriven från grunden i Rust.\nEn del av Crafting Apps från ArtCraft-teamet.
+	3D Models	3D Models
+	3D models need a path: 3D rendering isn't supported, the model is kept as a labelled placeholder	3D models need a path: 3D rendering isn't supported, the model is kept as a labelled placeholder
 	About	Om
 	About WordCraft	Om WordCraft
 	Accept	Acceptera
@@ -31,6 +33,7 @@
 	Add space between Asian text and numbers	Lägg till mellanrum mellan asiatisk text och siffror
 	Add tab stop at:	Lägg till tabbstopp vid:
 	Add Text	Lägg till text
+	Add-ins	Add-ins
 	Add a Table	Lägg till en tabell
 	Add a comment	Lägg till en kommentar
 	Add to Dictionary	Lägg till i ordlistan
@@ -112,6 +115,7 @@
 	Legal style numbering	Numrering i juridisk stil
 	Link level to style:	Koppla nivån till stil:
 	List Definition	Listdefinition
+	Media	Media
 	Mark grammar errors as you type	Visa grammatikfel medan du skriver
 	Measurement units:	Måttenheter:
 	Millimeters	Millimeter
@@ -123,6 +127,7 @@
 	Number alignment:	Justering av nummer:
 	Number format	Nummerformat
 	Number style for this level:	Numreringsstil för den här nivån:
+	Online Pictures	Online Pictures
 	Outside border	Yttre kantlinje
 	Overtype	Överskrivning
 	Overtype (typing replaces the characters after the caret)	Överskrivning (det du skriver ersätter tecknen efter markören)
@@ -174,6 +179,8 @@
 	Spelling	Stavning
 	Spelling and grammar are checked in English (United States).	Stavning och grammatik kontrolleras på engelska (USA).
 	Tab characters	Tabbtecken
+	Screenshot	Screenshot
+	screenshot capture isn't available here: take one with your system tool, then paste it or use Insert › Pictures	screenshot capture isn't available here: take one with your system tool, then paste it or use Insert › Pictures
 	Tab stop position:	Tabbstoppets position:
 	Default tab stops:	Standardtabbstopp:
 	Tab stops to be cleared:	Tabbstopp som ska rensas:
@@ -425,6 +432,7 @@
 	Formatting at Selection	Formatering vid markeringen
 	Formula	Formel
 	General	Allmänt
+	Get Add-ins	Get Add-ins
 	Go To	Gå till
 	Go To (⌘⌥G)	Gå till (⌘⌥G)
 	Go To…	Gå till…
@@ -1961,7 +1969,9 @@
 	Recolor Selected Ink	Färga om markerat bläck
 	Add Pen	Lägg till penna
 	Remove Pen	Ta bort penna
+	Ink Equation	Ink Equation
 	Ink to Shape	Bläck till figur
+	Convert to Math	Convert to Math
 	Convert to Shapes	Konvertera till figurer
 	Ink Replay	Spela upp bläck
 	Add\nPen	Lägg till\npenna
@@ -2647,3 +2657,8 @@ preview	Title	Titel
 	Bottom Right Cell	Nedre högra cellen
 	Inside Horizontal Border	Inre vågrät kantlinje
 	Inside Vertical Border	Inre lodrät kantlinje
+	Online Video	Online Video
+	Online\nVideo	Online\nVideo
+	online video needs a url, a path or a poster frame: paste a poster or use Insert › Pictures	online video needs a url, a path or a poster frame: paste a poster or use Insert › Pictures
+	Get\nAdd-ins	Get\nAdd-ins
+	Ink to Math	Ink to Math

@@ -20,6 +20,8 @@
 	(no suggestions)	(няма предложения)
 	1.5 Line Spacing	Междуредие 1,5
 	A free, open-source word processor written from scratch in Rust.\nPart of the Crafting Apps from the ArtCraft team.	Безплатен текстообработващ редактор с отворен код, написан от нулата на Rust.\nЧаст от Crafting Apps на екипа на ArtCraft.
+	3D Models	3D Models
+	3D models need a path: 3D rendering isn't supported, the model is kept as a labelled placeholder	3D models need a path: 3D rendering isn't supported, the model is kept as a labelled placeholder
 	About	Относно
 	About WordCraft	За WordCraft
 	Accept	Приемане
@@ -33,6 +35,7 @@
 	Add space between Asian text and numbers	Добавяне на интервал между азиатски текст и числа
 	Add tab stop at:	Добавяне на позиция на табулатора при:
 	Add Text	Добавяне на текст
+	Add-ins	Add-ins
 	Add a Table	Добавяне на таблица
 	Add a comment	Добавяне на коментар
 	Add to Dictionary	Добавяне в речника
@@ -96,11 +99,16 @@
 	Legal style numbering	Номериране в юридически стил
 	Link level to style:	Свързване на нивото със стил:
 	List Definition	Дефиниция на списък
+	Media	Media
 	No document is open. Create a document or open one first.	Няма отворен документ. Първо създайте или отворете документ.
 	Nothing	Нищо
 	Number alignment:	Подравняване на номера:
 	Number format	Формат на номера
 	Number style for this level:	Стил на номериране за това ниво:
+	Online Pictures	Online Pictures
+	Online Video	Online Video
+	Online\nVideo	Online\nVideo
+	online video needs a url, a path or a poster frame: paste a poster or use Insert › Pictures	online video needs a url, a path or a poster frame: paste a poster or use Insert › Pictures
 	Only for the selected text	Само за избрания текст
 	Outside border	Външна граница
 	Restart list after:	Рестартиране на списъка след:
@@ -135,6 +143,8 @@
 	Border Painter	Рисуване на граници
 	Border\nPainter	Рисуване\nна граници
 	Borders	Граници
+	Screenshot	Screenshot
+	screenshot capture isn't available here: take one with your system tool, then paste it or use Insert › Pictures	screenshot capture isn't available here: take one with your system tool, then paste it or use Insert › Pictures
 	Tab stop position:	Позиция на табулатора:
 	Default tab stops:	Позиции на табулатора по подразбиране:
 	Tab stops to be cleared:	Позиции на табулатора за изчистване:
@@ -372,6 +382,8 @@
 	Formatting at Selection	Форматиране при селекцията
 	Formula	Формула
 	General	Общи
+	Get Add-ins	Get Add-ins
+	Get\nAdd-ins	Get\nAdd-ins
 	Go To	Отиване до
 	Go To (⌘⌥G)	Отиване до (⌘⌥G)
 	Go To…	Отиване до…
@@ -1653,7 +1665,10 @@
 	Recolor Selected Ink	Прецветяване на избраното мастило
 	Add Pen	Добавяне на писалка
 	Remove Pen	Премахване на писалка
+	Ink Equation	Ink Equation
+	Ink to Math	Ink to Math
 	Ink to Shape	Мастило във фигура
+	Convert to Math	Convert to Math
 	Convert to Shapes	Преобразуване във фигури
 	Ink Replay	Възпроизвеждане на мастилото
 	Add\nPen	Добавяне\nна писалка

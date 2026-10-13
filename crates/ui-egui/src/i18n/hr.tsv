@@ -58,6 +58,8 @@
 	ASAP	ASAP
 	AaBbCcDd	AaBbCcDd
 	AaBbYyZz	AaBbYyZz
+	3D Models	3D Models
+	3D models need a path: 3D rendering isn't supported, the model is kept as a labelled placeholder	3D models need a path: 3D rendering isn't supported, the model is kept as a labelled placeholder
 	About	O programu
 	About WordCraft	O programu WordCraft
 	Above Chart	Iznad grafikona
@@ -88,6 +90,7 @@
 	Add Shape	Dodaj oblik
 	Add Space Before Paragraph	Dodaj razmak prije odlomka
 	Add Text	Dodaj tekst
+	Add-ins	Add-ins
 	Add a Table	Dodaj tablicu
 	Add a comment	Dodaj komentar
 	Add at least one field.	Dodajte barem jedno polje.
@@ -919,6 +922,7 @@
 	GOST (title sort)	GOST (sortiranje po naslovu)
 	Gallery	Galerija
 	General	Općenito
+	Get Add-ins	Get Add-ins
 	Geometry	Geometrija
 	German (Germany)	Njemački (Njemačka)
 	Glow	Sjaj
@@ -1053,6 +1057,7 @@
 	Ink	Rukopis
 	Ink Replay	Reprodukcija rukopisa
 	Ink to Shape	Rukopis u oblik
+	Convert to Math	Convert to Math
 	Ink to\nMath	Rukopis u\nmatematiku
 	Ink to\nShape	Rukopis u\noblik
 	Ink\nReplay	Reprodukcija\nrukopisa
@@ -1263,6 +1268,7 @@ template	Letter	Pismo
 	Link…	Poveznica…
 	List	Popis
 	List Definition	Definicija popisa
+	Media	Media
 	List Paragraph	Odlomak popisa
 	List Table 3 – Blue	Tablica popisa 3 – plava
 	List Table 3 – Green	Tablica popisa 3 – zelena
@@ -1469,6 +1475,7 @@ template	Letter	Pismo
 	Number of the page the field sits on	Broj stranice na kojoj se nalazi polje
 	Number of the section the field sits in	Broj odjeljka u kojem se nalazi polje
 	Number style for this level:	Stil brojeva za ovu razinu:
+	Online Pictures	Online Pictures
 	Number the equation; the number sits at the right margin (or type # then the number)	Numerirajte jednadžbu; broj se nalazi na desnoj margini (ili upišite # pa broj)
 	Numbering	Numeriranje
 	Numbering:	Numeriranje:
@@ -1756,6 +1763,7 @@ template	Letter	Pismo
 	Remove Hyperlink	Ukloni poveznicu
 	Remove Password	Ukloni lozinku
 	Remove Pen	Ukloni olovku
+	Ink Equation	Ink Equation
 	Remove Space After Paragraph	Ukloni razmak nakon odlomka
 	Remove Table of Contents	Ukloni sadržaj
 	Remove Watermark	Ukloni vodeni žig
@@ -2171,6 +2179,8 @@ template	Letter	Pismo
 	Tab character	Znak tabulatora
 	Tab characters	Znakovi tabulatora
 	Tab leader:	Vodeća crta tabulatora:
+	Screenshot	Screenshot
+	screenshot capture isn't available here: take one with your system tool, then paste it or use Insert › Pictures	screenshot capture isn't available here: take one with your system tool, then paste it or use Insert › Pictures
 	Tab stop position:	Položaj tabulatora:
 	Tab stops to be cleared:	Tabulatori za brisanje:
 	Table	Tablica
@@ -2632,3 +2642,8 @@ preview	Title	Naslov
 	Bottom Right Cell	Donja desna ćelija
 	Inside Horizontal Border	Unutarnji vodoravni obrub
 	Inside Vertical Border	Unutarnji okomiti obrub
+	Online Video	Online Video
+	Online\nVideo	Online\nVideo
+	online video needs a url, a path or a poster frame: paste a poster or use Insert › Pictures	online video needs a url, a path or a poster frame: paste a poster or use Insert › Pictures
+	Get\nAdd-ins	Get\nAdd-ins
+	Ink to Math	Ink to Math

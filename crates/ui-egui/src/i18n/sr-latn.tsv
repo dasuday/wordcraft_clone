@@ -17,6 +17,8 @@
 	1.5 Line Spacing	Proređenost 1,5
 	A free, open-source word processor written from scratch in Rust.\nPart of the Crafting Apps from the ArtCraft team.	Besplatan, otvoreni obrađivač teksta napisan od nule u Rust-u.\nDeo Crafting Apps paketa tima ArtCraft.
 	A password is required to open this document.	Za otvaranje ovog dokumenta potrebna je lozinka.
+	3D Models	3D Models
+	3D models need a path: 3D rendering isn't supported, the model is kept as a labelled placeholder	3D models need a path: 3D rendering isn't supported, the model is kept as a labelled placeholder
 	About	O programu
 	About WordCraft	O WordCraft-u
 	Accept	Prihvati
@@ -32,6 +34,7 @@
 	Add space between Asian text and numbers	Dodaj razmak između azijskog teksta i brojeva
 	Add tab stop at:	Dodaj tabulator na:
 	Add Text	Dodaj tekst
+	Add-ins	Add-ins
 	Add to Dictionary	Dodaj u rečnik
 	Add to Style Gallery	Dodaj u galeriju stilova
 	Address Block	Blok adrese
@@ -140,6 +143,7 @@
 	List Definition	Definicija liste
 	Mark grammar errors as you type	Označavaj gramatičke greške tokom kucanja
 	Measurement units:	Jedinice mere:
+	Media	Media
 	Millimeters	Milimetri
 	New comments and tracked changes are recorded under this name and these initials.	Novi komentari i praćene izmene beleže se pod ovim imenom i inicijalima.
 	New word	Nova reč
@@ -150,6 +154,10 @@
 	Number alignment:	Poravnanje broja:
 	Number format	Format broja
 	Number style for this level:	Stil broja za ovaj nivo:
+	Online Pictures	Online Pictures
+	Online Video	Online Video
+	Online\nVideo	Online\nVideo
+	online video needs a url, a path or a poster frame: paste a poster or use Insert › Pictures	online video needs a url, a path or a poster frame: paste a poster or use Insert › Pictures
 	Only for the selected text	Samo za izabrani tekst
 	Outside border	Spoljna ivica
 	In Default apps, choose WordCraft for the document types you want it to open.	U podrazumevanim aplikacijama izaberite WordCraft za vrste dokumenata koje želite da otvara.
@@ -209,6 +217,8 @@
 	Preview	Pregled
 	Remove Password	Ukloni lozinku
 	Save documents	Čuvanje dokumenata
+	Screenshot	Screenshot
+	screenshot capture isn't available here: take one with your system tool, then paste it or use Insert › Pictures	screenshot capture isn't available here: take one with your system tool, then paste it or use Insert › Pictures
 	Search	Pretraga
 	Shadow, glow and soft edges	Senka, sjaj i meke ivice
 	Shape Effects	Efekti oblika
@@ -479,6 +489,8 @@
 	Formatting at Selection	Formatiranje na izboru
 	Formula	Formula
 	General	Opšte
+	Get Add-ins	Get Add-ins
+	Get\nAdd-ins	Get\nAdd-ins
 	Go To	Idi na
 	Go to	Idi na
 	Go To (⌘⌥G)	Idi na (⌘⌥G)
@@ -1949,7 +1961,10 @@
 	Recolor Selected Ink	Promeni boju izabranog rukopisa
 	Add Pen	Dodaj pero
 	Remove Pen	Ukloni pero
+	Ink Equation	Ink Equation
+	Ink to Math	Ink to Math
 	Ink to Shape	Rukopis u oblik
+	Convert to Math	Convert to Math
 	Convert to Shapes	Pretvori u oblike
 	Ink Replay	Rukopis repriza
 	Add\nPen	Dodaj\npero

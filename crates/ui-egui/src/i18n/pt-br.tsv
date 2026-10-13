@@ -15,6 +15,8 @@
 	(no suggestions)	(sem sugestões)
 	1.5 Line Spacing	Espaçamento de 1,5 linha
 	A free, open-source word processor written from scratch in Rust.\nPart of the Crafting Apps from the ArtCraft team.	Um processador de texto gratuito e de código aberto, escrito do zero em Rust.\nFaz parte dos Crafting Apps da equipe ArtCraft.
+	3D Models	3D Models
+	3D models need a path: 3D rendering isn't supported, the model is kept as a labelled placeholder	3D models need a path: 3D rendering isn't supported, the model is kept as a labelled placeholder
 	About	Sobre
 	About WordCraft	Sobre o WordCraft
 	Accept	Aceitar
@@ -30,6 +32,7 @@
 	Add space between Asian text and numbers	Adicionar espaço entre texto asiático e números
 	Add tab stop at:	Adicionar tabulação em:
 	Add Text	Adicionar texto
+	Add-ins	Add-ins
 	Add to Dictionary	Adicionar ao dicionário
 	Add to Style Gallery	Adicionar à galeria de estilos
 	Address Block	Bloco de endereço
@@ -115,6 +118,7 @@
 	List Definition	Definição da lista
 	Mark grammar errors as you type	Marcar erros gramaticais enquanto você digita
 	Measurement units:	Unidades de medida:
+	Media	Media
 	Millimeters	Milímetros
 	New comments and tracked changes are recorded under this name and these initials.	Novos comentários e alterações controladas são registrados com este nome e estas iniciais.
 	New word	Nova palavra
@@ -125,6 +129,10 @@
 	Number alignment:	Alinhamento do número:
 	Number format	Formato do número
 	Number style for this level:	Estilo de número deste nível:
+	Online Pictures	Online Pictures
+	Online Video	Online Video
+	Online\nVideo	Online\nVideo
+	online video needs a url, a path or a poster frame: paste a poster or use Insert › Pictures	online video needs a url, a path or a poster frame: paste a poster or use Insert › Pictures
 	Only for the selected text	Somente para o texto selecionado
 	Outside border	Borda externa
 	Overtype	Sobrescrever
@@ -170,6 +178,8 @@
 	Border Painter	Pincel de bordas
 	Border\nPainter	Pincel\nde bordas
 	Borders	Bordas
+	Screenshot	Screenshot
+	screenshot capture isn't available here: take one with your system tool, then paste it or use Insert › Pictures	screenshot capture isn't available here: take one with your system tool, then paste it or use Insert › Pictures
 	Search	Pesquisar
 	Show the mini toolbar when text is selected	Mostrar a minibarra de ferramentas ao selecionar texto
 	Spaces	Espaços
@@ -432,6 +442,8 @@
 	Formatting at Selection	Formatação na seleção
 	Formula	Fórmula
 	General	Geral
+	Get Add-ins	Get Add-ins
+	Get\nAdd-ins	Get\nAdd-ins
 	Go To	Ir para
 	Go to	Ir para
 	Go To (⌘⌥G)	Ir para (⌘⌥G)
@@ -1951,7 +1963,10 @@
 	Recolor Selected Ink	Mudar a cor da tinta selecionada
 	Add Pen	Adicionar caneta
 	Remove Pen	Remover caneta
+	Ink Equation	Ink Equation
+	Ink to Math	Ink to Math
 	Ink to Shape	Tinta para forma
+	Convert to Math	Convert to Math
 	Convert to Shapes	Converter em formas
 	Ink Replay	Reproduzir tinta
 	Add\nPen	Adicionar\ncaneta

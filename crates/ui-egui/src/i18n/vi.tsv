@@ -20,6 +20,8 @@
 	(no suggestions)	(không có gợi ý)
 	1.5 Line Spacing	Giãn dòng 1,5
 	A free, open-source word processor written from scratch in Rust.\nPart of the Crafting Apps from the ArtCraft team.	Trình xử lý văn bản miễn phí, mã nguồn mở được viết từ đầu bằng Rust.\nMột phần trong bộ ứng dụng Crafting Apps của đội ngũ ArtCraft.
+	3D Models	3D Models
+	3D models need a path: 3D rendering isn't supported, the model is kept as a labelled placeholder	3D models need a path: 3D rendering isn't supported, the model is kept as a labelled placeholder
 	About	Giới thiệu
 	About WordCraft	Giới thiệu về WordCraft
 	Accept	Chấp nhận
@@ -33,6 +35,7 @@
 	Add space between Asian text and numbers	Thêm khoảng cách giữa chữ châu Á và chữ số
 	Add tab stop at:	Thêm mốc tab tại:
 	Add Text	Thêm văn bản
+	Add-ins	Add-ins
 	Add a Table	Thêm bảng
 	Add a comment	Thêm nhận xét
 	Add to Dictionary	Thêm vào từ điển
@@ -95,10 +98,12 @@
 	Legal style numbering	Đánh số kiểu pháp lý
 	Link level to style:	Liên kết cấp độ với kiểu:
 	List Definition	Định nghĩa danh sách
+	Media	Media
 	Nothing	Không có
 	Number alignment:	Căn lề số:
 	Number format	Định dạng số
 	Number style for this level:	Kiểu số cho cấp độ này:
+	Online Pictures	Online Pictures
 	Outside border	Viền ngoài
 	Restart list after:	Đánh số lại sau:
 	Right border	Viền phải
@@ -129,6 +134,8 @@
 	Border Painter	Cọ vẽ viền
 	Border\nPainter	Cọ vẽ\nviền
 	Borders	Đường viền
+	Screenshot	Screenshot
+	screenshot capture isn't available here: take one with your system tool, then paste it or use Insert › Pictures	screenshot capture isn't available here: take one with your system tool, then paste it or use Insert › Pictures
 	Tab stop position:	Vị trí mốc tab:
 	Default tab stops:	Mốc tab mặc định:
 	Tab stops to be cleared:	Mốc tab cần xóa:
@@ -366,6 +373,7 @@
 	Formatting at Selection	Định dạng tại vùng chọn
 	Formula	Công thức
 	General	Chung
+	Get Add-ins	Get Add-ins
 	Go To	Đi tới
 	Go To (⌘⌥G)	Đi tới (⌘⌥G)
 	Go To…	Đi tới…
@@ -1642,7 +1650,9 @@
 	Recolor Selected Ink	Đổi màu mực đã chọn
 	Add Pen	Thêm bút
 	Remove Pen	Gỡ bút
+	Ink Equation	Ink Equation
 	Ink to Shape	Mực thành hình
+	Convert to Math	Convert to Math
 	Convert to Shapes	Chuyển thành hình
 	Ink Replay	Phát lại mực
 	Add\nPen	Thêm\nbút
@@ -2672,3 +2682,8 @@ template	Letter	Thư
 # Reading Mode column widths (#1040)
 	Narrow	Hẹp
 	Medium	Trung bình
+	Online Video	Online Video
+	Online\nVideo	Online\nVideo
+	online video needs a url, a path or a poster frame: paste a poster or use Insert › Pictures	online video needs a url, a path or a poster frame: paste a poster or use Insert › Pictures
+	Get\nAdd-ins	Get\nAdd-ins
+	Ink to Math	Ink to Math
