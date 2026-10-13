@@ -495,10 +495,14 @@ pub fn status_bar(app: &mut WordApp, ui: &mut Ui) {
                         tl!("The spelling dictionary for {language} couldn't be read, so it isn't checked. File: {file}. Reason: {reason}"),
                         &[("language", &lang), ("file", &file.to_string_lossy()), ("reason", reason)],
                     ),
-                    (None, Some(name)) => crate::i18n::fmt(
-                        tl!("No spelling dictionary for {language} is installed, so it isn't checked. WordCraft looks for the Hunspell dictionary {name} in the WORDCRAFT_DICTIONARIES folder and in the usual system locations."),
-                        &[("language", &lang), ("name", name)],
-                    ),
+                    (None, Some(name)) => {
+                        let base = crate::i18n::fmt(
+                            tl!("No spelling dictionary for {language} is installed, so it isn't checked. WordCraft looks for the Hunspell dictionary {name} in the WORDCRAFT_DICTIONARIES folder and in the usual system locations."),
+                            &[("language", &lang), ("name", name)],
+                        );
+                        let hint = distro_package_hint(name);
+                        if hint.is_empty() { base } else { format!("{base}{hint}") }
+                    }
                     (None, None) => tl!("Language").to_string(),
                 };
                 let resp = st(ui, &shown).on_hover_text(tip);
@@ -614,6 +618,22 @@ fn small_icon(ui: &mut Ui, icon: &str, tip: &str) -> bool {
     }
     icons::paint(ui.painter(), r.shrink(3.0), icon, t.icon, t.accent);
     resp.on_hover_text(tip).clicked()
+}
+
+fn distro_package_hint(name: &str) -> &'static str {
+    match name {
+        "es_ES" | "es" => " (e.g. package hunspell-es on Debian/Ubuntu/Fedora, hunspell-es_es on Arch).",
+        "es_MX" => " (e.g. package hunspell-es on Debian/Ubuntu, hunspell-es_mx on Arch).",
+        "pl_PL" | "pl" => " (e.g. package hunspell-pl on Debian/Ubuntu/Fedora/Arch).",
+        "pt_BR" | "pt" => " (e.g. package hunspell-pt-br on Debian/Ubuntu, hunspell-pt_BR on Arch).",
+        "it_IT" | "it" => " (e.g. package hunspell-it on Debian/Ubuntu/Fedora/Arch).",
+        "hr_HR" | "hr" => " (e.g. package hunspell-hr on Debian/Ubuntu, hunspell-hr on Arch).",
+        "tr_TR" | "tr" => " (e.g. package hunspell-tr on Debian/Ubuntu/Fedora/Arch).",
+        "ru_RU" | "ru" => " (e.g. package hunspell-ru on Debian/Ubuntu/Fedora/Arch).",
+        "cs_CZ" | "cs" => " (e.g. package hunspell-cs on Debian/Ubuntu/Fedora/Arch).",
+        "id_ID" | "id" => " (e.g. package hunspell-id on Debian/Ubuntu/Fedora/Arch).",
+        _ => "",
+    }
 }
 
 impl WordApp {

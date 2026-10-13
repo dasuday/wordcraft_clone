@@ -483,6 +483,26 @@ pub struct CoreProps {
     pub created: String,
     pub modified: String,
     pub revision: u32,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub language: String,
+}
+
+/// Theme font languages (`w:themeFontLang` in `word/settings.xml`, ECMA-376 §17.15.1.88).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(default, rename_all = "camelCase")]
+pub struct ThemeFontLang {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub val: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub east_asia: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bidi: Option<String>,
+}
+
+impl ThemeFontLang {
+    pub fn is_empty(&self) -> bool {
+        self.val.is_none() && self.east_asia.is_none() && self.bidi.is_none()
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -579,6 +599,9 @@ pub struct Settings {
     /// comments and tracked changes are saved without `w:date`.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub remove_date_time: bool,
+    /// Theme font languages (`w:themeFontLang` in `word/settings.xml`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub theme_font_lang: Option<ThemeFontLang>,
 }
 
 /// A saved zoom: a percentage, or a fit mode (the percentage it last came to).
@@ -694,6 +717,7 @@ impl Default for Settings {
             zoom: None,
             remove_personal_info: false,
             remove_date_time: false,
+            theme_font_lang: None,
         }
     }
 }

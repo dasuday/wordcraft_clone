@@ -52,7 +52,7 @@ pub struct LangInfo {
 }
 
 /// The registry. English first: it is the fallback and the source language.
-pub static LANGUAGES: [LangInfo; 23] = [
+pub static LANGUAGES: [LangInfo; 24] = [
     LangInfo { code: "en", name: "English", source: "", prefer_hans: false, editing_lang: None, catalog: OnceLock::new() },
     // Simplified Chinese; `zh`, `zh-CN`, `zh-SG` and `zh-Hans-*` resolve here (see `candidates`).
     LangInfo {
@@ -84,8 +84,24 @@ pub static LANGUAGES: [LangInfo; 23] = [
     LangInfo {
         code: "uk", name: "Українська", source: include_str!("uk.tsv"), prefer_hans: false, editing_lang: None, catalog: OnceLock::new()
     },
-    // Spanish, neutral across Spain and Latin America; `es-ES`, `es-MX`, `es-419` … resolve here.
-    LangInfo { code: "es", name: "Español", source: include_str!("es.tsv"), prefer_hans: false, editing_lang: None, catalog: OnceLock::new() },
+    // Spanish, neutral across Spain and Latin America; `es`, `es-ES`, `es-419` … resolve here.
+    LangInfo {
+        code: "es",
+        name: "Español",
+        source: include_str!("es.tsv"),
+        prefer_hans: false,
+        editing_lang: Some("es-ES"),
+        catalog: OnceLock::new(),
+    },
+    // Mexican Spanish; `es-MX`, `es_MX.UTF-8` and `es-Latn-MX` resolve here.
+    LangInfo {
+        code: "es-mx",
+        name: "Español (México)",
+        source: include_str!("es-mx.tsv"),
+        prefer_hans: false,
+        editing_lang: Some("es-MX"),
+        catalog: OnceLock::new(),
+    },
     // Brazilian Portuguese; `pt-BR` and `pt-BR-*` resolve here. Plain `pt` and `pt-PT` have no
     // catalog yet (the European vocabulary differs), so they stay in English.
     LangInfo {
@@ -278,6 +294,11 @@ fn candidates(tag: &str) -> Vec<String> {
     let mut out = Vec::new();
     for n in (1..=parts.len()).rev() {
         out.push(parts.get(..n).unwrap_or_default().join("-"));
+    }
+    if parts.len() >= 3 && parts.get(1).is_some_and(|p| p.len() == 4) {
+        // Strip a script subtag to try language-region (e.g. es-Latn-MX -> es-mx).
+        let without_script = format!("{}-{}", parts[0], parts[2]);
+        out.insert(out.len().saturating_sub(1), without_script);
     }
     if primary == "zh" && !parts.iter().any(|p| matches!(*p, "hans" | "hant")) {
         // Chinese by region when no script is given.
