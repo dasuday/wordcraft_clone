@@ -173,6 +173,13 @@ impl CanvasState {
         self.unit_drag = None;
     }
 
+    /// Whole-page texture for the read-only mirror (`tiling`): pages too tall
+    /// for one GPU texture render as tiles instead and have none here —
+    /// the mirror draws its grey placeholder for those.
+    pub(crate) fn page_texture(&self, page: usize) -> Option<&TextureHandle> {
+        self.textures.get(&page).map(|(_, t)| t)
+    }
+
     /// How many pages have a cached rendering.
     #[cfg(test)]
     pub(crate) fn texture_count(&self) -> usize {

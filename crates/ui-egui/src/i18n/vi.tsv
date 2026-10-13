@@ -62,6 +62,7 @@
 	Apply Character Style	Áp dụng kiểu ký tự
 	Apply Style	Áp dụng kiểu
 	Arrange	Sắp xếp
+	Arrange All	Arrange All
 	Arrange\nAll	Sắp xếp\ntất cả
 	Arrow	Mũi tên
 	Artistic Effects	Hiệu ứng nghệ thuật
@@ -766,6 +767,8 @@
 	Show/Hide ¶	Hiện/Ẩn ¶
 	Show\nComments	Hiện\nnhận xét
 	Shrink Font 1 Point	Giảm cỡ phông chữ 1 pt
+	Side by Side	Side by Side
+	Side by\nSide	Side by\nSide
 	Side to Side	Xem cạnh nhau
 	Side\nto Side	Xem\ncạnh nhau
 	Signature Line	Dòng chữ ký
@@ -812,8 +815,12 @@
 	Superscript	Chỉ số trên
 	Switch Modes	Chuyển chế độ
 	Switch\nModes	Chuyển\nchế độ
+	Switch Windows	Switch Windows
+	Switch\nWindows	Switch\nWindows
 	Symbol	Ký hiệu
 	Symbols	Các ký hiệu
+	Sync\nScrolling	Sync\nScrolling
+	Synchronous Scrolling	Synchronous Scrolling
 	Synonyms	Từ đồng nghĩa
 	Tab	Tab
 	Tab character	Ký tự tab
@@ -893,6 +900,7 @@
 	Vertical Alignment	Căn dọc
 	View	Xem
 	View Gridlines	Hiện đường lưới bảng
+	View Side by Side	View Side by Side
 	View State	Trạng thái hiển thị
 	Views	Các chế độ xem
 	Voice	Giọng nói

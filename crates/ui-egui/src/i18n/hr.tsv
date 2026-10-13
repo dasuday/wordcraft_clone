@@ -184,6 +184,7 @@
 	Arch Up	Luk prema gore
 	Area	Površina
 	Arrange	Rasporedi
+	Arrange All	Arrange All
 	Arrange\nAll	Rasporedi\nsve
 	Arrow	Strelica
 	Arrows	Strelice
@@ -2002,6 +2003,8 @@ template	Letter	Pismo
 	Shows steps that repeat, around a circle.	Prikazuje korake koji se ponavljaju, u krugu.
 	Shrink Font 1 Point	Smanji font za 1 točku
 	Shrink text	Smanji tekst
+	Side by Side	Side by Side
+	Side by\nSide	Side by\nSide
 	Side to Side	S jedne strane na drugu
 	Side\nto Side	S jedne\nstrane na drugu
 	Sides of a right triangle	Stranice pravokutnog trokuta
@@ -2158,8 +2161,12 @@ template	Letter	Pismo
 	Swedish	Švedski
 	Switch Modes	Promijeni način
 	Switch\nModes	Promijeni\nnačin
+	Switch Windows	Switch Windows
+	Switch\nWindows	Switch\nWindows
 	Symbol	Simbol
 	Symbols	Simboli
+	Sync\nScrolling	Sync\nScrolling
+	Synchronous Scrolling	Synchronous Scrolling
 	Synonyms	Sinonimi
 	System	Sustav
 	TC entry fields	Polja stavki TC
@@ -2391,6 +2398,7 @@ preview	Title	Naslov
 	View	Prikaz
 	View Alt Text…	Prikaži alternativni tekst…
 	View Gridlines	Prikaži crte mreže
+	View Side by Side	View Side by Side
 	View State	Stanje prikaza
 	Views	Prikazi
 	Visual effects	Vizualni efekti
