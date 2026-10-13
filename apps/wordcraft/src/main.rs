@@ -1,6 +1,6 @@
 //! WordCraft desktop app.
 //!
-//! Usage: `wordcraft [--control <port>] [--sample] [files…]`
+//! Usage: `wordcraft [--control <port>] [--sample] [--plugin <dir>…] [files…]`
 //!
 //! `--control <port>` (or `WORDCRAFT_CONTROL_PORT`) starts a localhost JSON-lines control server:
 //! `{"id":1,"key":"…","method":"engine.execute","params":{"command":"text.insert","params":{"text":"Hi"}}}`.
@@ -175,6 +175,25 @@ fn load_user_fonts() {
     }
 }
 
+/// Add-ins: those named with `--plugin`, in `WORDCRAFT_PLUGIN_PATH` and in `plugins` in
+/// the settings folder, where File › Options › Add-ins installs them too. The ones the user
+/// turned off stay off. Runs without preferences don't read the settings folder's.
+fn load_plugins(app: &WordApp, extra: &[std::path::PathBuf]) {
+    let mut dirs = extra.to_vec();
+    if prefs_enabled()
+        && let Some(dir) = wordcraft_control_key::settings_dir().map(|d| d.join("plugins"))
+    {
+        wordcraft_plugin::install::set_install_dir(Some(dir.clone()));
+        dirs.push(dir);
+    }
+    for (dir, r) in wordcraft_plugin::autoload(&dirs) {
+        if let Err(e) = r {
+            log::warn!("add-in {}: {e}", dir.display());
+        }
+    }
+    wordcraft_engine::cmd::plugins::apply_prefs(&app.session.prefs);
+}
+
 /// The saved window geometry, read before the window opens (`load_prefs` runs after).
 fn saved_window() -> Option<WindowGeometry> {
     if !prefs_enabled() {
@@ -239,10 +258,12 @@ fn main() -> eframe::Result {
     let mut control_port: Option<u16> = std::env::var("WORDCRAFT_CONTROL_PORT").ok().and_then(|p| p.parse().ok());
     let mut files = Vec::new();
     let mut sample = false;
+    let mut plugin_dirs: Vec<std::path::PathBuf> = Vec::new();
     let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
         match a.as_str() {
             "--control" => control_port = args.next().and_then(|p| p.parse().ok()),
+            "--plugin" => plugin_dirs.extend(args.next().map(std::path::PathBuf::from)),
             "--sample" => sample = true,
             "--version" => {
                 println!("wordcraft {} ({})", env!("CARGO_PKG_VERSION"), build_sha());
@@ -320,6 +341,7 @@ fn main() -> eframe::Result {
             let mut app = WordApp::new(session, services(file_dialog, &cc.egui_ctx));
             load_prefs(&mut app);
             load_user_dictionary(&mut app);
+            load_plugins(&app, &plugin_dirs);
             // A region chosen in File › Options replaces the system's for the first blank
             // document too (#838).
             if !sample && app.session.prefs.region.is_some() {

@@ -2083,3 +2083,32 @@
 	Table Properties…	Propriétés du tableau…
 	Search	Rechercher
 	Title Bar	Barre de titre
+	Add-ins	Compléments
+	Get Add-ins	Obtenir des compléments
+	Get\nAdd-ins	Obtenir des\ncompléments
+	Load Add-in	Charger un complément
+	Load Add-in…	Charger un complément…
+	Install Add-in from GitHub	Installer un complément depuis GitHub
+	Unload Add-in	Décharger le complément
+	Turn Add-in On or Off	Activer ou désactiver le complément
+	Add-in Documentation	Documentation du complément
+	Run Add-in Command	Exécuter une commande du complément
+	Add-in manifest	Manifeste de complément
+	Install from GitHub:	Installer depuis GitHub :
+	Install	Installer
+	Installing…	Installation…
+	Installed {name}	{name} installé
+	An add-in is a program that runs with your permissions. Install it only if you trust its author.	Un complément est un programme qui s’exécute avec vos autorisations. Installez-le seulement si vous faites confiance à son auteur.
+	Install and run {repo}?	Installer et exécuter {repo} ?
+	Documentation	Documentation
+	Activate	Activer
+	Deactivate	Désactiver
+	Unload	Décharger
+	Until the next start	Jusqu’au prochain démarrage
+	Active	Actif
+	Inactive	Inactif
+	No add-ins are loaded.	Aucun complément n’est chargé.
+	owner/repository	propriétaire/dépôt
+	Pick the add-in's plugin.json	Choisir le fichier plugin.json du complément
+	Add-ins need the desktop app.	Les compléments nécessitent l’application de bureau.
+	There's no add-ins folder to install into.	Il n’y a pas de dossier de compléments où installer.

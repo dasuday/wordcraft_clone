@@ -2459,3 +2459,32 @@ preview	Title	Esempio
 	Automatic ({region})	Automatico ({region})
 	Search	Cerca
 	Title Bar	Barra del titolo
+	Add-ins	Componenti aggiuntivi
+	Get Add-ins	Ottieni componenti aggiuntivi
+	Get\nAdd-ins	Ottieni\ncomponenti
+	Load Add-in	Carica componente aggiuntivo
+	Load Add-in…	Carica componente aggiuntivo…
+	Install Add-in from GitHub	Installa componente aggiuntivo da GitHub
+	Unload Add-in	Scarica componente aggiuntivo
+	Turn Add-in On or Off	Attiva o disattiva componente aggiuntivo
+	Add-in Documentation	Documentazione del componente aggiuntivo
+	Run Add-in Command	Esegui comando del componente aggiuntivo
+	Add-in manifest	Manifesto del componente aggiuntivo
+	Install from GitHub:	Installa da GitHub:
+	Install	Installa
+	Installing…	Installazione…
+	Installed {name}	{name} installato
+	An add-in is a program that runs with your permissions. Install it only if you trust its author.	Un componente aggiuntivo è un programma che viene eseguito con le tue autorizzazioni. Installalo solo se ti fidi del suo autore.
+	Install and run {repo}?	Installare ed eseguire {repo}?
+	Documentation	Documentazione
+	Activate	Attiva
+	Deactivate	Disattiva
+	Unload	Scarica
+	Until the next start	Fino al prossimo avvio
+	Active	Attivo
+	Inactive	Inattivo
+	No add-ins are loaded.	Nessun componente aggiuntivo caricato.
+	owner/repository	proprietario/repository
+	Pick the add-in's plugin.json	Scegli il file plugin.json del componente aggiuntivo
+	Add-ins need the desktop app.	I componenti aggiuntivi richiedono l’app desktop.
+	There's no add-ins folder to install into.	Non c’è una cartella dei componenti aggiuntivi in cui installare.

@@ -1,6 +1,6 @@
 # WordCraft architecture
 
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-10 · **Change:** minor (`proof` is per language: English and Polish; previously major: first committed version; `plan/architecture.md` is local-only) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4
+> **Last reviewed:** 2026-10-14 · **Last updated:** 2026-10-14 · **Change:** minor (`plugin` crate: add-ins; previously minor: `proof` is per language: English and Polish; previously major: first committed version; `plan/architecture.md` is local-only) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4
 
 How WordCraft is built today (origin/main `40c5d51`). The longer design notes in
 `plan/architecture.md` are gitignored and local to the original author's machine; this file is the
@@ -8,7 +8,7 @@ committed, current summary. Rules for working in the code are in [`AGENTS.md`](.
 
 ## Layers
 
-~85,600 lines of Rust, 15 crates, 3 apps and `xtask`. Layering is enforced by `cargo xtask layers`:
+~86,900 lines of Rust, 16 crates, 3 apps and `xtask`. Layering is enforced by `cargo xtask layers`:
 a crate may only depend on crates in lower layers, and nothing below L6 depends on egui, eframe,
 winit or rfd.
 
@@ -24,6 +24,7 @@ winit or rfd.
 | L2 | `formats` | 10.6k | TXT, Markdown, HTML, RTF, ODT and LaTeX import/export through a shared intermediate model |
 | L3 | `render` | 0.6k | vello_cpu rasteriser: pages and thumbnails from the display list; PNG/JPEG |
 | L3 | `pdf` | 1.6k | krilla PDF export: font subsets, selectable text, links, outline, tagging |
+| L3 | `plugin` | 1.2k | Add-in host ([plugins.md](plugins.md)): `plugin.json` manifests, out-of-process add-ins over JSON-RPC on stdio (timeouts, restart, failure limit), install from GitHub (`ureq`, release zip per platform or source), the reference add-in `wordcraft-example-plugin` |
 | L4 | `engine` | 15.2k | `Session` (document, selection, undo, layout cache, view state), **command registry** (422 `CommandSpec`s in `cmd/*.rs`), Word feature catalog (`catalog.rs`), samples, file I/O dispatch (`io.rs`), Read Aloud sentence model |
 | L4 | `zotero` | 1.7k | Zotero's word-processor integration protocol answered against a `Session` |
 | L4 | `control-key` | 0.1k | Per-window control-port key files shared by the app and the MCP bridge |
@@ -47,6 +48,9 @@ winit or rfd.
 4. **Draw:** the UI paints pages through `render` (CPU raster, cached per page, pixel-aligned) on
    an egui/wgpu canvas; PDF export walks the same display list through `pdf`.
 5. **Save:** `engine::io` picks a writer by extension.
+6. **Add-ins:** `plugins.run` sends an add-in the selection and the caret's paragraph and runs the
+   engine commands it answers with, inside its own `Session::run`, so they are one undo step and a
+   failure restores the document. Add-ins are separate processes started on first use (`plugin`).
 
 ## Testing and gates
 
@@ -64,5 +68,6 @@ winit or rfd.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-14 | minor | `plugin` (L3): out-of-process add-ins; `plugins.run` runs their answers as one undo step |
 | 2026-10-10 | minor | `proof`: proofing languages (English, Polish), affix engine, Polish patterns; layout and engine route each run by its language |
 | 2026-10-10 | major | First committed architecture doc, from the crates' sources and `AGENTS.md` |

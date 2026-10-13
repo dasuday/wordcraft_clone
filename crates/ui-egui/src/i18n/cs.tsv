@@ -2080,3 +2080,32 @@
 	Automatic ({region})	Automaticky ({region})
 	Search	Hledat
 	Title Bar	Záhlaví okna
+	Add-ins	Doplňky
+	Get Add-ins	Získat doplňky
+	Get\nAdd-ins	Získat\ndoplňky
+	Load Add-in	Načíst doplněk
+	Load Add-in…	Načíst doplněk…
+	Install Add-in from GitHub	Nainstalovat doplněk z GitHubu
+	Unload Add-in	Uvolnit doplněk
+	Turn Add-in On or Off	Zapnout nebo vypnout doplněk
+	Add-in Documentation	Dokumentace doplňku
+	Run Add-in Command	Spustit příkaz doplňku
+	Add-in manifest	Manifest doplňku
+	Install from GitHub:	Nainstalovat z GitHubu:
+	Install	Nainstalovat
+	Installing…	Instalace…
+	Installed {name}	Nainstalováno: {name}
+	An add-in is a program that runs with your permissions. Install it only if you trust its author.	Doplněk je program, který běží s vašimi oprávněními. Instalujte ho, jen pokud důvěřujete jeho autorovi.
+	Install and run {repo}?	Nainstalovat a spustit {repo}?
+	Documentation	Dokumentace
+	Activate	Aktivovat
+	Deactivate	Deaktivovat
+	Unload	Uvolnit
+	Until the next start	Do příštího spuštění
+	Active	Aktivní
+	Inactive	Neaktivní
+	No add-ins are loaded.	Nejsou načteny žádné doplňky.
+	owner/repository	vlastník/úložiště
+	Pick the add-in's plugin.json	Vyberte soubor plugin.json doplňku
+	Add-ins need the desktop app.	Doplňky vyžadují desktopovou aplikaci.
+	There's no add-ins folder to install into.	Není k dispozici složka doplňků, do které by se dalo instalovat.

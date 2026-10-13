@@ -2085,3 +2085,32 @@
 	Start-up	Pokretanje
 	Show the Start screen when WordCraft starts	Prikaži početni ekran pri pokretanju programa WordCraft
 	On: WordCraft opens on File › Home, with a blank document, the templates and your recent documents. Off: it opens a blank document.	Uključeno: WordCraft se otvara na Fajl › Početak, sa praznim dokumentom, šablonima i nedavnim dokumentima. Isključeno: otvara prazan dokument.
+	Add-ins	Dodaci
+	Get Add-ins	Preuzmi dodatke
+	Get\nAdd-ins	Preuzmi\ndodatke
+	Load Add-in	Učitaj dodatak
+	Load Add-in…	Učitaj dodatak…
+	Install Add-in from GitHub	Instaliraj dodatak sa GitHub-a
+	Unload Add-in	Ukloni dodatak iz memorije
+	Turn Add-in On or Off	Uključi ili isključi dodatak
+	Add-in Documentation	Dokumentacija dodatka
+	Run Add-in Command	Pokreni komandu dodatka
+	Add-in manifest	Manifest dodatka
+	Install from GitHub:	Instaliraj sa GitHub-a:
+	Install	Instaliraj
+	Installing…	Instaliranje…
+	Installed {name}	Instalirano: {name}
+	An add-in is a program that runs with your permissions. Install it only if you trust its author.	Dodatak je program koji radi sa vašim dozvolama. Instalirajte ga samo ako verujete njegovom autoru.
+	Install and run {repo}?	Instalirati i pokrenuti {repo}?
+	Documentation	Dokumentacija
+	Activate	Aktiviraj
+	Deactivate	Deaktiviraj
+	Unload	Ukloni
+	Until the next start	Do sledećeg pokretanja
+	Active	Aktivan
+	Inactive	Neaktivan
+	No add-ins are loaded.	Nema učitanih dodataka.
+	owner/repository	vlasnik/spremište
+	Pick the add-in's plugin.json	Izaberite plugin.json datoteku dodatka
+	Add-ins need the desktop app.	Dodacima je potrebna aplikacija za računar.
+	There's no add-ins folder to install into.	Nema fascikle dodataka u koju bi se instaliralo.

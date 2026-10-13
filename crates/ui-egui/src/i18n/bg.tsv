@@ -2464,3 +2464,32 @@
 	Table Properties…	Свойства на таблица…
 	Search	Търсене
 	Title Bar	Заглавна лента
+	Add-ins	Добавки
+	Get Add-ins	Вземане на добавки
+	Get\nAdd-ins	Вземане на\nдобавки
+	Load Add-in	Зареждане на добавка
+	Load Add-in…	Зареждане на добавка…
+	Install Add-in from GitHub	Инсталиране на добавка от GitHub
+	Unload Add-in	Разтоварване на добавка
+	Turn Add-in On or Off	Включване или изключване на добавка
+	Add-in Documentation	Документация на добавката
+	Run Add-in Command	Изпълнение на команда на добавка
+	Add-in manifest	Манифест на добавка
+	Install from GitHub:	Инсталиране от GitHub:
+	Install	Инсталиране
+	Installing…	Инсталиране…
+	Installed {name}	Инсталирано: {name}
+	An add-in is a program that runs with your permissions. Install it only if you trust its author.	Добавката е програма, която работи с вашите разрешения. Инсталирайте я само ако имате доверие на нейния автор.
+	Install and run {repo}?	Да се инсталира и изпълни ли {repo}?
+	Documentation	Документация
+	Activate	Активиране
+	Deactivate	Деактивиране
+	Unload	Разтоварване
+	Until the next start	До следващото стартиране
+	Active	Активна
+	Inactive	Неактивна
+	No add-ins are loaded.	Няма заредени добавки.
+	owner/repository	собственик/хранилище
+	Pick the add-in's plugin.json	Изберете файла plugin.json на добавката
+	Add-ins need the desktop app.	Добавките изискват настолното приложение.
+	There's no add-ins folder to install into.	Няма папка за добавки, в която да се инсталира.

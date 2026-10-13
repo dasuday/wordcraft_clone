@@ -2075,3 +2075,32 @@
 	Start-up	起動
 	Show the Start screen when WordCraft starts	WordCraft の起動時にスタート画面を表示する
 	On: WordCraft opens on File › Home, with a blank document, the templates and your recent documents. Off: it opens a blank document.	オン: WordCraft は [ファイル] › [ホーム] で開き、白紙の文書、テンプレート、最近使った文書を表示します。オフ: 白紙の文書を開きます。
+	Add-ins	アドイン
+	Get Add-ins	アドインを入手
+	Get\nAdd-ins	アドインを\n入手
+	Load Add-in	アドインの読み込み
+	Load Add-in…	アドインを読み込む…
+	Install Add-in from GitHub	GitHub からアドインをインストール
+	Unload Add-in	アドインのアンロード
+	Turn Add-in On or Off	アドインのオン/オフ
+	Add-in Documentation	アドインのドキュメント
+	Run Add-in Command	アドインのコマンドを実行
+	Add-in manifest	アドイン マニフェスト
+	Install from GitHub:	GitHub からインストール:
+	Install	インストール
+	Installing…	インストールしています…
+	Installed {name}	{name} をインストールしました
+	An add-in is a program that runs with your permissions. Install it only if you trust its author.	アドインは、あなたの権限で動作するプログラムです。作成者を信頼できる場合にのみインストールしてください。
+	Install and run {repo}?	{repo} をインストールして実行しますか?
+	Documentation	ドキュメント
+	Activate	有効にする
+	Deactivate	無効にする
+	Unload	アンロード
+	Until the next start	次回の起動まで
+	Active	有効
+	Inactive	無効
+	No add-ins are loaded.	読み込まれたアドインはありません。
+	owner/repository	所有者/リポジトリ
+	Pick the add-in's plugin.json	アドインの plugin.json を選択します
+	Add-ins need the desktop app.	アドインにはデスクトップ アプリが必要です。
+	There's no add-ins folder to install into.	インストール先のアドイン フォルダーがありません。

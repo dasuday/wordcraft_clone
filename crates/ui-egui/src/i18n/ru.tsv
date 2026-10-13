@@ -2474,3 +2474,32 @@ preview	Title	Пример
 	Level 7	Уровень 7
 	Level 8	Уровень 8
 	Level 9	Уровень 9
+	Add-ins	Надстройки
+	Get Add-ins	Получить надстройки
+	Get\nAdd-ins	Получить\nнадстройки
+	Load Add-in	Загрузить надстройку
+	Load Add-in…	Загрузить надстройку…
+	Install Add-in from GitHub	Установить надстройку из GitHub
+	Unload Add-in	Выгрузить надстройку
+	Turn Add-in On or Off	Включить или отключить надстройку
+	Add-in Documentation	Документация надстройки
+	Run Add-in Command	Выполнить команду надстройки
+	Add-in manifest	Манифест надстройки
+	Install from GitHub:	Установить из GitHub:
+	Install	Установить
+	Installing…	Установка…
+	Installed {name}	Установлено: {name}
+	An add-in is a program that runs with your permissions. Install it only if you trust its author.	Надстройка — это программа, которая работает с вашими правами. Устанавливайте её, только если доверяете автору.
+	Install and run {repo}?	Установить и запустить {repo}?
+	Documentation	Документация
+	Activate	Включить
+	Deactivate	Отключить
+	Unload	Выгрузить
+	Until the next start	До следующего запуска
+	Active	Включена
+	Inactive	Отключена
+	No add-ins are loaded.	Надстройки не загружены.
+	owner/repository	владелец/репозиторий
+	Pick the add-in's plugin.json	Выберите файл plugin.json надстройки
+	Add-ins need the desktop app.	Для надстроек нужно классическое приложение.
+	There's no add-ins folder to install into.	Нет папки надстроек для установки.

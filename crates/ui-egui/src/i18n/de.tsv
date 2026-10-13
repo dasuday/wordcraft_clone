@@ -2074,3 +2074,32 @@
 	Automatic ({region})	Automatisch ({region})
 	Search	Suchen
 	Title Bar	Titelleiste
+	Add-ins	Add-Ins
+	Get Add-ins	Add-Ins abrufen
+	Get\nAdd-ins	Add-Ins\nabrufen
+	Load Add-in	Add-In laden
+	Load Add-in…	Add-In laden…
+	Install Add-in from GitHub	Add-In von GitHub installieren
+	Unload Add-in	Add-In entladen
+	Turn Add-in On or Off	Add-In ein- oder ausschalten
+	Add-in Documentation	Add-In-Dokumentation
+	Run Add-in Command	Add-In-Befehl ausführen
+	Add-in manifest	Add-In-Manifest
+	Install from GitHub:	Von GitHub installieren:
+	Install	Installieren
+	Installing…	Wird installiert…
+	Installed {name}	{name} installiert
+	An add-in is a program that runs with your permissions. Install it only if you trust its author.	Ein Add-In ist ein Programm, das mit Ihren Berechtigungen läuft. Installieren Sie es nur, wenn Sie seinem Autor vertrauen.
+	Install and run {repo}?	{repo} installieren und ausführen?
+	Documentation	Dokumentation
+	Activate	Aktivieren
+	Deactivate	Deaktivieren
+	Unload	Entladen
+	Until the next start	Bis zum nächsten Start
+	Active	Aktiv
+	Inactive	Inaktiv
+	No add-ins are loaded.	Keine Add-Ins geladen.
+	owner/repository	Besitzer/Repository
+	Pick the add-in's plugin.json	Die plugin.json des Add-Ins auswählen
+	Add-ins need the desktop app.	Add-Ins benötigen die Desktop-App.
+	There's no add-ins folder to install into.	Es gibt keinen Add-In-Ordner zum Installieren.

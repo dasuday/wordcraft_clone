@@ -2473,3 +2473,32 @@ preview	Title	Örnek
 	Level 7	Düzey 7
 	Level 8	Düzey 8
 	Level 9	Düzey 9
+	Add-ins	Eklentiler
+	Get Add-ins	Eklenti Al
+	Get\nAdd-ins	Eklenti\nAl
+	Load Add-in	Eklenti yükle
+	Load Add-in…	Eklenti yükle…
+	Install Add-in from GitHub	GitHub'dan eklenti yükle
+	Unload Add-in	Eklentiyi kaldır
+	Turn Add-in On or Off	Eklentiyi aç veya kapat
+	Add-in Documentation	Eklenti belgeleri
+	Run Add-in Command	Eklenti komutunu çalıştır
+	Add-in manifest	Eklenti bildirimi
+	Install from GitHub:	GitHub'dan yükle:
+	Install	Yükle
+	Installing…	Yükleniyor…
+	Installed {name}	{name} yüklendi
+	An add-in is a program that runs with your permissions. Install it only if you trust its author.	Eklenti, sizin izinlerinizle çalışan bir programdır. Yalnızca yazarına güveniyorsanız yükleyin.
+	Install and run {repo}?	{repo} yüklensin ve çalıştırılsın mı?
+	Documentation	Belgeler
+	Activate	Etkinleştir
+	Deactivate	Devre dışı bırak
+	Unload	Kaldır
+	Until the next start	Bir sonraki başlatmaya kadar
+	Active	Etkin
+	Inactive	Devre dışı
+	No add-ins are loaded.	Yüklü eklenti yok.
+	owner/repository	sahip/depo
+	Pick the add-in's plugin.json	Eklentinin plugin.json dosyasını seçin
+	Add-ins need the desktop app.	Eklentiler masaüstü uygulamasını gerektirir.
+	There's no add-ins folder to install into.	Yükleme yapılacak bir eklenti klasörü yok.

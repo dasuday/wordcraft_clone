@@ -488,6 +488,9 @@ pub enum Dialog {
     },
     /// Line Numbers, Hyphenation, Language, Envelopes and Labels (#407).
     Layout(Box<crate::dialogs_layout::LayoutDialog>),
+    /// Insert › Add-ins › Get Add-ins, Developer › Add-ins: the loaded add-ins, their commands,
+    /// installing and loading more.
+    AddIns,
 }
 
 /// The Table Properties dialog's fields. Lengths are in the interface unit
@@ -917,6 +920,7 @@ impl Dialog {
             Dialog::Enclose { .. } => "enclose",
             Dialog::NoteOptions { .. } => "noteOptions",
             Dialog::Templates { .. } => "templates",
+            Dialog::AddIns => "addIns",
             Dialog::Organizer { .. } => "organizer",
             Dialog::Layout(d) => d.name(),
         }
@@ -1184,6 +1188,7 @@ impl Dialog {
             }
             "noteOptions" => Dialog::NoteOptions { form: Box::new(crate::dialogs_notes::NoteForm::read(app)) },
             "templates" => Dialog::Templates { form: Box::new(crate::dialogs_templates::TemplatesForm::read(app)) },
+            "addIns" => Dialog::AddIns,
             "organizer" => Dialog::Organizer { form: Box::new(crate::dialogs_templates::OrganizerForm::read(app, None)) },
             "controlProperties" => match crate::dialogs_controls::ControlForm::read(app) {
                 Some(form) => Dialog::Control { form: Box::new(form) },
@@ -1368,6 +1373,7 @@ pub fn show(app: &mut WordApp, ctx: &egui::Context) {
         Dialog::Templates { .. } => "Templates and Add-ins",
         Dialog::Organizer { .. } => "Organizer",
         Dialog::Layout(d) => d.title(),
+        Dialog::AddIns => "Add-ins",
     };
     let id = egui::Id::new(("dialog", title));
     let shown = place_dialog(ctx, id, egui::Window::new(tl!(title)).id(id).collapsible(false).resizable(false)).open(&mut open).show(ctx, |ui| {
@@ -2557,6 +2563,12 @@ fn body(app: &mut WordApp, ui: &mut Ui, d: &mut Dialog) -> bool {
         }
         Dialog::NoteOptions { form } => crate::dialogs_notes::note_options(app, ui, form),
         Dialog::Templates { form } => crate::dialogs_templates::templates(app, ui, form),
+        Dialog::AddIns => {
+            ui.set_width(720.0);
+            egui::ScrollArea::vertical().max_height(520.0).show(ui, |ui| crate::plugin_ui::page(app, ui, true));
+            ui.add_space(8.0);
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| ui.button(tl!("Close")).clicked()).inner
+        }
         Dialog::Organizer { form } => crate::dialogs_templates::organizer(app, ui, form),
         Dialog::Layout(d) => crate::dialogs_layout::body(app, ui, d),
         Dialog::FindRecipient { text, message } => {

@@ -61,6 +61,7 @@ pub mod objects;
 pub mod options;
 pub mod panes;
 pub mod paste_picture;
+pub mod plugin_ui;
 pub mod previews;
 pub mod print_page;
 pub mod printing;
@@ -368,6 +369,8 @@ pub struct WordApp {
     /// A file picked for the open dialog (Templates and Add-ins › Attach…, Organizer ›
     /// Browse…); the dialog takes it on its next frame.
     pub(crate) dialog_pick: Option<String>,
+    /// Installing an add-in from GitHub (File › Options › Add-ins, Insert › Add-ins).
+    pub plugin_install: plugin_ui::Install,
     /// macOS: the window has no title bar; leave room for the traffic lights.
     pub integrated_titlebar: bool,
     control_rx: Option<std::sync::mpsc::Receiver<ControlRequest>>,
@@ -514,6 +517,7 @@ impl WordApp {
             recipient_list_pending: false,
             font_generation: wordcraft_fonts::FontDb::global().generation(),
             dialog_pick: None,
+            plugin_install: Default::default(),
             file_dialog: None,
             #[cfg(not(target_arch = "wasm32"))]
             file_browser: file_browser::State::default(),
@@ -886,6 +890,10 @@ impl WordApp {
         // Ctrl+F: type straight into the Navigation pane's search box (#712).
         if req.get("focus").and_then(Value::as_str) == Some("navSearch") {
             self.nav_search_focus = true;
+        }
+        // An add-in's web page (`plugins.openHomepage`); only web links get this far.
+        if let Some(url) = req.get("openUrl").and_then(Value::as_str) {
+            self.canvas.open_url = Some(url.to_string());
         }
         if let Some(what) = req.get("open").and_then(Value::as_str) {
             match what {
@@ -1317,6 +1325,7 @@ impl WordApp {
             self.applied_editing = Some(lang);
         }
         options::sync(self);
+        plugin_ui::poll_install(self, ctx);
         // Chinese text wants the Chinese face before the Japanese one (one glyph style per line).
         // An installed CJK font is read only once CJK text is shown (#241): a CJK interface, the
         // language names in Options, or a file name the caption is drawing. A file opened later

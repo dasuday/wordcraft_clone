@@ -41,6 +41,7 @@ pub fn open_filters(purpose: &str) -> &'static [(&'static str, &'static [&'stati
     match purpose {
         "picture" => &[("Pictures", PICTURES)],
         "font" => &[("Fonts", wordcraft_fonts::FONT_FILE_EXTS)],
+        "addin" => &[("Add-in manifest", &["json"])],
         "recipients" => &[("Recipient lists", &["csv", "tsv", "txt", "xlsx", "xlsm", "ods"]), ("All files", &["*"])],
         _ => &[("Documents", DOCUMENTS), ("Word document", &["docx"]), ("All files", &["*"])],
     }
@@ -62,6 +63,8 @@ pub(crate) enum AfterPick {
     Recipients,
     /// Add the picked font file (#582).
     Font,
+    /// Load the add-in whose `plugin.json` was picked (File › Options › Add-ins).
+    AddIn,
     /// Hand the picked path to the open dialog (`WordApp::dialog_pick`): Templates and Add-ins,
     /// Organizer (#377).
     ForDialog,
@@ -198,6 +201,12 @@ impl WordApp {
                 let Some(path) = picked else { return Ok(json!({"cancelled": true})) };
                 self.run("font.add", json!({"path": path}))
             }
+            AfterPick::AddIn => {
+                let Some(path) = picked else { return Ok(json!({"cancelled": true})) };
+                let r = self.run("plugins.load", json!({"path": path}));
+                self.plugin_install.outcome = Some(r.clone().map(|info| crate::plugin_ui::loaded_message(&info)));
+                r
+            }
             AfterPick::ForDialog => {
                 let picked = picked.filter(|p| !p.is_empty());
                 let r = json!({"picked": picked});
@@ -307,6 +316,11 @@ impl WordApp {
             return;
         }
         let _ = self.ask_file(FileDialogRequest::Open { purpose: "font".into() }, AfterPick::Font);
+    }
+
+    /// Pick an add-in's `plugin.json` to load (the desktop app; the web can't run add-ins).
+    pub(crate) fn pick_addin(&mut self) {
+        let _ = self.ask_file(FileDialogRequest::Open { purpose: "addin".into() }, AfterPick::AddIn);
     }
 }
 

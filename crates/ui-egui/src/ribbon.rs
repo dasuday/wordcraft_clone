@@ -174,6 +174,12 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
     let user_tabs = app.session.ribbon.tabs().into_owned();
     let mut tabs: Vec<(String, bool)> = vec![("File".to_string(), false)];
     tabs.extend(user_tabs.iter().filter(|e| !e.hidden).map(|e| (e.name.clone(), e.custom)));
+    // Tabs add-ins add, after the user's (a name a user tab already has shares it).
+    for t in crate::plugin_ui::extra_tabs() {
+        if !tabs.iter().any(|(n, _)| *n == t) {
+            tabs.push((t, true));
+        }
+    }
     for ct in contextual_tabs(&app.session) {
         if ct == "Outlining" {
             tabs.insert(1.min(tabs.len()), (ct.to_string(), false));
@@ -306,11 +312,16 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
                         "SmartArt Design" => smart_art_design(app, ui),
                         "Outlining" => outlining(app, ui),
                         "Chart Design" => chart_design(app, ui),
+                        // A tab an add-in added (or one whose add-in was just turned off).
+                        other if !crate::plugin_ui::groups(other).is_empty() => {}
                         _ => home(app, ui),
                     }
                     if let Some(e) = entry {
                         custom_groups(app, ui, &e.groups);
                     }
+                    // Add-in groups: at the end of a built-in tab, or the whole of an add-in's own tab.
+                    let tab = app.ui.tab.clone();
+                    crate::plugin_ui::ribbon_groups(app, ui, &tab);
                 });
             });
             // The bar is hidden, so a row wider than the window would be clipped with no sign. Edge chevrons show
@@ -819,6 +830,9 @@ fn insert(app: &mut WordApp, ui: &mut Ui) {
             small(ui, app, "smartArt", Some("SmartArt"), "SmartArt", "insert.smartArt", json!({}), false);
             small(ui, app, "chart", Some("Chart"), "Chart", "insert.chart", json!({}), false);
         });
+    });
+    group(ui, "Add-ins", None, app, |ui, app| {
+        big(ui, app, "addins", "Get\nAdd-ins", "ui.dialog", json!({"name": "addIns"}), false);
     });
     group(ui, "Links", None, app, |ui, app| {
         stack(ui, |ui| {
@@ -1565,6 +1579,9 @@ fn review(app: &mut WordApp, ui: &mut Ui) {
 
 /// Developer › Controls: content controls.
 fn developer(app: &mut WordApp, ui: &mut Ui) {
+    group(ui, "Add-ins", None, app, |ui, app| {
+        big(ui, app, "addins", "Add-ins", "ui.dialog", json!({"name": "addIns"}), false);
+    });
     let design = app.session.view.design_mode;
     group(ui, "Controls", None, app, |ui, app| {
         let rows: [[(&str, &str, &str); 3]; 3] = [

@@ -2,7 +2,7 @@
 
 **Stage: alpha** · next: beta, ~15 points (60% → 75% ready for real work) and ~150–230 h away
 
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-11 · **Change:** trivial (progress log: symbol fonts, #776; previously trivial: the save prompt answers from the keyboard, #861; previously trivial: table column and row markers on the rulers, #700; previously trivial: table borders and the resize handle drag on the page, #217; previously trivial: formatting revisions landed, #41; previously trivial: Draw tab ink, #307, and Draw Table and Eraser, #303, landed: catalog 402/434; previously minor: readiness table with hours per audience; full number back to the additive weighted sum, 60%; mainstream and essentials numbers added; alpha gate checked; previously major: full re-measure against Word for Mac 16.113.4; restructured to the craftrules progress-docs standard) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4
+> **Last reviewed:** 2026-10-14 · **Last updated:** 2026-10-14 · **Change:** trivial (progress log: add-ins; Ecosystem and plugins 15% → 30%; previously trivial: progress log: symbol fonts, #776; previously trivial: the save prompt answers from the keyboard, #861; previously trivial: table column and row markers on the rulers, #700; previously trivial: table borders and the resize handle drag on the page, #217; previously trivial: formatting revisions landed, #41; previously trivial: Draw tab ink, #307, and Draw Table and Eraser, #303, landed: catalog 402/434; previously minor: readiness table with hours per audience; full number back to the additive weighted sum, 60%; mainstream and essentials numbers added; alpha gate checked; previously major: full re-measure against Word for Mac 16.113.4; restructured to the craftrules progress-docs standard) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4
 
 > **Printing update:** 2026-10-12 · direct desktop printing through craft-print; details below.
 
@@ -64,7 +64,7 @@ the two partial ones (real-world .docx, printing) complete, roughly.
 | Performance | 75% | 10–20 | [layout-parity.md](docs/layout-parity.md#performance) |
 | Stability | 50% | 25–45 | [gaps.md](docs/gaps.md) (#3) |
 | Platforms | 95% (beyond Word on Linux, BSD, web) | 5–10 | this page |
-| Ecosystem and plugins | 15% | 40–80 + owner decisions | [gaps.md](docs/gaps.md) (#22) |
+| Ecosystem and plugins | 30% | 30–65 + owner decisions | [plugins.md](docs/plugins.md), [gaps.md](docs/gaps.md) (#22) |
 | AI features | 40% (beyond Word for external agents; no in-app assistant) | 15–30 | [gaps.md](docs/gaps.md) (#25) |
 
 ## Features
@@ -135,6 +135,7 @@ Ranked, to beta (detail and remaining milestones in [docs/roadmap.md](docs/roadm
 
 | Date | What landed |
 |---|---|
+| 2026-10-14 | Add-ins: programs in any language that add commands, ribbon groups and tabs, and right-click menu items. File › Options › Add-ins lists them with their documentation and turns them off and on; they install from a GitHub repository's address (Insert › Add-ins › Get Add-ins too), from a folder or with `--plugin`. An add-in's command is one undoable step, and a crashing add-in never takes the document with it. The manifest and protocol are GridCraft's, so one add-in can serve both ([plugins.md](docs/plugins.md)) |
 | 2026-10-12 | RTF import now uses the RTF spec's defaults where a file names none (#902): no space before or after paragraphs, single line spacing, and the `\deff` default font, instead of WordCraft's Normal style; RTF files that relied on the old defaults open tighter, like in Word |
 | 2026-10-11 | Right-clicking a table cell offers the table's commands, and as in Word they follow the selection: with the caret in a cell Insert, Delete Cells, Split Cells, Text Direction and Table Properties…; with several cells Merge Cells instead of Split; with whole columns or rows Delete Columns or Rows, Merge Cells and Distribute Rows and Columns; with the whole table Delete Table, Distribute, AutoFit and Insert Caption…. A right-click beside selected cells moves the caret there instead of keeping them |
 | 2026-10-11 | Drags, Shift+arrows and Shift+click over table cells select whole cells, as in Word: from one cell into another the rectangle between them (bold, alignment and Delete leave the other cells alone), into or out of a table whole rows; extending again goes on from where the selection started |
@@ -273,6 +274,7 @@ Ranked, to beta (detail and remaining milestones in [docs/roadmap.md](docs/roadm
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-14 | trivial | Progress log: add-ins (out-of-process plugins, [plugins.md](docs/plugins.md)); Ecosystem and plugins 15% → 30%, 30–65 h |
 | 2026-10-12 | trivial | Progress log: Accept All and Reject All keep the right paragraph marks (#864) |
 | 2026-10-11 | trivial | Progress log: Ctrl, Alt, left-edge and selected-cells table border drags (#711) |
 | 2026-10-11 | trivial | Progress log: table markers on the rulers (#700) |

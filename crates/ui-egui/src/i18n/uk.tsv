@@ -2087,3 +2087,32 @@
 	Start-up	Запуск
 	Show the Start screen when WordCraft starts	Показувати початковий екран під час запуску WordCraft
 	On: WordCraft opens on File › Home, with a blank document, the templates and your recent documents. Off: it opens a blank document.	Увімкнено: WordCraft відкривається на сторінці Файл › Основне з порожнім документом, шаблонами та нещодавніми документами. Вимкнено: відкривається порожній документ.
+	Add-ins	Надбудови
+	Get Add-ins	Отримати надбудови
+	Get\nAdd-ins	Отримати\nнадбудови
+	Load Add-in	Завантажити надбудову
+	Load Add-in…	Завантажити надбудову…
+	Install Add-in from GitHub	Інсталювати надбудову з GitHub
+	Unload Add-in	Вивантажити надбудову
+	Turn Add-in On or Off	Увімкнути або вимкнути надбудову
+	Add-in Documentation	Документація надбудови
+	Run Add-in Command	Виконати команду надбудови
+	Add-in manifest	Маніфест надбудови
+	Install from GitHub:	Інсталювати з GitHub:
+	Install	Інсталювати
+	Installing…	Інсталяція…
+	Installed {name}	Інстальовано: {name}
+	An add-in is a program that runs with your permissions. Install it only if you trust its author.	Надбудова — це програма, що працює з вашими дозволами. Інсталюйте її, лише якщо довіряєте авторові.
+	Install and run {repo}?	Інсталювати й запустити {repo}?
+	Documentation	Документація
+	Activate	Увімкнути
+	Deactivate	Вимкнути
+	Unload	Вивантажити
+	Until the next start	До наступного запуску
+	Active	Увімкнено
+	Inactive	Вимкнено
+	No add-ins are loaded.	Надбудови не завантажено.
+	owner/repository	власник/репозиторій
+	Pick the add-in's plugin.json	Виберіть файл plugin.json надбудови
+	Add-ins need the desktop app.	Для надбудов потрібна класична програма.
+	There's no add-ins folder to install into.	Немає папки надбудов для інсталяції.

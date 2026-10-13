@@ -2468,3 +2468,32 @@ preview	Title	Tytuł
 	Typing	Pisanie
 	Search	Wyszukaj
 	Title Bar	Pasek tytułu
+	Add-ins	Dodatki
+	Get Add-ins	Pobierz dodatki
+	Get\nAdd-ins	Pobierz\ndodatki
+	Load Add-in	Wczytaj dodatek
+	Load Add-in…	Wczytaj dodatek…
+	Install Add-in from GitHub	Zainstaluj dodatek z GitHuba
+	Unload Add-in	Zwolnij dodatek
+	Turn Add-in On or Off	Włącz lub wyłącz dodatek
+	Add-in Documentation	Dokumentacja dodatku
+	Run Add-in Command	Uruchom polecenie dodatku
+	Add-in manifest	Manifest dodatku
+	Install from GitHub:	Zainstaluj z GitHuba:
+	Install	Zainstaluj
+	Installing…	Instalowanie…
+	Installed {name}	Zainstalowano: {name}
+	An add-in is a program that runs with your permissions. Install it only if you trust its author.	Dodatek to program działający z Twoimi uprawnieniami. Instaluj go tylko wtedy, gdy ufasz jego autorowi.
+	Install and run {repo}?	Zainstalować i uruchomić {repo}?
+	Documentation	Dokumentacja
+	Activate	Włącz
+	Deactivate	Wyłącz
+	Unload	Zwolnij
+	Until the next start	Do następnego uruchomienia
+	Active	Aktywny
+	Inactive	Nieaktywny
+	No add-ins are loaded.	Nie wczytano żadnych dodatków.
+	owner/repository	właściciel/repozytorium
+	Pick the add-in's plugin.json	Wybierz plik plugin.json dodatku
+	Add-ins need the desktop app.	Dodatki wymagają aplikacji klasycznej.
+	There's no add-ins folder to install into.	Brak folderu dodatków, do którego można instalować.

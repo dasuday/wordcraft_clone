@@ -2473,3 +2473,32 @@
 	Table Properties…	Táblázat tulajdonságai…
 	Search	Keresés
 	Title Bar	Címsor
+	Add-ins	Bővítmények
+	Get Add-ins	Bővítmények beszerzése
+	Get\nAdd-ins	Bővítmények\nbeszerzése
+	Load Add-in	Bővítmény betöltése
+	Load Add-in…	Bővítmény betöltése…
+	Install Add-in from GitHub	Bővítmény telepítése a GitHubról
+	Unload Add-in	Bővítmény eltávolítása a memóriából
+	Turn Add-in On or Off	Bővítmény be- vagy kikapcsolása
+	Add-in Documentation	Bővítmény dokumentációja
+	Run Add-in Command	Bővítményparancs futtatása
+	Add-in manifest	Bővítményjegyzék
+	Install from GitHub:	Telepítés a GitHubról:
+	Install	Telepítés
+	Installing…	Telepítés…
+	Installed {name}	Telepítve: {name}
+	An add-in is a program that runs with your permissions. Install it only if you trust its author.	A bővítmény egy program, amely az Ön jogosultságaival fut. Csak akkor telepítse, ha megbízik a szerzőjében.
+	Install and run {repo}?	Telepíti és futtatja ezt: {repo}?
+	Documentation	Dokumentáció
+	Activate	Aktiválás
+	Deactivate	Inaktiválás
+	Unload	Eltávolítás
+	Until the next start	A következő indításig
+	Active	Aktív
+	Inactive	Inaktív
+	No add-ins are loaded.	Nincs betöltött bővítmény.
+	owner/repository	tulajdonos/tárház
+	Pick the add-in's plugin.json	Válassza ki a bővítmény plugin.json fájlját
+	Add-ins need the desktop app.	A bővítményekhez az asztali alkalmazás kell.
+	There's no add-ins folder to install into.	Nincs bővítménymappa, ahová telepíteni lehetne.

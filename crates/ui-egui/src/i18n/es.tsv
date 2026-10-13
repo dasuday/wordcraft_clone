@@ -2441,3 +2441,32 @@ preview	Title	Título
 	Start-up	Inicio de la aplicación
 	Show the Start screen when WordCraft starts	Mostrar la pantalla de inicio al abrir WordCraft
 	On: WordCraft opens on File › Home, with a blank document, the templates and your recent documents. Off: it opens a blank document.	Activado: WordCraft se abre en Archivo › Inicio, con un documento en blanco, las plantillas y tus documentos recientes. Desactivado: abre un documento en blanco.
+	Add-ins	Complementos
+	Get Add-ins	Obtener complementos
+	Get\nAdd-ins	Obtener\ncomplementos
+	Load Add-in	Cargar complemento
+	Load Add-in…	Cargar complemento…
+	Install Add-in from GitHub	Instalar complemento desde GitHub
+	Unload Add-in	Descargar complemento
+	Turn Add-in On or Off	Activar o desactivar complemento
+	Add-in Documentation	Documentación del complemento
+	Run Add-in Command	Ejecutar comando del complemento
+	Add-in manifest	Manifiesto del complemento
+	Install from GitHub:	Instalar desde GitHub:
+	Install	Instalar
+	Installing…	Instalando…
+	Installed {name}	{name} instalado
+	An add-in is a program that runs with your permissions. Install it only if you trust its author.	Un complemento es un programa que se ejecuta con sus permisos. Instálelo solo si confía en su autor.
+	Install and run {repo}?	¿Instalar y ejecutar {repo}?
+	Documentation	Documentación
+	Activate	Activar
+	Deactivate	Desactivar
+	Unload	Descargar
+	Until the next start	Hasta el próximo inicio
+	Active	Activo
+	Inactive	Inactivo
+	No add-ins are loaded.	No hay complementos cargados.
+	owner/repository	propietario/repositorio
+	Pick the add-in's plugin.json	Elija el plugin.json del complemento
+	Add-ins need the desktop app.	Los complementos necesitan la aplicación de escritorio.
+	There's no add-ins folder to install into.	No hay una carpeta de complementos donde instalar.
