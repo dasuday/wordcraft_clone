@@ -199,6 +199,15 @@ fn save(s: &mut Session, v: &Value) -> CmdResult {
         wordcraft_docx::check_password(pw).map_err(|e| CmdError::Params(e.to_string()))?;
         s.password = Some(crate::io::Password::new(pw));
     }
+    // Macros need a macro-enabled format: Notes.docx is saved as Notes.docm (the .docx is left alone).
+    let asked = path.clone();
+    let path = crate::io::macro_enabled_path(&s.doc, &asked).unwrap_or(path);
+    let renamed = (path != asked).then(|| asked.to_string_lossy().into_owned());
+    if renamed.is_some() {
+        let ext = asked.extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
+        let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("").to_string();
+        s.ui_requests.push(json!({"status": format!("This document has macros, which a .{ext} file can't hold, so it was saved as {name}.")}));
+    }
     s.stamp_save();
     let password = s.password.as_ref().map(crate::io::Password::as_str);
     crate::io::save_path_with(&path, &s.doc, password, &export_options(s, v)).map_err(CmdError::Failed)?;
@@ -208,7 +217,7 @@ fn save(s: &mut Session, v: &Value) -> CmdResult {
         s.path = Some(path.clone());
         s.dirty = false;
     }
-    Ok(json!({"saved": true, "path": path.to_string_lossy(), "encrypted": encrypted}))
+    Ok(json!({"saved": true, "path": path.to_string_lossy(), "encrypted": encrypted, "renamedFrom": renamed}))
 }
 
 fn save_as(s: &mut Session, v: &Value) -> CmdResult {
