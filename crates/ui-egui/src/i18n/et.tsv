@@ -2263,3 +2263,26 @@
 
 # Backstage › Recover (#586)
 	Recover	Taasta
+
+# Developer › Ribbon Buttons: the document's buttons that run macros (Gaps #22)
+	Ribbon Buttons	Lindi nupud
+	Add Ribbon Button	Lisa nupp lindile
+	Edit Ribbon Button	Muuda lindi nuppu
+	Remove Ribbon Button	Eemalda nupp lindilt
+	Press Ribbon Button	Vajuta lindi nuppu
+	Runs the macro {macro}	Käivitab makro {macro}
+	Buttons that run this document's macros. They are saved with the document, and Word shows them too.	Nupud, mis käivitavad selle dokumendi makrosid. Need salvestatakse koos dokumendiga ja ka Word näitab neid.
+	No buttons yet.	Nuppe veel pole.
+	runs {macro}	käivitab {macro}
+	This document's ribbon came from another program with more than buttons: its buttons run, but WordCraft doesn't change it.	Selle dokumendi lint pärineb teisest programmist ja sisaldab rohkem kui nuppe: selle nupud töötavad, kuid WordCraft seda ei muuda.
+	New button	Uus nupp
+	Macro:	Makro:
+	or type a name: Module1.Go	või tippige nimi: Module1.Go
+	the macro's name	makro nimi
+	Tab:	Vahekaart:
+	or a new tab's name	või uue vahekaardi nimi
+	Group:	Rühm:
+	Picture:	Pilt:
+	Small button (three to a column)	Väike nupp (kolm veerus)
+	Add to Ribbon…	Lisa lindile…
+	A ribbon button that runs this macro, saved with the document	Lindi nupp, mis käivitab selle makro ja salvestatakse koos dokumendiga

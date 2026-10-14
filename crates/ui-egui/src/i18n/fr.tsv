@@ -2236,3 +2236,26 @@
 
 # Backstage › Recover (#586)
 	Recover	Récupérer
+
+# Developer › Ribbon Buttons: the document's buttons that run macros (Gaps #22)
+	Ribbon Buttons	Boutons du ruban
+	Add Ribbon Button	Ajouter un bouton au ruban
+	Edit Ribbon Button	Modifier un bouton du ruban
+	Remove Ribbon Button	Supprimer un bouton du ruban
+	Press Ribbon Button	Appuyer sur un bouton du ruban
+	Runs the macro {macro}	Exécute la macro {macro}
+	Buttons that run this document's macros. They are saved with the document, and Word shows them too.	Des boutons qui exécutent les macros de ce document. Ils sont enregistrés avec le document, et Word les affiche aussi.
+	No buttons yet.	Aucun bouton pour l’instant.
+	runs {macro}	exécute {macro}
+	This document's ribbon came from another program with more than buttons: its buttons run, but WordCraft doesn't change it.	Le ruban de ce document vient d’un autre programme et contient plus que des boutons : ses boutons fonctionnent, mais WordCraft ne le modifie pas.
+	New button	Nouveau bouton
+	Macro:	Macro :
+	or type a name: Module1.Go	ou tapez un nom : Module1.Go
+	the macro's name	le nom de la macro
+	Tab:	Onglet :
+	or a new tab's name	ou le nom d’un nouvel onglet
+	Group:	Groupe :
+	Picture:	Image :
+	Small button (three to a column)	Petit bouton (trois par colonne)
+	Add to Ribbon…	Ajouter au ruban…
+	A ribbon button that runs this macro, saved with the document	Un bouton du ruban qui exécute cette macro, enregistré avec le document

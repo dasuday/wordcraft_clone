@@ -2239,3 +2239,26 @@
 
 # Backstage › Recover (#586)
 	Recover	Oporavi
+
+# Developer › Ribbon Buttons: the document's buttons that run macros (Gaps #22)
+	Ribbon Buttons	Dugmad na traci
+	Add Ribbon Button	Dodaj dugme na traku
+	Edit Ribbon Button	Uredi dugme na traci
+	Remove Ribbon Button	Ukloni dugme sa trake
+	Press Ribbon Button	Pritisni dugme na traci
+	Runs the macro {macro}	Pokreće makro {macro}
+	Buttons that run this document's macros. They are saved with the document, and Word shows them too.	Dugmad koja pokreću makroe ovog dokumenta. Čuvaju se sa dokumentom, a prikazuje ih i Word.
+	No buttons yet.	Još nema dugmadi.
+	runs {macro}	pokreće {macro}
+	This document's ribbon came from another program with more than buttons: its buttons run, but WordCraft doesn't change it.	Traka ovog dokumenta potiče iz drugog programa i sadrži više od dugmadi: njena dugmad rade, ali je WordCraft ne menja.
+	New button	Novo dugme
+	Macro:	Makro:
+	or type a name: Module1.Go	ili unesite naziv: Module1.Go
+	the macro's name	naziv makroa
+	Tab:	Kartica:
+	or a new tab's name	ili naziv nove kartice
+	Group:	Grupa:
+	Picture:	Slika:
+	Small button (three to a column)	Malo dugme (tri u koloni)
+	Add to Ribbon…	Dodaj na traku…
+	A ribbon button that runs this macro, saved with the document	Dugme na traci koje pokreće ovaj makro, sačuvano sa dokumentom

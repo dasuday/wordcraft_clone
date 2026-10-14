@@ -2241,3 +2241,26 @@
 
 # Backstage › Recover (#586)
 	Recover	Відновити
+
+# Developer › Ribbon Buttons: the document's buttons that run macros (Gaps #22)
+	Ribbon Buttons	Кнопки на стрічці
+	Add Ribbon Button	Додати кнопку на стрічку
+	Edit Ribbon Button	Змінити кнопку на стрічці
+	Remove Ribbon Button	Видалити кнопку зі стрічки
+	Press Ribbon Button	Натиснути кнопку на стрічці
+	Runs the macro {macro}	Виконує макрос {macro}
+	Buttons that run this document's macros. They are saved with the document, and Word shows them too.	Кнопки, що виконують макроси цього документа. Вони зберігаються разом із документом, і Word теж їх показує.
+	No buttons yet.	Кнопок поки немає.
+	runs {macro}	виконує {macro}
+	This document's ribbon came from another program with more than buttons: its buttons run, but WordCraft doesn't change it.	Стрічка цього документа походить з іншої програми й містить не лише кнопки: її кнопки працюють, але WordCraft її не змінює.
+	New button	Нова кнопка
+	Macro:	Макрос:
+	or type a name: Module1.Go	або введіть ім'я: Module1.Go
+	the macro's name	ім'я макросу
+	Tab:	Вкладка:
+	or a new tab's name	або ім'я нової вкладки
+	Group:	Група:
+	Picture:	Зображення:
+	Small button (three to a column)	Маленька кнопка (по три в стовпці)
+	Add to Ribbon…	Додати на стрічку…
+	A ribbon button that runs this macro, saved with the document	Кнопка на стрічці, що виконує цей макрос і зберігається разом із документом

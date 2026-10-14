@@ -2229,3 +2229,26 @@
 
 # Backstage › Recover (#586)
 	Recover	回復
+
+# Developer › Ribbon Buttons: the document's buttons that run macros (Gaps #22)
+	Ribbon Buttons	リボンのボタン
+	Add Ribbon Button	リボン ボタンの追加
+	Edit Ribbon Button	リボン ボタンの編集
+	Remove Ribbon Button	リボン ボタンの削除
+	Press Ribbon Button	リボン ボタンを押す
+	Runs the macro {macro}	マクロ {macro} を実行します
+	Buttons that run this document's macros. They are saved with the document, and Word shows them too.	この文書のマクロを実行するボタンです。文書と一緒に保存され、Word にも表示されます。
+	No buttons yet.	ボタンはまだありません。
+	runs {macro}	{macro} を実行
+	This document's ribbon came from another program with more than buttons: its buttons run, but WordCraft doesn't change it.	この文書のリボンは別のプログラムで作られ、ボタン以外の要素も含んでいます: ボタンは動作しますが、WordCraft はリボンを変更しません。
+	New button	新しいボタン
+	Macro:	マクロ:
+	or type a name: Module1.Go	または名前を入力: Module1.Go
+	the macro's name	マクロの名前
+	Tab:	タブ:
+	or a new tab's name	または新しいタブの名前
+	Group:	グループ:
+	Picture:	画像:
+	Small button (three to a column)	小さいボタン (1 列に 3 つ)
+	Add to Ribbon…	リボンに追加…
+	A ribbon button that runs this macro, saved with the document	このマクロを実行するリボン ボタン (文書と一緒に保存されます)

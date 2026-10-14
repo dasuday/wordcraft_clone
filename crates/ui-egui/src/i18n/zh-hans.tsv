@@ -2241,3 +2241,26 @@
 
 # Backstage › Recover (#586)
 	Recover	恢复
+
+# Developer › Ribbon Buttons: the document's buttons that run macros (Gaps #22)
+	Ribbon Buttons	功能区按钮
+	Add Ribbon Button	添加功能区按钮
+	Edit Ribbon Button	编辑功能区按钮
+	Remove Ribbon Button	删除功能区按钮
+	Press Ribbon Button	按下功能区按钮
+	Runs the macro {macro}	运行宏 {macro}
+	Buttons that run this document's macros. They are saved with the document, and Word shows them too.	运行此文档中宏的按钮。它们随文档一起保存，Word 也会显示它们。
+	No buttons yet.	还没有按钮。
+	runs {macro}	运行 {macro}
+	This document's ribbon came from another program with more than buttons: its buttons run, but WordCraft doesn't change it.	此文档的功能区来自另一个程序，且不只包含按钮：其中的按钮可以运行，但 WordCraft 不会修改它。
+	New button	新按钮
+	Macro:	宏：
+	or type a name: Module1.Go	或输入名称：Module1.Go
+	the macro's name	宏的名称
+	Tab:	选项卡：
+	or a new tab's name	或新选项卡的名称
+	Group:	组：
+	Picture:	图片：
+	Small button (three to a column)	小按钮（每列三个）
+	Add to Ribbon…	添加到功能区…
+	A ribbon button that runs this macro, saved with the document	运行此宏的功能区按钮，随文档一起保存

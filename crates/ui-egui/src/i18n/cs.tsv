@@ -2620,3 +2620,26 @@ preview	Title	Ukázka
 
 # Backstage › Recover (#586)
 	Recover	Obnovit
+
+# Developer › Ribbon Buttons: the document's buttons that run macros (Gaps #22)
+	Ribbon Buttons	Tlačítka na pásu karet
+	Add Ribbon Button	Přidat tlačítko na pás karet
+	Edit Ribbon Button	Upravit tlačítko na pásu karet
+	Remove Ribbon Button	Odebrat tlačítko z pásu karet
+	Press Ribbon Button	Stisknout tlačítko na pásu karet
+	Runs the macro {macro}	Spustí makro {macro}
+	Buttons that run this document's macros. They are saved with the document, and Word shows them too.	Tlačítka, která spouštějí makra tohoto dokumentu. Ukládají se s dokumentem a zobrazí je i Word.
+	No buttons yet.	Zatím žádná tlačítka.
+	runs {macro}	spouští {macro}
+	This document's ribbon came from another program with more than buttons: its buttons run, but WordCraft doesn't change it.	Pás karet tohoto dokumentu pochází z jiného programu a obsahuje víc než tlačítka: jeho tlačítka fungují, ale WordCraft ho nemění.
+	New button	Nové tlačítko
+	Macro:	Makro:
+	or type a name: Module1.Go	nebo zadejte název: Module1.Go
+	the macro's name	název makra
+	Tab:	Karta:
+	or a new tab's name	nebo název nové karty
+	Group:	Skupina:
+	Picture:	Obrázek:
+	Small button (three to a column)	Malé tlačítko (tři ve sloupci)
+	Add to Ribbon…	Přidat na pás karet…
+	A ribbon button that runs this macro, saved with the document	Tlačítko na pásu karet, které spouští toto makro, uložené s dokumentem

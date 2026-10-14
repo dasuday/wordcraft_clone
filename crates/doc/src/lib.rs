@@ -35,6 +35,7 @@ pub mod numbering;
 pub mod para;
 pub mod props;
 pub mod resolve;
+pub mod ribbon;
 pub mod section;
 pub mod smart_art;
 pub mod styles;
@@ -53,6 +54,7 @@ pub use fields::FieldRange;
 pub use numbering::{ListKind, Numbering};
 pub use para::{InlineObject, Paragraph, Run};
 pub use props::{Align, CharProps, ParaProps, Rgb, TextColor};
+pub use ribbon::{Ribbon, RibbonButton, RibbonGroup, RibbonTab};
 pub use section::SectionProps;
 pub use styles::{Style, StyleKind, StyleSheet};
 pub use table::{Cell, Row, Table};
@@ -651,6 +653,10 @@ pub struct Document {
     /// Source-format parts we keep verbatim for round-trip (e.g. custom XML), by part name.
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     pub passthrough: BTreeMap<String, Arc<Vec<u8>>>,
+    /// The document's own ribbon tabs, groups and macro buttons (`customUI14.xml`). `None` = none,
+    /// or a richer customisation kept unchanged as a package part.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ribbon: Option<Ribbon>,
 }
 
 impl Default for Document {
@@ -678,6 +684,7 @@ impl Document {
             endnote_separators: NoteSeparators::default(),
             media: BTreeMap::new(),
             passthrough: BTreeMap::new(),
+            ribbon: None,
         }
     }
 

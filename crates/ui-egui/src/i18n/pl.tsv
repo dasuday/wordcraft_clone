@@ -2618,3 +2618,26 @@ preview	Title	Tytuł
 
 # Backstage › Recover (#586)
 	Recover	Odzyskaj
+
+# Developer › Ribbon Buttons: the document's buttons that run macros (Gaps #22)
+	Ribbon Buttons	Przyciski na wstążce
+	Add Ribbon Button	Dodaj przycisk do wstążki
+	Edit Ribbon Button	Edytuj przycisk na wstążce
+	Remove Ribbon Button	Usuń przycisk ze wstążki
+	Press Ribbon Button	Naciśnij przycisk na wstążce
+	Runs the macro {macro}	Uruchamia makro {macro}
+	Buttons that run this document's macros. They are saved with the document, and Word shows them too.	Przyciski uruchamiające makra tego dokumentu. Są zapisywane z dokumentem i Word też je pokazuje.
+	No buttons yet.	Nie ma jeszcze przycisków.
+	runs {macro}	uruchamia {macro}
+	This document's ribbon came from another program with more than buttons: its buttons run, but WordCraft doesn't change it.	Wstążka tego dokumentu pochodzi z innego programu i zawiera więcej niż przyciski: jej przyciski działają, ale WordCraft jej nie zmienia.
+	New button	Nowy przycisk
+	Macro:	Makro:
+	or type a name: Module1.Go	lub wpisz nazwę: Module1.Go
+	the macro's name	nazwa makra
+	Tab:	Karta:
+	or a new tab's name	lub nazwa nowej karty
+	Group:	Grupa:
+	Picture:	Obraz:
+	Small button (three to a column)	Mały przycisk (trzy w kolumnie)
+	Add to Ribbon…	Dodaj do wstążki…
+	A ribbon button that runs this macro, saved with the document	Przycisk na wstążce uruchamiający to makro, zapisany z dokumentem

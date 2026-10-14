@@ -2230,3 +2230,26 @@
 
 # Backstage › Recover (#586)
 	Recover	復原
+
+# Developer › Ribbon Buttons: the document's buttons that run macros (Gaps #22)
+	Ribbon Buttons	功能區按鈕
+	Add Ribbon Button	新增功能區按鈕
+	Edit Ribbon Button	編輯功能區按鈕
+	Remove Ribbon Button	移除功能區按鈕
+	Press Ribbon Button	按下功能區按鈕
+	Runs the macro {macro}	執行巨集 {macro}
+	Buttons that run this document's macros. They are saved with the document, and Word shows them too.	執行此文件中巨集的按鈕。它們會隨文件一起儲存，Word 也會顯示它們。
+	No buttons yet.	還沒有按鈕。
+	runs {macro}	執行 {macro}
+	This document's ribbon came from another program with more than buttons: its buttons run, but WordCraft doesn't change it.	此文件的功能區來自另一個程式，而且不只包含按鈕：其中的按鈕可以執行，但 WordCraft 不會修改它。
+	New button	新按鈕
+	Macro:	巨集：
+	or type a name: Module1.Go	或輸入名稱：Module1.Go
+	the macro's name	巨集的名稱
+	Tab:	分頁：
+	or a new tab's name	或新分頁的名稱
+	Group:	群組：
+	Picture:	圖片：
+	Small button (three to a column)	小按鈕（每欄三個）
+	Add to Ribbon…	新增到功能區…
+	A ribbon button that runs this macro, saved with the document	執行此巨集的功能區按鈕，隨文件一起儲存

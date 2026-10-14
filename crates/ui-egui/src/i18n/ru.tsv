@@ -2626,3 +2626,26 @@ preview	Title	Пример
 
 # Backstage › Recover (#586)
 	Recover	Восстановить
+
+# Developer › Ribbon Buttons: the document's buttons that run macros (Gaps #22)
+	Ribbon Buttons	Кнопки на ленте
+	Add Ribbon Button	Добавить кнопку на ленту
+	Edit Ribbon Button	Изменить кнопку на ленте
+	Remove Ribbon Button	Удалить кнопку с ленты
+	Press Ribbon Button	Нажать кнопку на ленте
+	Runs the macro {macro}	Выполняет макрос {macro}
+	Buttons that run this document's macros. They are saved with the document, and Word shows them too.	Кнопки, которые выполняют макросы этого документа. Они сохраняются вместе с документом, и Word тоже их показывает.
+	No buttons yet.	Кнопок пока нет.
+	runs {macro}	выполняет {macro}
+	This document's ribbon came from another program with more than buttons: its buttons run, but WordCraft doesn't change it.	Лента этого документа создана в другой программе и содержит не только кнопки: её кнопки работают, но WordCraft её не изменяет.
+	New button	Новая кнопка
+	Macro:	Макрос:
+	or type a name: Module1.Go	или введите имя: Module1.Go
+	the macro's name	имя макроса
+	Tab:	Вкладка:
+	or a new tab's name	или имя новой вкладки
+	Group:	Группа:
+	Picture:	Рисунок:
+	Small button (three to a column)	Маленькая кнопка (по три в столбце)
+	Add to Ribbon…	Добавить на ленту…
+	A ribbon button that runs this macro, saved with the document	Кнопка на ленте, которая выполняет этот макрос и сохраняется вместе с документом

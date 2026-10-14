@@ -93,7 +93,8 @@ impl Reader<'_> {
     /// relationship types the writer produces or the reader models ([`HANDLED_RELS`]) and any
     /// relationship the main document's markup refers to by id (its target goes with the
     /// element, or not at all).
-    pub(super) fn keep_unmodelled(&mut self, package: &Rels, document: &Rels) {
+    /// `modelled` names package relationships whose content the model took over (the ribbon).
+    pub(super) fn keep_unmodelled(&mut self, package: &Rels, document: &Rels, modelled: &[String]) {
         let main = self.pkg.get(&self.main).map(|b| b.to_vec()).unwrap_or_default();
         let referenced = |id: &str| {
             let needle = format!("\"{id}\"");
@@ -104,6 +105,7 @@ impl Reader<'_> {
             for rel in rels.list.iter().filter(|r| !r.external).take(MAX_EMBEDDED_RELS) {
                 let tail = rel.kind.rsplit('/').next().unwrap_or("");
                 if HANDLED_RELS.contains(&tail)
+                    || (owner == "P" && modelled.contains(&rel.id))
                     || (owner == "D" && referenced(&rel.id))
                     || ![&rel.kind, &rel.target].iter().all(|s| manifest_field_ok(s))
                 {

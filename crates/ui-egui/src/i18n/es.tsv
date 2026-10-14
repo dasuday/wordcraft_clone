@@ -2595,3 +2595,26 @@ preview	Title	Título
 
 # Backstage › Recover (#586)
 	Recover	Recuperar
+
+# Developer › Ribbon Buttons: the document's buttons that run macros (Gaps #22)
+	Ribbon Buttons	Botones de la cinta de opciones
+	Add Ribbon Button	Agregar botón a la cinta de opciones
+	Edit Ribbon Button	Editar botón de la cinta de opciones
+	Remove Ribbon Button	Quitar botón de la cinta de opciones
+	Press Ribbon Button	Pulsar botón de la cinta de opciones
+	Runs the macro {macro}	Ejecuta la macro {macro}
+	Buttons that run this document's macros. They are saved with the document, and Word shows them too.	Botones que ejecutan las macros de este documento. Se guardan con el documento y Word también los muestra.
+	No buttons yet.	Todavía no hay botones.
+	runs {macro}	ejecuta {macro}
+	This document's ribbon came from another program with more than buttons: its buttons run, but WordCraft doesn't change it.	La cinta de opciones de este documento viene de otro programa y contiene algo más que botones: sus botones funcionan, pero WordCraft no la modifica.
+	New button	Botón nuevo
+	Macro:	Macro:
+	or type a name: Module1.Go	o escriba un nombre: Module1.Go
+	the macro's name	el nombre de la macro
+	Tab:	Pestaña:
+	or a new tab's name	o el nombre de una pestaña nueva
+	Group:	Grupo:
+	Picture:	Imagen:
+	Small button (three to a column)	Botón pequeño (tres por columna)
+	Add to Ribbon…	Agregar a la cinta de opciones…
+	A ribbon button that runs this macro, saved with the document	Un botón de la cinta de opciones que ejecuta esta macro, guardado con el documento

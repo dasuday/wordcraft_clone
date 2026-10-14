@@ -2625,3 +2625,26 @@ preview	Title	Örnek
 
 # Backstage › Recover (#586)
 	Recover	Kurtar
+
+# Developer › Ribbon Buttons: the document's buttons that run macros (Gaps #22)
+	Ribbon Buttons	Şerit Düğmeleri
+	Add Ribbon Button	Şeride Düğme Ekle
+	Edit Ribbon Button	Şerit Düğmesini Düzenle
+	Remove Ribbon Button	Şerit Düğmesini Kaldır
+	Press Ribbon Button	Şerit Düğmesine Bas
+	Runs the macro {macro}	{macro} makrosunu çalıştırır
+	Buttons that run this document's macros. They are saved with the document, and Word shows them too.	Bu belgenin makrolarını çalıştıran düğmeler. Belgeyle birlikte kaydedilir ve Word de bunları gösterir.
+	No buttons yet.	Henüz düğme yok.
+	runs {macro}	{macro} çalıştırır
+	This document's ribbon came from another program with more than buttons: its buttons run, but WordCraft doesn't change it.	Bu belgenin şeridi başka bir programdan geliyor ve düğmelerden fazlasını içeriyor: düğmeleri çalışır, ancak WordCraft şeridi değiştirmez.
+	New button	Yeni düğme
+	Macro:	Makro:
+	or type a name: Module1.Go	veya bir ad yazın: Module1.Go
+	the macro's name	makronun adı
+	Tab:	Sekme:
+	or a new tab's name	veya yeni bir sekmenin adı
+	Group:	Grup:
+	Picture:	Resim:
+	Small button (three to a column)	Küçük düğme (sütun başına üç)
+	Add to Ribbon…	Şeride Ekle…
+	A ribbon button that runs this macro, saved with the document	Bu makroyu çalıştıran, belgeyle birlikte kaydedilen bir şerit düğmesi

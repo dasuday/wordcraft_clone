@@ -2228,3 +2228,26 @@
 
 # Backstage › Recover (#586)
 	Recover	Wiederherstellen
+
+# Developer › Ribbon Buttons: the document's buttons that run macros (Gaps #22)
+	Ribbon Buttons	Menüband-Schaltflächen
+	Add Ribbon Button	Schaltfläche zum Menüband hinzufügen
+	Edit Ribbon Button	Menüband-Schaltfläche bearbeiten
+	Remove Ribbon Button	Menüband-Schaltfläche entfernen
+	Press Ribbon Button	Menüband-Schaltfläche drücken
+	Runs the macro {macro}	Führt das Makro {macro} aus
+	Buttons that run this document's macros. They are saved with the document, and Word shows them too.	Schaltflächen, die die Makros dieses Dokuments ausführen. Sie werden mit dem Dokument gespeichert, und auch Word zeigt sie an.
+	No buttons yet.	Noch keine Schaltflächen.
+	runs {macro}	führt {macro} aus
+	This document's ribbon came from another program with more than buttons: its buttons run, but WordCraft doesn't change it.	Das Menüband dieses Dokuments stammt aus einem anderen Programm und enthält mehr als Schaltflächen: Seine Schaltflächen funktionieren, aber WordCraft ändert es nicht.
+	New button	Neue Schaltfläche
+	Macro:	Makro:
+	or type a name: Module1.Go	oder einen Namen eingeben: Module1.Go
+	the macro's name	der Name des Makros
+	Tab:	Registerkarte:
+	or a new tab's name	oder der Name einer neuen Registerkarte
+	Group:	Gruppe:
+	Picture:	Bild:
+	Small button (three to a column)	Kleine Schaltfläche (drei pro Spalte)
+	Add to Ribbon…	Zum Menüband hinzufügen…
+	A ribbon button that runs this macro, saved with the document	Eine Menüband-Schaltfläche, die dieses Makro ausführt, gespeichert mit dem Dokument

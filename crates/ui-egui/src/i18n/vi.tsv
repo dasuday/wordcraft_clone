@@ -2654,3 +2654,26 @@
 	Stop Recording	Dừng ghi
 	This document has no macros yet: type a name and Create.	Tài liệu này chưa có macro: nhập tên rồi chọn Tạo.
 	Visual Basic	Visual Basic
+
+# Developer › Ribbon Buttons: the document's buttons that run macros (Gaps #22)
+	Ribbon Buttons	Nút trên ribbon
+	Add Ribbon Button	Thêm nút vào ribbon
+	Edit Ribbon Button	Sửa nút trên ribbon
+	Remove Ribbon Button	Gỡ nút khỏi ribbon
+	Press Ribbon Button	Bấm nút trên ribbon
+	Runs the macro {macro}	Chạy macro {macro}
+	Buttons that run this document's macros. They are saved with the document, and Word shows them too.	Các nút chạy macro của tài liệu này. Chúng được lưu cùng tài liệu và Word cũng hiển thị chúng.
+	No buttons yet.	Chưa có nút nào.
+	runs {macro}	chạy {macro}
+	This document's ribbon came from another program with more than buttons: its buttons run, but WordCraft doesn't change it.	Ribbon của tài liệu này đến từ một chương trình khác và chứa nhiều thứ hơn ngoài các nút: các nút vẫn chạy, nhưng WordCraft không thay đổi nó.
+	New button	Nút mới
+	Macro:	Macro:
+	or type a name: Module1.Go	hoặc nhập tên: Module1.Go
+	the macro's name	tên của macro
+	Tab:	Thẻ:
+	or a new tab's name	hoặc tên của một thẻ mới
+	Group:	Nhóm:
+	Picture:	Ảnh:
+	Small button (three to a column)	Nút nhỏ (ba nút mỗi cột)
+	Add to Ribbon…	Thêm vào ribbon…
+	A ribbon button that runs this macro, saved with the document	Một nút trên ribbon chạy macro này, được lưu cùng tài liệu

@@ -2624,3 +2624,26 @@
 
 # Backstage › Recover (#586)
 	Recover	Helyreállítás
+
+# Developer › Ribbon Buttons: the document's buttons that run macros (Gaps #22)
+	Ribbon Buttons	Menüszalaggombok
+	Add Ribbon Button	Gomb hozzáadása a menüszalaghoz
+	Edit Ribbon Button	Menüszalaggomb szerkesztése
+	Remove Ribbon Button	Menüszalaggomb eltávolítása
+	Press Ribbon Button	Menüszalaggomb megnyomása
+	Runs the macro {macro}	Futtatja a(z) {macro} makrót
+	Buttons that run this document's macros. They are saved with the document, and Word shows them too.	Gombok, amelyek a dokumentum makróit futtatják. A dokumentummal együtt mentődnek, és a Word is megjeleníti őket.
+	No buttons yet.	Még nincsenek gombok.
+	runs {macro}	futtatja: {macro}
+	This document's ribbon came from another program with more than buttons: its buttons run, but WordCraft doesn't change it.	A dokumentum menüszalagja egy másik programból származik, és nem csak gombokat tartalmaz: a gombjai működnek, de a WordCraft nem módosítja.
+	New button	Új gomb
+	Macro:	Makró:
+	or type a name: Module1.Go	vagy írjon be egy nevet: Module1.Go
+	the macro's name	a makró neve
+	Tab:	Lap:
+	or a new tab's name	vagy egy új lap neve
+	Group:	Csoport:
+	Picture:	Kép:
+	Small button (three to a column)	Kis gomb (oszloponként három)
+	Add to Ribbon…	Hozzáadás a menüszalaghoz…
+	A ribbon button that runs this macro, saved with the document	Menüszalaggomb, amely ezt a makrót futtatja, és a dokumentummal együtt mentődik

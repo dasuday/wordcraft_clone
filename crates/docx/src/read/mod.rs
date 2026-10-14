@@ -276,7 +276,10 @@ pub(crate) fn read_opened(pkg: &Package) -> Result<Document, DocxError> {
         r.read_vba_related(&v);
     }
     r.keep_custom_xml(&root_rels, &rels);
-    r.keep_unmodelled(&root_rels, &rels);
+    // The document's ribbon (tabs, groups, macro buttons) is modelled when that's all it holds;
+    // then it isn't kept as a package part as well.
+    let modelled = read_ribbon(&mut r.doc, pkg, &root_rels);
+    r.keep_unmodelled(&root_rels, &rels, &modelled);
     if !r.embedded.parts.is_empty() {
         let manifest = r.embedded.to_bytes();
         r.doc.passthrough.insert(EMBEDDED_PARTS.into(), Arc::new(manifest));
@@ -290,6 +293,34 @@ pub(crate) fn read_opened(pkg: &Package) -> Result<Document, DocxError> {
     let mut doc = r.doc;
     doc.ensure_nonempty();
     Ok(doc)
+}
+
+/// The document's ribbon part, when the model holds all of it (tabs, groups, macro buttons):
+/// returns the package relationships it came through, which then aren't kept as parts. The
+/// Office 2010 part wins over the Office 2007 one. A part with relationships of its own (pictures)
+/// isn't only tabs, groups and buttons.
+fn read_ribbon(doc: &mut Document, pkg: &Package, root_rels: &Rels) -> Vec<String> {
+    let parts: Vec<(&str, &str, &[u8])> = root_rels
+        .list
+        .iter()
+        .filter(|r| !r.external && crate::custom_ui::is_ribbon_rel(&r.kind))
+        .take(8)
+        .filter_map(|r| pkg.get(&r.target).map(|d| (r.id.as_str(), r.target.as_str(), d)))
+        .collect();
+    let Some((_, target, data)) = parts.iter().find(|(_, _, d)| crate::custom_ui::is_v14(d)).or(parts.first()) else { return Vec::new() };
+    if !pkg.rels(target).list.is_empty() {
+        return Vec::new();
+    }
+    match crate::custom_ui::parse_exact(data) {
+        Some(ribbon) => {
+            if parts.len() > 1 {
+                log::info!("docx: the ribbon's Office 2007 copy is replaced by its Office 2010 one on save");
+            }
+            doc.ribbon = Some(ribbon).filter(|r| !r.is_empty());
+            parts.iter().map(|(id, _, _)| id.to_string()).collect()
+        }
+        None => Vec::new(),
+    }
 }
 
 /// Most move ranges open at once, and most move names tracked, per file.

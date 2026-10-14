@@ -2241,3 +2241,26 @@
 
 # Backstage › Recover (#586)
 	Recover	Recuperar
+
+# Developer › Ribbon Buttons: the document's buttons that run macros (Gaps #22)
+	Ribbon Buttons	Botões da faixa de opções
+	Add Ribbon Button	Adicionar botão à faixa de opções
+	Edit Ribbon Button	Editar botão da faixa de opções
+	Remove Ribbon Button	Remover botão da faixa de opções
+	Press Ribbon Button	Pressionar botão da faixa de opções
+	Runs the macro {macro}	Executa a macro {macro}
+	Buttons that run this document's macros. They are saved with the document, and Word shows them too.	Botões que executam as macros deste documento. Eles são salvos com o documento, e o Word também os mostra.
+	No buttons yet.	Ainda não há botões.
+	runs {macro}	executa {macro}
+	This document's ribbon came from another program with more than buttons: its buttons run, but WordCraft doesn't change it.	A faixa de opções deste documento veio de outro programa e tem mais do que botões: os botões funcionam, mas o WordCraft não a altera.
+	New button	Novo botão
+	Macro:	Macro:
+	or type a name: Module1.Go	ou digite um nome: Module1.Go
+	the macro's name	o nome da macro
+	Tab:	Guia:
+	or a new tab's name	ou o nome de uma nova guia
+	Group:	Grupo:
+	Picture:	Imagem:
+	Small button (three to a column)	Botão pequeno (três por coluna)
+	Add to Ribbon…	Adicionar à faixa de opções…
+	A ribbon button that runs this macro, saved with the document	Um botão da faixa de opções que executa esta macro, salvo com o documento
