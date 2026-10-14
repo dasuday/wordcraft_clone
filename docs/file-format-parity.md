@@ -214,14 +214,19 @@ see a dialog: `file.save` saves as before and its result's `losses` lists the id
 
 The list comes from the writers (`crates/engine/src/losses.rs`): both write
 `formats::model::from_doc`'s flow, which holds only the body's paragraphs, tables, pictures,
-bookmarks and links, and both then drop equations and charts. Listed: tracked changes (deleted text
-left out, insertions written as plain text; this shrinks when RTF/ODT revisions land), comments,
-footnotes and endnotes, headers and footers, content controls, equations, charts and SmartArt,
-shapes/text boxes/ink, embedded OLE objects (the picture stays), field codes (the result stays),
-hidden text, section breaks and columns, phonetic guides, macros, and other content kept only for
-round trip. Not listed: formatting the flow model simplifies (custom styles, direct paragraph
-spacing and indents, character effects). `.json` (WordCraft's own serialisation) and `.xml` (Flat
-OPC, the DOCX writer) keep everything and never warn.
+bookmarks and links; both write equations as their linear text and leave charts out, and RTF
+also leaves out pictures it can't re-encode as PNG (`rtf::can_write_picture`: EMF, WMF, SVG).
+Listed: tracked changes (deleted text left out, insertions written as plain text, formatting and
+page-setup changes dropped; this shrinks when RTF/ODT revisions land), comments, footnotes and
+endnotes, headers and footers, content controls, equations (written as plain text), charts and
+SmartArt, pictures RTF can't hold (RTF only), shapes/text boxes/ink, embedded OLE objects (the
+picture stays), field codes (the result stays), hidden text, section breaks and columns, phonetic
+guides, macros, and other content (kept only for round trip, custom XML parts). Not listed:
+formatting the flow model simplifies (custom styles, direct paragraph spacing and indents,
+character effects, floating pictures placed inline, right-to-left paragraph direction), cropped
+pictures (written whole, so the cropped-out part shows again), and package parts the DOCX reader
+doesn't keep anyway (building blocks, digital signatures, embedded fonts). `.json` (WordCraft's own
+serialisation) and `.xml` (Flat OPC, the DOCX writer) keep everything and never warn.
 
 ## Unmodelled-part preservation
 
@@ -274,6 +279,7 @@ Imported text fields use the first nonempty cached result run's formatting on th
 | 2026-10-13 | trivial | Replace All checks content-control locks before editing; a refused batch leaves the document and undo history unchanged; existing deletion-lock rules reused, with tracked/untracked regression coverage |
 | 2026-10-14 | trivial | VML preset shapes (`o:spt`, `_x0000_tNN` shapetypes) drawn like the DrawingML preset of the same shape (the nearest shape when WordCraft has none) and kept on save, e.g. Word's right arrow `_x0000_t13` (#1377) |
 | 2026-10-14 | trivial | RTF import (#1653): Mac OS Roman (code page 10000) for `\mac` documents, `\fcharset77` fonts and `\cpg`/`\ansicpg` 10000, and DOS text: `\pc` (437), `\pca` (850), the OEM pages through `\cpg` and `\fcharset254` (was read as Windows-1252); a code page number out of range is ignored instead of truncated to another; East Asian double-byte code pages still to do |
+| 2026-10-14 | trivial | Save safety review fixes: RTF's unencodable pictures listed, equations described as written as text, custom XML and page-setup changes listed (#1316) |
 | 2026-10-14 | trivial | Save safety for RTF and ODT: a "may lose features" warning before saving a document with features the format drops; `file.save` returns `losses`; AutoSave skips such files (#1316) |
 | 2026-10-12 | trivial | VML text boxes keep their internal margins (`inset`), fit to their text (`mso-fit-shape-to-text`) and vertical alignment (`v-text-anchor`); hidden drawings (`visibility:hidden`, `wp:docPr/@hidden`) are kept but not shown |
 | 2026-10-13 | trivial | Remove personal information / Remove date and time settings kept and honoured on save: anonymous annotation authors, no creator or last-modified-by, no annotation dates (#1062) |
