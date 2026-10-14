@@ -42,7 +42,7 @@ mod tests {
 
     #[test]
     fn concurrent_writers_publish_whole_preferences() {
-        let dir = std::env::temp_dir().join(format!("wordcraft-prefs-test-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("wordcraft-prefs-atomic-test-{}", std::process::id()));
         fs::create_dir_all(&dir).unwrap();
         let path = dir.join("ui.json");
         write(&path, br#"{"window":0}"#).unwrap();

@@ -346,7 +346,6 @@ fn main() -> eframe::Result {
                     None => bad_control = Some(port),
                 }
             }
-            "--template" => template = Some(args.next().unwrap_or_else(|| "blank".into())),
             "--sample" => sample = true,
             "--template" => template = Some(args.next().unwrap_or_else(|| "blank".into())),
             "--version" => {
