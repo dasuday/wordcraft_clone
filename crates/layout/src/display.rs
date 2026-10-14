@@ -614,27 +614,24 @@ fn border_stroke(s: BorderStyle) -> Stroke {
     }
 }
 
+/// The width a border line is drawn at.
+pub(crate) fn rule_width(b: &Border) -> f32 {
+    if b.style == BorderStyle::Thick { b.width.max(1.5) } else { b.width.max(0.25) }
+}
+
 /// A border line from `(x0, y0)` to `(x1, y1)` (paragraph rules and character borders).
 fn rule(x0: f32, y0: f32, x1: f32, y1: f32, b: &Border, alpha: f32) -> Draw {
-    Draw::Line {
-        x0,
-        y0,
-        x1,
-        y1,
-        width: if b.style == BorderStyle::Thick { b.width.max(1.5) } else { b.width.max(0.25) },
-        color: b.color.unwrap_or(Rgb::BLACK),
-        stroke: border_stroke(b.style),
-        alpha,
-        text_bg: None,
-    }
+    Draw::Line { x0, y0, x1, y1, width: rule_width(b), color: b.color.unwrap_or(Rgb::BLACK), stroke: border_stroke(b.style), alpha, text_bg: None }
 }
 
 /// Closed box around one line segment of a character-border group, widened by `space`.
 // Note: border drawn outside text advance, reserve width in line breaking if overlap shows.
 fn char_box(b: &Border, x0: f32, x1: f32, top: f32, bottom: f32, alpha: f32, out: &mut Vec<Draw>) {
     let (l, r) = (x0 - b.space, x1 + b.space);
-    out.push(rule(l, top, r, top, b, alpha));
-    out.push(rule(l, bottom, r, bottom, b, alpha));
+    // The top and bottom lines run on over half the side lines, closing the corners.
+    let half = rule_width(b) / 2.0;
+    out.push(rule(l - half, top, r + half, top, b, alpha));
+    out.push(rule(l - half, bottom, r + half, bottom, b, alpha));
     out.push(rule(l, top, l, bottom, b, alpha));
     out.push(rule(r, top, r, bottom, b, alpha));
 }
@@ -1036,16 +1033,29 @@ fn lines(
                     let uy = base - st.shift + st.size * 0.12;
                     let ucolor = rc.underline_color.unwrap_or(color);
                     if underline == Underline::Words {
+                        // One line per word: flat-ended lines per letter would show seams where they meet.
+                        let mut words: Vec<(f32, f32)> = Vec::new();
+                        // A space ends a word even when condensed spacing leaves it no width.
+                        let mut apart = true;
                         for kk in run_start..end_k {
                             let Some(c) = pl.clusters.get(kk) else { continue };
                             if c.kind != ClKind::Text {
+                                apart = true;
                                 continue;
                             }
                             let a = x + line.cl_left(kk).unwrap_or(0.0);
                             let b = x + line.cl_right(kk).unwrap_or(a - x);
                             if a < x0 - 0.01 || b > x1 + 0.01 {
+                                apart = true;
                                 continue; // drawn with its own span
                             }
+                            match words.last_mut() {
+                                Some(w) if !apart && a <= w.1 + 0.01 && b >= w.0 - 0.01 => *w = (w.0.min(a), w.1.max(b)),
+                                _ => words.push((a, b)),
+                            }
+                            apart = false;
+                        }
+                        for (a, b) in words {
                             out.push(Draw::Line { x0: a, y0: uy, x1: b, y1: uy, width: thick, color: ucolor, stroke: Stroke::Solid, alpha, text_bg });
                         }
                     } else {
