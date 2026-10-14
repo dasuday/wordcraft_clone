@@ -2114,3 +2114,27 @@
 	Pick the add-in's plugin.json	Izaberite plugin.json datoteku dodatka
 	Add-ins need the desktop app.	Dodacima je potrebna aplikacija za računar.
 	There's no add-ins folder to install into.	Nema fascikle dodataka u koju bi se instaliralo.
+	Code	Kôd
+	Disable all macros	Onemogući sve makroe
+	Disable macros with notification (enable them per document)	Onemogući makroe uz obaveštenje (omogućavaju se za svaki dokument posebno)
+	Edit	Uredi
+	Enable Content	Omogući sadržaj
+	Enable all macros (not recommended: a macro is a program)	Omogući sve makroe (ne preporučuje se: makro je program)
+	Insert Module	Ubaci modul
+	Macro Security	Bezbednost makroa
+	Macro name:	Naziv makroa:
+	Macros are disabled for this document. Enable Content in the message bar, or change Macro Security.	Makroi su onemogućeni za ovaj dokument. Kliknite na „Omogući sadržaj” na traci sa porukama ili promenite „Bezbednost makroa”.
+	Macros have been disabled.	Makroi su onemogućeni.
+	Modules	Moduli
+	No code yet: Insert Module.	Još nema kôda: „Ubaci modul”.
+	Office Add-in	Office dodatak
+	Office add-ins need the WordCraft desktop app on macOS or Windows.	Office dodacima je potrebna aplikacija WordCraft za računar na macOS-u ili Windows-u.
+	Remove Module	Ukloni modul
+	Run	Pokreni
+	Run Macro	Pokreni makro
+	SECURITY WARNING	BEZBEDNOSNO UPOZORENJE
+	Save Module	Sačuvaj modul
+	Saves the module into the document (save the document as .docm to keep it)	Čuva modul u dokumentu (sačuvajte dokument kao .docm da biste ga zadržali)
+	Stop Recording	Zaustavi snimanje
+	This document has no macros yet: type a name and Create.	Ovaj dokument još nema makroe: unesite naziv i kliknite na „Napravi”.
+	Visual Basic	Visual Basic

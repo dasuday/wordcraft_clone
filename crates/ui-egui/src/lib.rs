@@ -34,6 +34,7 @@ pub mod desktop_theme;
 pub mod dialogs;
 pub mod dialogs_chart;
 pub mod dialogs_controls;
+pub mod dialogs_developer;
 pub mod dialogs_insert;
 pub mod dialogs_keyboard;
 pub mod dialogs_layout;
@@ -58,6 +59,7 @@ pub mod keys;
 pub mod keytips;
 pub mod mini_toolbar;
 pub mod objects;
+pub mod office_pane;
 pub mod options;
 pub mod panes;
 pub mod paste_picture;
@@ -119,6 +121,8 @@ pub struct Services {
     /// Desktop: the picture on the system clipboard, if any — egui's paste only carries text
     /// (#45). Read when Paste finds no text; see [`paste_picture`].
     pub clipboard_picture: Option<Box<dyn Fn() -> Option<paste_picture::ClipboardPicture>>>,
+    /// Web views for Office add-ins' task panes (the desktop app on macOS and Windows).
+    pub office: Option<Box<dyn office_pane::OfficeHost>>,
     /// Whether the system has animation effects on (Windows: Animation effects; macOS: Reduce
     /// motion; Linux and the BSDs: the desktop's setting; browsers: `prefers-reduced-motion`), or
     /// `None` when it doesn't say. What "Use system setting" follows ([`theme::Animations`]).
@@ -371,6 +375,10 @@ pub struct WordApp {
     pub(crate) dialog_pick: Option<String>,
     /// Installing an add-in from GitHub (File › Options › Add-ins, Insert › Add-ins).
     pub plugin_install: plugin_ui::Install,
+    /// Office add-ins' task panes.
+    pub office: office_pane::Panes,
+    /// The document (`document_id`) whose "macros disabled" bar was closed or acted on.
+    pub macro_bar_done: Option<u64>,
     /// macOS: the window has no title bar; leave room for the traffic lights.
     pub integrated_titlebar: bool,
     control_rx: Option<std::sync::mpsc::Receiver<ControlRequest>>,
@@ -518,6 +526,8 @@ impl WordApp {
             font_generation: wordcraft_fonts::FontDb::global().generation(),
             dialog_pick: None,
             plugin_install: Default::default(),
+            office: office_pane::Panes::default(),
+            macro_bar_done: None,
             file_dialog: None,
             #[cfg(not(target_arch = "wasm32"))]
             file_browser: file_browser::State::default(),
@@ -920,6 +930,15 @@ impl WordApp {
         }
         if req.get("close").is_some() {
             self.quit_requested = true;
+        }
+        // An Office add-in's command: its task pane, or a function in its hidden page.
+        if let Some(p) = req.get("officePane") {
+            let s = |k: &str| p.get(k).and_then(Value::as_str).unwrap_or("").to_string();
+            office_pane::open(self, &s("plugin"), &s("title"), &s("url"), p.get("pane").and_then(Value::as_str));
+        }
+        if let Some(p) = req.get("officeFunction") {
+            let s = |k: &str| p.get(k).and_then(Value::as_str).unwrap_or("").to_string();
+            office_pane::run_function(self, &s("plugin"), &s("url"), &s("function"));
         }
         // A word from a command for the status bar (Save turning a .docx with macros into a .docm).
         if let Some(text) = req.get("status").and_then(Value::as_str) {
@@ -1527,12 +1546,16 @@ impl WordApp {
         // Keytips are read before layout so the frame paints the new state; badges paint after
         // the ribbon so they sit on top of it.
         crate::keytips::logic(self, &ctx);
+        office_pane::pump(self);
         if self.ui.backstage {
+            office_pane::covered(self);
             backstage::show(self, ui);
         } else {
             chrome::title_bar(self, ui);
             ribbon::show(self, ui);
+            dialogs_developer::macro_bar(self, ui);
             chrome::status_bar(self, ui);
+            office_pane::show(self, ui);
             panes::show(self, ui);
             egui::CentralPanel::default().frame(egui::Frame::NONE.fill(t.canvas)).show(ui, |ui| {
                 canvas::show(self, ui);

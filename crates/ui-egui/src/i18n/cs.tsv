@@ -2109,3 +2109,27 @@
 	Pick the add-in's plugin.json	Vyberte soubor plugin.json doplňku
 	Add-ins need the desktop app.	Doplňky vyžadují desktopovou aplikaci.
 	There's no add-ins folder to install into.	Není k dispozici složka doplňků, do které by se dalo instalovat.
+	Code	Kód
+	Disable all macros	Zakázat všechna makra
+	Disable macros with notification (enable them per document)	Zakázat makra s oznámením (povolovat je pro každý dokument zvlášť)
+	Edit	Upravit
+	Enable Content	Povolit obsah
+	Enable all macros (not recommended: a macro is a program)	Povolit všechna makra (nedoporučuje se: makro je program)
+	Insert Module	Vložit modul
+	Macro Security	Zabezpečení maker
+	Macro name:	Název makra:
+	Macros are disabled for this document. Enable Content in the message bar, or change Macro Security.	Makra jsou v tomto dokumentu zakázaná. Klikněte na panelu zpráv na „Povolit obsah“, nebo změňte „Zabezpečení maker“.
+	Macros have been disabled.	Makra byla zakázána.
+	Modules	Moduly
+	No code yet: Insert Module.	Zatím žádný kód: „Vložit modul“.
+	Office Add-in	Doplněk Office
+	Office add-ins need the WordCraft desktop app on macOS or Windows.	Doplňky Office vyžadují desktopovou aplikaci WordCraft v systému macOS nebo Windows.
+	Remove Module	Odebrat modul
+	Run	Spustit
+	Run Macro	Spustit makro
+	SECURITY WARNING	UPOZORNĚNÍ ZABEZPEČENÍ
+	Save Module	Uložit modul
+	Saves the module into the document (save the document as .docm to keep it)	Uloží modul do dokumentu (aby se zachoval, uložte dokument jako .docm)
+	Stop Recording	Zastavit záznam
+	This document has no macros yet: type a name and Create.	Tento dokument zatím nemá žádná makra: zadejte název a klikněte na „Vytvořit“.
+	Visual Basic	Visual Basic

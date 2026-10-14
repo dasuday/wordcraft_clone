@@ -2105,3 +2105,27 @@
 	Pick the add-in's plugin.json	選擇增益集的 plugin.json
 	Add-ins need the desktop app.	增益集需要桌面應用程式。
 	There's no add-ins folder to install into.	沒有可供安裝的增益集資料夾。
+	Code	程式碼
+	Disable all macros	停用所有巨集
+	Disable macros with notification (enable them per document)	停用巨集並發出通知（可依文件啟用）
+	Edit	編輯
+	Enable Content	啟用內容
+	Enable all macros (not recommended: a macro is a program)	啟用所有巨集（不建議：巨集是一種程式）
+	Insert Module	插入模組
+	Macro Security	巨集安全性
+	Macro name:	巨集名稱：
+	Macros are disabled for this document. Enable Content in the message bar, or change Macro Security.	此文件的巨集已停用。請按一下訊息列中的「啟用內容」，或變更「巨集安全性」。
+	Macros have been disabled.	巨集已停用。
+	Modules	模組
+	No code yet: Insert Module.	尚無程式碼：請按一下「插入模組」。
+	Office Add-in	Office 增益集
+	Office add-ins need the WordCraft desktop app on macOS or Windows.	Office 增益集需要 macOS 或 Windows 上的 WordCraft 桌面應用程式。
+	Remove Module	移除模組
+	Run	執行
+	Run Macro	執行巨集
+	SECURITY WARNING	安全性警告
+	Save Module	儲存模組
+	Saves the module into the document (save the document as .docm to keep it)	將模組儲存到文件中（若要保留，請將文件另存為 .docm）
+	Stop Recording	停止錄製
+	This document has no macros yet: type a name and Create.	此文件還沒有巨集：請輸入名稱，然後按一下「建立」。
+	Visual Basic	Visual Basic

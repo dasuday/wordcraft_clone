@@ -2138,3 +2138,27 @@
 	Pick the add-in's plugin.json	Valige lisandmooduli plugin.json
 	Add-ins need the desktop app.	Lisandmoodulid vajavad töölauarakendust.
 	There's no add-ins folder to install into.	Pole lisandmoodulite kausta, kuhu installida.
+	Code	Kood
+	Disable all macros	Keela kõik makrod
+	Disable macros with notification (enable them per document)	Keela makrod teavitusega (luba need dokumendipõhiselt)
+	Edit	Redigeeri
+	Enable Content	Luba sisu
+	Enable all macros (not recommended: a macro is a program)	Luba kõik makrod (pole soovitatav: makro on programm)
+	Insert Module	Lisa moodul
+	Macro Security	Makrode turve
+	Macro name:	Makro nimi:
+	Macros are disabled for this document. Enable Content in the message bar, or change Macro Security.	Selle dokumendi makrod on keelatud. Klõpsake teaberibal „Luba sisu“ või muutke sätet „Makrode turve“.
+	Macros have been disabled.	Makrod on keelatud.
+	Modules	Moodulid
+	No code yet: Insert Module.	Koodi veel pole: „Lisa moodul“.
+	Office Add-in	Office’i lisandmoodul
+	Office add-ins need the WordCraft desktop app on macOS or Windows.	Office’i lisandmoodulid vajavad WordCrafti töölauarakendust macOS-is või Windowsis.
+	Remove Module	Eemalda moodul
+	Run	Käivita
+	Run Macro	Käivita makro
+	SECURITY WARNING	TURBEHOIATUS
+	Save Module	Salvesta moodul
+	Saves the module into the document (save the document as .docm to keep it)	Salvestab mooduli dokumenti (selle säilitamiseks salvestage dokument .docm-vormingus)
+	Stop Recording	Lõpeta salvestamine
+	This document has no macros yet: type a name and Create.	Selles dokumendis pole veel makrosid: tippige nimi ja klõpsake „Loo“.
+	Visual Basic	Visual Basic

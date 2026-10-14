@@ -2116,3 +2116,27 @@
 	Pick the add-in's plugin.json	Escolha o plugin.json do suplemento
 	Add-ins need the desktop app.	Os suplementos precisam do aplicativo para desktop.
 	There's no add-ins folder to install into.	Não há uma pasta de suplementos para instalar.
+	Code	Código
+	Disable all macros	Desabilitar todas as macros
+	Disable macros with notification (enable them per document)	Desabilitar macros com notificação (habilitá-las documento a documento)
+	Edit	Editar
+	Enable Content	Habilitar conteúdo
+	Enable all macros (not recommended: a macro is a program)	Habilitar todas as macros (não recomendado: uma macro é um programa)
+	Insert Module	Inserir módulo
+	Macro Security	Segurança de macro
+	Macro name:	Nome da macro:
+	Macros are disabled for this document. Enable Content in the message bar, or change Macro Security.	As macros estão desabilitadas neste documento. Clique em “Habilitar conteúdo” na barra de mensagens ou altere a “Segurança de macro”.
+	Macros have been disabled.	As macros foram desabilitadas.
+	Modules	Módulos
+	No code yet: Insert Module.	Ainda não há código: “Inserir módulo”.
+	Office Add-in	Suplemento do Office
+	Office add-ins need the WordCraft desktop app on macOS or Windows.	Os suplementos do Office precisam do aplicativo para desktop do WordCraft no macOS ou no Windows.
+	Remove Module	Remover módulo
+	Run	Executar
+	Run Macro	Executar macro
+	SECURITY WARNING	AVISO DE SEGURANÇA
+	Save Module	Salvar módulo
+	Saves the module into the document (save the document as .docm to keep it)	Salva o módulo no documento (salve o documento como .docm para mantê-lo)
+	Stop Recording	Parar gravação
+	This document has no macros yet: type a name and Create.	Este documento ainda não tem macros: digite um nome e clique em “Criar”.
+	Visual Basic	Visual Basic

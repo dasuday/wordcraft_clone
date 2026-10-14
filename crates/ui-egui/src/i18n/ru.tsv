@@ -2503,3 +2503,27 @@ preview	Title	Пример
 	Pick the add-in's plugin.json	Выберите файл plugin.json надстройки
 	Add-ins need the desktop app.	Для надстроек нужно классическое приложение.
 	There's no add-ins folder to install into.	Нет папки надстроек для установки.
+	Code	Код
+	Disable all macros	Отключить все макросы
+	Disable macros with notification (enable them per document)	Отключить макросы с уведомлением (включать их для каждого документа)
+	Edit	Изменить
+	Enable Content	Включить содержимое
+	Enable all macros (not recommended: a macro is a program)	Включить все макросы (не рекомендуется: макрос — это программа)
+	Insert Module	Вставить модуль
+	Macro Security	Безопасность макросов
+	Macro name:	Имя макроса:
+	Macros are disabled for this document. Enable Content in the message bar, or change Macro Security.	Макросы в этом документе отключены. Нажмите «Включить содержимое» на панели сообщений или измените «Безопасность макросов».
+	Macros have been disabled.	Макросы отключены.
+	Modules	Модули
+	No code yet: Insert Module.	Кода пока нет: «Вставить модуль».
+	Office Add-in	Надстройка Office
+	Office add-ins need the WordCraft desktop app on macOS or Windows.	Для надстроек Office нужно классическое приложение WordCraft для macOS или Windows.
+	Remove Module	Удалить модуль
+	Run	Выполнить
+	Run Macro	Выполнить макрос
+	SECURITY WARNING	ПРЕДУПРЕЖДЕНИЕ СИСТЕМЫ БЕЗОПАСНОСТИ
+	Save Module	Сохранить модуль
+	Saves the module into the document (save the document as .docm to keep it)	Сохраняет модуль в документе (чтобы он не пропал, сохраните документ как .docm)
+	Stop Recording	Остановить запись
+	This document has no macros yet: type a name and Create.	В этом документе пока нет макросов: введите имя и нажмите «Создать».
+	Visual Basic	Visual Basic

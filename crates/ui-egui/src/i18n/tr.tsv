@@ -2502,3 +2502,27 @@ preview	Title	Örnek
 	Pick the add-in's plugin.json	Eklentinin plugin.json dosyasını seçin
 	Add-ins need the desktop app.	Eklentiler masaüstü uygulamasını gerektirir.
 	There's no add-ins folder to install into.	Yükleme yapılacak bir eklenti klasörü yok.
+	Code	Kod
+	Disable all macros	Tüm makroları devre dışı bırak
+	Disable macros with notification (enable them per document)	Makroları bildirimle devre dışı bırak (her belge için ayrı etkinleştir)
+	Edit	Düzenle
+	Enable Content	İçeriği Etkinleştir
+	Enable all macros (not recommended: a macro is a program)	Tüm makroları etkinleştir (önerilmez: makro bir programdır)
+	Insert Module	Modül Ekle
+	Macro Security	Makro Güvenliği
+	Macro name:	Makro adı:
+	Macros are disabled for this document. Enable Content in the message bar, or change Macro Security.	Bu belgede makrolar devre dışı. İleti çubuğunda İçeriği Etkinleştir'e tıklayın veya Makro Güvenliği ayarını değiştirin.
+	Macros have been disabled.	Makrolar devre dışı bırakıldı.
+	Modules	Modüller
+	No code yet: Insert Module.	Henüz kod yok: Modül Ekle.
+	Office Add-in	Office Eklentisi
+	Office add-ins need the WordCraft desktop app on macOS or Windows.	Office eklentileri, macOS veya Windows'ta WordCraft masaüstü uygulamasını gerektirir.
+	Remove Module	Modülü Kaldır
+	Run	Çalıştır
+	Run Macro	Makro Çalıştır
+	SECURITY WARNING	GÜVENLİK UYARISI
+	Save Module	Modülü Kaydet
+	Saves the module into the document (save the document as .docm to keep it)	Modülü belgeye kaydeder (korumak için belgeyi .docm olarak kaydedin)
+	Stop Recording	Kaydı Durdur
+	This document has no macros yet: type a name and Create.	Bu belgede henüz makro yok: bir ad yazın ve Oluştur'a tıklayın.
+	Visual Basic	Visual Basic

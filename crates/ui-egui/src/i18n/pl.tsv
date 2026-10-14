@@ -2497,3 +2497,27 @@ preview	Title	Tytuł
 	Pick the add-in's plugin.json	Wybierz plik plugin.json dodatku
 	Add-ins need the desktop app.	Dodatki wymagają aplikacji klasycznej.
 	There's no add-ins folder to install into.	Brak folderu dodatków, do którego można instalować.
+	Code	Kod
+	Disable all macros	Wyłącz wszystkie makra
+	Disable macros with notification (enable them per document)	Wyłącz makra z powiadomieniem (włączaj je dla każdego dokumentu osobno)
+	Edit	Edytuj
+	Enable Content	Włącz zawartość
+	Enable all macros (not recommended: a macro is a program)	Włącz wszystkie makra (niezalecane: makro to program)
+	Insert Module	Wstaw moduł
+	Macro Security	Bezpieczeństwo makr
+	Macro name:	Nazwa makra:
+	Macros are disabled for this document. Enable Content in the message bar, or change Macro Security.	Makra są wyłączone w tym dokumencie. Kliknij „Włącz zawartość” na pasku komunikatów lub zmień ustawienia „Bezpieczeństwo makr”.
+	Macros have been disabled.	Makra zostały wyłączone.
+	Modules	Moduły
+	No code yet: Insert Module.	Nie ma jeszcze kodu: „Wstaw moduł”.
+	Office Add-in	Dodatek pakietu Office
+	Office add-ins need the WordCraft desktop app on macOS or Windows.	Dodatki pakietu Office wymagają aplikacji klasycznej WordCraft w systemie macOS lub Windows.
+	Remove Module	Usuń moduł
+	Run	Uruchom
+	Run Macro	Uruchom makro
+	SECURITY WARNING	OSTRZEŻENIE O ZABEZPIECZENIACH
+	Save Module	Zapisz moduł
+	Saves the module into the document (save the document as .docm to keep it)	Zapisuje moduł w dokumencie (zapisz dokument jako .docm, aby go zachować)
+	Stop Recording	Zatrzymaj rejestrowanie
+	This document has no macros yet: type a name and Create.	Ten dokument nie ma jeszcze makr: wpisz nazwę i kliknij „Utwórz”.
+	Visual Basic	Visual Basic

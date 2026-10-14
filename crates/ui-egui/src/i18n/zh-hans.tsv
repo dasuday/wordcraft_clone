@@ -2116,3 +2116,27 @@
 	Pick the add-in's plugin.json	选择加载项的 plugin.json
 	Add-ins need the desktop app.	加载项需要桌面应用。
 	There's no add-ins folder to install into.	没有可供安装的加载项文件夹。
+	Code	代码
+	Disable all macros	禁用所有宏
+	Disable macros with notification (enable them per document)	禁用宏并发出通知（可按文档启用）
+	Edit	编辑
+	Enable Content	启用内容
+	Enable all macros (not recommended: a macro is a program)	启用所有宏（不推荐：宏是一种程序）
+	Insert Module	插入模块
+	Macro Security	宏安全性
+	Macro name:	宏名称：
+	Macros are disabled for this document. Enable Content in the message bar, or change Macro Security.	此文档的宏已被禁用。请点击消息栏中的“启用内容”，或更改“宏安全性”。
+	Macros have been disabled.	宏已被禁用。
+	Modules	模块
+	No code yet: Insert Module.	尚无代码：请点击“插入模块”。
+	Office Add-in	Office 加载项
+	Office add-ins need the WordCraft desktop app on macOS or Windows.	Office 加载项需要 macOS 或 Windows 上的 WordCraft 桌面应用。
+	Remove Module	删除模块
+	Run	运行
+	Run Macro	运行宏
+	SECURITY WARNING	安全警告
+	Save Module	保存模块
+	Saves the module into the document (save the document as .docm to keep it)	将模块保存到文档中（要保留它，请将文档另存为 .docm）
+	Stop Recording	停止录制
+	This document has no macros yet: type a name and Create.	此文档还没有宏：请输入名称，然后点击“创建”。
+	Visual Basic	Visual Basic

@@ -2104,3 +2104,27 @@
 	Pick the add-in's plugin.json	アドインの plugin.json を選択します
 	Add-ins need the desktop app.	アドインにはデスクトップ アプリが必要です。
 	There's no add-ins folder to install into.	インストール先のアドイン フォルダーがありません。
+	Code	コード
+	Disable all macros	すべてのマクロを無効にする
+	Disable macros with notification (enable them per document)	マクロを無効にして通知する (文書ごとに有効にできます)
+	Edit	編集
+	Enable Content	コンテンツを有効にする
+	Enable all macros (not recommended: a macro is a program)	すべてのマクロを有効にする (推奨しません: マクロはプログラムです)
+	Insert Module	モジュールの挿入
+	Macro Security	マクロのセキュリティ
+	Macro name:	マクロ名:
+	Macros are disabled for this document. Enable Content in the message bar, or change Macro Security.	この文書のマクロは無効になっています。メッセージ バーの「コンテンツを有効にする」をクリックするか、「マクロのセキュリティ」を変更してください。
+	Macros have been disabled.	マクロは無効になりました。
+	Modules	モジュール
+	No code yet: Insert Module.	コードはまだありません:「モジュールの挿入」をクリックしてください。
+	Office Add-in	Office アドイン
+	Office add-ins need the WordCraft desktop app on macOS or Windows.	Office アドインには、macOS または Windows 版の WordCraft デスクトップ アプリが必要です。
+	Remove Module	モジュールの削除
+	Run	実行
+	Run Macro	マクロの実行
+	SECURITY WARNING	セキュリティの警告
+	Save Module	モジュールの保存
+	Saves the module into the document (save the document as .docm to keep it)	モジュールを文書に保存します (残すには文書を .docm 形式で保存してください)
+	Stop Recording	記録の終了
+	This document has no macros yet: type a name and Create.	この文書にはまだマクロがありません: 名前を入力して「作成」をクリックしてください。
+	Visual Basic	Visual Basic

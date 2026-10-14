@@ -2502,3 +2502,27 @@
 	Pick the add-in's plugin.json	Válassza ki a bővítmény plugin.json fájlját
 	Add-ins need the desktop app.	A bővítményekhez az asztali alkalmazás kell.
 	There's no add-ins folder to install into.	Nincs bővítménymappa, ahová telepíteni lehetne.
+	Code	Kód
+	Disable all macros	Minden makró letiltása
+	Disable macros with notification (enable them per document)	Makrók letiltása értesítéssel (dokumentumonként engedélyezhetők)
+	Edit	Szerkesztés
+	Enable Content	Tartalom engedélyezése
+	Enable all macros (not recommended: a macro is a program)	Minden makró engedélyezése (nem ajánlott: a makró egy program)
+	Insert Module	Modul beszúrása
+	Macro Security	Makróbiztonság
+	Macro name:	Makró neve:
+	Macros are disabled for this document. Enable Content in the message bar, or change Macro Security.	A makrók le vannak tiltva ebben a dokumentumban. Kattintson az üzenetsáv „Tartalom engedélyezése” gombjára, vagy módosítsa a „Makróbiztonság” beállítást.
+	Macros have been disabled.	A makrók le lettek tiltva.
+	Modules	Modulok
+	No code yet: Insert Module.	Még nincs kód: „Modul beszúrása”.
+	Office Add-in	Office-bővítmény
+	Office add-ins need the WordCraft desktop app on macOS or Windows.	Az Office-bővítményekhez a WordCraft asztali alkalmazása kell macOS vagy Windows rendszeren.
+	Remove Module	Modul eltávolítása
+	Run	Futtatás
+	Run Macro	Makró futtatása
+	SECURITY WARNING	BIZTONSÁGI FIGYELMEZTETÉS
+	Save Module	Modul mentése
+	Saves the module into the document (save the document as .docm to keep it)	A modult a dokumentumba menti (a megtartásához mentse a dokumentumot .docm formátumban)
+	Stop Recording	Rögzítés leállítása
+	This document has no macros yet: type a name and Create.	Ebben a dokumentumban még nincs makró: írjon be egy nevet, és kattintson a „Létrehozás” gombra.
+	Visual Basic	Visual Basic

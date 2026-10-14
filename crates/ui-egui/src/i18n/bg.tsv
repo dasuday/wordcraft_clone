@@ -2493,3 +2493,27 @@
 	Pick the add-in's plugin.json	Изберете файла plugin.json на добавката
 	Add-ins need the desktop app.	Добавките изискват настолното приложение.
 	There's no add-ins folder to install into.	Няма папка за добавки, в която да се инсталира.
+	Code	Код
+	Disable all macros	Изключване на всички макроси
+	Disable macros with notification (enable them per document)	Изключване на макросите с известяване (включват се за всеки документ поотделно)
+	Edit	Редактиране
+	Enable Content	Разрешаване на съдържанието
+	Enable all macros (not recommended: a macro is a program)	Включване на всички макроси (не се препоръчва: макросът е програма)
+	Insert Module	Вмъкване на модул
+	Macro Security	Защита на макросите
+	Macro name:	Име на макроса:
+	Macros are disabled for this document. Enable Content in the message bar, or change Macro Security.	Макросите в този документ са изключени. Щракнете върху „Разрешаване на съдържанието“ в лентата за съобщения или променете „Защита на макросите“.
+	Macros have been disabled.	Макросите са изключени.
+	Modules	Модули
+	No code yet: Insert Module.	Още няма код: „Вмъкване на модул“.
+	Office Add-in	Добавка за Office
+	Office add-ins need the WordCraft desktop app on macOS or Windows.	Добавките за Office изискват настолното приложение WordCraft за macOS или Windows.
+	Remove Module	Премахване на модул
+	Run	Изпълнение
+	Run Macro	Изпълнение на макрос
+	SECURITY WARNING	ПРЕДУПРЕЖДЕНИЕ ЗА ЗАЩИТА
+	Save Module	Запазване на модул
+	Saves the module into the document (save the document as .docm to keep it)	Запазва модула в документа (запазете документа като .docm, за да го съхраните)
+	Stop Recording	Спиране на записа
+	This document has no macros yet: type a name and Create.	Този документ още няма макроси: въведете име и щракнете върху „Създаване“.
+	Visual Basic	Visual Basic

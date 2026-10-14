@@ -390,6 +390,8 @@ pub struct Session {
     pub last_command: Option<(String, Value)>,
     /// Macro being recorded: (name, steps).
     pub recording: Option<(String, Vec<(String, Value)>)>,
+    /// The user let this document's macros run (Enable Content), until another document opens.
+    pub macros_enabled: bool,
     pub macros: std::collections::BTreeMap<String, Vec<(String, Value)>>,
     /// Saved versions: (label, date, document).
     pub versions: Vec<(String, String, Document)>,
@@ -501,6 +503,9 @@ pub struct Prefs {
     pub autocorrect: crate::cmd::tools::AutoCorrectPrefs,
     /// Add-ins the user turned off (File › Options › Add-ins): listed, but not run.
     pub disabled_plugins: Vec<String>,
+    /// Which documents' macros may run: `disable`, `prompt` (once enabled for the document) or
+    /// `enable` (Developer › Macro Security).
+    pub macro_security: String,
 }
 
 impl Default for Prefs {
@@ -522,6 +527,7 @@ impl Default for Prefs {
             detect_language: true,
             autocorrect: Default::default(),
             disabled_plugins: Vec::new(),
+            macro_security: "prompt".into(),
         }
     }
 }
@@ -598,6 +604,7 @@ impl Session {
             originals: Default::default(),
             last_command: None,
             recording: None,
+            macros_enabled: false,
             macros: Default::default(),
             versions: Vec::new(),
             building_blocks: Default::default(),
@@ -835,6 +842,43 @@ impl Session {
         }
         self.typing_open = false;
     }
+    /// Runs `f` (which runs commands of its own) as one undo step named `label`: the steps the
+    /// commands inside make are folded into one, recorded only if the document changed. If `f`
+    /// fails, the document, the selection and the undo history go back to how they were.
+    pub fn one_step<T, E>(&mut self, label: &str, f: impl FnOnce(&mut Session) -> Result<T, E>) -> Result<T, E> {
+        let before = (self.doc.clone(), self.sel.clone(), self.history.clone(), self.redo.clone(), self.typing_open, self.undo_evicted);
+        let (rev, dirty) = (self.rev, self.dirty);
+        self.typing_open = false;
+        let r = f(self);
+        let (doc, sel, history, redo, typing, evicted) = before;
+        match &r {
+            Ok(_) => {
+                let changed = self.rev != rev;
+                self.history = history;
+                self.undo_evicted = evicted;
+                self.typing_open = false;
+                if changed {
+                    self.redo.clear();
+                    self.push_undo(label, doc, sel);
+                } else {
+                    self.redo = redo;
+                    self.typing_open = typing;
+                }
+            }
+            Err(_) => {
+                self.doc = doc;
+                self.sel = sel;
+                self.history = history;
+                self.redo = redo;
+                self.typing_open = typing;
+                self.undo_evicted = evicted;
+                // Caches follow the document back; it's as saved as it was.
+                self.rev = self.rev.wrapping_add(1);
+                self.dirty = dirty;
+            }
+        }
+        r
+    }
     /// Make the next mutating command part of the previous undo step instead of a new one, so a
     /// drag that runs a command every frame is a single Undo. Call it on every frame of the drag
     /// except the first; it is consumed by the next `run`.
@@ -963,6 +1007,7 @@ impl Session {
         self.doc = doc;
         self.doc.ensure_nonempty();
         self.password = None;
+        self.macros_enabled = false;
         self.sel = Selection::caret(self.doc.start_of(StoryRef::Body));
         self.pending = None;
         self.also_selected.clear();
@@ -1058,6 +1103,8 @@ impl Session {
             // Go Back's places, like the caret history: not part of the document.
             edit_marks: _,
             go_back_step: _,
+            // The user's Enable Content: a decision about the document, not an edit to it.
+            macros_enabled: _,
         } = self;
         let head = if history.len() + SNAPSHOT_HEAD > MAX_UNDO { history.iter().take(SNAPSHOT_HEAD).cloned().collect() } else { Vec::new() };
         EditSnapshot {
