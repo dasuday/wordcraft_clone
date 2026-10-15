@@ -1327,7 +1327,7 @@ impl Reader<'_> {
             part.body.inset = (inset != wordcraft_doc::TEXT_BOX_INSET).then_some(inset);
             part.body.auto_fit = bp.child("a:spAutoFit").is_some();
         }
-        let mut extra = ShapeExtra::default();
+        let mut extra = ShapeExtra { fill_transparency: fill_transparency(sppr), ..ShapeExtra::default() };
         // A rounded rectangle's own corner (`adj`, ECMA-376 §20.1.10.56); other presets drawn as
         // rounded rectangles keep the default.
         if prst == "roundRect" {
@@ -1954,6 +1954,16 @@ fn effect_list(l: &El) -> ShapeEffects {
     });
     let soft_edge = l.child("a:softEdge").map(|e| pt(e, "rad"));
     ShapeEffects { shadow, glow, soft_edge }.sanitized()
+}
+
+/// The transparency of a shape's own solid fill, percent: its colour's `a:alpha` (opacity in
+/// 1000ths of a percent), 0 when opaque or when the fill comes from the style.
+fn fill_transparency(sppr: Option<&El>) -> f32 {
+    let Some(f) = sppr.and_then(|s| s.child("a:solidFill")) else { return 0.0 };
+    match effect_color(f) {
+        (_, t) if t.is_finite() => t.clamp(0.0, 100.0),
+        _ => 0.0,
+    }
 }
 
 /// The colour inside an effect (`a:srgbClr`, `a:prstClr`, `a:sysClr`; theme colours aren't

@@ -81,12 +81,16 @@ pub enum Draw {
         effects: wordcraft_doc::effects::ShapeEffects,
         /// A rounded rectangle's corner ([`wordcraft_doc::connector::ShapeExtra::corner`]).
         corner: Option<u32>,
+        /// The fill's opacity, 0–1 ([`wordcraft_doc::connector::ShapeExtra::fill_opacity`]).
+        fill_alpha: f32,
     },
     /// An ink stroke: a line through `pts` (page points) with round ends and joins, `width`
     /// wide, in `color` at opacity `alpha`.
     Ink { pts: Vec<(f32, f32)>, color: Rgb, width: f32, alpha: f32 },
     /// A vector path (a chart's or diagram's polygons, slices, lines): filled, then stroked.
-    Path { segs: Vec<PathSeg>, fill: Option<Rgb>, stroke: Option<Rgb>, stroke_width: f32 },
+    /// `even_odd` fills it with the even-odd rule (a freeform's joined subpaths: inner outlines
+    /// are holes); otherwise non-zero winding.
+    Path { segs: Vec<PathSeg>, fill: Option<Rgb>, stroke: Option<Rgb>, stroke_width: f32, even_odd: bool, fill_alpha: f32 },
     /// An inline chart or diagram's draws, as one figure with its alt text (for tagged PDF).
     Figure { alt: String, kind: GraphicKind, draws: Vec<Draw> },
     /// A formatting mark (¶ · → ↵) in the UI's mark colour, or in `color` (a tracked
@@ -1057,6 +1061,7 @@ fn lines(
                 stroke_width: e.stroke,
                 effects: Default::default(),
                 corner: None,
+                fill_alpha: 1.0,
             });
         }
         // Ruby (Phonetic Guide) text over its base text, in runs of one style.
@@ -1274,10 +1279,11 @@ fn graphic_draws(doc: &Document, g: &Graphic, rect: Rect, alpha: f32) -> Vec<Dra
                 stroke_width: stroke_width * k,
                 effects: Default::default(),
                 corner: None,
+                fill_alpha: 1.0,
             }),
             GraphicItem::Path { segs, fill, stroke, stroke_width } => {
                 let segs = page_segs(segs, |x, y| (rect.x + x * sx, rect.y + y * sy));
-                out.push(Draw::Path { segs, fill: *fill, stroke: *stroke, stroke_width: stroke_width * k })
+                out.push(Draw::Path { segs, fill: *fill, stroke: *stroke, stroke_width: stroke_width * k, even_odd: false, fill_alpha: 1.0 })
             }
             GraphicItem::Text { rect: r, .. } => out.extend(text_glyphs(doc, inside(r), it, alpha, k)),
             GraphicItem::Image { rect: r, media } => {
@@ -1353,14 +1359,17 @@ fn shape_draws(
         return;
     }
     let Some(f) = freeform.filter(|_| kind == ShapeKind::Freeform) else {
-        out.push(Draw::Shape { rect, kind, fill, stroke, stroke_width, effects, corner: extra.corner });
+        out.push(Draw::Shape { rect, kind, fill, stroke, stroke_width, effects, corner: extra.corner, fill_alpha: extra.fill_opacity() });
         return;
     };
     if f.is_ink() && opts.hide_ink {
         return;
     }
     let width = if stroke_width.is_finite() { stroke_width.clamp(0.0, 200.0) } else { 0.75 };
-    for (pts, closed) in f.placed(rect.x, rect.y, rect.w, rect.h) {
+    // The draw a closed path's joined subpaths are added to (one `a:path`: its holes).
+    let mut group: Option<usize> = None;
+    let joined = f.paths.iter().map(|p| p.joined);
+    for ((pts, closed), joined) in f.placed(rect.x, rect.y, rect.w, rect.h).into_iter().zip(joined) {
         if f.is_ink() || (!closed && fill.is_none()) {
             if let Some(color) = stroke {
                 let mut pts: Vec<(f32, f32)> = pts.iter().map(|[x, y]| (*x, *y)).collect();
@@ -1384,7 +1393,23 @@ fn shape_draws(
         if closed {
             segs.push(PathSeg::Close);
         }
-        out.push(Draw::Path { segs, fill: if closed { fill } else { None }, stroke, stroke_width: width });
+        if closed
+            && joined
+            && let Some(Draw::Path { segs: into, even_odd, .. }) = group.and_then(|i| out.get_mut(i))
+        {
+            into.extend(segs);
+            *even_odd = true;
+            continue;
+        }
+        group = closed.then_some(out.len());
+        out.push(Draw::Path {
+            segs,
+            fill: if closed { fill } else { None },
+            stroke,
+            stroke_width: width,
+            even_odd: false,
+            fill_alpha: extra.fill_opacity(),
+        });
         if !closed
             && extra.arrow_end
             && let Some(color) = stroke
@@ -1412,7 +1437,7 @@ fn path_arrowhead(points: &[(f32, f32)], color: Rgb, stroke_width: f32) -> Optio
     let (bx, by) = (tip.0 - dx * len, tip.1 - dy * len);
     let (nx, ny) = (-dy * len * 0.45, dx * len * 0.45);
     let segs = vec![PathSeg::Move(tip.0, tip.1), PathSeg::Line(bx + nx, by + ny), PathSeg::Line(bx - nx, by - ny), PathSeg::Close];
-    Some(Draw::Path { segs, fill: Some(color), stroke: None, stroke_width: 0.0 })
+    Some(Draw::Path { segs, fill: Some(color), stroke: None, stroke_width: 0.0, even_odd: false, fill_alpha: 1.0 })
 }
 
 /// A line or connector at `rect` (its unflipped frame: flips are the frame's turn), with its
@@ -1438,9 +1463,9 @@ fn line_draws(
                     PathSeg::Close => PathSeg::Close,
                 })
                 .collect();
-            out.push(Draw::Path { segs, fill: None, stroke, stroke_width });
+            out.push(Draw::Path { segs, fill: None, stroke, stroke_width, even_odd: false, fill_alpha: 1.0 });
         }
-        None => out.push(Draw::Shape { rect, kind, fill: None, stroke, stroke_width, effects, corner: None }),
+        None => out.push(Draw::Shape { rect, kind, fill: None, stroke, stroke_width, effects, corner: None, fill_alpha: 1.0 }),
     }
     let Some(color) = stroke else { return };
     // Our line runs from the bottom-left corner to the top-right; connectors from the top-left
@@ -1457,7 +1482,7 @@ fn line_draws(
         let (bx, by) = (tip.0 - dx * len, tip.1 - dy * len);
         let (nx, ny) = (-dy * len * 0.45, dx * len * 0.45);
         let segs = vec![PathSeg::Move(tip.0, tip.1), PathSeg::Line(bx + nx, by + ny), PathSeg::Line(bx - nx, by - ny), PathSeg::Close];
-        out.push(Draw::Path { segs, fill: Some(color), stroke: None, stroke_width: 0.0 });
+        out.push(Draw::Path { segs, fill: Some(color), stroke: None, stroke_width: 0.0, even_odd: false, fill_alpha: 1.0 });
     }
 }
 
@@ -1627,6 +1652,7 @@ fn canvas_background(rect: Rect, c: &wordcraft_doc::para::CanvasStyle) -> Draw {
         stroke_width: c.stroke_width,
         effects: Default::default(),
         corner: None,
+        fill_alpha: 1.0,
     }
 }
 
