@@ -32,7 +32,10 @@ pub fn specs() -> Vec<CommandSpec> {
             .key(super::mac_or("End / Mod+Right", "End"))
             .params(EXTEND)
             .pure(),
-        CommandSpec::new("caret.paraUp", "Paragraph Up", "Navigation", |s, v| mv(s, v, para_up)).key("Mod+Up / Alt+Up").params(EXTEND).pure(),
+        CommandSpec::new("caret.paraUp", "Paragraph Up", "Navigation", |s, v| mv_to(s, v, para_up, true))
+            .key("Mod+Up / Alt+Up")
+            .params(EXTEND)
+            .pure(),
         CommandSpec::new("caret.paraDown", "Paragraph Down", "Navigation", |s, v| mv(s, v, para_down))
             .key("Mod+Down / Alt+Down")
             .params(EXTEND)
@@ -85,20 +88,26 @@ fn apply(s: &mut Session, to: Pos, ext: bool) {
 }
 
 fn mv(s: &mut Session, v: &Value, f: fn(&mut Session, &Pos) -> Pos) -> CmdResult {
+    mv_to(s, v, f, false)
+}
+
+/// [`mv`]; a move back onto a collapsed heading lands on its start with `start` (Ctrl+Up goes to
+/// paragraph starts), else on its end.
+fn mv_to(s: &mut Session, v: &Value, f: fn(&mut Session, &Pos) -> Pos, start: bool) -> CmdResult {
     let ext = extend(v);
     s.goal_x = None;
     let from = s.sel.focus.clone();
     let to = f(s, &from);
-    let to = shown_pos(s, &from, to);
+    let to = shown_pos(s, &from, to, start);
     apply(s, to, ext);
     sel_result(s)
 }
 
 /// `to`, reached by a move from `from`, taken off text a collapsed heading hides (#1745): forward
-/// to the start of the next block shown, back onto the heading (its start when `to` is a
-/// paragraph start, else its end). Word for Mac's Right arrow from the end of a collapsed
+/// to the start of the next block shown, back onto the heading (its start with `start`, else its
+/// end). Word for Mac's Right arrow from the end of a collapsed
 /// heading goes to the start of the next heading shown.
-pub(crate) fn shown_pos(s: &Session, from: &Pos, to: Pos) -> Pos {
+pub(crate) fn shown_pos(s: &Session, from: &Pos, to: Pos, start: bool) -> Pos {
     if to.story != StoryRef::Body {
         return to;
     }
@@ -118,7 +127,7 @@ pub(crate) fn shown_pos(s: &Session, from: &Pos, to: Pos) -> Pos {
     } else {
         (0..top).rev().find(|i| !hidden(*i)).and_then(|j| paths.iter().rfind(|p| first(p) == j)).map(|path| {
             let len = s.doc.para(StoryRef::Body, path).map_or(0, |p| p.len());
-            Pos::new(StoryRef::Body, path.clone(), if to.off == 0 { 0 } else { len })
+            Pos::new(StoryRef::Body, path.clone(), if start { 0 } else { len })
         })
     };
     found.unwrap_or_else(|| from.clone())
@@ -178,7 +187,7 @@ fn visual_lr(s: &mut Session, v: &Value, is_left: bool) -> CmdResult {
         None if is_left => left(s, &from),
         None => right(s, &from),
     };
-    let to = shown_pos(s, &from, to);
+    let to = shown_pos(s, &from, to, false);
     apply(s, to, ext);
     sel_result(s)
 }
@@ -256,7 +265,7 @@ fn vert(s: &mut Session, v: &Value, dir: i32) -> CmdResult {
         None => {
             // Top/bottom of the story: go to its start/end.
             let end = if dir < 0 { s.doc.start_of(from.story) } else { s.doc.end_of(from.story) };
-            shown_pos(s, &from, end)
+            shown_pos(s, &from, end, dir < 0)
         }
     };
     if let Some(c) = l.caret_on(&to, s.page_hint) {

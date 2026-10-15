@@ -265,6 +265,11 @@ pub struct FoldArrow {
     pub rect: Rect,
     /// The heading is collapsed (the arrow points along the line, not down).
     pub collapsed: bool,
+    /// The heading reads right to left: the arrow is on the right, pointing left when collapsed.
+    pub rtl: bool,
+    /// The left and right edges of the heading's first line on the page: pointing anywhere
+    /// between them and the arrow shows it.
+    pub line: (f32, f32),
 }
 
 impl DocLayout {
@@ -287,6 +292,8 @@ impl DocLayout {
                     block: *block as usize,
                     rect: Rect::new(side, *y, FOLD_ARROW, first.height.max(FOLD_ARROW)),
                     collapsed: para.rp.collapsed,
+                    rtl: first.rtl,
+                    line: (x + first.left, x + first.right),
                 })
             })
             .collect()

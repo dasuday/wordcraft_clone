@@ -3179,10 +3179,12 @@ fn apply_paragraph(app: &mut WordApp, d: &Dialog) {
     let Dialog::Paragraph { start, mixed, .. } = d else { return };
     let fields = para_fields(d);
     let turned = !mixed.contains("bidi") && fields.get("bidi") != start.get("bidi");
+    // "Collapsed by default" is greyed for body text: what it shows isn't sent then (#1745).
+    let body_text = fields.get("outlineLevel").and_then(Value::as_u64).is_none_or(|l| l >= u64::from(BODY_LEVEL));
     let (mut props, mut page) = (serde_json::Map::new(), serde_json::Map::new());
     for (k, v) in fields {
         let on_page = matches!(k.as_str(), "align" | "left" | "right");
-        if mixed.contains(&k) || (start.get(&k) == Some(&v) && !(turned && on_page)) {
+        if mixed.contains(&k) || (start.get(&k) == Some(&v) && !(turned && on_page)) || (k == "collapsed" && body_text) {
             continue;
         }
         if on_page {
@@ -3951,6 +3953,16 @@ mod tests {
         let shown =
             |app: &mut WordApp, i: usize| app.session.layout().index.contains_key(&(wordcraft_doc::StoryRef::Body, wordcraft_doc::Path::top(i)));
         assert!(shown(&mut app, 0) && !shown(&mut app, 1) && !shown(&mut app, 2));
+        // The box is greyed for body text: ticking it and choosing Body Text sends no flag.
+        app.session.sel = wordcraft_engine::Selection::caret(wordcraft_doc::Pos::body(0, 0));
+        let _ = app.run("para.collapsed", json!({"value": false}));
+        ok_edit(&mut app, |d| {
+            if let Dialog::Paragraph { outline, collapsed, .. } = d {
+                *outline = BODY_LEVEL;
+                *collapsed = true;
+            }
+        });
+        assert_eq!((para_props(&app, 0).outline_level, para_props(&app, 0).collapsed), (Some(BODY_LEVEL), Some(false)));
     }
 
     #[test]

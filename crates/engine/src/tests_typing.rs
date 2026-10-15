@@ -1219,15 +1219,96 @@ fn typing_at_the_end_of_a_collapsed_heading_keeps_it_collapsed() {
     assert_eq!(s.doc.para(StoryRef::Body, &wordcraft_doc::Path::top(1)).unwrap().text, "Body one.");
 }
 
-/// Enter at the end of a collapsed heading expands it (WordCraft's choice; not checked in Word):
-/// the new paragraph and what follows show, so nothing is typed out of sight.
+/// Word for Mac (checked): Enter at the end of a collapsed heading only expands it: no new
+/// paragraph, the caret stays at the heading's end; the next Enter splits as usual.
 #[test]
-fn enter_at_the_end_of_a_collapsed_heading_expands_it() {
+fn enter_at_the_end_of_a_collapsed_heading_only_expands_it() {
     let mut s = collapsed_doc();
     s.sel = crate::Selection::caret(Pos::body(0, 5));
+    typ(&mut s, "\n");
+    assert_eq!(body_texts(&s), ["Intro", "Body one.", "Part", "Body two.", "Next", "Body three."]);
+    assert_eq!(s.sel.focus, Pos::body(0, 5));
+    assert!((0..6).all(|i| shown(&mut s, i)));
     typ(&mut s, "\nNew");
-    let texts: Vec<String> = s.doc.body.iter().filter_map(|b| b.as_para()).map(|p| p.text.clone()).collect();
-    assert_eq!(texts.get(..3).unwrap(), ["Intro", "New", "Body one."]);
-    assert!(s.doc.body.iter().filter_map(|b| b.as_para()).all(|p| p.props.collapsed != Some(true)));
-    assert!((0..7).all(|i| shown(&mut s, i)));
+    assert_eq!(body_texts(&s).get(..3).unwrap(), ["Intro", "New", "Body one."]);
+}
+
+/// Word for Mac (checked): Delete at the end of a collapsed heading only expands it; the second
+/// press joins the next paragraph as usual.
+#[test]
+fn delete_at_the_end_of_a_collapsed_heading_first_expands_it() {
+    let mut s = collapsed_doc();
+    s.sel = crate::Selection::caret(Pos::body(0, 5));
+    run(&mut s, "text.delete", json!({}));
+    assert_eq!(body_texts(&s).len(), 6);
+    assert_eq!(s.sel.focus, Pos::body(0, 5));
+    assert!(shown(&mut s, 1), "expanded");
+    run(&mut s, "text.delete", json!({}));
+    assert_eq!(body_texts(&s).first().unwrap(), "IntroBody one.");
+}
+
+/// Word for Mac (checked): Backspace at the start of the first paragraph after a fold only
+/// expands the heading; the second press joins as usual.
+#[test]
+fn backspace_after_a_collapsed_heading_first_expands_it() {
+    let mut s = collapsed_doc();
+    s.sel = crate::Selection::caret(Pos::body(4, 0));
+    typ(&mut s, "\u{8}");
+    assert_eq!(body_texts(&s).len(), 6);
+    assert_eq!(s.sel.focus, Pos::body(4, 0));
+    assert!((0..6).all(|i| shown(&mut s, i)), "expanded");
+    typ(&mut s, "\u{8}");
+    assert_eq!(body_texts(&s).get(3).unwrap(), "Body two.Next");
+}
+
+/// Word for Mac (checked): Find expands the heading to show the match. Go To-style selection
+/// commands (`select.text`, `caret.set`) do the same; Undo folds it again.
+#[test]
+fn find_and_selection_commands_open_a_collapsed_heading() {
+    let mut s = collapsed_doc();
+    run(&mut s, "edit.find", json!({"text": "two"}));
+    assert_eq!(s.sel.focus.path, wordcraft_doc::Path::top(3));
+    assert!(shown(&mut s, 3), "the match shows");
+    run(&mut s, "edit.undo", json!({}));
+    assert!(!shown(&mut s, 3), "Undo folds it again");
+    let mut s = collapsed_doc();
+    run(&mut s, "select.text", json!({"text": "Body one"}));
+    assert!(shown(&mut s, 1));
+    let mut s = collapsed_doc();
+    run(&mut s, "caret.set", json!({"pos": {"story": "body", "path": [3], "off": 2}}));
+    assert_eq!(s.sel.focus, Pos::body(3, 2));
+    assert!(shown(&mut s, 3));
+    // Select All leaves the fold alone (Word: Select All + Delete deletes the hidden text too).
+    let mut s = collapsed_doc();
+    run(&mut s, "select.all", json!({}));
+    assert!(!shown(&mut s, 1));
+}
+
+/// Pasting paragraphs at the end of a collapsed heading opens it, so the pasted text and the
+/// caret show (as Enter does).
+#[test]
+fn pasting_paragraphs_into_a_collapsed_heading_opens_it() {
+    let mut s = collapsed_doc();
+    s.sel = crate::Selection::caret(Pos::body(0, 5));
+    run(&mut s, "edit.paste", json!({"html": "<p>A</p><p>B</p>"}));
+    assert!(body_texts(&s).iter().any(|t| t == "B"), "{:?}", body_texts(&s));
+    let top = s.sel.focus.path.0[0] as usize;
+    assert!(shown(&mut s, top) && shown(&mut s, 1), "{:?}", body_texts(&s));
+}
+
+/// Left across a fold whose last hidden paragraph is empty lands at the heading's end.
+#[test]
+fn left_across_a_collapsed_heading_fold_ending_in_an_empty_paragraph_lands_at_its_end() {
+    let mut s = collapsed_doc();
+    let p = s.doc.para_mut(StoryRef::Body, &wordcraft_doc::Path::top(3)).unwrap();
+    p.text.clear();
+    p.runs.clear();
+    p.touch();
+    s.sel = crate::Selection::caret(Pos::body(4, 0));
+    run(&mut s, "caret.left", json!({}));
+    assert_eq!(s.sel.focus, Pos::body(0, 5));
+}
+
+fn body_texts(s: &Session) -> Vec<String> {
+    s.doc.body.iter().filter_map(|b| b.as_para()).map(|p| p.text.clone()).collect()
 }

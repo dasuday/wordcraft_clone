@@ -56,3 +56,20 @@ fn no_flag_writes_nothing() {
     z.by_name("word/document.xml").unwrap().read_to_string(&mut xml).unwrap();
     assert!(!xml.contains("collapsed"));
 }
+
+/// A style can carry the flag (`w:style/w:pPr/w15:collapsed`): read, written back in styles.xml.
+#[test]
+fn a_style_carrying_the_flag_round_trips() {
+    let mut d = Document::from_text("Intro\nBody");
+    if let Some(st) = d.styles.styles.iter_mut().find(|s| s.id == "Heading1") {
+        st.para.collapsed = Some(true);
+    }
+    let bytes = wordcraft_docx::write(&d).unwrap();
+    let mut z = zip::ZipArchive::new(std::io::Cursor::new(bytes.clone())).unwrap();
+    let mut xml = String::new();
+    z.by_name("word/styles.xml").unwrap().read_to_string(&mut xml).unwrap();
+    let h1 = xml.split("w:styleId=\"Heading1\"").nth(1).and_then(|s| s.split("</w:style>").next()).unwrap_or("");
+    assert!(h1.contains("<w15:collapsed/>"), "{h1}");
+    let back = wordcraft_docx::read(&bytes).unwrap();
+    assert_eq!(back.styles.styles.iter().find(|s| s.id == "Heading1").and_then(|s| s.para.collapsed), Some(true));
+}

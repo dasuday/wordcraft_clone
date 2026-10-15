@@ -28,19 +28,22 @@ formatting use the existing editing primitives. Tests: `sample_text_formulas_exp
 
 A heading (a paragraph with an outline level) can be "Collapsed by default" (Paragraph dialog,
 `para.collapsed`, the fold arrow beside it, or the heading context menu): it then hides everything
-after it up to the next heading of its level or higher. Checked in Word for Mac 16.113.4
-(2026-10-15) unless marked.
+after it up to the next heading of its level or higher. Word-checked in Word for Mac 16.113.4
+(2026-10-15 and 2026-10-16) unless marked.
 
 | Keys | Word's result | Test |
 |---|---|---|
 | End, Right at the end of a collapsed heading, then `X` | the caret goes to the start of the next heading shown: `XNext` | `arrows_skip_what_a_collapsed_heading_hides` |
-| Left at the start of that heading; Down/Up, Ctrl+Down/Up, Word Right, Shift+Right across the fold | skip the hidden text both ways (WordCraft; Word for Mac checked for Right only) | `arrows_skip_what_a_collapsed_heading_hides` |
-| Typing at the end of a collapsed heading | the heading stays collapsed; Backspace edits the heading, not the hidden text | `typing_at_the_end_of_a_collapsed_heading_keeps_it_collapsed` |
-| Enter in a collapsed heading | **WordCraft's choice, not checked in Word:** the heading expands, so the new paragraph and what was hidden show (nothing is typed out of sight) | `enter_at_the_end_of_a_collapsed_heading_expands_it` |
+| Left at the start of that heading; Down/Up, Ctrl+Down/Up, Word Right, Shift+Right across the fold | skip the hidden text both ways, Left landing at the heading's end even when the last hidden paragraph is empty (WordCraft; Word for Mac checked for Right only) | `arrows_skip_what_a_collapsed_heading_hides`, `left_across_a_collapsed_heading_fold_ending_in_an_empty_paragraph_lands_at_its_end` |
+| Typing at the end of a collapsed heading | the heading stays collapsed | `typing_at_the_end_of_a_collapsed_heading_keeps_it_collapsed` |
+| Enter at the end of a collapsed heading | only expands it: no new paragraph, the caret stays at the heading's end; the next Enter splits as usual | `enter_at_the_end_of_a_collapsed_heading_only_expands_it` |
+| Delete at the end of a collapsed heading | the first press only expands it; the second joins the next paragraph | `delete_at_the_end_of_a_collapsed_heading_first_expands_it` |
+| Backspace at the start of the paragraph after a fold | the first press only expands the heading; the second joins | `backspace_after_a_collapsed_heading_first_expands_it` |
+| Find landing in hidden text | expands the heading to show the match. WordCraft does the same for Go To, `select.text` and `caret.set` (not checked in Word); Undo folds it again (Word's Undo doesn't restore the folded display; ours does) | `find_and_selection_commands_open_a_collapsed_heading` |
+| Pasting paragraphs at the end of a collapsed heading | WordCraft: the heading opens first, so the pasted text and the caret show (not checked in Word) | `pasting_paragraphs_into_a_collapsed_heading_opens_it` |
+| Select All, Delete | deletes the hidden text too | — |
 
-Not changed (and not checked in Word): Find and Replace still search and replace hidden text,
-Select All selects it, and Delete at the end of a collapsed heading or Backspace at the start of
-the next shown paragraph joins with the hidden paragraph next to it.
+Outline view shows collapsed headings expanded, as in Word.
 
 ## Lists
 
@@ -214,6 +217,7 @@ Word.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-16 | minor | Collapsed headings Word-checked (#1745 fix round 1): Enter, Delete and Backspace next to a fold only expand it first; Find (and Go To, `select.text`, `caret.set`, paste) opens the fold |
 | 2026-10-16 | minor | Collapsed headings (#1745): Right from the end of a collapsed heading goes to the next heading shown (Word for Mac); the arrows skip the hidden text both ways; typing at the heading's end doesn't expand it; Enter in it expands it (WordCraft's choice) |
 | 2026-10-14 | trivial | Shift+Delete cuts the selection, and does nothing without one, on macOS and Linux too, as in Word for Windows (#1669); Shift+Backspace already erased (#707) |
 | 2026-10-13 | trivial | Select All then Delete or Backspace removes a table the document starts with (#1198) |

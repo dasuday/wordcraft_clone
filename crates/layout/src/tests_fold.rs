@@ -123,3 +123,46 @@ fn fold_arrows_sit_beside_headings() {
     assert_eq!(l.fold_arrow_at(0, body.x + 50.0, arrows[0].rect.y + 2.0), None);
     assert!(l.fold_arrows(99).is_empty());
 }
+
+/// Notes referenced only from hidden text are left out alike: a footnote's note isn't placed
+/// (its reference isn't), and neither is an endnote's at the end of the document.
+#[test]
+fn notes_referenced_from_hidden_text_are_left_out_alike() {
+    use wordcraft_doc::para::{InlineObject, NoteKind};
+    use wordcraft_doc::{PartKind, Pos};
+    let mut d = doc(0);
+    let note = |d: &mut Document, kind: PartKind, text: &str| d.add_part(kind, vec![para(text, ParaProps::default())]);
+    let foot = note(&mut d, PartKind::Footnote, "Hidden footnote");
+    let end = note(&mut d, PartKind::Endnote, "Hidden endnote");
+    let shown_end = note(&mut d, PartKind::Endnote, "Shown endnote");
+    for (block, kind, id) in [(1, NoteKind::Footnote, foot), (1, NoteKind::Endnote, end), (5, NoteKind::Endnote, shown_end)] {
+        d.insert_object(&Pos::body(block, 0), InlineObject::NoteRef { kind, id, custom: String::new() }, &Default::default()).unwrap();
+    }
+    let l = lay(&d, ViewMode::Print);
+    let parts: Vec<u32> = l
+        .pages
+        .iter()
+        .flat_map(|p| p.items.iter())
+        .filter_map(|it| if let Placed::Lines { story: StoryRef::Part(id), .. } = it { Some(*id) } else { None })
+        .collect();
+    assert!(parts.contains(&shown_end), "{parts:?}");
+    assert!(!parts.contains(&foot) && !parts.contains(&end), "{parts:?}");
+}
+
+/// A right-to-left heading's arrow sits on its start side, the right, and says so.
+#[test]
+fn a_right_to_left_headings_arrow_is_on_the_right() {
+    let mut d = doc(0);
+    if let Some(Block::Para(p)) = d.body.first_mut().map(Arc::make_mut) {
+        p.props.bidi = Some(true);
+    }
+    let l = lay(&d, ViewMode::Print);
+    let arrows = l.fold_arrows(0);
+    let body = l.pages[0].body;
+    let rtl = arrows.iter().find(|a| a.block == 0).unwrap();
+    assert!(rtl.rtl && rtl.rect.x >= body.x + body.w, "{rtl:?} {body:?}");
+    let ltr = arrows.iter().find(|a| a.block == 4).unwrap();
+    assert!(!ltr.rtl && ltr.rect.x + ltr.rect.w <= body.x, "{ltr:?}");
+    // The line beside it: hovering there shows the arrow, the rest of the page doesn't.
+    assert!(ltr.line.0 >= body.x - 0.5 && ltr.line.1 <= body.x + body.w + 0.5, "{ltr:?}");
+}

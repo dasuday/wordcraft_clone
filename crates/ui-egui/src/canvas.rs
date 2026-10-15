@@ -2849,12 +2849,13 @@ fn paint_fold_arrows(app: &WordApp, ui: &Ui, layout: &DocLayout, rects: &[Rect],
         let Some(page) = layout.pages.get(i) else { continue };
         let k = page_screen_scale(*r, page, scale);
         for a in layout.fold_arrows(i) {
-            let over = hover.is_some_and(|(hp, _, y)| hp == i && y >= a.rect.y && y <= a.rect.y + a.rect.h);
+            // Over the heading's first line or the arrow (not the same height in another column).
+            let (x0, x1) = (a.line.0.min(a.rect.x), a.line.1.max(a.rect.x + a.rect.w));
+            let over = hover.is_some_and(|(hp, x, y)| hp == i && y >= a.rect.y && y <= a.rect.y + a.rect.h && x >= x0 && x <= x1);
             if !a.collapsed && !over {
                 continue;
             }
-            let rtl = a.rect.x > page.body.x;
-            let fold = match (a.collapsed, rtl) {
+            let fold = match (a.collapsed, a.rtl) {
                 (false, _) => crate::icons::Fold::Open,
                 (true, false) => crate::icons::Fold::ClosedLtr,
                 (true, true) => crate::icons::Fold::ClosedRtl,

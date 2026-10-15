@@ -2130,12 +2130,25 @@ fn layout_pass(
     };
     // Endnotes in document order, with the section of their reference; placed at the end of a
     // section that keeps them there, else at the end of the document.
+    // Endnotes referenced only from text collapsed headings hide are left out, as their
+    // footnotes are (#1745).
+    let mut folded_notes = HashSet::new();
+    if !ctx.folded.is_empty() {
+        doc.objects_in_reading_order_by_block(&mut |block, p, k| {
+            if ctx.folded.get(block).copied().unwrap_or(false)
+                && let Some(InlineObject::NoteRef { id, .. }) = p.objects.get(k)
+            {
+                folded_notes.insert(*id);
+            }
+            true
+        });
+    }
     let mut endnotes: std::collections::VecDeque<(u32, usize)> = {
         let mut ids: Vec<(u32, u32, usize)> = ctx
             .fields
             .notes
             .iter()
-            .filter(|(id, _)| doc.parts.get(id).is_some_and(|p| p.kind == wordcraft_doc::PartKind::Endnote))
+            .filter(|(id, _)| doc.parts.get(id).is_some_and(|p| p.kind == wordcraft_doc::PartKind::Endnote) && !folded_notes.contains(*id))
             .map(|(id, n)| (n.order, *id, n.section))
             .collect();
         ids.sort();

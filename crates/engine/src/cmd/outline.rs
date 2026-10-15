@@ -207,7 +207,7 @@ pub(crate) fn folded(s: &Session) -> Vec<bool> {
 }
 
 /// Whether body block `i` is a heading its stored flag collapses.
-fn folds(s: &Session, i: usize) -> bool {
+pub(crate) fn folds(s: &Session, i: usize) -> bool {
     let Some(Block::Para(p)) = s.doc.body.get(i).map(|b| &**b) else { return false };
     let rp = s.doc.styles.resolve_para(&p.props);
     rp.collapsed && rp.outline_level.is_some()
@@ -262,12 +262,57 @@ fn fold_all(s: &mut Session, on: bool) -> CmdResult {
     sel_result(s)
 }
 
-/// After a fold, a caret it hides moves onto the heading (#1745).
+/// After a fold, a selection it hides (either end) becomes a caret on the heading (#1745).
 pub(crate) fn keep_caret_shown(s: &mut Session) {
-    let focus = s.sel.focus.clone();
-    let to = super::caret::shown_pos(s, &focus, focus.clone());
-    if to != focus {
+    let (focus, anchor) = (s.sel.focus.clone(), s.sel.anchor.clone());
+    let to = super::caret::shown_pos(s, &focus, focus.clone(), false);
+    if to != focus || super::caret::shown_pos(s, &anchor, anchor.clone(), false) != anchor {
         s.sel = Selection::caret(to);
+    }
+}
+
+/// The top-level body block `p` is in, when that block is hidden by a collapsed heading.
+fn hidden_block(folded: &[bool], p: &Pos) -> Option<usize> {
+    let top = (p.story == StoryRef::Body).then(|| p.path.0.first().map(|b| *b as usize)).flatten()?;
+    folded.get(top).copied().unwrap_or(false).then_some(top)
+}
+
+/// Expand every collapsed heading whose fold hides body block `top` (nested folds too), so it
+/// shows. Returns whether anything changed.
+pub(crate) fn show_block(s: &mut Session, top: usize) -> bool {
+    let levels = ol::levels(&s.doc);
+    let mut changed = false;
+    for i in (0..top.min(levels.len())).rev() {
+        if folds(s, i) && ol::subtree_end(&levels, i) > top {
+            changed |= set_fold(s, i, false).is_ok();
+        }
+    }
+    changed
+}
+
+/// Whether either end of the selection is in text a collapsed heading hides.
+pub(crate) fn selection_hidden(s: &Session) -> bool {
+    let folded = folded(s);
+    !folded.is_empty() && (hidden_block(&folded, &s.sel.focus).is_some() || hidden_block(&folded, &s.sel.anchor).is_some())
+}
+
+/// Open the folds hiding the selection's ends (Find landing in hidden text, Word for Mac; Go To,
+/// `select.text`, `caret.set`, paste).
+pub(crate) fn show_selection(s: &mut Session) -> bool {
+    let folded = folded(s);
+    let ends = [hidden_block(&folded, &s.sel.focus), hidden_block(&folded, &s.sel.anchor)];
+    let mut changed = false;
+    for top in ends.into_iter().flatten() {
+        changed |= show_block(s, top);
+    }
+    changed
+}
+
+/// Before several paragraphs are inserted at `at`: a collapsed heading there opens, so they don't
+/// land in its fold out of sight (#1745).
+pub(crate) fn open_for_insert(s: &mut Session, at: &Pos, blocks: usize) {
+    if blocks > 1 && at.story == StoryRef::Body && at.path.0.len() == 1 {
+        expand_heading(s, at.path.last());
     }
 }
 
