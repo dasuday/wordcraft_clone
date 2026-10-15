@@ -347,3 +347,22 @@ fn spacing_corrections_are_tracked_changes_while_tracking() {
         assert_eq!(s.doc.plain_text(StoryRef::Body), want, "typing {answer}");
     }
 }
+
+/// A sign inserted before an existing space and number while tracking: the space's change to a
+/// non-breaking one is tracked like the sign, so Reject All gives back exactly what was there.
+#[test]
+fn sign_before_existing_space_is_tracked_while_tracking() {
+    for (command, glyph) in [("law.symbols.section", "§"), ("law.symbols.paragraphs", "¶¶")] {
+        for (answer, want) in [("review.rejectAll", " 1.010".to_string()), ("review.acceptAll", format!("{glyph}{NBSP}X1.010"))] {
+            let mut s = law();
+            run(&mut s, "text.insert", json!({"text": " 1.010"}));
+            run(&mut s, "review.trackChanges", json!({"value": true}));
+            s.sel = Selection::caret(Pos::body(0, 0));
+            run(&mut s, command, json!({}));
+            // The caret sits after the new non-breaking space.
+            run(&mut s, "text.insert", json!({"text": "X"}));
+            run(&mut s, answer, json!({}));
+            assert_eq!(s.doc.plain_text(StoryRef::Body), want, "{command} {answer}");
+        }
+    }
+}

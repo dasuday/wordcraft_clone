@@ -154,6 +154,12 @@ fn maybe_append_sign_nbsp(s: &mut Session) -> Result<(), CmdError> {
         // the whole insertion one undo step.
         let space_start = f.off;
         let space_end = space_start + 1;
+        if s.doc.settings.track_changes {
+            // As a tracked change, like the sign itself: Reject puts the ordinary space back.
+            let end = wordcraft_engine::cmd::replace_text(s, &Pos { off: space_start, ..f.clone() }, &Pos { off: space_end, ..f.clone() }, NBSP_STR)?;
+            s.sel = Selection::caret(end);
+            return Ok(());
+        }
         let para = s.doc.para_mut(f.story, &f.path)?;
         let props = para.props_of_char(space_start).clone();
         para.delete(space_start, space_end)?;

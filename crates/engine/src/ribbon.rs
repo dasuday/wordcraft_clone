@@ -445,6 +445,14 @@ impl RibbonLayout {
         self.hidden_addin_tabs.clear();
     }
 
+    /// Take `other`'s tabs, hidden add-in tabs and toolbar (a loaded or imported layout), keeping
+    /// the tabs installed add-ins show: those come from the add-ins, not from a saved layout.
+    pub fn replace_layout(&mut self, other: RibbonLayout) {
+        let addins = std::mem::take(&mut self.addin_tabs);
+        *self = other;
+        self.addin_tabs = addins;
+    }
+
     /// Back to the default Quick Access Toolbar.
     pub fn reset_qat(&mut self) {
         self.qat = None;
@@ -571,6 +579,37 @@ mod tests {
         // Reset Ribbon shows hidden add-in tabs again.
         l.reset_ribbon();
         assert!(l.ribbon_is_default() && !l.tabs().last().unwrap().hidden);
+
+        // Loading a saved layout keeps the add-in's tab too.
+        l.set_hidden("Extra", true).unwrap();
+        l.replace_layout(RibbonLayout::default());
+        assert!(l.ribbon_is_default());
+        let extra = l.tabs().last().unwrap().clone();
+        assert!(extra.name == "Extra" && !extra.hidden, "{extra:?}");
+    }
+
+    /// Every reset in Customize the Ribbon keeps an installed add-in's tab: the add-in put it
+    /// there, and only turning the add-in off takes it away.
+    #[test]
+    fn reset_keeps_addin_tabs() {
+        for reset in [json!(true), json!("ribbon"), json!("qat")] {
+            let mut s = crate::Session::new(wordcraft_doc::Document::new());
+            let group = CustomGroup { name: "Tools".into(), commands: vec!["format.bold".into()] };
+            s.ribbon.set_addin_tab("Extra", vec![group]);
+            s.run("tools.customizeRibbon", &json!({"newTab": {"name": "Mine"}, "hide": "Extra", "qatAdd": "file.new"})).unwrap();
+            s.run("tools.customizeRibbon", &json!({"reset": reset})).unwrap();
+            let names: Vec<String> = s.ribbon.tabs().iter().map(|t| t.name.clone()).collect();
+            assert_eq!(names.last().map(String::as_str), Some("Extra"), "{reset}: {names:?}");
+            if reset != json!("qat") {
+                assert!(!s.ribbon.tabs().last().unwrap().hidden, "{reset}");
+                assert!(!names.contains(&"Mine".to_string()), "{reset}");
+            }
+            if reset != json!("ribbon") {
+                assert!(!s.ribbon.qat().contains(&"file.new"), "{reset}");
+            }
+            s.run("tools.customizeRibbon", &json!({"layout": {}})).unwrap();
+            assert!(s.ribbon.tabs().iter().any(|t| t.name == "Extra"), "{reset}: a loaded layout keeps it");
+        }
     }
 
     #[test]
