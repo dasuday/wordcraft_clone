@@ -63,6 +63,7 @@ The Language dialog reads effective character formatting, including document def
 |---|---|---|
 | 2026-10-17 | trivial | Language dialog keeps inherited proofing language and no-proof choices (#2717); readiness estimates unchanged |
 | 2026-10-16 | trivial | Multilevel List heading presets: every selected paragraph takes the first level (Heading 1), as Word for Mac does; headings outside the selection keep their styles and levels (#1793) |
+| 2026-10-16 | trivial | Multilevel List heading presets: selected paragraphs already in a Heading style keep their style and level, every other selected paragraph becomes Heading 1, as Word for Mac does (#1793) |
 | 2026-10-15 | trivial | Multilevel List gallery: four lists linked to Heading 1–9 (1 / 1.1 / 1.1.1; Article I. / Section 1.01 / (a); I. / A. / 1.; Chapter 1), `list.multilevelPreset`; headings keep their styles and new headings are numbered (#1793). Style gallery previews don't show the numbers yet |
 | 2026-10-13 | trivial | New/Modify Table Style: No Border on a part that inherits its lines hides them; emptying the font box makes the part's font inherited again (#1288) |
 | 2026-10-14 | trivial | Tab stops edited on the ruler: corner kind selector, click to set, drag to move or off to clear, per-kind markers mirrored for RTL; each gesture one `para.tabs` call and one undo step; Rulers 85% → 90% |
