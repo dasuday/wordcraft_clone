@@ -1996,6 +1996,42 @@ fn joined_freeform_subpaths_draw_as_one_even_odd_path() {
     assert_eq!(paths, vec![(2, true), (1, false)], "the ring and its hole are one even-odd path; the third square is apart");
 }
 
+/// Word dims a header it isn't editing to about 57%, text and shapes alike: a header shape is
+/// drawn faded as one layer, and nothing is faded when headers aren't dimmed (print, PDF).
+#[test]
+fn a_header_shape_fades_with_the_header() {
+    use wordcraft_doc::para::{Float, ShapeKind};
+    use wordcraft_doc::props::Rgb;
+
+    let shape = InlineObject::Shape {
+        kind: ShapeKind::Rectangle,
+        w: 40.0,
+        h: 20.0,
+        fill: Some(Rgb(0x20, 0x2E, 0x55)),
+        stroke: Some(Rgb::BLACK),
+        stroke_width: 1.0,
+        float: Float::default(),
+        story: None,
+        freeform: None,
+        effects: Default::default(),
+        extra: Default::default(),
+    };
+    let mut d = Document::from_text("Body");
+    let id = d.add_part(wordcraft_doc::PartKind::Header, vec![wordcraft_doc::para_block(wordcraft_doc::Paragraph::new())]);
+    d.last_section.headers.default = Some(id);
+    d.insert_object(&Pos { story: StoryRef::Part(id), path: Path::top(0), off: 0 }, shape, &Default::default()).unwrap();
+    let l = lay(&d);
+    let faded = |dim: bool| {
+        let opts = display::DisplayOptions { dim_header: dim, ..Default::default() };
+        let draws = display::page_display(&d, &l.pages[0], &opts);
+        let alphas: Vec<f32> = draws.iter().filter_map(|x| if let display::Draw::Faded { alpha, .. } = x { Some(*alpha) } else { None }).collect();
+        let bare = draws.iter().any(|x| matches!(x, display::Draw::Shape { .. }));
+        (alphas, bare)
+    };
+    assert_eq!(faded(true), (vec![display::HEADER_DIM], false));
+    assert_eq!(faded(false), (vec![], true));
+}
+
 #[test]
 fn hidden_drawings_are_neither_drawn_nor_take_room() {
     // A hidden floating shape (VML `visibility:hidden`, `wp:docPr/@hidden`): no wrap area, nothing

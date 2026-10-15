@@ -105,6 +105,9 @@ pub enum Draw {
     /// `items` clipped to `rect` (a Drawing Canvas's members to its frame). Inside a
     /// [`Draw::Rotated`], `rect` is in the turned frame's (unturned) coordinates.
     Clip { rect: Rect, items: Vec<Draw> },
+    /// `items` drawn together at opacity `alpha` (a shape in a dimmed header or footer: its
+    /// fill, outline and effects fade as one, so overlaps don't show through).
+    Faded { alpha: f32, items: Vec<Draw> },
     /// Text drawn from its outlines with WordArt effects (and bent, in a warped text box):
     /// `path` in page coordinates, painted as [`crate::wordart::art_layers`] says. `color` is the
     /// run's own colour, the fill when the effects set none.
@@ -345,10 +348,15 @@ fn stroke_of(u: Underline) -> Stroke {
     }
 }
 
+/// The opacity of a header or footer while the body is being edited (Word's, measured).
+pub const HEADER_DIM: f32 = 0.573;
+
 /// Draw items for a page.
 pub fn page_display(doc: &Document, page: &Page, opts: &DisplayOptions) -> Vec<Draw> {
     let mut out = Vec::new();
-    let ha = if opts.dim_header { 0.45 } else { 1.0 };
+    // Word blends a header or footer it isn't editing with the paper at about 57% (text and
+    // shapes alike: a black glyph shows as 109/255 grey on white).
+    let ha = if opts.dim_header { HEADER_DIM } else { 1.0 };
     let ba = if opts.dim_body { 0.45 } else { 1.0 };
     for (items, a) in [(&page.header, ha), (&page.footer, ha), (&page.items, ba)] {
         let warps = warped_boxes(doc, items);
@@ -589,7 +597,7 @@ fn item_in(doc: &Document, it: &Placed, opts: &DisplayOptions, alpha: f32, outer
             let mut items = Vec::new();
             let fx = effects_in(*effects, spin.within(outer));
             shape_draws(*rect, *kind, *fill, *stroke, *stroke_width, fx, freeform.as_deref(), extra, opts, &mut items);
-            spun(*spin, *rect, items, out)
+            spun(*spin, *rect, faded(alpha, items), out)
         }
         Placed::Graphic { rect, graphic, spin, .. } => spun(*spin, *rect, graphic_draws(doc, graphic, *rect, alpha), out),
         Placed::Clip { rect, spin, items } => {
@@ -1571,6 +1579,12 @@ pub fn text_color(c: &TextColor, background: Option<Rgb>) -> Rgb {
 }
 
 /// `items` turned by `spin` about the centre of `rect` (as they are, unturned).
+/// A shape's draws at opacity `alpha` (a dimmed header's): one faded layer, so its outline and
+/// effects don't add up over its fill.
+fn faded(alpha: f32, items: Vec<Draw>) -> Vec<Draw> {
+    if alpha < 1.0 && !items.is_empty() { vec![Draw::Faded { alpha, items }] } else { items }
+}
+
 fn spun(spin: Spin, rect: Rect, items: Vec<Draw>, out: &mut Vec<Draw>) {
     if spin.is_identity() {
         out.extend(items);
@@ -1592,7 +1606,7 @@ fn object_draws(o: &InlineObject, rect: Rect, outer: Spin, alpha: f32, opts: &Di
             let effects = effects_in(*effects, own.within(outer));
             let mut items = Vec::new();
             shape_draws(rect, *kind, *fill, *stroke, *stroke_width, effects, freeform.as_deref(), extra, opts, &mut items);
-            spun(own, rect, items, out)
+            spun(own, rect, faded(alpha, items), out)
         }
         InlineObject::Group { .. } => {
             let mut members = Vec::new();
@@ -1605,7 +1619,11 @@ fn object_draws(o: &InlineObject, rect: Rect, outer: Spin, alpha: f32, opts: &Di
             match o.canvas_style() {
                 // A Drawing Canvas: its background and outline, then its members clipped to its
                 // frame, all inside its turn.
-                Some(c) => spun(own, rect, vec![canvas_background(rect, c), Draw::Clip { rect, items: members }], out),
+                Some(c) => {
+                    let mut items = faded(alpha, vec![canvas_background(rect, c)]);
+                    items.push(Draw::Clip { rect, items: members });
+                    spun(own, rect, items, out)
+                }
                 None => spun(own, rect, members, out),
             }
         }

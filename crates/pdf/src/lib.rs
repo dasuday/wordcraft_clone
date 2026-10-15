@@ -1081,6 +1081,13 @@ impl Exporter<'_> {
                 }
                 s.pop();
             }
+            Draw::Faded { alpha, items } => {
+                s.push_opacity(norm(*alpha));
+                for it in items {
+                    self.draw(s, it);
+                }
+                s.pop();
+            }
             Draw::Turned { x, y, turn, items } => {
                 if !ok(*x) || !ok(*y) {
                     return;

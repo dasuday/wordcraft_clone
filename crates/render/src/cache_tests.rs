@@ -86,3 +86,23 @@ fn a_translucent_shape_fill_is_drawn_see_through() {
     assert!((alpha(shape(0.3)) as i32 - 77).abs() <= 1, "{}", alpha(shape(0.3)));
     assert_eq!(alpha(shape(1.0)), 255);
 }
+
+/// A faded shape (in a dimmed header) is one layer: its outline over its fill doesn't add up.
+#[test]
+fn a_faded_shape_is_drawn_as_one_layer() {
+    let shape = Draw::Shape {
+        rect: wordcraft_geom::Rect::new(0.0, 0.0, 20.0, 20.0),
+        kind: ShapeKind::Rectangle,
+        fill: Some(Rgb::BLACK),
+        stroke: Some(Rgb::BLACK),
+        stroke_width: 4.0,
+        effects: Default::default(),
+        corner: None,
+        fill_alpha: 1.0,
+    };
+    let faded = Draw::Faded { alpha: 0.573, items: vec![shape] };
+    let r = render_items(&Document::new(), &[faded], 0.0, 0.0, 20.0, 20.0, 1.0, &RenderOptions::default());
+    let at = |x: usize, y: usize| r.pixels.get((y * r.width as usize + x) * 4 + 3).copied().unwrap_or(0) as i32;
+    assert!((at(10, 10) - 146).abs() <= 1, "{}", at(10, 10));
+    assert_eq!(at(1, 10), at(10, 10), "the outline over the fill is as faded as the fill");
+}

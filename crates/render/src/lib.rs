@@ -559,6 +559,16 @@ fn blend_backgrounds(items: &[Draw], p: wordcraft_geom::Point, opts: &RenderOpti
                 blend_backgrounds(draws, p, opts, bg, depth + 1);
                 continue;
             }
+            Draw::Faded { alpha, items } => {
+                // Blend what the items paint with what was behind them, at the layer's opacity.
+                let a = if alpha.is_finite() { alpha.clamp(0.0, 1.0) } else { 1.0 };
+                let mut inner = *bg;
+                blend_backgrounds(items, p, opts, &mut inner, depth + 1);
+                for (v, n) in bg.iter_mut().zip(inner) {
+                    *v += (n - *v) * a;
+                }
+                continue;
+            }
             _ => continue,
         };
         let a = if alpha.is_finite() { alpha.clamp(0.0, 1.0) } else { 1.0 };
@@ -977,6 +987,14 @@ fn draw(ctx: &mut RenderContext, doc: &Document, it: &Draw, view: Affine, visibl
             let local = r.intersect(*visible);
             for it in items {
                 draw(ctx, doc, it, view, &local, opts);
+            }
+            ctx.pop_layer();
+        }
+        Draw::Faded { alpha, items } => {
+            let a = if alpha.is_finite() { alpha.clamp(0.0, 1.0) } else { 1.0 };
+            ctx.push_opacity_layer(a);
+            for it in items {
+                draw(ctx, doc, it, view, visible, opts);
             }
             ctx.pop_layer();
         }
