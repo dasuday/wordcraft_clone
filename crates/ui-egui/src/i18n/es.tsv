@@ -2622,3 +2622,40 @@ preview	Title	Título
 	Nothing to show.	No hay nada que mostrar.
 	{label} must be a number.	{label} debe ser un número.
 	The add-in {name} reported an error: {error}	El complemento {name} informó de un error: {error}
+	Start Live Session	Iniciar sesión en directo
+	Join Live Session	Unirse a una sesión en directo
+	Leave Live Session	Salir de la sesión en directo
+	Live Session	Sesión en directo
+	Live session	Sesión en directo
+	Live Session Name and Colour	Nombre y color en sesiones en directo
+	Title bar	Barra de título
+	Joining…	Uniéndose…
+	Live	En directo
+	Connecting…	Conectando…
+	Offline	Sin conexión
+	Session ended	Sesión finalizada
+	Share this document in a live session	Compartir este documento en una sesión en directo
+	{name} (you)	{name} (usted)
+	{name}'s caret isn't in a shared paragraph	El cursor de {name} no está en un párrafo compartido
+	Encrypted end to end	Cifrado de extremo a extremo
+	Encrypt end to end	Cifrar de extremo a extremo
+	People here	Personas aquí
+	Go to their caret	Ir a su cursor
+	Copy Invitation	Copiar invitación
+	Invitation copied	Invitación copiada
+	{count} others	Otros: {count}
+	Start a live session	Iniciar una sesión en directo
+	Join a live session	Unirse a una sesión en directo
+	Connection:	Conexión:
+	Your name:	Su nombre:
+	Your colour:	Su color:
+	Invitation:	Invitación:
+	Paste the invitation link	Pegue el enlace de invitación
+	Joining replaces this document, which has unsaved changes.	Al unirse se reemplaza este documento, que tiene cambios sin guardar.
+	Discard my unsaved changes	Descartar mis cambios sin guardar
+	Join	Unirse
+	Start	Iniciar
+	Choose a connection	Elija una conexión
+	This add-in has no {command} command	Este complemento no tiene el comando {command}
+	The add-in didn't start a live session	El complemento no inició una sesión en directo
+	Live sessions need a co-editing add-in (a transport). Add one in File › Options › Add-ins.	Las sesiones en directo necesitan un complemento de coedición (un transporte). Añada uno en Archivo › Opciones › Complementos.

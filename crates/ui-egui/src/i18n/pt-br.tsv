@@ -2268,3 +2268,40 @@
 	Nothing to show.	Nada para mostrar.
 	{label} must be a number.	{label} deve ser um número.
 	The add-in {name} reported an error: {error}	O suplemento {name} relatou um erro: {error}
+	Start Live Session	Iniciar sessão ao vivo
+	Join Live Session	Entrar em sessão ao vivo
+	Leave Live Session	Sair da sessão ao vivo
+	Live Session	Sessão ao vivo
+	Live session	Sessão ao vivo
+	Live Session Name and Colour	Nome e cor na sessão ao vivo
+	Title bar	Barra de título
+	Joining…	Entrando…
+	Live	Ao vivo
+	Connecting…	Conectando…
+	Offline	Off-line
+	Session ended	Sessão encerrada
+	Share this document in a live session	Compartilhar este documento em uma sessão ao vivo
+	{name} (you)	{name} (você)
+	{name}'s caret isn't in a shared paragraph	O cursor de {name} não está em um parágrafo compartilhado
+	Encrypted end to end	Criptografado de ponta a ponta
+	Encrypt end to end	Criptografar de ponta a ponta
+	People here	Pessoas aqui
+	Go to their caret	Ir para o cursor
+	Copy Invitation	Copiar convite
+	Invitation copied	Convite copiado
+	{count} others	Outros: {count}
+	Start a live session	Iniciar uma sessão ao vivo
+	Join a live session	Entrar em uma sessão ao vivo
+	Connection:	Conexão:
+	Your name:	Seu nome:
+	Your colour:	Sua cor:
+	Invitation:	Convite:
+	Paste the invitation link	Cole o link do convite
+	Joining replaces this document, which has unsaved changes.	Entrar substitui este documento, que tem alterações não salvas.
+	Discard my unsaved changes	Descartar minhas alterações não salvas
+	Join	Entrar
+	Start	Iniciar
+	Choose a connection	Escolha uma conexão
+	This add-in has no {command} command	Este suplemento não tem o comando {command}
+	The add-in didn't start a live session	O suplemento não iniciou uma sessão ao vivo
+	Live sessions need a co-editing add-in (a transport). Add one in File › Options › Add-ins.	Sessões ao vivo precisam de um suplemento de coedição (um transporte). Adicione um em Arquivo › Opções › Suplementos.

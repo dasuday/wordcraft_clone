@@ -2653,3 +2653,40 @@ preview	Title	Пример
 	Nothing to show.	Нечего показать.
 	{label} must be a number.	{label}: требуется число.
 	The add-in {name} reported an error: {error}	Надстройка {name} сообщила об ошибке: {error}
+	Start Live Session	Начать сеанс совместной работы
+	Join Live Session	Присоединиться к сеансу совместной работы
+	Leave Live Session	Покинуть сеанс совместной работы
+	Live Session	Сеанс совместной работы
+	Live session	Сеанс совместной работы
+	Live Session Name and Colour	Имя и цвет в сеансах совместной работы
+	Title bar	Строка заголовка
+	Joining…	Присоединение…
+	Live	В сети
+	Connecting…	Подключение…
+	Offline	Не в сети
+	Session ended	Сеанс завершён
+	Share this document in a live session	Открыть совместную работу над этим документом
+	{name} (you)	{name} (вы)
+	{name}'s caret isn't in a shared paragraph	Курсор пользователя {name} не в общем абзаце
+	Encrypted end to end	Сквозное шифрование
+	Encrypt end to end	Использовать сквозное шифрование
+	People here	Участники
+	Go to their caret	Перейти к курсору
+	Copy Invitation	Копировать приглашение
+	Invitation copied	Приглашение скопировано
+	{count} others	Других: {count}
+	Start a live session	Начать сеанс совместной работы
+	Join a live session	Присоединиться к сеансу совместной работы
+	Connection:	Подключение:
+	Your name:	Ваше имя:
+	Your colour:	Ваш цвет:
+	Invitation:	Приглашение:
+	Paste the invitation link	Вставьте ссылку-приглашение
+	Joining replaces this document, which has unsaved changes.	При присоединении этот документ будет заменён, а в нём есть несохранённые изменения.
+	Discard my unsaved changes	Отменить мои несохранённые изменения
+	Join	Присоединиться
+	Start	Начать
+	Choose a connection	Выберите подключение
+	This add-in has no {command} command	У этой надстройки нет команды {command}
+	The add-in didn't start a live session	Надстройка не начала сеанс совместной работы
+	Live sessions need a co-editing add-in (a transport). Add one in File › Options › Add-ins.	Для совместной работы нужна надстройка-транспорт. Добавьте её в разделе Файл › Параметры › Надстройки.

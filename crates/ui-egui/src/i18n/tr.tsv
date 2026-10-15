@@ -2652,3 +2652,40 @@ preview	Title	Örnek
 	Nothing to show.	Gösterilecek bir şey yok.
 	{label} must be a number.	{label} bir sayı olmalıdır.
 	The add-in {name} reported an error: {error}	{name} eklentisi bir hata bildirdi: {error}
+	Start Live Session	Canlı oturum başlat
+	Join Live Session	Canlı oturuma katıl
+	Leave Live Session	Canlı oturumdan ayrıl
+	Live Session	Canlı oturum
+	Live session	Canlı oturum
+	Live Session Name and Colour	Canlı oturumda ad ve renk
+	Title bar	Başlık çubuğu
+	Joining…	Katılınıyor…
+	Live	Canlı
+	Connecting…	Bağlanıyor…
+	Offline	Çevrimdışı
+	Session ended	Oturum sona erdi
+	Share this document in a live session	Bu belgeyi canlı oturumda paylaş
+	{name} (you)	{name} (siz)
+	{name}'s caret isn't in a shared paragraph	{name} adlı kişinin imleci paylaşılan bir paragrafta değil
+	Encrypted end to end	Uçtan uca şifreli
+	Encrypt end to end	Uçtan uca şifrele
+	People here	Buradakiler
+	Go to their caret	İmlecine git
+	Copy Invitation	Daveti kopyala
+	Invitation copied	Davet kopyalandı
+	{count} others	Diğerleri: {count}
+	Start a live session	Canlı oturum başlat
+	Join a live session	Canlı oturuma katıl
+	Connection:	Bağlantı:
+	Your name:	Adınız:
+	Your colour:	Renginiz:
+	Invitation:	Davet:
+	Paste the invitation link	Davet bağlantısını yapıştırın
+	Joining replaces this document, which has unsaved changes.	Katılmak, kaydedilmemiş değişiklikleri olan bu belgenin yerini alır.
+	Discard my unsaved changes	Kaydedilmemiş değişikliklerimi at
+	Join	Katıl
+	Start	Başlat
+	Choose a connection	Bir bağlantı seçin
+	This add-in has no {command} command	Bu eklentinin {command} komutu yok
+	The add-in didn't start a live session	Eklenti canlı oturum başlatmadı
+	Live sessions need a co-editing add-in (a transport). Add one in File › Options › Add-ins.	Canlı oturumlar için birlikte düzenleme eklentisi (aktarım) gerekir. Dosya › Seçenekler › Eklentiler bölümünden bir tane ekleyin.

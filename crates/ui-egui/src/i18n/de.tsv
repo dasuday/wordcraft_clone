@@ -2255,3 +2255,40 @@
 	Nothing to show.	Nichts anzuzeigen.
 	{label} must be a number.	{label} muss eine Zahl sein.
 	The add-in {name} reported an error: {error}	Das Add-In {name} hat einen Fehler gemeldet: {error}
+	Start Live Session	Live-Sitzung starten
+	Join Live Session	An Live-Sitzung teilnehmen
+	Leave Live Session	Live-Sitzung verlassen
+	Live Session	Live-Sitzung
+	Live session	Live-Sitzung
+	Live Session Name and Colour	Name und Farbe in Live-Sitzungen
+	Title bar	Titelleiste
+	Joining…	Wird beigetreten…
+	Live	Live
+	Connecting…	Verbindung wird hergestellt…
+	Offline	Offline
+	Session ended	Sitzung beendet
+	Share this document in a live session	Dieses Dokument in einer Live-Sitzung teilen
+	{name} (you)	{name} (Sie)
+	{name}'s caret isn't in a shared paragraph	Die Einfügemarke von {name} steht nicht in einem geteilten Absatz
+	Encrypted end to end	Ende-zu-Ende-verschlüsselt
+	Encrypt end to end	Ende-zu-Ende verschlüsseln
+	People here	Anwesende
+	Go to their caret	Zur Einfügemarke springen
+	Copy Invitation	Einladung kopieren
+	Invitation copied	Einladung kopiert
+	{count} others	Weitere: {count}
+	Start a live session	Live-Sitzung starten
+	Join a live session	An einer Live-Sitzung teilnehmen
+	Connection:	Verbindung:
+	Your name:	Ihr Name:
+	Your colour:	Ihre Farbe:
+	Invitation:	Einladung:
+	Paste the invitation link	Einladungslink einfügen
+	Joining replaces this document, which has unsaved changes.	Beim Beitreten wird dieses Dokument ersetzt, und es hat ungespeicherte Änderungen.
+	Discard my unsaved changes	Meine ungespeicherten Änderungen verwerfen
+	Join	Beitreten
+	Start	Starten
+	Choose a connection	Wählen Sie eine Verbindung
+	This add-in has no {command} command	Dieses Add-In hat keinen Befehl {command}
+	The add-in didn't start a live session	Das Add-In hat keine Live-Sitzung gestartet
+	Live sessions need a co-editing add-in (a transport). Add one in File › Options › Add-ins.	Live-Sitzungen brauchen ein Add-In für gemeinsames Bearbeiten (einen Transport). Fügen Sie eines unter Datei › Optionen › Add-Ins hinzu.

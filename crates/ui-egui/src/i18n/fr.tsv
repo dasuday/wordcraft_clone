@@ -2263,3 +2263,40 @@
 	Nothing to show.	Rien à afficher.
 	{label} must be a number.	{label} doit être un nombre.
 	The add-in {name} reported an error: {error}	Le complément {name} a signalé une erreur : {error}
+	Start Live Session	Démarrer une session en direct
+	Join Live Session	Rejoindre une session en direct
+	Leave Live Session	Quitter la session en direct
+	Live Session	Session en direct
+	Live session	Session en direct
+	Live Session Name and Colour	Nom et couleur en session en direct
+	Title bar	Barre de titre
+	Joining…	Connexion à la session…
+	Live	En direct
+	Connecting…	Connexion…
+	Offline	Hors ligne
+	Session ended	Session terminée
+	Share this document in a live session	Partager ce document dans une session en direct
+	{name} (you)	{name} (vous)
+	{name}'s caret isn't in a shared paragraph	Le curseur de {name} n’est pas dans un paragraphe partagé
+	Encrypted end to end	Chiffré de bout en bout
+	Encrypt end to end	Chiffrer de bout en bout
+	People here	Personnes présentes
+	Go to their caret	Aller à son curseur
+	Copy Invitation	Copier l’invitation
+	Invitation copied	Invitation copiée
+	{count} others	Autres : {count}
+	Start a live session	Démarrer une session en direct
+	Join a live session	Rejoindre une session en direct
+	Connection:	Connexion :
+	Your name:	Votre nom :
+	Your colour:	Votre couleur :
+	Invitation:	Invitation :
+	Paste the invitation link	Collez le lien d’invitation
+	Joining replaces this document, which has unsaved changes.	Rejoindre remplace ce document, qui contient des modifications non enregistrées.
+	Discard my unsaved changes	Abandonner mes modifications non enregistrées
+	Join	Rejoindre
+	Start	Démarrer
+	Choose a connection	Choisissez une connexion
+	This add-in has no {command} command	Ce complément n’a pas de commande {command}
+	The add-in didn't start a live session	Le complément n’a pas démarré de session en direct
+	Live sessions need a co-editing add-in (a transport). Add one in File › Options › Add-ins.	Les sessions en direct nécessitent un complément de coédition (un transport). Ajoutez-en un dans Fichier › Options › Compléments.

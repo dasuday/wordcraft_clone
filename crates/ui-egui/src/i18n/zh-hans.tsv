@@ -2268,3 +2268,40 @@
 	Nothing to show.	没有可显示的内容。
 	{label} must be a number.	{label} 必须是数字。
 	The add-in {name} reported an error: {error}	加载项 {name} 报告了错误：{error}
+	Start Live Session	开始实时会话
+	Join Live Session	加入实时会话
+	Leave Live Session	离开实时会话
+	Live Session	实时会话
+	Live session	实时会话
+	Live Session Name and Colour	实时会话中的名称和颜色
+	Title bar	标题栏
+	Joining…	正在加入…
+	Live	在线
+	Connecting…	正在连接…
+	Offline	离线
+	Session ended	会话已结束
+	Share this document in a live session	在实时会话中共享此文档
+	{name} (you)	{name}（你）
+	{name}'s caret isn't in a shared paragraph	{name} 的光标不在共享段落中
+	Encrypted end to end	端到端加密
+	Encrypt end to end	使用端到端加密
+	People here	当前成员
+	Go to their caret	转到其光标
+	Copy Invitation	复制邀请
+	Invitation copied	已复制邀请
+	{count} others	其他 {count} 人
+	Start a live session	开始实时会话
+	Join a live session	加入实时会话
+	Connection:	连接：
+	Your name:	你的名称：
+	Your colour:	你的颜色：
+	Invitation:	邀请：
+	Paste the invitation link	粘贴邀请链接
+	Joining replaces this document, which has unsaved changes.	加入会替换此文档，而它有未保存的更改。
+	Discard my unsaved changes	放弃我未保存的更改
+	Join	加入
+	Start	开始
+	Choose a connection	请选择连接
+	This add-in has no {command} command	此加载项没有 {command} 命令
+	The add-in didn't start a live session	加载项未开始实时会话
+	Live sessions need a co-editing add-in (a transport). Add one in File › Options › Add-ins.	实时会话需要协同编辑加载项（传输）。请在“文件 › 选项 › 加载项”中添加。

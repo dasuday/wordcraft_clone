@@ -1,6 +1,6 @@
 # WordCraft architecture
 
-> **Last reviewed:** 2026-10-14 · **Last updated:** 2026-10-14 · **Change:** minor (`plugin` crate: add-ins; previously minor: `proof` is per language: English and Polish; previously major: first committed version; `plan/architecture.md` is local-only) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4
+> **Last reviewed:** 2026-10-14 · **Last updated:** 2026-10-15 · **Change:** minor (`collab` crate: live sessions, plugin protocol 2; previously minor: `plugin` crate: add-ins; previously minor: `proof` is per language: English and Polish; previously major: first committed version; `plan/architecture.md` is local-only) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4
 
 How WordCraft is built today (origin/main `40c5d51`). The longer design notes in
 `plan/architecture.md` are gitignored and local to the original author's machine; this file is the
@@ -24,6 +24,7 @@ winit or rfd.
 | L2 | `formats` | 10.6k | TXT, Markdown, HTML, RTF, ODT and LaTeX import/export through a shared intermediate model |
 | L3 | `render` | 0.6k | vello_cpu rasteriser: pages and thumbnails from the display list; PNG/JPEG |
 | L3 | `pdf` | 1.6k | krilla PDF export: font subsets, selectable text, links, outline, tagging |
+| L2 | `collab` | 2.4k | Live sessions (plugin protocol 2, [collab.md](collab.md)): the document as a Yjs document (schema 1 on `yrs`: stories as XML, text with formatting attributes), one transaction per command by diffing, remote changes read back incrementally, per-user undo, relative positions, awareness, AES-256-GCM; no I/O, wasm-safe |
 | L3 | `plugin` | 1.2k | Add-in host ([plugins.md](plugins.md)): `plugin.json` manifests, out-of-process add-ins over JSON-RPC on stdio (timeouts, restart, failure limit), install from GitHub (`ureq`, release zip per platform or source), the reference add-in `wordcraft-example-plugin` |
 | L4 | `engine` | 15.2k | `Session` (document, selection, undo, layout cache, view state), **command registry** (422 `CommandSpec`s in `cmd/*.rs`), Word feature catalog (`catalog.rs`), samples, file I/O dispatch (`io.rs`), Read Aloud sentence model |
 | L4 | `zotero` | 1.7k | Zotero's word-processor integration protocol answered against a `Session` |
@@ -51,6 +52,11 @@ winit or rfd.
 6. **Add-ins:** `plugins.run` sends an add-in the selection and the caret's paragraph and runs the
    engine commands it answers with, inside its own `Session::run`, so they are one undo step and a
    failure restores the document. Add-ins are separate processes started on first use (`plugin`).
+7. **Live sessions:** after each top-level command the engine's room hands the document to
+   `collab`'s replica, which writes the change into the shared Yjs document as one transaction and
+   sends it through the transport add-in; between frames `Session::collab_poll` applies what the
+   transport pushed and puts the refreshed document (only changed paragraphs read again) and the
+   selection (kept as relative positions) back ([collab.md](collab.md)).
 
 ## Testing and gates
 
@@ -68,6 +74,7 @@ winit or rfd.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-15 | minor | `collab` (L2): live sessions (plugin protocol 2); `plugin` reads add-ins' output all the time (the push channel); `engine` has the room, `collab.*` and per-user undo |
 | 2026-10-14 | minor | `plugin` (L3): out-of-process add-ins; `plugins.run` runs their answers as one undo step |
 | 2026-10-10 | minor | `proof`: proofing languages (English, Polish), affix engine, Polish patterns; layout and engine route each run by its language |
 | 2026-10-10 | major | First committed architecture doc, from the crates' sources and `AGENTS.md` |

@@ -2290,3 +2290,40 @@
 	Nothing to show.	Pole midagi näidata.
 	{label} must be a number.	{label} peab olema arv.
 	The add-in {name} reported an error: {error}	Lisandmoodul {name} teatas veast: {error}
+	Start Live Session	Alusta reaalajas seanssi
+	Join Live Session	Liitu reaalajas seansiga
+	Leave Live Session	Lahku reaalajas seansist
+	Live Session	Reaalajas seanss
+	Live session	Reaalajas seanss
+	Live Session Name and Colour	Nimi ja värv reaalajas seanssides
+	Title bar	Tiitliriba
+	Joining…	Liitumine…
+	Live	Reaalajas
+	Connecting…	Ühendamine…
+	Offline	Võrguühenduseta
+	Session ended	Seanss lõppes
+	Share this document in a live session	Jaga seda dokumenti reaalajas seansis
+	{name} (you)	{name} (teie)
+	{name}'s caret isn't in a shared paragraph	Kasutaja {name} kursor ei ole jagatud lõigus
+	Encrypted end to end	Otspunktkrüpteeritud
+	Encrypt end to end	Krüpteeri otspunktist otspunkti
+	People here	Kohal olijad
+	Go to their caret	Mine tema kursori juurde
+	Copy Invitation	Kopeeri kutse
+	Invitation copied	Kutse kopeeriti
+	{count} others	Teisi: {count}
+	Start a live session	Alusta reaalajas seanssi
+	Join a live session	Liitu reaalajas seansiga
+	Connection:	Ühendus:
+	Your name:	Teie nimi:
+	Your colour:	Teie värv:
+	Invitation:	Kutse:
+	Paste the invitation link	Kleepige kutse link
+	Joining replaces this document, which has unsaved changes.	Liitumine asendab selle dokumendi, milles on salvestamata muudatusi.
+	Discard my unsaved changes	Loobu minu salvestamata muudatustest
+	Join	Liitu
+	Start	Alusta
+	Choose a connection	Valige ühendus
+	This add-in has no {command} command	Sellel lisandmoodulil pole käsku {command}
+	The add-in didn't start a live session	Lisandmoodul ei alustanud reaalajas seanssi
+	Live sessions need a co-editing add-in (a transport). Add one in File › Options › Add-ins.	Reaalajas seansid vajavad kaastöötamise lisandmoodulit (transporti). Lisage see menüüs Fail › Valikud › Lisandmoodulid.

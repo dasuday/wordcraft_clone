@@ -393,6 +393,8 @@ fn main() -> eframe::Result {
                 if let Err(e) = app.session.enable_recovery(dir.join("recovery"), std::sync::Arc::new(move || ctx.request_repaint())) {
                     log::warn!("local recovery unavailable: {e}");
                 }
+                // Live sessions keep their room's state here, so a crash and rejoin merges.
+                app.session.collab.recovery_dir = Some(dir.join("live-sessions"));
             }
             app.ui.window = restored;
             app.integrated_titlebar = cfg!(target_os = "macos");

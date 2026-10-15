@@ -2645,3 +2645,40 @@ preview	Title	Tytuł
 	Nothing to show.	Brak elementów do wyświetlenia.
 	{label} must be a number.	{label} musi być liczbą.
 	The add-in {name} reported an error: {error}	Dodatek {name} zgłosił błąd: {error}
+	Start Live Session	Rozpocznij sesję na żywo
+	Join Live Session	Dołącz do sesji na żywo
+	Leave Live Session	Opuść sesję na żywo
+	Live Session	Sesja na żywo
+	Live session	Sesja na żywo
+	Live Session Name and Colour	Nazwa i kolor w sesji na żywo
+	Title bar	Pasek tytułu
+	Joining…	Dołączanie…
+	Live	Na żywo
+	Connecting…	Łączenie…
+	Offline	Offline
+	Session ended	Sesja zakończona
+	Share this document in a live session	Udostępnij ten dokument w sesji na żywo
+	{name} (you)	{name} (Ty)
+	{name}'s caret isn't in a shared paragraph	Kursor użytkownika {name} nie jest w udostępnionym akapicie
+	Encrypted end to end	Szyfrowanie end-to-end
+	Encrypt end to end	Szyfruj end-to-end
+	People here	Obecne osoby
+	Go to their caret	Przejdź do kursora
+	Copy Invitation	Kopiuj zaproszenie
+	Invitation copied	Skopiowano zaproszenie
+	{count} others	Inni: {count}
+	Start a live session	Rozpocznij sesję na żywo
+	Join a live session	Dołącz do sesji na żywo
+	Connection:	Połączenie:
+	Your name:	Twoje imię:
+	Your colour:	Twój kolor:
+	Invitation:	Zaproszenie:
+	Paste the invitation link	Wklej link z zaproszenia
+	Joining replaces this document, which has unsaved changes.	Dołączenie zastąpi ten dokument, który ma niezapisane zmiany.
+	Discard my unsaved changes	Odrzuć moje niezapisane zmiany
+	Join	Dołącz
+	Start	Rozpocznij
+	Choose a connection	Wybierz połączenie
+	This add-in has no {command} command	Ten dodatek nie ma polecenia {command}
+	The add-in didn't start a live session	Dodatek nie rozpoczął sesji na żywo
+	Live sessions need a co-editing add-in (a transport). Add one in File › Options › Add-ins.	Sesje na żywo wymagają dodatku do współpracy (transportu). Dodaj go w menu Plik › Opcje › Dodatki.

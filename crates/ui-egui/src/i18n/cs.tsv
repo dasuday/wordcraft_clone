@@ -2647,3 +2647,40 @@ preview	Title	Ukázka
 	Nothing to show.	Není co zobrazit.
 	{label} must be a number.	{label} musí být číslo.
 	The add-in {name} reported an error: {error}	Doplněk {name} ohlásil chybu: {error}
+	Start Live Session	Zahájit živou relaci
+	Join Live Session	Připojit se k živé relaci
+	Leave Live Session	Opustit živou relaci
+	Live Session	Živá relace
+	Live session	Živá relace
+	Live Session Name and Colour	Jméno a barva v živé relaci
+	Title bar	Záhlaví okna
+	Joining…	Připojování…
+	Live	Živě
+	Connecting…	Navazování spojení…
+	Offline	Offline
+	Session ended	Relace skončila
+	Share this document in a live session	Sdílet tento dokument v živé relaci
+	{name} (you)	{name} (vy)
+	{name}'s caret isn't in a shared paragraph	Kurzor uživatele {name} není ve sdíleném odstavci
+	Encrypted end to end	Koncově šifrováno
+	Encrypt end to end	Šifrovat koncově
+	People here	Přítomní
+	Go to their caret	Přejít na kurzor
+	Copy Invitation	Kopírovat pozvánku
+	Invitation copied	Pozvánka zkopírována
+	{count} others	Další: {count}
+	Start a live session	Zahájit živou relaci
+	Join a live session	Připojit se k živé relaci
+	Connection:	Připojení:
+	Your name:	Vaše jméno:
+	Your colour:	Vaše barva:
+	Invitation:	Pozvánka:
+	Paste the invitation link	Vložte odkaz z pozvánky
+	Joining replaces this document, which has unsaved changes.	Připojení nahradí tento dokument, který obsahuje neuložené změny.
+	Discard my unsaved changes	Zahodit moje neuložené změny
+	Join	Připojit
+	Start	Zahájit
+	Choose a connection	Vyberte připojení
+	This add-in has no {command} command	Tento doplněk nemá příkaz {command}
+	The add-in didn't start a live session	Doplněk nezahájil živou relaci
+	Live sessions need a co-editing add-in (a transport). Add one in File › Options › Add-ins.	Živé relace potřebují doplněk pro společné úpravy (přenos). Přidejte ho v nabídce Soubor › Možnosti › Doplňky.

@@ -2256,3 +2256,40 @@
 	Nothing to show.	表示する項目はありません。
 	{label} must be a number.	{label} には数値を入力してください。
 	The add-in {name} reported an error: {error}	アドイン {name} がエラーを報告しました: {error}
+	Start Live Session	ライブ セッションを開始
+	Join Live Session	ライブ セッションに参加
+	Leave Live Session	ライブ セッションから退出
+	Live Session	ライブ セッション
+	Live session	ライブ セッション
+	Live Session Name and Colour	ライブ セッションでの名前と色
+	Title bar	タイトル バー
+	Joining…	参加しています…
+	Live	ライブ
+	Connecting…	接続しています…
+	Offline	オフライン
+	Session ended	セッションは終了しました
+	Share this document in a live session	この文書をライブ セッションで共有
+	{name} (you)	{name} (自分)
+	{name}'s caret isn't in a shared paragraph	{name} のカーソルは共有された段落にありません
+	Encrypted end to end	エンドツーエンドで暗号化済み
+	Encrypt end to end	エンドツーエンドで暗号化する
+	People here	参加者
+	Go to their caret	カーソル位置へ移動
+	Copy Invitation	招待をコピー
+	Invitation copied	招待をコピーしました
+	{count} others	ほか {count} 人
+	Start a live session	ライブ セッションを開始する
+	Join a live session	ライブ セッションに参加する
+	Connection:	接続:
+	Your name:	名前:
+	Your colour:	色:
+	Invitation:	招待:
+	Paste the invitation link	招待リンクを貼り付けてください
+	Joining replaces this document, which has unsaved changes.	参加するとこの文書が置き換えられます。この文書には保存されていない変更があります。
+	Discard my unsaved changes	保存していない変更を破棄する
+	Join	参加
+	Start	開始
+	Choose a connection	接続を選択してください
+	This add-in has no {command} command	このアドインには {command} コマンドがありません
+	The add-in didn't start a live session	アドインはライブ セッションを開始しませんでした
+	Live sessions need a co-editing add-in (a transport). Add one in File › Options › Add-ins.	ライブ セッションには共同編集アドイン (トランスポート) が必要です。ファイル › オプション › アドイン で追加してください。

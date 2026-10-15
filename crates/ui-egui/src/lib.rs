@@ -28,6 +28,7 @@ pub mod backstage;
 pub mod canvas;
 pub mod caret_glide;
 pub mod chrome;
+pub mod collab_ui;
 pub mod colors;
 pub mod content_controls;
 pub mod control;
@@ -427,6 +428,8 @@ pub struct WordApp {
     /// The Restrict Editing pane (#412).
     pub restrict: dialogs_review::RestrictPane,
     pub status_msg: Option<(String, f64)>,
+    /// Live sessions: others' edits highlighted, the recovery timer.
+    pub collab: collab_ui::CollabUi,
     pub previews: previews::Previews,
     /// Media key of the picture a pending Change Picture replaces (#147).
     pub change_picture_target: Option<String>,
@@ -580,6 +583,7 @@ impl WordApp {
             colors: None,
             restrict: Default::default(),
             status_msg: None,
+            collab: Default::default(),
             previews: previews::Previews::default(),
             integrated_titlebar: false,
             mac_titlebar: chrome::MacTitleBar::default(),
@@ -1710,6 +1714,8 @@ impl WordApp {
         options::sync(self);
         plugin_ui::poll_install(self, ctx);
         plugin_ui::poll_events(self, ctx);
+        // Live sessions: remote changes into the document, the selection out (protocol 2).
+        collab_ui::pump(self, ctx);
         self.settle_async_saves();
         // Chinese text wants the Chinese face before the Japanese one (one glyph style per line).
         // An installed CJK font is read only once CJK text is shown (#241): a CJK interface, the

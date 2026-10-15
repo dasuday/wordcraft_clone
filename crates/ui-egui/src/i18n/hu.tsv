@@ -2651,3 +2651,40 @@
 	Nothing to show.	Nincs mit megjeleníteni.
 	{label} must be a number.	{label}: számot kell megadni.
 	The add-in {name} reported an error: {error}	A(z) {name} bővítmény hibát jelzett: {error}
+	Start Live Session	Élő munkamenet indítása
+	Join Live Session	Csatlakozás élő munkamenethez
+	Leave Live Session	Kilépés az élő munkamenetből
+	Live Session	Élő munkamenet
+	Live session	Élő munkamenet
+	Live Session Name and Colour	Név és szín élő munkamenetben
+	Title bar	Címsor
+	Joining…	Csatlakozás…
+	Live	Élő
+	Connecting…	Kapcsolódás…
+	Offline	Offline
+	Session ended	A munkamenet véget ért
+	Share this document in a live session	A dokumentum megosztása élő munkamenetben
+	{name} (you)	{name} (Ön)
+	{name}'s caret isn't in a shared paragraph	{name} kurzora nincs megosztott bekezdésben
+	Encrypted end to end	Végpontok között titkosítva
+	Encrypt end to end	Végpontok közötti titkosítás
+	People here	Jelen lévők
+	Go to their caret	Ugrás a kurzorához
+	Copy Invitation	Meghívó másolása
+	Invitation copied	Meghívó másolva
+	{count} others	További: {count}
+	Start a live session	Élő munkamenet indítása
+	Join a live session	Csatlakozás élő munkamenethez
+	Connection:	Kapcsolat:
+	Your name:	Az Ön neve:
+	Your colour:	Az Ön színe:
+	Invitation:	Meghívó:
+	Paste the invitation link	Illessze be a meghívó hivatkozását
+	Joining replaces this document, which has unsaved changes.	A csatlakozás lecseréli ezt a dokumentumot, amelyben nem mentett módosítások vannak.
+	Discard my unsaved changes	A nem mentett módosításaim elvetése
+	Join	Csatlakozás
+	Start	Indítás
+	Choose a connection	Válasszon kapcsolatot
+	This add-in has no {command} command	Ennek a bővítménynek nincs {command} parancsa
+	The add-in didn't start a live session	A bővítmény nem indított élő munkamenetet
+	Live sessions need a co-editing add-in (a transport). Add one in File › Options › Add-ins.	Az élő munkamenetekhez közös szerkesztést biztosító bővítmény (átvitel) kell. Adjon hozzá egyet itt: Fájl › Beállítások › Bővítmények.

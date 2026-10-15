@@ -2257,3 +2257,40 @@
 	Nothing to show.	沒有可顯示的內容。
 	{label} must be a number.	{label} 必須是數字。
 	The add-in {name} reported an error: {error}	增益集 {name} 回報了錯誤：{error}
+	Start Live Session	開始即時工作階段
+	Join Live Session	加入即時工作階段
+	Leave Live Session	離開即時工作階段
+	Live Session	即時工作階段
+	Live session	即時工作階段
+	Live Session Name and Colour	即時工作階段中的名稱和色彩
+	Title bar	標題列
+	Joining…	正在加入…
+	Live	線上
+	Connecting…	正在連線…
+	Offline	離線
+	Session ended	工作階段已結束
+	Share this document in a live session	在即時工作階段中共用此文件
+	{name} (you)	{name}（你）
+	{name}'s caret isn't in a shared paragraph	{name} 的游標不在共用段落中
+	Encrypted end to end	端對端加密
+	Encrypt end to end	使用端對端加密
+	People here	目前成員
+	Go to their caret	移至其游標
+	Copy Invitation	複製邀請
+	Invitation copied	已複製邀請
+	{count} others	其他 {count} 人
+	Start a live session	開始即時工作階段
+	Join a live session	加入即時工作階段
+	Connection:	連線：
+	Your name:	你的名稱：
+	Your colour:	你的色彩：
+	Invitation:	邀請：
+	Paste the invitation link	貼上邀請連結
+	Joining replaces this document, which has unsaved changes.	加入會取代此文件，而它有尚未儲存的變更。
+	Discard my unsaved changes	捨棄我尚未儲存的變更
+	Join	加入
+	Start	開始
+	Choose a connection	請選擇連線
+	This add-in has no {command} command	此增益集沒有 {command} 命令
+	The add-in didn't start a live session	增益集未開始即時工作階段
+	Live sessions need a co-editing add-in (a transport). Add one in File › Options › Add-ins.	即時工作階段需要共同編輯增益集（傳輸）。請在「檔案 › 選項 › 增益集」中新增。

@@ -2638,3 +2638,40 @@ preview	Title	Esempio
 	Nothing to show.	Niente da mostrare.
 	{label} must be a number.	{label} deve essere un numero.
 	The add-in {name} reported an error: {error}	Il componente aggiuntivo {name} ha segnalato un errore: {error}
+	Start Live Session	Avvia sessione dal vivo
+	Join Live Session	Partecipa a sessione dal vivo
+	Leave Live Session	Esci dalla sessione dal vivo
+	Live Session	Sessione dal vivo
+	Live session	Sessione dal vivo
+	Live Session Name and Colour	Nome e colore nelle sessioni dal vivo
+	Title bar	Barra del titolo
+	Joining…	Partecipazione in corso…
+	Live	Dal vivo
+	Connecting…	Connessione in corso…
+	Offline	Offline
+	Session ended	Sessione terminata
+	Share this document in a live session	Condividi questo documento in una sessione dal vivo
+	{name} (you)	{name} (tu)
+	{name}'s caret isn't in a shared paragraph	Il cursore di {name} non è in un paragrafo condiviso
+	Encrypted end to end	Crittografato end-to-end
+	Encrypt end to end	Crittografa end-to-end
+	People here	Persone presenti
+	Go to their caret	Vai al suo cursore
+	Copy Invitation	Copia invito
+	Invitation copied	Invito copiato
+	{count} others	Altri: {count}
+	Start a live session	Avvia una sessione dal vivo
+	Join a live session	Partecipa a una sessione dal vivo
+	Connection:	Connessione:
+	Your name:	Il tuo nome:
+	Your colour:	Il tuo colore:
+	Invitation:	Invito:
+	Paste the invitation link	Incolla il link d’invito
+	Joining replaces this document, which has unsaved changes.	Partecipare sostituisce questo documento, che ha modifiche non salvate.
+	Discard my unsaved changes	Scarta le mie modifiche non salvate
+	Join	Partecipa
+	Start	Avvia
+	Choose a connection	Scegli una connessione
+	This add-in has no {command} command	Questo componente aggiuntivo non ha il comando {command}
+	The add-in didn't start a live session	Il componente aggiuntivo non ha avviato una sessione dal vivo
+	Live sessions need a co-editing add-in (a transport). Add one in File › Options › Add-ins.	Le sessioni dal vivo richiedono un componente aggiuntivo di co-editing (un trasporto). Aggiungine uno in File › Opzioni › Componenti aggiuntivi.

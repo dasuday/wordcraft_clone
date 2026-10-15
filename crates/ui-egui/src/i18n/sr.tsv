@@ -2270,3 +2270,40 @@
 	Nothing to show.	Нема ничега за приказ.
 	{label} must be a number.	{label} мора бити број.
 	The add-in {name} reported an error: {error}	Додатак {name} је пријавио грешку: {error}
+	Start Live Session	Започни сесију уживо
+	Join Live Session	Придружи се сесији уживо
+	Leave Live Session	Напусти сесију уживо
+	Live Session	Сесија уживо
+	Live session	Сесија уживо
+	Live Session Name and Colour	Име и боја у сесији уживо
+	Title bar	Насловна трака
+	Joining…	Придруживање…
+	Live	Уживо
+	Connecting…	Повезивање…
+	Offline	Ван мреже
+	Session ended	Сесија је завршена
+	Share this document in a live session	Дели овај документ у сесији уживо
+	{name} (you)	{name} (ви)
+	{name}'s caret isn't in a shared paragraph	Курсор корисника {name} није у дељеном пасусу
+	Encrypted end to end	Шифровано с краја на крај
+	Encrypt end to end	Шифруј с краја на крај
+	People here	Присутни
+	Go to their caret	Иди на курсор
+	Copy Invitation	Копирај позивницу
+	Invitation copied	Позивница је копирана
+	{count} others	Других: {count}
+	Start a live session	Започни сесију уживо
+	Join a live session	Придружи се сесији уживо
+	Connection:	Веза:
+	Your name:	Ваше име:
+	Your colour:	Ваша боја:
+	Invitation:	Позивница:
+	Paste the invitation link	Налепите везу из позивнице
+	Joining replaces this document, which has unsaved changes.	Придруживање замењује овај документ, који има несачуване измене.
+	Discard my unsaved changes	Одбаци моје несачуване измене
+	Join	Придружи се
+	Start	Започни
+	Choose a connection	Изаберите везу
+	This add-in has no {command} command	Овај додатак нема команду {command}
+	The add-in didn't start a live session	Додатак није започео сесију уживо
+	Live sessions need a co-editing add-in (a transport). Add one in File › Options › Add-ins.	Сесије уживо захтевају додатак за заједничко уређивање (транспорт). Додајте га у Фајл › Опције › Додаци.

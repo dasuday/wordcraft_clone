@@ -2681,3 +2681,40 @@
 	Nothing to show.	Không có gì để hiển thị.
 	{label} must be a number.	{label} phải là một số.
 	The add-in {name} reported an error: {error}	Phần bổ trợ {name} đã báo lỗi: {error}
+	Start Live Session	Bắt đầu phiên trực tiếp
+	Join Live Session	Tham gia phiên trực tiếp
+	Leave Live Session	Rời phiên trực tiếp
+	Live Session	Phiên trực tiếp
+	Live session	Phiên trực tiếp
+	Live Session Name and Colour	Tên và màu trong phiên trực tiếp
+	Title bar	Thanh tiêu đề
+	Joining…	Đang tham gia…
+	Live	Trực tiếp
+	Connecting…	Đang kết nối…
+	Offline	Ngoại tuyến
+	Session ended	Phiên đã kết thúc
+	Share this document in a live session	Chia sẻ tài liệu này trong một phiên trực tiếp
+	{name} (you)	{name} (bạn)
+	{name}'s caret isn't in a shared paragraph	Con trỏ của {name} không nằm trong đoạn văn được chia sẻ
+	Encrypted end to end	Được mã hóa đầu cuối
+	Encrypt end to end	Mã hóa đầu cuối
+	People here	Những người đang ở đây
+	Go to their caret	Đi tới con trỏ của họ
+	Copy Invitation	Sao chép lời mời
+	Invitation copied	Đã sao chép lời mời
+	{count} others	{count} người khác
+	Start a live session	Bắt đầu một phiên trực tiếp
+	Join a live session	Tham gia một phiên trực tiếp
+	Connection:	Kết nối:
+	Your name:	Tên của bạn:
+	Your colour:	Màu của bạn:
+	Invitation:	Lời mời:
+	Paste the invitation link	Dán liên kết lời mời
+	Joining replaces this document, which has unsaved changes.	Tham gia sẽ thay thế tài liệu này, tài liệu có thay đổi chưa lưu.
+	Discard my unsaved changes	Bỏ các thay đổi chưa lưu của tôi
+	Join	Tham gia
+	Start	Bắt đầu
+	Choose a connection	Hãy chọn một kết nối
+	This add-in has no {command} command	Phần bổ trợ này không có lệnh {command}
+	The add-in didn't start a live session	Phần bổ trợ chưa bắt đầu phiên trực tiếp
+	Live sessions need a co-editing add-in (a transport). Add one in File › Options › Add-ins.	Phiên trực tiếp cần một phần bổ trợ đồng chỉnh sửa (phương thức truyền). Hãy thêm trong Tệp › Tùy chọn › Phần bổ trợ.

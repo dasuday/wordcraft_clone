@@ -519,6 +519,8 @@ pub enum Dialog {
     AddIns,
     /// An add-in's own dialog (protocol 1.2): a list, a form or a message.
     Plugin(Box<crate::plugin_dialog::PluginDialog>),
+    /// Share: start or join a live session (drawn by `collab_ui::show_dialog`).
+    Share(Box<crate::collab_ui::ShareDialog>),
 }
 
 /// The Table Properties dialog's fields. Lengths are in the interface unit
@@ -1014,6 +1016,7 @@ impl Dialog {
             Dialog::Templates { .. } => "templates",
             Dialog::AddIns => "addIns",
             Dialog::Plugin(_) => "pluginDialog",
+            Dialog::Share(_) => "collabShare",
             Dialog::Organizer { .. } => "organizer",
             Dialog::Layout(d) => d.name(),
         }
@@ -1036,6 +1039,9 @@ impl Dialog {
     }
 
     pub fn open(name: &str, app: &mut WordApp) -> Option<Dialog> {
+        if name == "collabShare" {
+            return Some(Dialog::Share(Box::new(crate::collab_ui::ShareDialog::new(app, false))));
+        }
         if let Some(d) = crate::dialogs_insert::open(name, app) {
             return Some(Dialog::Insert(Box::new(d)));
         }
@@ -1430,6 +1436,10 @@ pub fn show(app: &mut WordApp, ctx: &egui::Context) {
         crate::plugin_dialog::show(app, ctx);
         return;
     }
+    if matches!(app.dialog, Some(Dialog::Share(_))) {
+        crate::collab_ui::show_dialog(app, ctx);
+        return;
+    }
     let Some(mut d) = app.dialog.take() else {
         ctx.data_mut(|d| d.remove::<(egui::Id, u8)>(dialog_top_key()));
         return;
@@ -1492,6 +1502,7 @@ pub fn show(app: &mut WordApp, ctx: &egui::Context) {
         Dialog::AddIns => "Add-ins",
         // Drawn by `plugin_dialog::show` (below): its title is the add-in's.
         Dialog::Plugin(_) => "Add-in",
+        Dialog::Share(_) => "Live Session",
     };
     let id = egui::Id::new(("dialog", title));
     let shown = place_dialog(ctx, id, egui::Window::new(tl!(title)).id(id).collapsible(false).resizable(false)).open(&mut open).show(ctx, |ui| {
@@ -2870,8 +2881,8 @@ fn body(app: &mut WordApp, ui: &mut Ui, d: &mut Dialog) -> bool {
         }
         Dialog::NoteOptions { form } => crate::dialogs_notes::note_options(app, ui, form),
         Dialog::Templates { form } => crate::dialogs_templates::templates(app, ui, form),
-        // Drawn by `plugin_dialog::show`, never here.
-        Dialog::Plugin(_) => true,
+        // Drawn by `plugin_dialog::show` and `collab_ui::show_dialog`, never here.
+        Dialog::Plugin(_) | Dialog::Share(_) => true,
         Dialog::AddIns => {
             ui.set_width(720.0);
             egui::ScrollArea::vertical().max_height(520.0).show(ui, |ui| crate::plugin_ui::page(app, ui, true));

@@ -2643,3 +2643,40 @@
 	Nothing to show.	Няма нищо за показване.
 	{label} must be a number.	{label} трябва да е число.
 	The add-in {name} reported an error: {error}	Добавката {name} съобщи за грешка: {error}
+	Start Live Session	Започване на сесия на живо
+	Join Live Session	Присъединяване към сесия на живо
+	Leave Live Session	Напускане на сесията на живо
+	Live Session	Сесия на живо
+	Live session	Сесия на живо
+	Live Session Name and Colour	Име и цвят в сесията на живо
+	Title bar	Заглавна лента
+	Joining…	Присъединяване…
+	Live	На живо
+	Connecting…	Свързване…
+	Offline	Без връзка
+	Session ended	Сесията приключи
+	Share this document in a live session	Споделяне на този документ в сесия на живо
+	{name} (you)	{name} (вие)
+	{name}'s caret isn't in a shared paragraph	Курсорът на {name} не е в споделен абзац
+	Encrypted end to end	Шифровано от край до край
+	Encrypt end to end	Шифроване от край до край
+	People here	Хора тук
+	Go to their caret	Към курсора му
+	Copy Invitation	Копиране на поканата
+	Invitation copied	Поканата е копирана
+	{count} others	Други: {count}
+	Start a live session	Започване на сесия на живо
+	Join a live session	Присъединяване към сесия на живо
+	Connection:	Връзка:
+	Your name:	Вашето име:
+	Your colour:	Вашият цвят:
+	Invitation:	Покана:
+	Paste the invitation link	Поставете връзката от поканата
+	Joining replaces this document, which has unsaved changes.	Присъединяването заменя този документ, който има незаписани промени.
+	Discard my unsaved changes	Отхвърляне на незаписаните ми промени
+	Join	Присъединяване
+	Start	Започване
+	Choose a connection	Изберете връзка
+	This add-in has no {command} command	Тази добавка няма команда {command}
+	The add-in didn't start a live session	Добавката не започна сесия на живо
+	Live sessions need a co-editing add-in (a transport). Add one in File › Options › Add-ins.	Сесиите на живо изискват добавка за съвместно редактиране (транспорт). Добавете такава от Файл › Опции › Добавки.
