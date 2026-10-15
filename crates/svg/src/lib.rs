@@ -13,6 +13,7 @@
 #![forbid(unsafe_code)]
 
 mod fonts;
+mod refs;
 #[cfg(test)]
 mod tests;
 
@@ -131,6 +132,8 @@ struct Budget {
     text: AtomicU64,
     /// Text bytes drawn so far, `<use>` copies counted.
     drawn: AtomicU64,
+    /// Elements built so far, copies counted.
+    elements: AtomicU64,
     /// Bytes of nested pictures read so far (usvg reads a nested picture once per copy of it).
     nested: AtomicU64,
     /// Why a nested picture went past the caps: the whole picture is refused.
@@ -303,6 +306,12 @@ const XLINK_NS: &str = "http://www.w3.org/1999/xlink";
 /// the links resolved (copies counted) times the nodes in the file.
 const MAX_TREF_WORK: u64 = 1 << 26;
 const ENDLESS_COPIES: &str = "SVG whose copies of itself never end is not supported";
+const REFERENCE_LOOP: &str = "SVG whose clip paths, masks, patterns, filters or markers refer to each other in a loop is not supported";
+const TOO_MANY_REFERENCES: &str = "SVG with this many clip paths, masks, patterns, filters or markers is not supported";
+const TOO_MANY_ELEMENTS: &str = "SVG that draws this many elements is not supported";
+/// Most elements a picture may build, copies made by `<use>`, markers, clip paths, masks, patterns
+/// and filters counted.
+const MAX_ELEMENTS: u64 = 4_000_000;
 const TREFS_TOO_MANY: &str = "SVG with this many text references is not supported";
 
 /// Refuses, before usvg builds the picture from the parsed XML: more than [`MAX_TEXT_BYTES`] of
@@ -311,7 +320,10 @@ const TREFS_TOO_MANY: &str = "SVG with this many text references is not supporte
 /// those nested before it); `<use>` links that copy without end; and `<tref>` links that would
 /// cost more than [`MAX_TREF_WORK`] to find.
 fn check_copies(xml: &usvg::roxmltree::Document, budget: &Budget) -> Result<(), Error> {
-    let c = copies(xml);
+    let c = match copies(xml) {
+        Ok(c) => c,
+        Err(why) => return budget.refuse(why),
+    };
     if budget.text.fetch_add(c.written, Ordering::Relaxed).saturating_add(c.written) > MAX_TEXT_BYTES {
         return budget.refuse(TEXT_TOO_LONG);
     }
@@ -320,6 +332,9 @@ fn check_copies(xml: &usvg::roxmltree::Document, budget: &Budget) -> Result<(), 
     }
     if budget.drawn.fetch_add(c.bytes, Ordering::Relaxed).saturating_add(c.bytes) > MAX_TEXT_DRAWN {
         return budget.refuse(TEXT_TOO_LONG);
+    }
+    if budget.elements.fetch_add(c.elements, Ordering::Relaxed).saturating_add(c.elements) > MAX_ELEMENTS {
+        return budget.refuse(TOO_MANY_ELEMENTS);
     }
     let nodes = xml.descendants().count() as u64;
     if c.trefs.saturating_mul(nodes) > MAX_TREF_WORK {
@@ -336,6 +351,8 @@ struct Copies {
     written: u64,
     /// Text elements built.
     texts: u64,
+    /// Elements built.
+    elements: u64,
     /// Bytes of text in them, `<tref>` text included.
     bytes: u64,
     /// `<tref>` links resolved.
@@ -352,13 +369,23 @@ struct Copies {
 }
 
 impl Copies {
-    const ENDLESS: Copies =
-        Copies { written: 0, texts: u64::MAX, bytes: u64::MAX, trefs: u64::MAX, endless: true, slots: u64::MAX, marks: u64::MAX, url: true };
+    const ENDLESS: Copies = Copies {
+        written: 0,
+        texts: u64::MAX,
+        elements: u64::MAX,
+        bytes: u64::MAX,
+        trefs: u64::MAX,
+        endless: true,
+        slots: u64::MAX,
+        marks: u64::MAX,
+        url: true,
+    };
 
     fn add(self, o: Copies) -> Copies {
         Copies {
             written: self.written.saturating_add(o.written),
             texts: self.texts.saturating_add(o.texts),
+            elements: self.elements.saturating_add(o.elements),
             bytes: self.bytes.saturating_add(o.bytes),
             trefs: self.trefs.saturating_add(o.trefs),
             endless: self.endless || o.endless,
@@ -418,8 +445,9 @@ fn link<'a, 'i>(
 /// themselves are endless. Where usvg's rules are not mirrored (a `<use>` without the SVG
 /// namespace that links back to its copy), this counts more, never less. The text drawn by
 /// markers, clip paths, masks, patterns and filter images (usvg's converter builds them per
-/// use) is bounded from above rather than counted.
-fn copies<'a, 'i>(xml: &'a usvg::roxmltree::Document<'i>) -> Copies {
+/// use) is bounded from above rather than counted, along the references between them
+/// ([`refs`]); references that lead back to themselves are refused (usvg overflows its stack).
+fn copies<'a, 'i>(xml: &'a usvg::roxmltree::Document<'i>) -> Result<Copies, &'static str> {
     type Node<'a, 'i> = usvg::roxmltree::Node<'a, 'i>;
     let all: Vec<Node> = xml.descendants().collect();
     let len = all.iter().map(|n| n.id().get_usize() + 1).max().unwrap_or(0);
@@ -549,6 +577,7 @@ fn copies<'a, 'i>(xml: &'a usvg::roxmltree::Document<'i>) -> Copies {
         Kind::Text => {
             let t = Copies {
                 texts: 1,
+                elements: 1,
                 bytes: text.get(at(n)).copied().unwrap_or(0),
                 slots: sub_slots.get(at(n)).copied().unwrap_or(0),
                 url: sub_url.get(at(n)).copied().unwrap_or(false),
@@ -558,7 +587,7 @@ fn copies<'a, 'i>(xml: &'a usvg::roxmltree::Document<'i>) -> Copies {
         }
         Kind::Group | Kind::Use if n != xml.root() => {
             let u = urls.get(at(n)).copied().unwrap_or(0);
-            Copies { slots: own_slots(u), marks: marks(n), url: u > 0, ..Copies::default() }
+            Copies { elements: 1, slots: own_slots(u), marks: marks(n), url: u > 0, ..Copies::default() }
         }
         _ => Copies::default(),
     };
@@ -608,48 +637,44 @@ fn copies<'a, 'i>(xml: &'a usvg::roxmltree::Document<'i>) -> Copies {
         .iter()
         .filter(|n| kind(**n) == Kind::Text && !in_text.get(at(**n)).copied().unwrap_or(true))
         .fold(0u64, |a, n| a.saturating_add(text.get(at(*n)).copied().unwrap_or(0)));
-    if total.endless || !(total.url || sheet_urls > 0) {
-        return total;
-    }
     // usvg draws a marker's content at every marker place of the shapes that name it, and builds
     // a clip path, mask, filter or pattern again for each element that names it (unless it can
-    // share one, which isn't counted on). The text in all of them, times every place one may be
-    // drawn, bounds what they draw. Their own content may name others (when it, or an ancestor
-    // whose properties it inherits, or a style sheet names a `url(`): each such one may nest the
-    // places once more.
-    let (mut in_marks, mut in_others) = (Copies::default(), Copies::default());
-    let mut places_inside = 0u64;
-    let mut nesting = 0u32;
-    for n in &all {
-        let name = n.tag_name().name();
-        if !(svg_element(*n) && matches!(name, "marker" | "clipPath" | "mask" | "pattern" | "filter")) || state.get(at(*n)) != Some(&2) {
-            continue;
-        }
-        let b = built.get(at(*n)).copied().unwrap_or_default();
-        if name == "marker" {
-            in_marks = in_marks.add(b);
-        } else {
-            in_others = in_others.add(b);
-        }
-        places_inside = places_inside.saturating_add(b.slots).saturating_add(b.marks);
-        if sheet_urls > 0 || b.url || above_url.get(at(*n)).copied().unwrap_or(true) {
-            nesting = nesting.saturating_add(1);
+    // share one, which isn't counted on). They refer to each other, which usvg follows without
+    // limit: a loop is refused. Along the references (what each one holds, inherits or names), a
+    // special is built once for every place any referrer may name it, times how often that
+    // referrer is built.
+    let graph = refs::graph(xml, &ids).map_err(|r| match r {
+        refs::Refusal::Loop => REFERENCE_LOOP,
+        refs::Refusal::TooBig => TOO_MANY_REFERENCES,
+    })?;
+    if total.endless {
+        return Ok(total);
+    }
+    let held = |i: usize| graph.nodes.get(i).and_then(|id| built.get(*id)).copied().unwrap_or_default();
+    let mut times: Vec<u64> = (0..graph.nodes.len())
+        .map(|i| match (graph.named.get(i), graph.marker.get(i)) {
+            (Some(true), Some(true)) => total.marks,
+            (Some(true), _) => total.slots,
+            _ => 0,
+        })
+        .collect();
+    for &x in &graph.order {
+        let x = x as usize;
+        let (b, k) = (held(x), times.get(x).copied().unwrap_or(0));
+        for &t in graph.edges.get(x).into_iter().flatten() {
+            let places = if graph.marker.get(t as usize) == Some(&true) { b.marks } else { b.slots };
+            if let Some(m) = times.get_mut(t as usize) {
+                *m = m.saturating_add(places.saturating_mul(k));
+            }
         }
     }
-    let reach = |m: u64, o: u64| -> u64 {
-        if nesting == 0 {
-            m.saturating_mul(total.marks).saturating_add(o.saturating_mul(total.slots))
-        } else {
-            let mut r = m.saturating_add(o).saturating_mul(total.marks.saturating_add(total.slots));
-            for _ in 0..nesting.min(64) {
-                r = r.saturating_mul(places_inside.saturating_add(1));
-            }
-            r
-        }
-    };
-    total.bytes = total.bytes.saturating_add(reach(in_marks.bytes, in_others.bytes));
-    total.texts = total.texts.saturating_add(reach(in_marks.texts, in_others.texts));
-    total
+    for (i, k) in times.iter().enumerate() {
+        let b = held(i);
+        total.bytes = total.bytes.saturating_add(b.bytes.saturating_mul(*k));
+        total.texts = total.texts.saturating_add(b.texts.saturating_mul(*k));
+        total.elements = total.elements.saturating_add(b.elements.saturating_mul(*k));
+    }
+    Ok(total)
 }
 
 /// The number of `url(` in `s` (any case).

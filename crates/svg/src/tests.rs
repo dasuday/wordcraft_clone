@@ -497,7 +497,7 @@ fn text_copies_match_usvg() {
     for body in cases {
         let doc = svg(body);
         let xml = usvg::roxmltree::Document::parse(&doc).unwrap();
-        let counted = copies(&xml).texts;
+        let counted = copies(&xml).unwrap().texts;
         let built = usvg_texts(parse(doc.as_bytes()).unwrap().tree().root());
         assert_eq!(counted, built, "{body}");
     }
@@ -517,7 +517,7 @@ fn text_copies_match_usvg() {
     for body in bounded {
         let doc = svg(body);
         let xml = usvg::roxmltree::Document::parse(&doc).unwrap();
-        let counted = copies(&xml).texts;
+        let counted = copies(&xml).unwrap().texts;
         let built = usvg_texts(parse(doc.as_bytes()).unwrap().tree().root());
         assert!(built > 0 && counted >= built, "{body}: counted {counted}, usvg drew {built}");
     }
@@ -579,4 +579,184 @@ fn text_in_clip_paths_and_masks_counts_per_use() {
     // A short text clip used a few times opens.
     let few = picture_with_text(&many_users(clip, r##"clip-path="url(#c)""##, 5), 20);
     assert!(parse(few.as_bytes()).is_ok());
+}
+
+/// A picture around `body`, for the reference tests.
+fn pic(body: &str) -> String {
+    format!(r##"<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="100" height="100">{body}</svg>"##)
+}
+
+/// Whether `doc` is refused for references that lead back to themselves. (usvg builds the things
+/// such links name by building what they hold, without limit: a stack overflow, which aborts the
+/// process, so each shape below is its own test.)
+fn refused_as_loop(doc: &str) -> bool {
+    matches!(parse(doc.as_bytes()), Err(Error::Parse(m)) if m.contains("in a loop"))
+}
+
+const PAT: &str = r#"patternUnits="userSpaceOnUse" width="10" height="10""#;
+
+/// Review 6 C-1 (a): three patterns in a ring.
+#[test]
+fn loop_pattern_ring() {
+    let d = pic(&format!(
+        r##"<defs><pattern id="p1" {PAT}><rect width="5" height="5" fill="url(#p2)"/></pattern><pattern id="p2" {PAT}><rect width="5" height="5" fill="url(#p3)"/></pattern><pattern id="p3" {PAT}><rect width="5" height="5" fill="url(#p1)"/></pattern></defs><rect width="50" height="50" fill="url(#p1)"/>"##
+    ));
+    assert!(refused_as_loop(&d));
+}
+
+/// Review 6 C-1 (b): two patterns, fill and stroke.
+#[test]
+fn loop_pattern_fill_and_stroke() {
+    let d = pic(&format!(
+        r##"<defs><pattern id="p1" {PAT}><rect width="5" height="5" fill="url(#p2)"/></pattern><pattern id="p2" {PAT}><rect width="5" height="5" stroke="url(#p1)"/></pattern></defs><rect width="50" height="50" fill="url(#p1)"/>"##
+    ));
+    assert!(refused_as_loop(&d));
+}
+
+/// Review 6 C-1 (c): a pattern and a mask.
+#[test]
+fn loop_pattern_and_mask() {
+    let d = pic(&format!(
+        r##"<defs><pattern id="p" {PAT}><rect width="5" height="5" mask="url(#m)"/></pattern><mask id="m" maskUnits="userSpaceOnUse" x="0" y="0" width="50" height="50"><rect width="50" height="50" fill="url(#p)"/></mask></defs><rect width="50" height="50" fill="url(#p)"/>"##
+    ));
+    assert!(refused_as_loop(&d));
+}
+
+/// Review 6 C-1 (d): three masks in a ring.
+#[test]
+fn loop_mask_ring() {
+    let m = |a: &str, b: &str| {
+        format!(
+            r##"<mask id="{a}" maskUnits="userSpaceOnUse" x="0" y="0" width="50" height="50"><rect width="50" height="50" fill="white" mask="url(#{b})"/></mask>"##
+        )
+    };
+    let d = pic(&format!(r##"<defs>{}{}{}</defs><rect width="50" height="50" mask="url(#m1)"/>"##, m("m1", "m2"), m("m2", "m3"), m("m3", "m1")));
+    assert!(refused_as_loop(&d));
+}
+
+/// Review 6 C-1 (e): three clip paths whose own `clip-path` leads round.
+#[test]
+fn loop_clip_path_ring() {
+    let d = pic(
+        r##"<defs><clipPath id="c1" clip-path="url(#c2)"><rect width="9" height="9"/></clipPath><clipPath id="c2" clip-path="url(#c3)"><rect width="9" height="9"/></clipPath><clipPath id="c3" clip-path="url(#c1)"><rect width="9" height="9"/></clipPath></defs><rect width="50" height="50" clip-path="url(#c1)"/>"##,
+    );
+    assert!(refused_as_loop(&d));
+}
+
+/// Review 6 C-1 (f): a filter, its image, a pattern.
+#[test]
+fn loop_filter_image_pattern() {
+    let d = pic(&format!(
+        r##"<defs><filter id="f"><feImage href="#r"/></filter><rect id="r" width="5" height="5" fill="url(#p)"/><pattern id="p" {PAT}><rect width="5" height="5" filter="url(#f)"/></pattern></defs><rect width="50" height="50" filter="url(#f)"/>"##
+    ));
+    assert!(refused_as_loop(&d));
+}
+
+/// Review 6 C-1 (g): a mask, a filter, its image.
+#[test]
+fn loop_mask_filter_image() {
+    let d = pic(
+        r##"<defs><mask id="m" maskUnits="userSpaceOnUse" x="0" y="0" width="50" height="50"><rect width="50" height="50" fill="white" filter="url(#f)"/></mask><filter id="f"><feImage href="#r"/></filter><rect id="r" width="5" height="5" mask="url(#m)"/></defs><rect width="50" height="50" mask="url(#m)"/>"##,
+    );
+    assert!(refused_as_loop(&d));
+}
+
+/// Review 6 C-1 (j): a pattern inherits the paint of the group around it, which names the pattern.
+#[test]
+fn loop_through_inherited_paint() {
+    let d = pic(&format!(r##"<g fill="url(#p)"><pattern id="p" {PAT}><rect width="5" height="5"/></pattern><rect width="50" height="50"/></g>"##));
+    assert!(refused_as_loop(&d));
+    // A pattern template that leads back to itself.
+    let href = pic(&format!(
+        r##"<pattern id="a" {PAT} href="#b"/><pattern id="b" {PAT} href="#a"><rect width="5" height="5"/></pattern><rect width="50" height="50" fill="url(#a)"/>"##
+    ));
+    assert!(refused_as_loop(&href));
+    // A pattern's own fill or stroke naming itself (in a style sheet, a `style` attribute, or
+    // through a `<use>`) is removed by usvg, so these are drawn.
+    let ok = |body: &str| {
+        let r = parse(pic(body).as_bytes());
+        assert!(r.is_ok(), "{body}: {:?}", r.err());
+    };
+    ok(&format!(
+        r##"<style>.k{{fill:url(#p)}}</style><pattern id="p" {PAT}><rect class="k" width="5" height="5"/></pattern><rect width="50" height="50" fill="url(#p)"/>"##
+    ));
+    ok(&format!(
+        r##"<pattern id="p" {PAT}><rect style="stroke:url( '#p' )" width="5" height="5"/></pattern><rect width="50" height="50" fill="url(#p)"/>"##
+    ));
+    ok(&format!(
+        r##"<g id="g" fill="url(#p)"><rect width="5" height="5"/></g><pattern id="p" {PAT}><use href="#g"/></pattern><rect width="50" height="50" fill="url(#p)"/>"##
+    ));
+}
+
+/// Review 6: shapes that don't loop, or that usvg stops itself, are drawn.
+#[test]
+fn references_without_loops_are_accepted() {
+    let ok = |body: &str| {
+        let r = parse(pic(body).as_bytes());
+        assert!(r.is_ok(), "{body}: {:?}", r.err());
+    };
+    // A pattern whose marker draws the pattern (usvg doesn't build a marker inside itself).
+    ok(&format!(
+        r##"<pattern id="p" {PAT}><path d="M0 0L5 5L9 0" stroke="black" marker-mid="url(#m)"/></pattern><marker id="m" markerWidth="4" markerHeight="4"><rect width="2" height="2" fill="url(#p)"/></marker><rect width="50" height="50" fill="url(#p)"/>"##
+    ));
+    // A `<use>` in a pattern that links to the shape using the pattern.
+    ok(&format!(r##"<rect id="r" width="50" height="50" fill="url(#p)"/><pattern id="p" {PAT}><use href="#r"/></pattern>"##));
+    // A style sheet's two-hop masks.
+    ok(
+        r##"<style>.a{mask:url(#m2)}.b{mask:url(#m1)}</style><mask id="m1" maskUnits="userSpaceOnUse" x="0" y="0" width="50" height="50"><rect class="a" width="50" height="50" fill="white"/></mask><mask id="m2" maskUnits="userSpaceOnUse" x="0" y="0" width="50" height="50"><rect width="50" height="50" fill="white"/></mask><rect class="b" width="50" height="50"/>"##,
+    );
+    // Chains that end, a gradient pattern, a clip path inside a masked group.
+    ok(&format!(
+        r##"<linearGradient id="g"><stop offset="0" stop-color="red"/><stop offset="1" stop-color="blue"/></linearGradient><clipPath id="c"><rect width="30" height="30"/></clipPath><pattern id="p" {PAT} href="#q"/><pattern id="q" {PAT}><rect width="5" height="5" fill="url(#g)" clip-path="url(#c)"/></pattern><g fill="url(#g)" clip-path="url(#c)"><rect width="50" height="50" fill="url(#p)"/></g>"##
+    ));
+}
+
+/// Review 6 I-1: an Illustrator-style logo (style sheet with `url(`s, clip paths, a text mask,
+/// many paths) is an ordinary picture.
+#[test]
+fn illustrator_style_logo_is_accepted() {
+    let clips: String = (0..5).map(|i| format!(r##"<clipPath id="clippath-{i}"><rect width="100" height="100"/></clipPath>"##)).collect();
+    let paths: String = (0..200).map(|i| format!(r##"<path class="cls-1" d="M{i} 0h5v5z"/>"##)).collect();
+    let d = pic(&format!(
+        r##"<defs><style>.cls-1{{fill:url(#lg)}}.cls-2{{clip-path:url(#clippath-0)}}.cls-3{{clip-path:url(#clippath-1)}}.cls-4{{mask:url(#mask)}}</style><linearGradient id="lg"><stop offset="0" stop-color="#f00"/><stop offset="1" stop-color="#00f"/></linearGradient>{clips}<mask id="mask" maskUnits="userSpaceOnUse" x="0" y="0" width="100" height="100"><rect width="100" height="100" fill="#fff"/><text y="50" font-size="10">ACME Studio</text></mask></defs><g class="cls-2"><g class="cls-3">{paths}</g></g><g class="cls-4"><rect width="100" height="100" fill="#ccc"/></g><text y="90" font-size="8">ACME Studio, since 1920</text>"##
+    ));
+    let r = parse(d.as_bytes());
+    assert!(r.is_ok(), "{:?}", r.err());
+}
+
+/// Review 6 M-5: text in a pattern is built again for every element the pattern paints.
+#[test]
+fn text_in_patterns_counts_per_use() {
+    let pattern = format!(r##"<pattern id="p" {PAT}><text y="9">TEXT</text></pattern>"##);
+    assert!(refused_quickly(&picture_with_text(&many_users(&pattern, r##"fill="url(#p)""##, 2000), 10_000)), "pattern text");
+    let few = picture_with_text(&many_users(&pattern, r##"fill="url(#p)""##, 5), 20);
+    assert!(parse(few.as_bytes()).is_ok());
+}
+
+fn refused_as_elements(doc: &str) -> bool {
+    let t = std::time::Instant::now();
+    let r = parse(doc.as_bytes());
+    let fast = t.elapsed() < std::time::Duration::from_secs(5);
+    matches!(&r, Err(Error::Parse(m)) if m.contains("this many elements") || m.contains("draws this many")) && fast
+}
+
+/// Review 6 C-2: markers and clip paths copy their content (not only text) per vertex or per user.
+#[test]
+fn elements_built_through_markers_and_clips_are_capped() {
+    // 10,000 rects in a marker, 100,000 vertices (a file of about half a megabyte).
+    let marker = format!(
+        r##"<marker id="m" overflow="visible">{}</marker><path d="M0 0{}" stroke="black" marker-mid="url(#m)"/>"##,
+        r#"<rect width="1" height="1"/>"#.repeat(10_000),
+        "h1".repeat(100_000)
+    );
+    assert!(refused_as_elements(&pic(&marker)));
+    // Clip path shapes times users.
+    let clip = format!(r##"<clipPath id="c" clipPathUnits="objectBoundingBox">{}</clipPath>"##, r#"<rect width="1" height="1"/>"#.repeat(5000));
+    assert!(refused_as_elements(&pic(&many_users(&clip, r##"clip-path="url(#c)""##, 2000))));
+    // A chart's dot markers on 2000 points open.
+    let points: String = (0..2000).map(|i| format!("{i},{} ", i % 7)).collect();
+    let chart =
+        pic(&format!(r##"<marker id="m"><circle r="2"/><circle r="1"/><circle r="3"/></marker><polyline points="{points}" marker-mid="url(#m)"/>"##));
+    let r = parse(chart.as_bytes());
+    assert!(r.is_ok(), "{:?}", r.err());
 }
