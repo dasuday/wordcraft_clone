@@ -75,6 +75,12 @@ Word's "Field" in the file.)
 - Zotero's "Bookmarks" field type isn't supported; keep the default.
 - Zotero's document transfer (Export/Import Document) isn't needed and isn't supported.
 - The web version can't reach Zotero (browsers can't open the socket).
+- A citation's hidden code isn't a tracked change. After Reject All undoes a tracked refresh,
+  the citation's text is back but its code keeps the refreshed version, so on the next refresh
+  Zotero says the citation was modified and asks whether to keep it.
+- In a protected document with exceptions (or fillable controls), Zotero can't change the
+  document's styles. Add/Edit Bibliography fails there unless a "Bibliography" style with
+  Zotero's settings already exists; nothing in the document changes.
 
 ## How it works
 

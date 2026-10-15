@@ -264,6 +264,8 @@ impl Bridge {
                 self.begin_edit(s);
                 let at = delete_selection(s)?;
                 let base = s.doc.para_at(&at).map(|p| p.props_at(at.off).clone()).unwrap_or_default();
+                // New text: never deleted, even next to text Track Changes just struck.
+                let base = cmd::new_text_props(s, &at, base).map_err(|e| e.to_string())?;
                 let frag = rich::fragment(&html, true, &base);
                 let end = cmd::insert_fragment(s, &at, frag).map_err(|e| e.to_string())?;
                 s.sel = Selection::caret(end);
@@ -427,6 +429,7 @@ impl Bridge {
         let (_, f) = self.field(s, id)?;
         self.begin_edit(s);
         let base = s.doc.para(f.start.story, &f.start.path).map(|p| p.props_of_char(f.start.off).clone()).unwrap_or_default();
+        let base = cmd::new_text_props(s, &f.content_start(), base).map_err(|e| e.to_string())?;
         let frag = rich::fragment(text, rich, &base);
         let multi = frag.blocks.len() > 1;
         let at = cmd::delete_range(s, &f.content_start(), &f.end).map_err(|e| e.to_string())?;

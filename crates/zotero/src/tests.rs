@@ -766,3 +766,22 @@ fn track_changes_records_zotero_edits_as_revisions() {
 fn tracked_changes_protection_records_zotero_edits_as_revisions() {
     tracked_edits_are_revisions(true);
 }
+
+/// Review of #1323: text Zotero inserts where Track Changes just marked text deleted is an
+/// insertion only, never deleted too (Accept All keeps it).
+#[test]
+fn tracked_inserted_text_never_takes_a_deletion_mark() {
+    let mut z = Z::new("Hello world", 0);
+    z.s.run("review.trackChanges", &json!({"value": true})).unwrap();
+    z.s.sel = Selection { anchor: Pos::body(0, 0), focus: Pos::body(0, 5) };
+    z.begin();
+    z.ok("Document_insertText", json!([1, "Note"]));
+    z.ok("Document_complete", json!([1]));
+    let p = z.s.doc.para(StoryRef::Body, &Path::top(0)).unwrap();
+    let off = p.text.find("Note").unwrap();
+    let props = p.props_of_char(off);
+    assert!(props.ins.is_some() && props.del.is_none(), "{props:?}");
+    assert_eq!(z.s.doc.final_text(StoryRef::Body), "Note world");
+    z.s.run("review.acceptAll", &json!({})).unwrap();
+    assert_eq!(z.text(), "Note world");
+}
