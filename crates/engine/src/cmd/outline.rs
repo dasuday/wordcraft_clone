@@ -172,6 +172,14 @@ pub fn specs() -> Vec<CommandSpec> {
         CommandSpec::new("outline.close", "Close Outline View", "Outlining › Close", |s, _| s.run("view.printLayout", &json!({})))
             .when(in_outline)
             .pure(),
+        // Collapsed headings in the other views (#1745) are the stored "Collapsed by default"
+        // flag (Word for Mac's only control), so a fold is undoable and saved with the file.
+        CommandSpec::new("outline.expandHeading", "Expand Heading", "Home › Paragraph", |s, v| fold_heading(s, v, Some(false))).params(BLOCK),
+        CommandSpec::new("outline.collapseHeading", "Collapse Heading", "Home › Paragraph", |s, v| fold_heading(s, v, Some(true))).params(BLOCK),
+        // The fold arrow beside a heading in the left margin.
+        CommandSpec::new("outline.toggleHeading", "Expand or Collapse Heading", "Home › Paragraph", |s, v| fold_heading(s, v, None)).params(BLOCK),
+        CommandSpec::new("outline.expandAllHeadings", "Expand All Headings", "Home › Paragraph", |s, _| fold_all(s, false)),
+        CommandSpec::new("outline.collapseAllHeadings", "Collapse All Headings", "Home › Paragraph", |s, _| fold_all(s, true)),
         CommandSpec::new("outline.state", "Outline State", "Outlining", |s, _| {
             let levels = ol::levels(&s.doc);
             let hidden = ol::hidden(&levels, &s.view.outline.view());
@@ -225,6 +233,41 @@ fn set_fold(s: &mut Session, i: usize, on: bool) -> Result<(), CmdError> {
 pub(crate) fn expand_heading(s: &mut Session, i: usize) {
     if folds(s, i) {
         let _ = set_fold(s, i, false);
+    }
+}
+
+/// Expand (`Some(false)`), collapse or toggle (`None`) the headings [`targets`] names.
+fn fold_heading(s: &mut Session, v: &Value, on: Option<bool>) -> CmdResult {
+    let targets = targets(s, v);
+    if targets.is_empty() {
+        return Err(CmdError::Failed("no heading to expand or collapse".into()));
+    }
+    for h in targets {
+        let on = on.unwrap_or_else(|| !folds(s, h));
+        set_fold(s, h, on)?;
+    }
+    keep_caret_shown(s);
+    sel_result(s)
+}
+
+/// Expand every heading in the body, or collapse every one with something under it.
+fn fold_all(s: &mut Session, on: bool) -> CmdResult {
+    let levels = ol::levels(&s.doc);
+    for (i, l) in levels.iter().enumerate() {
+        if *l < BODY && (!on || ol::has_children(&levels, i)) {
+            set_fold(s, i, on)?;
+        }
+    }
+    keep_caret_shown(s);
+    sel_result(s)
+}
+
+/// After a fold, a caret it hides moves onto the heading (#1745).
+pub(crate) fn keep_caret_shown(s: &mut Session) {
+    let focus = s.sel.focus.clone();
+    let to = super::caret::shown_pos(s, &focus, focus.clone());
+    if to != focus {
+        s.sel = Selection::caret(to);
     }
 }
 

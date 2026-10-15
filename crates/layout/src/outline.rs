@@ -252,6 +252,55 @@ impl DocLayout {
     }
 }
 
+/// How wide a heading's fold arrow is, points, and its gap from the text.
+pub const FOLD_ARROW: f32 = 9.0;
+const FOLD_GAP: f32 = 3.0;
+
+/// A heading's fold arrow (#1745): in the margin beside its first line, on its start side.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct FoldArrow {
+    /// The heading's body block.
+    pub block: usize,
+    /// Where it sits on the page, points.
+    pub rect: Rect,
+    /// The heading is collapsed (the arrow points along the line, not down).
+    pub collapsed: bool,
+}
+
+impl DocLayout {
+    /// The fold arrows of the body headings that start on `page` (top-level paragraphs with an
+    /// outline level; not in Outline view, which has its own symbols).
+    pub fn fold_arrows(&self, page: usize) -> Vec<FoldArrow> {
+        let Some(page) = self.pages.get(page) else { return Vec::new() };
+        page.items
+            .iter()
+            .filter_map(|it| {
+                let Placed::Lines { story: StoryRef::Body, path, para, l0: 0, x, y, turn: wordcraft_doc::props::TextDirection::Horizontal, .. } = it
+                else {
+                    return None;
+                };
+                let [block] = path.0.as_slice() else { return None };
+                para.rp.outline_level.filter(|l| *l < 9)?;
+                let first = para.lines.first()?;
+                let side = if first.rtl { x + first.right + FOLD_GAP } else { x + first.left - FOLD_GAP - FOLD_ARROW };
+                Some(FoldArrow {
+                    block: *block as usize,
+                    rect: Rect::new(side, *y, FOLD_ARROW, first.height.max(FOLD_ARROW)),
+                    collapsed: para.rp.collapsed,
+                })
+            })
+            .collect()
+    }
+
+    /// The heading whose fold arrow is at page point (`x`, `y`), with a little slack around it.
+    pub fn fold_arrow_at(&self, page: usize, x: f32, y: f32) -> Option<usize> {
+        self.fold_arrows(page)
+            .into_iter()
+            .find(|a| x >= a.rect.x - 2.0 && x <= a.rect.x + a.rect.w + 2.0 && y >= a.rect.y && y <= a.rect.y + a.rect.h)
+            .map(|a| a.block)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -328,14 +377,18 @@ mod tests {
         assert_eq!(folded(&doc), vec![false, true, true, true, false, false, true, true]);
         // A collapsed style folds its headings; direct formatting switches it off again.
         let mut styled = doc.clone();
-        styled.body = doc.body.iter().map(|b| match b.as_para() {
-            Some(p) => {
-                let mut p = p.clone();
-                p.props.collapsed = None;
-                para_block(p)
-            }
-            None => b.clone(),
-        }).collect();
+        styled.body = doc
+            .body
+            .iter()
+            .map(|b| match b.as_para() {
+                Some(p) => {
+                    let mut p = p.clone();
+                    p.props.collapsed = None;
+                    para_block(p)
+                }
+                None => b.clone(),
+            })
+            .collect();
         assert!(folded(&styled).is_empty());
         if let Some(s) = styled.styles.styles.iter_mut().find(|s| s.id == "Heading2") {
             s.para.collapsed = Some(true);

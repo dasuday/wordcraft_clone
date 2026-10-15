@@ -71,7 +71,10 @@ fn hidden_blocks_take_no_room_and_are_not_drawn() {
             assert!(texts.contains(&"Intro") && texts.contains(&"Next") && texts.contains(&"End"), "{view:?} {filler}: {texts:?}");
             assert!(!texts.iter().any(|t| t.starts_with("Hidden") || *t == "Part" || *t == "In a hidden cell"), "{view:?} {filler}: {texts:?}");
             // Nothing of the hidden table is drawn either (its cell borders, its cell paragraphs).
-            assert!(!l.index.keys().any(|(_, p)| p.0.first().is_some_and(|b| (filler + 1..filler + 4).contains(&(*b as usize)))), "{view:?} {filler}");
+            assert!(
+                !l.index.keys().any(|(_, p)| p.0.first().is_some_and(|b| (filler + 1..filler + 4).contains(&(*b as usize)))),
+                "{view:?} {filler}"
+            );
             // Pages, positions and keep-with-next are as if the hidden blocks weren't there.
             let v = without_hidden(&d);
             let lv = lay(&v, view);
@@ -100,4 +103,23 @@ fn outline_view_ignores_the_stored_flag() {
     let d = doc(0);
     let got = placed(&d, &lay(&d, ViewMode::Outline));
     assert!(got.iter().any(|(t, ..)| t == "Part"), "{got:?}");
+}
+
+/// The fold arrow (#1745) sits in the left margin beside each heading's first line, and says
+/// whether the heading is collapsed; body text has none.
+#[test]
+fn fold_arrows_sit_beside_headings() {
+    let d = doc(0);
+    let l = lay(&d, ViewMode::Print);
+    let arrows = l.fold_arrows(0);
+    let blocks: Vec<(usize, bool)> = arrows.iter().map(|a| (a.block, a.collapsed)).collect();
+    assert_eq!(blocks, [(0, true), (4, false)]);
+    let body = l.pages[0].body;
+    for a in &arrows {
+        assert!(a.rect.x + a.rect.w <= body.x && a.rect.x >= body.x - 20.0, "{a:?} {body:?}");
+        let c = (a.rect.x + a.rect.w / 2.0, a.rect.y + a.rect.h / 2.0);
+        assert_eq!(l.fold_arrow_at(0, c.0, c.1), Some(a.block));
+    }
+    assert_eq!(l.fold_arrow_at(0, body.x + 50.0, arrows[0].rect.y + 2.0), None);
+    assert!(l.fold_arrows(99).is_empty());
 }
