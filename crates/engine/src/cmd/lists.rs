@@ -24,7 +24,7 @@ pub fn specs() -> Vec<CommandSpec> {
             .params(r#"{"num"?: list id (default: the caret's list)} → {"num", "levels": [as list.define]}"#)
             .pure(),
         CommandSpec::new("list.multilevelPreset", "Multilevel List Library", "Home › Paragraph › Multilevel List", preset).params(
-            r#"{"preset": "headings" (1 / 1.1 / 1.1.1) | "article" (Article I. / Section 1.01 / (a)) | "outlineHeadings" (I. / A. / 1.) | "chapter" (Chapter 1, lower levels unnumbered)} — a new list whose nine levels are linked to Heading 1–9: every paragraph in those styles is numbered, and selected body text becomes Heading 1"#,
+            r#"{"preset": "headings" (1 / 1.1 / 1.1.1) | "article" (Article I. / Section 1.01 / (a)) | "outlineHeadings" (I. / A. / 1.) | "chapter" (Chapter 1, lower levels unnumbered)} — a new list whose nine levels are linked to Heading 1–9: every paragraph in those styles is numbered, and every selected paragraph becomes Heading 1 (the first level)"#,
         ),
     ]
 }
@@ -286,7 +286,8 @@ fn preset_levels(preset: &str) -> Option<Vec<Level>> {
 }
 
 /// A Multilevel List gallery preset: a new list linked to Heading 1–9. The heading styles carry
-/// the number, so every heading (and every heading added later) is numbered and keeps its style.
+/// the number, so every heading (and every heading added later) is numbered; the selection
+/// becomes the first level.
 fn preset(s: &mut Session, v: &Value) -> CmdResult {
     let id = p::req_str(v, "preset")?;
     let levels = preset_levels(id).ok_or_else(|| CmdError::Params("`preset` must be headings, article, outlineHeadings or chapter".into()))?;
@@ -301,10 +302,10 @@ fn preset(s: &mut Session, v: &Value) -> CmdResult {
     }
     touch_styles(s, &linked)?;
     super::para::fmt(s, &|pp| {
-        // A heading takes its number from its style; body text becomes the first level's heading.
-        if !pp.style.as_ref().is_some_and(|st| linked.contains(st)) {
-            pp.style = linked.first().cloned();
-        }
+        // Every selected paragraph takes the first level, Heading 1, and its number from the
+        // style (Word: a selected Heading 2 or body text becomes Heading 1); headings outside the
+        // selection keep their styles and levels.
+        pp.style = linked.first().cloned();
         pp.numbering = None;
         pp.indent_left = None;
         pp.indent_first = None;
@@ -417,7 +418,7 @@ mod tests {
         (label.map(str::to_string), style.to_string())
     }
 
-    /// Paragraphs "One" (Heading 1), "Two" (Heading 2), "Three" (`third`), all selected.
+    /// Paragraphs "One" (Heading 1), "Two" (Heading 2), "Three" (`third`), the caret in "One".
     fn headings(third: &str) -> Session {
         let mut s = Session::new(Document::new());
         for (i, (t, st)) in [("One", "Heading1"), ("Two", "Heading2"), ("Three", third)].iter().enumerate() {
@@ -427,7 +428,7 @@ mod tests {
             s.run("text.insert", &json!({"text": t})).unwrap();
             s.run("para.style", &json!({"style": st})).unwrap();
         }
-        s.run("select.all", &json!({})).unwrap();
+        s.sel = crate::Selection::caret(wordcraft_doc::Pos::body(0, 0));
         s
     }
 
@@ -467,14 +468,31 @@ mod tests {
         assert!(s.run("list.multilevelPreset", &json!({})).is_err());
     }
 
-    /// #1793: a body-text paragraph in the selection becomes the first level's heading, as when
-    /// Word applies a list whose levels are linked to styles; body text elsewhere stays unnumbered.
+    /// #1793 (Word for Mac, 2026-10-15): every selected paragraph takes the list's first level,
+    /// so a selection of One (Heading 1), Body (Normal) and Two (Heading 2) becomes three Heading 1s
+    /// numbered 1, 2, 3; body text outside the selection stays unnumbered.
     #[test]
-    fn a_heading_preset_leaves_body_text_outside_the_selection_alone() {
-        let mut s = headings("Normal");
-        // Only One and Two.
-        s.sel = crate::Selection { anchor: wordcraft_doc::Pos::body(0, 0), focus: wordcraft_doc::Pos::body(1, 1) };
+    fn a_heading_preset_makes_every_selected_paragraph_the_first_level() {
+        let mut s = Session::new(Document::new());
+        for (i, (t, st)) in [("One", "Heading1"), ("Body", "Normal"), ("Two", "Heading2"), ("After", "Normal")].iter().enumerate() {
+            if i > 0 {
+                s.run("text.newParagraph", &json!({})).unwrap();
+            }
+            s.run("text.insert", &json!({"text": t})).unwrap();
+            s.run("para.style", &json!({"style": st})).unwrap();
+        }
+        s.sel = crate::Selection { anchor: wordcraft_doc::Pos::body(0, 0), focus: wordcraft_doc::Pos::body(2, 3) };
         s.run("list.multilevelPreset", &json!({"preset": "headings"})).unwrap();
-        assert_eq!(numbered(&mut s), [n(Some("1"), "Heading1"), n(Some("1.1"), "Heading2"), n(None, "Normal")]);
+        assert_eq!(numbered(&mut s), [n(Some("1"), "Heading1"), n(Some("2"), "Heading1"), n(Some("3"), "Heading1"), n(None, "Normal")]);
+    }
+
+    /// #1793: the caret alone in a Heading 2 makes it a Heading 1 too (the same rule; not checked
+    /// in Word for a single paragraph); headings elsewhere keep their styles.
+    #[test]
+    fn a_heading_preset_on_a_single_heading_2_makes_it_heading_1() {
+        let mut s = headings("Heading2");
+        s.sel = crate::Selection::caret(wordcraft_doc::Pos::body(1, 0));
+        s.run("list.multilevelPreset", &json!({"preset": "headings"})).unwrap();
+        assert_eq!(numbered(&mut s), [n(Some("1"), "Heading1"), n(Some("2"), "Heading1"), n(Some("2.1"), "Heading2")]);
     }
 }

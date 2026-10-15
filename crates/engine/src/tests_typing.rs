@@ -1171,7 +1171,7 @@ fn a_new_heading_after_a_heading_linked_list_is_numbered() {
     run(&mut s, "para.heading2", json!({}));
     typ(&mut s, "\nThree");
     run(&mut s, "para.heading1", json!({}));
-    run(&mut s, "select.all", json!({}));
+    // The caret in "Three" (a Heading 1, the list's first level).
     run(&mut s, "list.multilevelPreset", json!({"preset": "headings"}));
     run(&mut s, "caret.docEnd", json!({}));
     typ(&mut s, "\n");
@@ -1219,4 +1219,13 @@ fn typing_1_dot_in_a_heading_keeps_the_heading_style() {
     run(&mut s, "para.normal", json!({}));
     typ(&mut s, "1. Body");
     assert_eq!(numbers(&mut s), [num(Some("1."), "Heading1"), num(Some("1."), "ListParagraph")]);
+    for (style, keys) in [("Heading2", "a) Part"), ("Subtitle", "1. Item")] {
+        let mut s = self::s();
+        run(&mut s, "para.style", json!({"style": style}));
+        typ(&mut s, keys);
+        let got = numbers(&mut s);
+        assert_eq!(got.len(), 1);
+        assert!(got[0].0.is_some(), "{style}: a list");
+        assert_eq!(got[0].1, style);
+    }
 }
