@@ -2233,3 +2233,7 @@
 # Reading Mode column widths (#1040)
 	Narrow	狭い
 	Medium	中
+# Update Table of Contents dialog (#1197)
+	Update Table of Contents	目次の更新
+	Update page numbers only	ページ番号だけを更新する
+	Update entire table	目次をすべて更新する

@@ -2621,3 +2621,7 @@
 # Reading Mode column widths (#1040)
 	Narrow	Тясна
 	Medium	Средна
+# Update Table of Contents dialog (#1197)
+	Update Table of Contents	Актуализиране на съдържанието
+	Update page numbers only	Актуализиране само на номерата на страниците
+	Update entire table	Актуализиране на цялото съдържание

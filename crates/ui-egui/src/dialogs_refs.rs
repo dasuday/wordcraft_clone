@@ -9,7 +9,7 @@ use egui::{Sense, Ui, vec2};
 use serde::Serialize;
 use serde_json::{Value, json};
 use wordcraft_doc::{Block, Source, StyleKind};
-use wordcraft_engine::cmd::references::FieldCode;
+use wordcraft_engine::cmd::references::{self, FieldCode};
 
 use crate::WordApp;
 use crate::dialogs::{Dialog, buttons};
@@ -46,6 +46,12 @@ pub enum RefsDialog {
         selected: Option<usize>,
     },
     Source(Box<SourceForm>),
+    /// Update Table of Contents (#1197): page numbers only, or the entire table; OK runs `then`
+    /// (`references.updateToc` or `references.updateFields`) with `pageNumbersOnly`.
+    UpdateToc {
+        then: String,
+        entire: bool,
+    },
 }
 
 impl RefsDialog {
@@ -63,6 +69,7 @@ impl RefsDialog {
             RefsDialog::Sources { .. } => "sourceManager",
             RefsDialog::Source(f) if f.edit => "editSource",
             RefsDialog::Source(_) => "createSource",
+            RefsDialog::UpdateToc { .. } => "updateToc",
         }
     }
 
@@ -81,12 +88,13 @@ impl RefsDialog {
             RefsDialog::Sources { .. } => "Source Manager",
             RefsDialog::Source(f) if f.edit => "Edit Source",
             RefsDialog::Source(_) => "Create Source",
+            RefsDialog::UpdateToc { .. } => "Update Table of Contents",
         }
     }
 }
 
 /// The dialog `ui.dialog` opens by `name`: `caption`, `crossReference`, `index`, `markEntry`, `toc`,
-/// `sourceManager` or `createSource` (which inserts a citation of the new source).
+/// `sourceManager`, `createSource` (which inserts a citation of the new source) or `updateToc`.
 pub fn open(name: &str, app: &WordApp) -> Option<RefsDialog> {
     Some(match name {
         "caption" => RefsDialog::Caption(CaptionForm::read(app)),
@@ -96,6 +104,7 @@ pub fn open(name: &str, app: &WordApp) -> Option<RefsDialog> {
         "toc" => RefsDialog::Toc(TocForm::read(app)),
         "sourceManager" => RefsDialog::Sources { selected: None },
         "createSource" => RefsDialog::Source(Box::new(SourceForm::new(true, false))),
+        "updateToc" => RefsDialog::UpdateToc { then: "references.updateToc".into(), entire: false },
         _ => return None,
     })
 }
@@ -114,6 +123,7 @@ pub fn body(app: &mut WordApp, ui: &mut Ui, d: &mut RefsDialog) -> bool {
         RefsDialog::TocStyles { form, level } => toc_styles_ui(app, ui, form, level),
         RefsDialog::Sources { selected } => sources_ui(app, ui, selected),
         RefsDialog::Source(f) => source_ui(app, ui, f),
+        RefsDialog::UpdateToc { then, entire } => update_toc_ui(app, ui, then, entire),
     };
     match next {
         Next::Stay => false,
@@ -123,6 +133,31 @@ pub fn body(app: &mut WordApp, ui: &mut Ui, d: &mut RefsDialog) -> bool {
             false
         }
     }
+}
+
+/// The Update Table of Contents dialog Word shows before updating a table of contents (#1197):
+/// for Update Table, and for Update Field (F9, the context menu) with the table selected. None
+/// when the command already says what to update (`pageNumbersOnly`, as scripts and the dialog's
+/// OK pass it) or there is no table to ask about.
+pub fn update_toc(app: &WordApp, id: &str, params: &Value) -> Option<RefsDialog> {
+    let asks = match id {
+        "references.updateToc" => references::has_toc(&app.session),
+        "references.updateFields" => references::toc_selected(&app.session),
+        _ => false,
+    };
+    (asks && params.get("pageNumbersOnly").is_none() && crate::widgets::enabled(app, id))
+        .then(|| RefsDialog::UpdateToc { then: id.to_string(), entire: false })
+}
+
+/// Update page numbers only (the default, as in Word) or Update entire table.
+fn update_toc_ui(app: &mut WordApp, ui: &mut Ui, then: &str, entire: &mut bool) -> Next {
+    ui.radio_value(entire, false, tl!("Update page numbers only"));
+    ui.radio_value(entire, true, tl!("Update entire table"));
+    let (ok, cancel) = buttons(ui, tl!("OK"));
+    if ok && let Err(e) = app.run(then, json!({"pageNumbersOnly": !*entire})) {
+        app.status(e);
+    }
+    if ok || cancel { Next::Close } else { Next::Stay }
 }
 
 fn go(d: RefsDialog) -> Next {
@@ -1263,6 +1298,34 @@ mod tests {
         let text = a.session.doc.plain_text(StoryRef::Body);
         assert!(text.contains("Intro\t1") && text.contains("Note\t1"), "{text}");
         assert_eq!(TocForm::read(&a), f);
+    }
+
+    /// #1197: Update Table, and Update Field (F9) with the table of contents selected, ask what to
+    /// update before touching it, page numbers only first; scripts say it and aren't asked.
+    #[test]
+    fn updating_the_table_of_contents_asks_what_to_update() {
+        let mut a = app("Intro\nBody");
+        a.run("select.text", json!({"text": "Intro"})).unwrap();
+        a.run("styles.apply", json!({"style": "Heading 1"})).unwrap();
+        a.run("caret.docStart", json!({})).unwrap();
+        a.run("references.toc", json!({})).unwrap();
+        let before = a.session.doc.plain_text(StoryRef::Body);
+        assert_eq!(a.run("references.updateToc", json!({})).unwrap(), json!({"pending": "updateToc"}));
+        let RefsDialog::UpdateToc { then, entire } = form(&a) else { panic!() };
+        assert_eq!((then.as_str(), entire), ("references.updateToc", false));
+        assert_eq!(a.session.doc.plain_text(StoryRef::Body), before, "nothing updated before the answer");
+        // F9 away from the table updates without asking; with the table selected it asks.
+        a.dialog = None;
+        a.run("caret.docEnd", json!({})).unwrap();
+        assert!(a.run("references.updateFields", json!({})).unwrap().get("pending").is_none());
+        assert!(a.dialog.is_none());
+        a.run("select.all", json!({})).unwrap();
+        assert_eq!(a.run("references.updateFields", json!({})).unwrap(), json!({"pending": "updateToc"}));
+        let RefsDialog::UpdateToc { then, .. } = form(&a) else { panic!() };
+        assert_eq!(then, "references.updateFields");
+        a.dialog = None;
+        assert!(a.run("references.updateToc", json!({"pageNumbersOnly": false})).unwrap().get("pending").is_none());
+        assert!(a.dialog.is_none());
     }
 
     /// #402: Insert Citation without a source opens Create Source; the type picks the fields,

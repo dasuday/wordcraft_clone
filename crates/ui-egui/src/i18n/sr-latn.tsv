@@ -2243,3 +2243,7 @@
 # Reading Mode column widths (#1040)
 	Narrow	Uska
 	Medium	Srednja
+# Update Table of Contents dialog (#1197)
+	Update Table of Contents	Ažuriranje sadržaja
+	Update page numbers only	Ažuriraj samo brojeve stranica
+	Update entire table	Ažuriraj ceo sadržaj

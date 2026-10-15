@@ -2267,3 +2267,7 @@
 # Reading Mode column widths (#1040)
 	Narrow	Kitsas
 	Medium	Keskmine
+# Update Table of Contents dialog (#1197)
+	Update Table of Contents	Uuenda sisukorda
+	Update page numbers only	Uuenda ainult leheküljenumbreid
+	Update entire table	Uuenda kogu sisukorda

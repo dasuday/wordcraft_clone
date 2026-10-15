@@ -2599,3 +2599,7 @@ preview	Title	Título
 # Reading Mode column widths (#1040)
 	Narrow	Estrecha
 	Medium	Media
+# Update Table of Contents dialog (#1197)
+	Update Table of Contents	Actualizar tabla de contenido
+	Update page numbers only	Actualizar solo los números de página
+	Update entire table	Actualizar toda la tabla

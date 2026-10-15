@@ -2672,3 +2672,7 @@ template	Letter	Thư
 # Reading Mode column widths (#1040)
 	Narrow	Hẹp
 	Medium	Trung bình
+# Update Table of Contents dialog (#1197)
+	Update Table of Contents	Cập nhật mục lục
+	Update page numbers only	Chỉ cập nhật số trang
+	Update entire table	Cập nhật toàn bộ mục lục
