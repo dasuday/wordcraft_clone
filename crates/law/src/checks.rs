@@ -407,8 +407,22 @@ fn effective_line_spacing_multiple(ls: LineSpacing, natural: f32) -> Option<f32>
     }
 }
 
+/// Every story a reader of the filing sees: the body, notes, text boxes, and headers and
+/// footers (which the word count leaves out but a hyperlink check must not). Comments are not
+/// part of the filing.
+fn printed_stories(doc: &Document) -> Vec<StoryRef> {
+    let mut stories = doc.counted_stories();
+    for (id, part) in &doc.parts {
+        let story = StoryRef::Part(*id);
+        if part.kind != PartKind::Comment && !stories.contains(&story) {
+            stories.push(story);
+        }
+    }
+    stories
+}
+
 fn no_hyperlinks(doc: &Document, id: &str, out: &mut Vec<Finding>) {
-    for story in doc.counted_stories() {
+    for story in printed_stories(doc) {
         for path in doc.para_paths(story) {
             let Some(para) = doc.para(story, &path) else { continue };
             let para_style = para.props.style.as_deref();

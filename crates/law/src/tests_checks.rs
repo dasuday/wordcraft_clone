@@ -431,6 +431,20 @@ fn footnote_hyperlink_is_reported() {
 }
 
 #[test]
+fn header_and_footer_hyperlinks_are_reported() {
+    for cmd in ["insert.header", "insert.footer"] {
+        let profile = store().get(MISSOURI).expect("profile").clone();
+        let mut s = apply_session(MISSOURI, "brief");
+        write_skeleton(&mut s, &profile, "brief");
+        assert!(!has_check(&findings(&mut s, MISSOURI, "brief", false), "noHyperlinks"));
+        let story = run(&mut s, cmd, json!({}))["story"].as_u64().expect("story") as u32;
+        run(&mut s, "caret.set", json!({"pos": {"story": StoryRef::Part(story), "path": [0], "off": 0}}));
+        run(&mut s, "insert.link", json!({"url": "https://example.com", "text": "link"}));
+        assert!(has_check(&findings(&mut s, MISSOURI, "brief", false), "noHyperlinks"), "{cmd}");
+    }
+}
+
+#[test]
 fn text_before_first_heading_counts_toward_word_limit() {
     let mut s = law();
     let mut p = super::tests::profile_json("test-pre-heading");

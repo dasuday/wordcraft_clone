@@ -126,6 +126,25 @@ fn export_checks_see_the_export_options_and_serialise_like_lint() {
 }
 
 #[test]
+fn a_failed_export_check_clears_when_it_runs_again() {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    static FAIL: AtomicBool = AtomicBool::new(true);
+    let mut s = s();
+    let flaky = crate::CommandSpec::new("test.exportFlaky", "Flaky Export Check", "Test", |_, _| {
+        if FAIL.load(Ordering::SeqCst) { Err(crate::CmdError::Failed("offline".into())) } else { Ok(json!({"findings": []})) }
+    });
+    assert_eq!(s.install_commands(vec![flaky]), 1);
+    s.set_export_check_commands(vec![("test.exportFlaky".into(), json!({}))]);
+    let plain = crate::io::ExportOptions { markup: false, comments: false, word2003: false };
+    s.run_export_checks(&plain, "pdf");
+    assert_eq!(s.lint_findings_of("export:test.exportFlaky").len(), 1, "the failure shows in Proofing");
+    FAIL.store(false, Ordering::SeqCst);
+    assert!(s.run_export_checks(&plain, "pdf").is_empty());
+    assert!(s.lint_findings_of("export:test.exportFlaky").is_empty(), "a successful retry drops the old failure");
+    assert!(s.lint_findings().is_empty());
+}
+
+#[test]
 fn export_checks_see_the_output_format() {
     let mut s = s();
     let echo = crate::CommandSpec::new("test.exportFormat", "Echo Format", "Test", |_, v| {

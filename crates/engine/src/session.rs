@@ -770,6 +770,8 @@ impl Session {
             }
             match self.run(&id, &params) {
                 Ok(v) => {
+                    // A check that failed on an earlier export and runs now drops that failure.
+                    self.set_lint_findings(&format!("export:{id}"), Vec::new());
                     if let Some(arr) = v.get("findings").and_then(serde_json::Value::as_array) {
                         for f in arr {
                             all.push(f.clone());
