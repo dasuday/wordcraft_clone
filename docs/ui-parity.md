@@ -91,6 +91,7 @@ Find selects the Results tab, including when it prefills selected text. Editing 
 | 2026-10-16 | trivial | Ctrl/⌘+wheel only zooms: a coast or wheel notch still gliding stops instead of scrolling the page on top of the zoom (#1743) |
 | 2026-10-16 | trivial | The Spike: Ctrl+F3 (⌘F3 on macOS) cuts the selection to the end of the Spike, Ctrl+Shift+F3 (⌘⇧F3) inserts everything collected and empties it; it is the AutoText entry "Spike", so Quick Parts inserts it without emptying it. Per session, not saved between launches |
 | 2026-10-15 | trivial | Selection bar: the right margin for right-to-left paragraphs and tables, and the page margin beside table rows selects rows (click, drag, Shift+click) |
+| 2026-10-15 | trivial | Selection bar: the right margin for right-to-left paragraphs and tables, and the page margin beside table rows selects rows (click, drag, Shift+click; triple-click or Ctrl+click there selects the document, as in Word) |
 | 2026-10-13 | trivial | New/Modify Table Style: No Border on a part that inherits its lines hides them; emptying the font box makes the part's font inherited again (#1288) |
 | 2026-10-14 | trivial | Tab stops edited on the ruler: corner kind selector, click to set, drag to move or off to clear, per-kind markers mirrored for RTL; each gesture one `para.tabs` call and one undo step; Rulers 85% → 90% |
 | 2026-10-12 | trivial | Tables on the page: one selected cell (Select Cell, or a click along its left edge) is a cell selection when its border is dragged: the border moves in its row only (#962) |

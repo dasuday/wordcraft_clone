@@ -185,8 +185,8 @@ Ranked, to beta (detail and remaining milestones in [docs/roadmap.md](docs/roadm
 | 2026-10-17 | Language dialog keeps inherited proofing language and no-proof choices (#2717). Opening and accepting unchanged no longer replaces style-derived values with English US and proofing enabled. |
 <<<<<<< HEAD
 | 2026-10-16 | Text with the legacy Outline, Shadow, Emboss or Engrave font effects (`w:outline`, `w:shadow`, `w:emboss`, `w:imprint`) is drawn with them on screen and in PDFs, no longer as plain text: hollow outlined letters, or a grey copy behind the letters; the PDF keeps the text (#2534) |
-=======
 >>>>>>> e9f6d80 (gap: selection bar review fixes (row bar only beside the table, Shift+click from outside, text-box tables))
+=======
 | 2026-10-14 | Consistent preferred cell widths override a stale table grid when both totals agree, for fixed and AutoFit tables. Conflicting widths, spans and percentages remain unchanged. |
 | 2026-10-14 | Legacy VML freeforms (`v:shape` with its own `path`), such as the rule lines in many older headers, are read as freeform shapes: they show on screen and in PDFs and are saved back as DrawingML custom geometry instead of vanishing |
 | 2026-10-14 | Field instructions spanning paragraphs no longer add blank lines during pagination; empty result paragraphs still take a line. |
