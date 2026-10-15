@@ -286,8 +286,9 @@ fn preset_levels(preset: &str) -> Option<Vec<Level>> {
 }
 
 /// A Multilevel List gallery preset: a new list linked to Heading 1–9. The heading styles carry
-/// the number, so every heading (and every heading added later) is numbered; selected body text
-/// becomes the first level.
+/// the number, so every heading (and every heading added later) is numbered. Paragraphs in a
+/// Heading style keep their level; any other paragraph under the caret or selection (Normal,
+/// Quote, Title…) becomes Heading 1, as in Word.
 fn preset(s: &mut Session, v: &Value) -> CmdResult {
     let id = p::req_str(v, "preset")?;
     let levels = preset_levels(id).ok_or_else(|| CmdError::Params("`preset` must be headings, article, outlineHeadings or chapter".into()))?;
