@@ -2251,3 +2251,7 @@
 	Small button (three to a column)	Kleine Schaltfläche (drei pro Spalte)
 	Add to Ribbon…	Zum Menüband hinzufügen…
 	A ribbon button that runs this macro, saved with the document	Eine Menüband-Schaltfläche, die dieses Makro ausführt, gespeichert mit dem Dokument
+	Filter	Filter
+	Nothing to show.	Nichts anzuzeigen.
+	{label} must be a number.	{label} muss eine Zahl sein.
+	The add-in {name} reported an error: {error}	Das Add-In {name} hat einen Fehler gemeldet: {error}

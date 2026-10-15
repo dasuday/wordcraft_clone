@@ -2264,3 +2264,7 @@
 	Small button (three to a column)	Botão pequeno (três por coluna)
 	Add to Ribbon…	Adicionar à faixa de opções…
 	A ribbon button that runs this macro, saved with the document	Um botão da faixa de opções que executa esta macro, salvo com o documento
+	Filter	Filtro
+	Nothing to show.	Nada para mostrar.
+	{label} must be a number.	{label} deve ser um número.
+	The add-in {name} reported an error: {error}	O suplemento {name} relatou um erro: {error}

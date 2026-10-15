@@ -2286,3 +2286,7 @@
 	Small button (three to a column)	Väike nupp (kolm veerus)
 	Add to Ribbon…	Lisa lindile…
 	A ribbon button that runs this macro, saved with the document	Lindi nupp, mis käivitab selle makro ja salvestatakse koos dokumendiga
+	Filter	Filter
+	Nothing to show.	Pole midagi näidata.
+	{label} must be a number.	{label} peab olema arv.
+	The add-in {name} reported an error: {error}	Lisandmoodul {name} teatas veast: {error}

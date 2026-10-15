@@ -2618,3 +2618,7 @@ preview	Title	Título
 	Small button (three to a column)	Botón pequeño (tres por columna)
 	Add to Ribbon…	Agregar a la cinta de opciones…
 	A ribbon button that runs this macro, saved with the document	Un botón de la cinta de opciones que ejecuta esta macro, guardado con el documento
+	Filter	Filtro
+	Nothing to show.	No hay nada que mostrar.
+	{label} must be a number.	{label} debe ser un número.
+	The add-in {name} reported an error: {error}	El complemento {name} informó de un error: {error}

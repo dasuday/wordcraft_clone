@@ -2252,3 +2252,7 @@
 	Small button (three to a column)	小さいボタン (1 列に 3 つ)
 	Add to Ribbon…	リボンに追加…
 	A ribbon button that runs this macro, saved with the document	このマクロを実行するリボン ボタン (文書と一緒に保存されます)
+	Filter	フィルター
+	Nothing to show.	表示する項目はありません。
+	{label} must be a number.	{label} には数値を入力してください。
+	The add-in {name} reported an error: {error}	アドイン {name} がエラーを報告しました: {error}

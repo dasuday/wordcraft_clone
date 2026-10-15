@@ -66,6 +66,7 @@ pub mod office_pane;
 pub mod options;
 pub mod panes;
 pub mod paste_picture;
+pub mod plugin_dialog;
 pub mod plugin_ui;
 pub mod previews;
 pub mod print_page;
@@ -497,6 +498,8 @@ pub struct WordApp {
     /// Escape may leave full screen. Read before anything handles the frame's keys.
     escape_free: bool,
     pub quit_requested: bool,
+    /// Add-ins have been told the document closes with the app ([`WordApp::closing`]).
+    closing_told: bool,
     pub autosave: bool,
     pub word_count: (u64, usize),
     last_autosave: f64,
@@ -608,6 +611,7 @@ impl WordApp {
             seen_full_screen: None,
             escape_free: false,
             quit_requested: false,
+            closing_told: false,
             autosave: true,
             word_count: (0, 0),
             last_autosave: 0.0,
@@ -729,6 +733,8 @@ impl WordApp {
     /// Close, Envelopes, Labels and Finish & Merge on a document with unsaved changes first ask
     /// Save / Don't Save / Cancel, and the command runs once that is answered (`ui.saveChanges`).
     pub fn run(&mut self, id: &str, params: Value) -> Result<Value, String> {
+        // An add-in command run from the interface: its dialog or file comes after it (below).
+        let plugin = (id == "plugins.run").then(|| params.get("plugin").and_then(Value::as_str).map(str::to_string)).flatten();
         if id == "file.recover" && params.as_object().is_none_or(|p| p.is_empty()) {
             self.ui.backstage = true;
             self.ui.backstage_page = "recover".into();
@@ -768,6 +774,9 @@ impl WordApp {
         }
         let r = self.execute_user(id, params);
         let r = system_clipboard::explain(self, id, r);
+        if let (Some(plugin), Ok(v)) = (&plugin, &r) {
+            plugin_ui::after_run(self, plugin, v);
+        }
         // Check Accessibility shows its findings in the Accessibility pane, kept up to date there.
         if id == "file.accessibility" && r.is_ok() {
             self.session.view.accessibility_pane = true;
@@ -1119,6 +1128,18 @@ impl WordApp {
             return false;
         }
         saved
+    }
+
+    /// The app is quitting: add-ins that listen hear that the document closes (protocol 1.2's
+    /// documentClosed), waiting at most 5 s for them. Once; best effort.
+    pub fn closing(&mut self) {
+        if std::mem::replace(&mut self.closing_told, true) || !self.has_document() {
+            return;
+        }
+        if let Some(path) = self.session.path.clone() {
+            wordcraft_engine::cmd::plugins::notify(wordcraft_plugin::DocumentEvent::Closed, &path);
+            wordcraft_plugin::wait_for_events(wordcraft_plugin::DocumentEvent::Closed.timeout());
+        }
     }
 
     /// The window's close button (or the system) asked to quit. Returns true to let the window
@@ -1683,9 +1704,12 @@ impl WordApp {
         if self.applied_editing != Some(lang) {
             self.session.set_editing_language(lang.editing_lang());
             self.applied_editing = Some(lang);
+            // Add-ins started from now on are told the interface language (`host.language`).
+            wordcraft_plugin::set_host_language(lang.code());
         }
         options::sync(self);
         plugin_ui::poll_install(self, ctx);
+        plugin_ui::poll_events(self, ctx);
         self.settle_async_saves();
         // Chinese text wants the Chinese face before the Japanese one (one glyph style per line).
         // An installed CJK font is read only once CJK text is shown (#241): a CJK interface, the
@@ -1868,7 +1892,8 @@ impl WordApp {
     fn autosave_tick(&mut self, now: f64) {
         if self.autosaves() && self.session.dirty && now - self.last_autosave > 2500.0 && now - self.canvas.caret_visible_since > 1500.0 {
             self.last_autosave = now;
-            if let Err(e) = self.session.run("file.save", &json!({})) {
+            // AutoSave's writes aren't saves add-ins hear of (`autosave`).
+            if let Err(e) = self.session.run("file.save", &json!({"autosave": true})) {
                 log::warn!("AutoSave failed: {e}");
                 self.autosave_path = None;
                 self.status(i18n::fmt(tl!("AutoSave failed: {error}. Save the document to turn AutoSave back on."), &[("error", &e.to_string())]));

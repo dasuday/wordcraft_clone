@@ -2639,3 +2639,7 @@
 	Small button (three to a column)	Малък бутон (по три в колона)
 	Add to Ribbon…	Добавяне към лентата…
 	A ribbon button that runs this macro, saved with the document	Бутон на лентата, който изпълнява този макрос и се записва с документа
+	Filter	Филтър
+	Nothing to show.	Няма нищо за показване.
+	{label} must be a number.	{label} трябва да е число.
+	The add-in {name} reported an error: {error}	Добавката {name} съобщи за грешка: {error}

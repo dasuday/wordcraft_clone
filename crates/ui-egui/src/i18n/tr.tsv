@@ -2648,3 +2648,7 @@ preview	Title	Örnek
 	Small button (three to a column)	Küçük düğme (sütun başına üç)
 	Add to Ribbon…	Şeride Ekle…
 	A ribbon button that runs this macro, saved with the document	Bu makroyu çalıştıran, belgeyle birlikte kaydedilen bir şerit düğmesi
+	Filter	Filtre
+	Nothing to show.	Gösterilecek bir şey yok.
+	{label} must be a number.	{label} bir sayı olmalıdır.
+	The add-in {name} reported an error: {error}	{name} eklentisi bir hata bildirdi: {error}

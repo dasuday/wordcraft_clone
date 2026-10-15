@@ -517,6 +517,8 @@ pub enum Dialog {
     /// Insert › Add-ins › Get Add-ins, Developer › Add-ins: the loaded add-ins, their commands,
     /// installing and loading more.
     AddIns,
+    /// An add-in's own dialog (protocol 1.2): a list, a form or a message.
+    Plugin(Box<crate::plugin_dialog::PluginDialog>),
 }
 
 /// The Table Properties dialog's fields. Lengths are in the interface unit
@@ -1011,6 +1013,7 @@ impl Dialog {
             Dialog::NoteOptions { .. } => "noteOptions",
             Dialog::Templates { .. } => "templates",
             Dialog::AddIns => "addIns",
+            Dialog::Plugin(_) => "pluginDialog",
             Dialog::Organizer { .. } => "organizer",
             Dialog::Layout(d) => d.name(),
         }
@@ -1402,7 +1405,7 @@ const DIALOG_CENTRED_FRAMES: u8 = 2;
 /// the bottom edge and the tab strip stays under the mouse (#507). It is no longer anchored after
 /// that, so dragging the title bar moves it (#732). egui keeps it on screen if it grows past the
 /// bottom.
-fn place_dialog<'a>(ctx: &egui::Context, id: egui::Id, w: egui::Window<'a>) -> egui::Window<'a> {
+pub(crate) fn place_dialog<'a>(ctx: &egui::Context, id: egui::Id, w: egui::Window<'a>) -> egui::Window<'a> {
     let w = w.pivot(egui::Align2::CENTER_TOP);
     match ctx.data(|d| d.get_temp::<(egui::Id, u8)>(dialog_top_key())) {
         Some((open, frames)) if open == id && frames >= DIALOG_CENTRED_FRAMES => w,
@@ -1411,7 +1414,7 @@ fn place_dialog<'a>(ctx: &egui::Context, id: egui::Id, w: egui::Window<'a>) -> e
 }
 
 /// After a frame of a dialog: counts the frames it has been centred for.
-fn count_dialog_frame(ctx: &egui::Context, id: egui::Id) {
+pub(crate) fn count_dialog_frame(ctx: &egui::Context, id: egui::Id) {
     let frames = match ctx.data(|d| d.get_temp::<(egui::Id, u8)>(dialog_top_key())) {
         Some((open, frames)) if open == id => frames,
         _ => 0,
@@ -1422,6 +1425,11 @@ fn count_dialog_frame(ctx: &egui::Context, id: egui::Id) {
 }
 
 pub fn show(app: &mut WordApp, ctx: &egui::Context) {
+    // An add-in's dialog has its own title and words, shown as given.
+    if matches!(app.dialog, Some(Dialog::Plugin(_))) {
+        crate::plugin_dialog::show(app, ctx);
+        return;
+    }
     let Some(mut d) = app.dialog.take() else {
         ctx.data_mut(|d| d.remove::<(egui::Id, u8)>(dialog_top_key()));
         return;
@@ -1482,6 +1490,8 @@ pub fn show(app: &mut WordApp, ctx: &egui::Context) {
         Dialog::Organizer { .. } => "Organizer",
         Dialog::Layout(d) => d.title(),
         Dialog::AddIns => "Add-ins",
+        // Drawn by `plugin_dialog::show` (below): its title is the add-in's.
+        Dialog::Plugin(_) => "Add-in",
     };
     let id = egui::Id::new(("dialog", title));
     let shown = place_dialog(ctx, id, egui::Window::new(tl!(title)).id(id).collapsible(false).resizable(false)).open(&mut open).show(ctx, |ui| {
@@ -2860,6 +2870,8 @@ fn body(app: &mut WordApp, ui: &mut Ui, d: &mut Dialog) -> bool {
         }
         Dialog::NoteOptions { form } => crate::dialogs_notes::note_options(app, ui, form),
         Dialog::Templates { form } => crate::dialogs_templates::templates(app, ui, form),
+        // Drawn by `plugin_dialog::show`, never here.
+        Dialog::Plugin(_) => true,
         Dialog::AddIns => {
             ui.set_width(720.0);
             egui::ScrollArea::vertical().max_height(520.0).show(ui, |ui| crate::plugin_ui::page(app, ui, true));

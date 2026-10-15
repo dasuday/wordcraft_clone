@@ -2677,3 +2677,7 @@
 	Small button (three to a column)	Nút nhỏ (ba nút mỗi cột)
 	Add to Ribbon…	Thêm vào ribbon…
 	A ribbon button that runs this macro, saved with the document	Một nút trên ribbon chạy macro này, được lưu cùng tài liệu
+	Filter	Lọc
+	Nothing to show.	Không có gì để hiển thị.
+	{label} must be a number.	{label} phải là một số.
+	The add-in {name} reported an error: {error}	Phần bổ trợ {name} đã báo lỗi: {error}

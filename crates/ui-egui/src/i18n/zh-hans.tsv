@@ -2264,3 +2264,7 @@
 	Small button (three to a column)	小按钮（每列三个）
 	Add to Ribbon…	添加到功能区…
 	A ribbon button that runs this macro, saved with the document	运行此宏的功能区按钮，随文档一起保存
+	Filter	筛选
+	Nothing to show.	没有可显示的内容。
+	{label} must be a number.	{label} 必须是数字。
+	The add-in {name} reported an error: {error}	加载项 {name} 报告了错误：{error}

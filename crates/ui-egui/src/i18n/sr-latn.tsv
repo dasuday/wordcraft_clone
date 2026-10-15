@@ -2262,3 +2262,7 @@
 	Small button (three to a column)	Malo dugme (tri u koloni)
 	Add to Ribbon…	Dodaj na traku…
 	A ribbon button that runs this macro, saved with the document	Dugme na traci koje pokreće ovaj makro, sačuvano sa dokumentom
+	Filter	Filter
+	Nothing to show.	Nema ničega za prikaz.
+	{label} must be a number.	{label} mora biti broj.
+	The add-in {name} reported an error: {error}	Dodatak {name} je prijavio grešku: {error}

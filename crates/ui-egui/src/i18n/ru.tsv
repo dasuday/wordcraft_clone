@@ -2649,3 +2649,7 @@ preview	Title	Пример
 	Small button (three to a column)	Маленькая кнопка (по три в столбце)
 	Add to Ribbon…	Добавить на ленту…
 	A ribbon button that runs this macro, saved with the document	Кнопка на ленте, которая выполняет этот макрос и сохраняется вместе с документом
+	Filter	Фильтр
+	Nothing to show.	Нечего показать.
+	{label} must be a number.	{label}: требуется число.
+	The add-in {name} reported an error: {error}	Надстройка {name} сообщила об ошибке: {error}

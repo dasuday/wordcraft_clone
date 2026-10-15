@@ -2634,3 +2634,7 @@ preview	Title	Esempio
 	Small button (three to a column)	Pulsante piccolo (tre per colonna)
 	Add to Ribbon…	Aggiungi alla barra multifunzione…
 	A ribbon button that runs this macro, saved with the document	Un pulsante della barra multifunzione che esegue questa macro, salvato con il documento
+	Filter	Filtro
+	Nothing to show.	Niente da mostrare.
+	{label} must be a number.	{label} deve essere un numero.
+	The add-in {name} reported an error: {error}	Il componente aggiuntivo {name} ha segnalato un errore: {error}

@@ -73,6 +73,20 @@ impl Pen<'_> {
 
 /// Paint icon `name` into `r`. `c` is the line colour; the accent comes from the theme.
 pub fn paint(p: &Painter, r: Rect, name: &str, c: Color32, accent: Color32) {
+    draw(p, r, name, c, accent);
+}
+
+/// [`paint`], but a name the set doesn't have gets icon `fallback` instead of a letter tile (the
+/// items of an add-in's dialog: a generic file icon).
+pub fn paint_or(p: &Painter, r: Rect, name: &str, fallback: &str, c: Color32, accent: Color32) {
+    let mut probe = p.clone();
+    probe.set_invisible();
+    let known = draw(&probe, r, name, c, accent);
+    paint(p, r, if known { name } else { fallback }, c, accent);
+}
+
+/// Paints icon `name`; false when the set has no such icon and the letter tile was drawn.
+fn draw(p: &Painter, r: Rect, name: &str, c: Color32, accent: Color32) -> bool {
     let pen = Pen { p, r, c, a: accent, w: 1.25 };
     let a = accent;
     let red = Color32::from_rgb(0xD1, 0x3B, 0x3B);
@@ -1432,8 +1446,10 @@ pub fn paint(p: &Painter, r: Rect, name: &str, c: Color32, accent: Color32) {
             p.rect_stroke(r.shrink(r.width() * 0.12), 3.0, Stroke::new(1.0, c), egui::StrokeKind::Middle);
             let ch = name.chars().next().map(|x| x.to_ascii_uppercase().to_string()).unwrap_or_default();
             p.text(r.center(), egui::Align2::CENTER_CENTER, ch, FontId::proportional(r.height() * 0.45), a);
+            return false;
         }
     }
+    true
 }
 
 trait ThenLines {

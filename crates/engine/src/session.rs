@@ -424,6 +424,9 @@ pub struct Session {
     pub merge: crate::cmd::mailings::MergeState,
     /// Requests from commands to the UI (open a dialog, scroll…), drained by the front end.
     pub ui_requests: Vec<Value>,
+    /// Where the document came from, in words, when an add-in opened it (`file.open`'s `label`,
+    /// protocol 1.2: "Nextcloud · Documents/Budget.docx"); shown as its location.
+    pub location_label: Option<String>,
     /// Read Aloud player (Review › Speech).
     pub read_aloud: crate::speech::ReadAloud,
     /// Preferences the front end saves between runs.
@@ -642,6 +645,7 @@ impl Session {
             bib_style,
             merge: Default::default(),
             ui_requests: Vec::new(),
+            location_label: None,
             math: None,
             math_latex: false,
             math_normal_text: false,
@@ -1049,6 +1053,7 @@ impl Session {
         self.password = None;
         self.macros_enabled = false;
         self.file_name = None;
+        self.location_label = None;
         self.sel = Selection::caret(self.doc.start_of(StoryRef::Body));
         self.pending = None;
         self.also_selected.clear();
@@ -1126,6 +1131,8 @@ impl Session {
             bib_style: _,
             merge: _,
             ui_requests: _,
+            // Like the file path: where the document is, not part of it.
+            location_label: _,
             document_id: _,
             read_aloud: _,
             prefs: _,

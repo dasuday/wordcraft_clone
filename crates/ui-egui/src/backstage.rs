@@ -449,7 +449,15 @@ fn info_page(app: &mut WordApp, ui: &mut Ui) {
             ui.label(format!("{}: {}", tl!(l), info.get(k).map(|v| v.to_string()).unwrap_or_default()));
         }
         let path = info.get("path").and_then(|v| v.as_str()).unwrap_or(tl!("Not saved yet"));
-        ui.label(crate::i18n::fmt(tl!("Location: {path}"), &[("path", path)]));
+        // An add-in's words for where the document came from (Nextcloud…), the file underneath.
+        match info.get("location").and_then(|v| v.as_str()) {
+            Some(label) => {
+                ui.label(crate::i18n::fmt(tl!("Location: {path}"), &[("path", label)])).on_hover_text(path);
+            }
+            None => {
+                ui.label(crate::i18n::fmt(tl!("Location: {path}"), &[("path", path)]));
+            }
+        }
     });
 }
 

@@ -2643,3 +2643,7 @@ preview	Title	Ukázka
 	Small button (three to a column)	Malé tlačítko (tři ve sloupci)
 	Add to Ribbon…	Přidat na pás karet…
 	A ribbon button that runs this macro, saved with the document	Tlačítko na pásu karet, které spouští toto makro, uložené s dokumentem
+	Filter	Filtr
+	Nothing to show.	Není co zobrazit.
+	{label} must be a number.	{label} musí být číslo.
+	The add-in {name} reported an error: {error}	Doplněk {name} ohlásil chybu: {error}

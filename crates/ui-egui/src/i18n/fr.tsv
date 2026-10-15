@@ -2259,3 +2259,7 @@
 	Small button (three to a column)	Petit bouton (trois par colonne)
 	Add to Ribbon…	Ajouter au ruban…
 	A ribbon button that runs this macro, saved with the document	Un bouton du ruban qui exécute cette macro, enregistré avec le document
+	Filter	Filtre
+	Nothing to show.	Rien à afficher.
+	{label} must be a number.	{label} doit être un nombre.
+	The add-in {name} reported an error: {error}	Le complément {name} a signalé une erreur : {error}

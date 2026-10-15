@@ -2647,3 +2647,7 @@
 	Small button (three to a column)	Kis gomb (oszloponként három)
 	Add to Ribbon…	Hozzáadás a menüszalaghoz…
 	A ribbon button that runs this macro, saved with the document	Menüszalaggomb, amely ezt a makrót futtatja, és a dokumentummal együtt mentődik
+	Filter	Szűrő
+	Nothing to show.	Nincs mit megjeleníteni.
+	{label} must be a number.	{label}: számot kell megadni.
+	The add-in {name} reported an error: {error}	A(z) {name} bővítmény hibát jelzett: {error}

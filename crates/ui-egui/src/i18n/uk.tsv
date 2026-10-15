@@ -2264,3 +2264,7 @@
 	Small button (three to a column)	Маленька кнопка (по три в стовпці)
 	Add to Ribbon…	Додати на стрічку…
 	A ribbon button that runs this macro, saved with the document	Кнопка на стрічці, що виконує цей макрос і зберігається разом із документом
+	Filter	Фільтр
+	Nothing to show.	Нічого показати.
+	{label} must be a number.	{label}: потрібне число.
+	The add-in {name} reported an error: {error}	Надбудова {name} повідомила про помилку: {error}

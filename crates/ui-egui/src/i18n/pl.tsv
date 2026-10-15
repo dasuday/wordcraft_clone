@@ -2641,3 +2641,7 @@ preview	Title	Tytuł
 	Small button (three to a column)	Mały przycisk (trzy w kolumnie)
 	Add to Ribbon…	Dodaj do wstążki…
 	A ribbon button that runs this macro, saved with the document	Przycisk na wstążce uruchamiający to makro, zapisany z dokumentem
+	Filter	Filtr
+	Nothing to show.	Brak elementów do wyświetlenia.
+	{label} must be a number.	{label} musi być liczbą.
+	The add-in {name} reported an error: {error}	Dodatek {name} zgłosił błąd: {error}
