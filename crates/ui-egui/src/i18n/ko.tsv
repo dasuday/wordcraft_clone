@@ -2488,3 +2488,7 @@ preview	Title	제목
 	Bottom Right Cell	오른쪽 아래 셀
 	Inside Horizontal Border	안쪽 가로 테두리
 	Inside Vertical Border	안쪽 세로 테두리
+# Update Table of Contents dialog (#1197)
+	Update Table of Contents	목차 업데이트
+	Update page numbers only	페이지 번호만 업데이트
+	Update entire table	목차 전체 업데이트

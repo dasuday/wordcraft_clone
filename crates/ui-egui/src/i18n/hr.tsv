@@ -2632,3 +2632,7 @@ preview	Title	Naslov
 	Bottom Right Cell	Donja desna ćelija
 	Inside Horizontal Border	Unutarnji vodoravni obrub
 	Inside Vertical Border	Unutarnji okomiti obrub
+# Update Table of Contents dialog (#1197)
+	Update Table of Contents	Ažuriraj sadržaj
+	Update page numbers only	Ažuriraj samo brojeve stranica
+	Update entire table	Ažuriraj cijeli sadržaj

@@ -2630,3 +2630,7 @@ preview	Title	Пример
 # Reading Mode column widths (#1040)
 	Narrow	Узкая
 	Medium	Средняя
+# Update Table of Contents dialog (#1197)
+	Update Table of Contents	Обновление оглавления
+	Update page numbers only	Обновить только номера страниц
+	Update entire table	Обновить оглавление целиком

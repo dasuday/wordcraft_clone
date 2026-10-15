@@ -2232,3 +2232,7 @@
 # Reading Mode column widths (#1040)
 	Narrow	Schmal
 	Medium	Mittel
+# Update Table of Contents dialog (#1197)
+	Update Table of Contents	Inhaltsverzeichnis aktualisieren
+	Update page numbers only	Nur Seitenzahlen aktualisieren
+	Update entire table	Gesamtes Verzeichnis aktualisieren

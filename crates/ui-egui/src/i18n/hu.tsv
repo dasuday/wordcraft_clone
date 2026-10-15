@@ -2628,3 +2628,7 @@
 # Reading Mode column widths (#1040)
 	Narrow	Keskeny
 	Medium	Közepes
+# Update Table of Contents dialog (#1197)
+	Update Table of Contents	Tartalomjegyzék frissítése
+	Update page numbers only	Csak az oldalszámok frissítése
+	Update entire table	A teljes jegyzék frissítése

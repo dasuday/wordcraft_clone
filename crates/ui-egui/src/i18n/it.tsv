@@ -2641,3 +2641,7 @@ preview	Title	Esempio
 # Reading Mode column widths (#1040)
 	Narrow	Stretta
 	Medium	Media
+# Update Table of Contents dialog (#1197)
+	Update Table of Contents	Aggiorna sommario
+	Update page numbers only	Aggiorna solo i numeri di pagina
+	Update entire table	Aggiorna l’intero sommario

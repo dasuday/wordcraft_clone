@@ -2234,3 +2234,7 @@
 # Reading Mode column widths (#1040)
 	Narrow	窄
 	Medium	中等
+# Update Table of Contents dialog (#1197)
+	Update Table of Contents	更新目錄
+	Update page numbers only	只更新頁碼
+	Update entire table	更新整個目錄
