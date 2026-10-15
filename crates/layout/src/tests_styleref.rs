@@ -175,3 +175,44 @@ fn body_edits_keep_styleref_headers_cached() {
     assert_eq!(shown(&edited.pages[2].header), ["The Middles", "above"]);
     assert_eq!(shown(&edited.pages[0].header), ["Beginnings", "below"]);
 }
+
+/// The x of each shown character's first glyph in a header field result, in text order.
+fn field_char_xs(d: &Document) -> Vec<(String, Vec<f32>)> {
+    let mut c = LayoutCache::new();
+    let l = layout(d, &mut c, &LayoutOptions::default());
+    let mut out = Vec::new();
+    for it in &l.pages[0].header {
+        let Placed::Lines { para, .. } = it else { continue };
+        for (k, text, ranges) in &para.shown {
+            let cl = &para.clusters[*k];
+            let glyphs = &para.glyphs[cl.g0 as usize..cl.g1 as usize];
+            let xs = text
+                .char_indices()
+                .map(|(i, _)| glyphs.iter().zip(ranges).find(|(_, r)| r.start == i).map(|(g, _)| g.dx).unwrap_or(f32::NAN))
+                .collect();
+            out.push((text.clone(), xs));
+        }
+    }
+    out
+}
+
+/// A STYLEREF showing a Hebrew heading reads right to left in the header like ordinary text
+/// (#1670): "פרק א" draws פ rightmost, not reversed as "א קרפ". Latin results keep their order,
+/// also in a right-to-left header paragraph.
+#[test]
+fn hebrew_styleref_result_reads_right_to_left() {
+    let d = doc(&[("Heading1", "פרק א", false), ("Normal", "Text.", false)], &[r#"STYLEREF "Heading 1""#]);
+    let got = field_char_xs(&d);
+    let (text, xs) = &got[0];
+    assert_eq!(text, "פרק א");
+    assert!(xs.iter().all(|x| x.is_finite()), "every letter has a glyph: {xs:?}");
+    assert!(xs.windows(2).all(|w| w[0] > w[1]), "letters in text order run right to left: {xs:?}");
+    // A Latin heading in a right-to-left header paragraph still reads left to right.
+    let mut d = doc(&[("Heading1", "Part one", false)], &[r#"STYLEREF "Heading 1""#]);
+    let hdr = d.last_section.headers.default.unwrap();
+    d.para_mut(StoryRef::Part(hdr), &Path::top(0)).unwrap().props.bidi = Some(true);
+    let got = field_char_xs(&d);
+    let (text, xs) = &got[0];
+    assert_eq!(text, "Part one");
+    assert!(xs.windows(2).all(|w| w[0] < w[1]), "Latin letters run left to right: {xs:?}");
+}

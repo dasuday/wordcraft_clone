@@ -966,15 +966,27 @@ impl<'a> Builder<'a> {
             });
             return;
         };
-        // Merge into one cluster: rebase glyph dx onto the first cluster, and keep each glyph's
-        // text (a ligature's glyph takes the letters of the clusters after it that have none).
+        // Right-to-left text in the result reads like ordinary text (UAX #9, #1670): its clusters
+        // are placed in visual order, in the direction of the text around the field.
+        let rtl_base = self.levels.get(start).is_some_and(|l| l % 2 == 1);
+        let lv = bidi_levels(text, rtl_base);
+        let order = if lv.is_empty() {
+            (0..added.len()).collect()
+        } else {
+            let cl_lv: Vec<u8> = added.iter().map(|c| lv.get(c.start.saturating_sub(start)).copied().unwrap_or(u8::from(rtl_base))).collect();
+            visual_order(&cl_lv)
+        };
+        // Merge into one cluster: rebase glyph dx onto the first cluster drawn, and keep each
+        // glyph's text (a ligature's glyph takes the letters of the clusters after it that have none).
         let mut x = 0.0;
-        let mut ranges: Vec<std::ops::Range<usize>> = Vec::new();
-        for c in &added {
+        for c in order.iter().filter_map(|&i| added.get(i)) {
             for g in self.glyphs.get_mut(c.g0 as usize..c.g1 as usize).into_iter().flatten() {
                 g.dx += x;
             }
             x += c.adv;
+        }
+        let mut ranges: Vec<std::ops::Range<usize>> = Vec::new();
+        for c in &added {
             let (a, b) = (c.start.saturating_sub(start), c.end.saturating_sub(start));
             if c.g1 <= c.g0 {
                 let from = ranges.last().map(|r| r.start);
