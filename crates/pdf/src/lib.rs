@@ -942,11 +942,12 @@ impl Exporter<'_> {
             }
             Draw::Line { x0, y0, x1, y1, width, color, stroke, alpha, .. } => self.line(s, (*x0, *y0, *x1, *y1), *width, *color, *stroke, *alpha),
             Draw::Image { rect, media, crop, alpha, .. } => self.picture(s, rect, media, crop, *alpha),
-            Draw::Path { segs, fill: f, stroke, stroke_width } => {
+            Draw::Path { segs, fill: f, stroke, stroke_width, even_odd } => {
                 let mut pb = PathBuilder::new();
                 append_path(&mut pb, &wordcraft_layout::display::seg_path(segs));
                 let Some(p) = pb.finish() else { return };
-                s.set_fill(f.map(|c| fill(c, 1.0)));
+                let rule = if *even_odd { FillRule::EvenOdd } else { FillRule::NonZero };
+                s.set_fill(f.map(|c| Fill { rule, ..fill(c, 1.0) }));
                 s.set_stroke(stroke.map(|c| Stroke {
                     paint: rgb::Color::new(c.0, c.1, c.2).into(),
                     // Width 0 (or none) is a hairline.
