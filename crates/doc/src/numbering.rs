@@ -106,6 +106,9 @@ pub struct Num {
 pub struct Numbering {
     pub abstracts: Vec<AbstractNum>,
     pub nums: Vec<Num>,
+    /// Where new list ids come from (see [`crate::IdSpace`]). Not part of the document.
+    #[serde(skip)]
+    pub id_space: crate::IdSpace,
 }
 
 /// Built-in list kinds for the Bullets / Numbering / Multilevel galleries.
@@ -232,16 +235,19 @@ impl Numbering {
     }
     /// Create a new list of `kind`; returns the `num` id.
     pub fn add_list(&mut self, kind: ListKind) -> u32 {
-        let aid = self.abstracts.iter().map(|a| a.id + 1).max().unwrap_or(0);
+        let aid = self.id_space.next(self.abstracts.iter().map(|a| a.id), 0);
+        self.id_space.take(aid);
         self.abstracts.push(AbstractNum { id: aid, name: None, levels: levels_for(kind), ..Default::default() });
-        let nid = self.nums.iter().map(|n| n.id + 1).max().unwrap_or(1).max(1);
+        let nid = self.id_space.next(self.nums.iter().map(|n| n.id), 1);
+        self.id_space.take(nid);
         self.nums.push(Num { id: nid, abstract_id: aid, ..Default::default() });
         nid
     }
     /// A new `num` that restarts numbering of an existing list.
     pub fn restart(&mut self, num: u32) -> Option<u32> {
         let a = self.num(num)?.abstract_id;
-        let nid = self.nums.iter().map(|n| n.id + 1).max().unwrap_or(1).max(1);
+        let nid = self.id_space.next(self.nums.iter().map(|n| n.id), 1);
+        self.id_space.take(nid);
         let starts = self.abstracts.iter().find(|x| x.id == a).map(|x| x.levels.iter().enumerate().map(|(i, l)| (i as u8, l.start)).collect());
         self.nums.push(Num { id: nid, abstract_id: a, start_overrides: starts.unwrap_or_default(), ..Default::default() });
         Some(nid)

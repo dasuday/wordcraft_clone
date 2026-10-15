@@ -463,6 +463,11 @@ pub struct Session {
     pub column: Option<ColumnBlock>,
     /// Column selection mode (Ctrl+Shift+F8): caret movement extends the block.
     pub column_mode: bool,
+    /// Live sessions (plugin protocol 2).
+    pub collab: crate::collab::Collab,
+    /// Commands running inside commands (a plugin command's steps): a live session shares the
+    /// outermost one's effect as one change.
+    depth: u32,
     /// A selection widened to whole table cells or rows, and where it really runs (see
     /// [`Session::sel_ends`]).
     pub(crate) widened: Option<Widened>,
@@ -535,6 +540,10 @@ pub struct Prefs {
     /// Which documents' macros may run: `disable`, `prompt` (once enabled for the document) or
     /// `enable` (Developer › Macro Security).
     pub macro_security: String,
+    /// Live sessions: this person's stable id (made on first use) and colour (`#RRGGBB`); their
+    /// name is the author name.
+    pub collab_user_id: String,
+    pub collab_color: String,
 }
 
 impl Default for Prefs {
@@ -558,6 +567,8 @@ impl Default for Prefs {
             autocorrect: Default::default(),
             disabled_plugins: Vec::new(),
             macro_security: "prompt".into(),
+            collab_user_id: String::new(),
+            collab_color: String::new(),
         }
     }
 }
@@ -661,6 +672,8 @@ impl Session {
             recovery: None,
             column: None,
             column_mode: false,
+            collab: Default::default(),
+            depth: 0,
             widened: None,
             edit_marks: Vec::new(),
             go_back_step: 0,
@@ -946,9 +959,15 @@ impl Session {
         self.typing_open = false;
     }
     pub fn can_undo(&self) -> bool {
+        if let Some(can) = crate::collab::room_undo(self, false) {
+            return can;
+        }
         !self.history.is_empty()
     }
     pub fn can_redo(&self) -> bool {
+        if let Some(can) = crate::collab::room_undo(self, true) {
+            return can;
+        }
         !self.redo.is_empty()
     }
     pub fn undo_label(&self) -> Option<&str> {
@@ -1158,6 +1177,9 @@ impl Session {
             // Go Back's places, like the caret history: not part of the document.
             edit_marks: _,
             go_back_step: _,
+            // A live session is where the document is shared, not part of it.
+            collab: _,
+            depth: _,
             // The user's Enable Content: a decision about the document, not an edit to it.
             macros_enabled: _,
         } = self;
@@ -1221,7 +1243,35 @@ impl Session {
     /// Run a command by id with JSON params (the single entry point for the UI, CLI, MCP and
     /// control channel). Mutating commands are undoable; a failed command leaves the document as
     /// it was; a panic inside a command becomes an error.
+    ///
+    /// In a live session the outermost command's change is shared as one update, and Undo and
+    /// Redo are the person's own; while the session's document is read-only (joining, a viewer)
+    /// commands that change it are refused.
     pub fn run(&mut self, id: &str, params: &Value) -> Result<Value, CmdError> {
+        if self.collab.room.is_some() {
+            if self.depth == 0
+                && let Some(r) = crate::collab::intercept(self, id, params)
+            {
+                return r;
+            }
+            if self.registry.get(id).is_some_and(|spec| spec.mutates)
+                && let Some(why) = crate::collab::read_only(self)
+            {
+                return Err(CmdError::Disabled(format!("{id}: {why}")));
+            }
+        }
+        // Typing that goes on (and the later frames of a drag) is one undo step, in a room too.
+        let joins = self.join_next || (self.typing_open && matches!(id, "text.insert" | "equation.type"));
+        self.depth += 1;
+        let r = self.run_command(id, params);
+        self.depth = self.depth.saturating_sub(1);
+        if self.depth == 0 && self.collab.room.is_some() {
+            crate::collab::after_command(self, joins && r.is_ok());
+        }
+        r
+    }
+
+    fn run_command(&mut self, id: &str, params: &Value) -> Result<Value, CmdError> {
         let join = std::mem::take(&mut self.join_next);
         let reg = self.registry.clone();
         let Some(spec) = reg.get(id) else { return Err(CmdError::Unknown(id.to_string())) };

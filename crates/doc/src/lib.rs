@@ -657,6 +657,64 @@ pub struct Document {
     /// or a richer customisation kept unchanged as a package part.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ribbon: Option<Ribbon>,
+    /// Where new story and comment ids come from: in a live session, a block of ids no other
+    /// person's copy uses (see [`IdSpace`]). Not part of the document.
+    #[serde(skip)]
+    pub id_space: IdSpace,
+}
+
+/// Where a document makes new story (part), comment and list ids. The default (`start` 0): one
+/// past the highest. In a live session each person's copy makes them in its own block of
+/// 65,536 ids from `start`, never below `floor` (so an id given up by an undo isn't given again
+/// while others may still have the old story), and two people adding a footnote or a comment at
+/// once don't pick the same id. Not part of the document: every `IdSpace` equals every other.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct IdSpace {
+    pub start: u32,
+    /// The lowest id this copy may make next.
+    pub floor: u32,
+}
+
+impl PartialEq for IdSpace {
+    fn eq(&self, _: &IdSpace) -> bool {
+        true
+    }
+}
+
+impl IdSpace {
+    /// Ids in a block.
+    pub const BLOCK: u32 = 1 << 16;
+
+    /// The block of ids from `start`.
+    pub fn new(start: u32) -> IdSpace {
+        IdSpace { start, floor: start }
+    }
+
+    /// Whether `id` is in this block.
+    pub fn contains(&self, id: u32) -> bool {
+        self.start > 0 && (self.start..self.start.saturating_add(Self::BLOCK)).contains(&id)
+    }
+
+    /// A new id not in `taken`, at least `floor`; [`IdSpace::take`] it.
+    pub fn next(&self, taken: impl Iterator<Item = u32> + Clone, floor: u32) -> u32 {
+        if self.start > 0 {
+            let end = self.start.saturating_add(Self::BLOCK);
+            let lo = self.start.max(self.floor);
+            let mine = taken.clone().filter(|id| (self.start..end).contains(id)).max().map(|m| m.saturating_add(1)).unwrap_or(lo).max(lo).max(floor);
+            if mine < end {
+                return mine;
+            }
+            // The block is full: one past the highest.
+        }
+        taken.max().map(|m| m.saturating_add(1)).unwrap_or(floor).max(floor)
+    }
+
+    /// Records that `id` was made, so it isn't made again.
+    pub fn take(&mut self, id: u32) {
+        if self.contains(id) {
+            self.floor = self.floor.max(id.saturating_add(1));
+        }
+    }
 }
 
 impl Default for Document {
@@ -685,6 +743,7 @@ impl Document {
             media: BTreeMap::new(),
             passthrough: BTreeMap::new(),
             ribbon: None,
+            id_space: IdSpace::default(),
         }
     }
 
@@ -951,13 +1010,28 @@ impl Document {
 
     /// Allocate a new part id and insert the part.
     pub fn add_part(&mut self, kind: PartKind, blocks: Blocks) -> u32 {
-        let id = self.parts.keys().next_back().map(|k| k + 1).unwrap_or(1);
+        let id = self.id_space.next(self.parts.keys().copied(), 1);
+        self.id_space.take(id);
         let mut part = Part { kind, blocks, body: TextBody::default() };
         if part.blocks.is_empty() {
             part.blocks.push(para_block(Paragraph::new()));
         }
         self.parts.insert(id, part);
         id
+    }
+
+    /// A new comment id ([`Document::id_space`]), for a comment about to be added.
+    pub fn next_comment_id(&mut self) -> u32 {
+        let id = self.id_space.next(self.comments.keys().copied(), 0);
+        self.id_space.take(id);
+        id
+    }
+
+    /// Sets where new story, comment and list ids come from (a live session's block, or
+    /// [`IdSpace::default`]).
+    pub fn set_id_space(&mut self, space: IdSpace) {
+        self.id_space = space;
+        self.numbering.id_space = space;
     }
 
     /// Count words like Word's status bar (whitespace-separated tokens containing a letter or digit,
