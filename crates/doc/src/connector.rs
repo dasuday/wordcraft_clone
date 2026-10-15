@@ -38,10 +38,17 @@ pub struct ShapeExtra {
     /// 100000ths of the shorter side, at most [`MAX_CORNER`]; `None` draws [`DEFAULT_CORNER`].
     #[serde(skip_serializing_if = "Option::is_none")]
     pub corner: Option<u32>,
+    /// How transparent the fill is, percent (Format Shape › Fill › Transparency; DrawingML's
+    /// `a:alpha` on the fill colour): 0 is opaque.
+    #[serde(skip_serializing_if = "is_zero_f32")]
+    pub fill_transparency: f32,
 }
 
 fn is_zero(v: &u32) -> bool {
     *v == 0
+}
+fn is_zero_f32(v: &f32) -> bool {
+    *v == 0.0
 }
 fn is_false(v: &bool) -> bool {
     !*v
@@ -50,6 +57,11 @@ fn is_false(v: &bool) -> bool {
 impl ShapeExtra {
     pub fn is_empty(&self) -> bool {
         *self == ShapeExtra::default()
+    }
+
+    /// The fill's opacity, 0–1 (1 when the transparency is junk).
+    pub fn fill_opacity(&self) -> f32 {
+        if self.fill_transparency.is_finite() { 1.0 - self.fill_transparency.clamp(0.0, 100.0) / 100.0 } else { 1.0 }
     }
 }
 

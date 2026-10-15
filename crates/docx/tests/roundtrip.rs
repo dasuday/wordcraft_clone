@@ -1956,6 +1956,37 @@ fn freeform_subpaths_round_trip_in_one_path() {
     assert_eq!(back, sent, "the hole comes back joined to its outline");
 }
 
+/// A shape's fill transparency (`a:alpha` on its solid fill) is read and written back.
+#[test]
+fn shape_fill_transparency_round_trips() {
+    use wordcraft_doc::connector::ShapeExtra;
+    let shape = InlineObject::Shape {
+        kind: ShapeKind::Rectangle,
+        w: 40.0,
+        h: 40.0,
+        fill: Some(Rgb(0xF5, 0xF8, 0xFF)),
+        stroke: None,
+        stroke_width: 0.0,
+        float: Float { wrap: Wrap::BehindText, ..Default::default() },
+        story: None,
+        freeform: None,
+        effects: Default::default(),
+        extra: ShapeExtra { fill_transparency: 70.0, ..Default::default() },
+    };
+    let mut p = Paragraph::with_text("Letterhead", CharProps::default());
+    p.insert_object(0, shape, &CharProps::default()).unwrap();
+    let d = doc_with(vec![p]);
+    let bytes = wordcraft_docx::write(&d).unwrap();
+    let mut z = zip::ZipArchive::new(std::io::Cursor::new(&bytes)).unwrap();
+    let mut xml = String::new();
+    std::io::Read::read_to_string(&mut z.by_name("word/document.xml").unwrap(), &mut xml).unwrap();
+    assert!(xml.contains(r#"<a:solidFill><a:srgbClr val="F5F8FF"><a:alpha val="30000"/></a:srgbClr></a:solidFill>"#), "{xml}");
+    let r = rt(&d);
+    let Some(InlineObject::Shape { extra, .. }) = paras(&r)[0].objects.first() else { panic!("no shape") };
+    assert_eq!(extra.fill_transparency, 70.0);
+    assert!((extra.fill_opacity() - 0.3).abs() < 1e-6);
+}
+
 /// Shape effects (#275): `a:effectLst` with an outer shadow, a glow and soft edges round-trips,
 /// and the effect extent leaves room for them.
 #[test]
