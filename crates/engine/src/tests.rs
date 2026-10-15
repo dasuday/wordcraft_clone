@@ -2253,6 +2253,27 @@ fn comments() {
     assert_eq!(s.doc.para_at(&Pos::body(0, 0)).unwrap().objects.len(), 0);
 }
 
+/// A new comment shows where comments show (its balloon, or the Comments pane when that is open):
+/// it doesn't open the pane. Each line of a new comment or reply is a paragraph, as an edit's is.
+#[test]
+fn new_comments_leave_the_pane_and_keep_their_lines() {
+    let mut s = s();
+    run(&mut s, "text.insert", json!({"text": "Alpha paragraph one."}));
+    run(&mut s, "select.text", json!({"text": "Alpha"}));
+    let id = run(&mut s, "review.newComment", json!({"text": "First line\nSecond line"}))["id"].as_u64().unwrap() as u32;
+    assert!(!s.view.comments_pane, "the pane stays closed");
+    let part = s.doc.comments[&id].part;
+    assert_eq!(s.doc.story(StoryRef::Part(part)).map(|b| b.len()), Some(2), "two lines, two paragraphs");
+    assert_eq!(run(&mut s, "review.comments", json!({}))[0]["text"], "First line\nSecond line");
+    let reply = run(&mut s, "review.reply", json!({"id": id, "text": "One\r\nTwo"}))["id"].as_u64().unwrap() as u32;
+    let part = s.doc.comments[&reply].part;
+    assert_eq!(s.doc.story(StoryRef::Part(part)).map(|b| b.len()), Some(2));
+    assert_eq!(s.doc.plain_text(StoryRef::Part(part)), "One\nTwo");
+    s.run("view.commentsPane", &json!({"value": true})).unwrap();
+    run(&mut s, "review.newComment", json!({"text": "Another"}));
+    assert!(s.view.comments_pane, "and an open pane stays open");
+}
+
 /// #1085: a new comment with no text, in an empty document or on a word, goes with Review ›
 /// Delete at the caret (no id) and by id.
 #[test]

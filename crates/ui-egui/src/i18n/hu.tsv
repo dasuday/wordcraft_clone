@@ -2628,3 +2628,7 @@
 # Reading Mode column widths (#1040)
 	Narrow	Keskeny
 	Medium	Közepes
+	Edit	Szerkesztés
+	Post	Közzététel
+	Skip	Kihagyás
+	Your comments and tracked changes show this name. You can change it later in Options.	A megjegyzéseid és a követett változtatásaid ezt a nevet mutatják. Később a Beállításokban módosíthatod.

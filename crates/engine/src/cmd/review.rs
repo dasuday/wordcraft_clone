@@ -117,23 +117,27 @@ pub fn specs() -> Vec<CommandSpec> {
     ]
 }
 
+/// Where a new comment goes: the selection, else the word at the caret (without the space after
+/// it), or the caret itself in an empty paragraph.
+pub fn comment_anchor(s: &Session) -> (Pos, Pos) {
+    let (a, b) = s.sel.ordered();
+    if a != b {
+        return (a, b);
+    }
+    match s.doc.para_at(&a) {
+        Some(para) if !para.is_empty() => {
+            let (x, y) = para.word_at(a.off);
+            let y = para.text.get(x..y).map(|w| x + w.trim_end().len()).unwrap_or(y);
+            (Pos { off: x, ..a.clone() }, Pos { off: y, ..a })
+        }
+        _ => (a.clone(), a),
+    }
+}
+
 fn new_comment(s: &mut Session, v: &Value) -> CmdResult {
     let text = p::str(v, "text").unwrap_or("").to_string();
-    let (a, b) = s.sel.ordered();
-    let (a, b) = if a == b {
-        // Comment on the word at the caret.
-        match s.doc.para_at(&a) {
-            Some(para) if !para.is_empty() => {
-                let (x, y) = para.word_at(a.off);
-                let y = para.text.get(x..y).map(|w| x + w.trim_end().len()).unwrap_or(y);
-                (Pos { off: x, ..a.clone() }, Pos { off: y, ..a })
-            }
-            _ => (a.clone(), a),
-        }
-    } else {
-        (a, b)
-    };
-    let part = s.doc.try_add_part(PartKind::Comment, vec![para_block(Paragraph::with_text(&text, Default::default()))])?;
+    let (a, b) = comment_anchor(s);
+    let part = s.doc.try_add_part(PartKind::Comment, comment_blocks(&text))?;
     let id = comment_id(s)?;
     let initials = s.user_initials();
     s.doc
@@ -142,7 +146,8 @@ fn new_comment(s: &mut Session, v: &Value) -> CmdResult {
     let props = Default::default();
     s.doc.insert_object(&b, InlineObject::CommentEnd { id }, &props)?;
     s.doc.insert_object(&a, InlineObject::CommentStart { id }, &props)?;
-    s.view.comments_pane = true;
+    // The Comments pane stays as it was: the comment shows in its balloon, or in the pane when
+    // that is open.
     Ok(json!({"id": id, "story": part}))
 }
 
@@ -152,7 +157,7 @@ fn reply(s: &mut Session, v: &Value) -> CmdResult {
         return Err(CmdError::Params("no such comment".into()));
     }
     let text = p::req_str(v, "text")?;
-    let part = s.doc.try_add_part(PartKind::Comment, vec![para_block(Paragraph::with_text(text, Default::default()))])?;
+    let part = s.doc.try_add_part(PartKind::Comment, comment_blocks(text))?;
     let id = comment_id(s)?;
     let initials = s.user_initials();
     s.doc.comments.insert(
@@ -182,9 +187,14 @@ fn edit_comment(s: &mut Session, v: &Value) -> CmdResult {
     let id = p::u64(v, "id").and_then(|x| u32::try_from(x).ok()).ok_or_else(|| CmdError::Params("`id` required".into()))?;
     let text = p::req_str(v, "text")?;
     let part = s.doc.comments.get(&id).map(|c| c.part).ok_or_else(|| CmdError::Params("no such comment".into()))?;
-    let blocks = text.split('\n').take(10_000).map(|l| para_block(Paragraph::with_text(l.trim_end_matches('\r'), Default::default()))).collect();
-    s.doc.set_story(StoryRef::Part(part), blocks)?;
+    s.doc.set_story(StoryRef::Part(part), comment_blocks(text))?;
     Ok(json!({"id": id}))
+}
+
+/// A comment's text as its story: each line a paragraph, as typed in a comment field (Enter
+/// starts a new paragraph there, as in Word).
+fn comment_blocks(text: &str) -> Vec<std::sync::Arc<wordcraft_doc::Block>> {
+    text.split('\n').take(10_000).map(|l| para_block(Paragraph::with_text(l.trim_end_matches('\r'), Default::default()))).collect()
 }
 
 /// The innermost comment whose range holds the caret.
