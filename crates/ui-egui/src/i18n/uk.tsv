@@ -2305,3 +2305,22 @@
 	This add-in has no {command} command	Ця надбудова не має команди {command}
 	The add-in didn't start a live session	Надбудова не почала сеанс спільної роботи
 	Live sessions need a co-editing add-in (a transport). Add one in File › Options › Add-ins.	Для спільної роботи потрібна надбудова-транспорт. Додайте її в розділі Файл › Параметри › Надбудови.
+	{why}. Install {name} anyway?	{why}. Усе одно інсталювати {name}?
+	{name} (release {tag})	{name} (випуск {tag})
+	The add-ins that need the installed version are blocked until it suits them again.	Надбудови, яким потрібна інстальована версія, залишаються заблокованими, доки вона знову їм не підійде.
+	Install Anyway	Усе одно інсталювати
+	{addin}; version {version} is installed	{addin}; інстальовано версію {version}
+	{name} can use {addin}. Install it too?	{name} може використовувати {addin}. Інсталювати і її?
+	{name} needs {addin}. Install it too?	Для {name} потрібна надбудова {addin}. Інсталювати і її?
+	the newest release in range	найновіший випуск у діапазоні
+	Add-ins are programs that run with your permissions. Install them only if you trust their authors.	Надбудови — це програми, що працюють з вашими дозволами. Інсталюйте їх, лише якщо довіряєте їхнім авторам.
+	Install Selected	Інсталювати вибрані
+	Not Now	Не зараз
+	Blocked	Заблоковано
+	Install Missing	Інсталювати відсутні
+	{who} needs {name}. Turn both off?	Для {who} потрібна надбудова {name}. Вимкнути обидві?
+	{who} need {name}. Turn them all off?	Для {who} потрібна надбудова {name}. Вимкнути всі?
+	Turn Both Off	Вимкнути обидві
+	Turn All Off	Вимкнути всі
+	Install Missing Add-ins	Інсталювати відсутні надбудови
+	Add-in Requirements	Вимоги надбудови

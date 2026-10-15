@@ -2718,3 +2718,22 @@
 	This add-in has no {command} command	Phần bổ trợ này không có lệnh {command}
 	The add-in didn't start a live session	Phần bổ trợ chưa bắt đầu phiên trực tiếp
 	Live sessions need a co-editing add-in (a transport). Add one in File › Options › Add-ins.	Phiên trực tiếp cần một phần bổ trợ đồng chỉnh sửa (phương thức truyền). Hãy thêm trong Tệp › Tùy chọn › Phần bổ trợ.
+	{why}. Install {name} anyway?	{why}. Vẫn cài {name}?
+	{name} (release {tag})	{name} (bản phát hành {tag})
+	The add-ins that need the installed version are blocked until it suits them again.	Các phần bổ trợ cần phiên bản đã cài sẽ bị chặn cho đến khi phiên bản đó phù hợp trở lại.
+	Install Anyway	Vẫn cài
+	{addin}; version {version} is installed	{addin}; đã cài phiên bản {version}
+	{name} can use {addin}. Install it too?	{name} có thể dùng {addin}. Cài luôn phần này?
+	{name} needs {addin}. Install it too?	{name} cần {addin}. Cài luôn phần này?
+	the newest release in range	bản phát hành mới nhất trong phạm vi
+	Add-ins are programs that run with your permissions. Install them only if you trust their authors.	Phần bổ trợ là các chương trình chạy với quyền của bạn. Chỉ cài nếu bạn tin tưởng tác giả của chúng.
+	Install Selected	Cài các mục đã chọn
+	Not Now	Để sau
+	Blocked	Bị chặn
+	Install Missing	Cài phần còn thiếu
+	{who} needs {name}. Turn both off?	{who} cần {name}. Tắt cả hai?
+	{who} need {name}. Turn them all off?	{who} cần {name}. Tắt tất cả?
+	Turn Both Off	Tắt cả hai
+	Turn All Off	Tắt tất cả
+	Install Missing Add-ins	Cài phần bổ trợ còn thiếu
+	Add-in Requirements	Yêu cầu của phần bổ trợ

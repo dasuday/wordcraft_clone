@@ -2659,3 +2659,22 @@ preview	Title	Título
 	This add-in has no {command} command	Este complemento no tiene el comando {command}
 	The add-in didn't start a live session	El complemento no inició una sesión en directo
 	Live sessions need a co-editing add-in (a transport). Add one in File › Options › Add-ins.	Las sesiones en directo necesitan un complemento de coedición (un transporte). Añada uno en Archivo › Opciones › Complementos.
+	{why}. Install {name} anyway?	{why}. ¿Instalar {name} de todos modos?
+	{name} (release {tag})	{name} (versión {tag})
+	The add-ins that need the installed version are blocked until it suits them again.	Los complementos que necesitan la versión instalada quedan bloqueados hasta que vuelva a servirles.
+	Install Anyway	Instalar de todos modos
+	{addin}; version {version} is installed	{addin}; está instalada la versión {version}
+	{name} can use {addin}. Install it too?	{name} puede usar {addin}. ¿Instalarlo también?
+	{name} needs {addin}. Install it too?	{name} necesita {addin}. ¿Instalarlo también?
+	the newest release in range	la versión más reciente dentro del rango
+	Add-ins are programs that run with your permissions. Install them only if you trust their authors.	Los complementos son programas que se ejecutan con sus permisos. Instálelos solo si confía en sus autores.
+	Install Selected	Instalar seleccionados
+	Not Now	Ahora no
+	Blocked	Bloqueado
+	Install Missing	Instalar los que faltan
+	{who} needs {name}. Turn both off?	{who} necesita {name}. ¿Desactivar ambos?
+	{who} need {name}. Turn them all off?	{who} necesitan {name}. ¿Desactivarlos todos?
+	Turn Both Off	Desactivar ambos
+	Turn All Off	Desactivar todos
+	Install Missing Add-ins	Instalar complementos que faltan
+	Add-in Requirements	Requisitos del complemento

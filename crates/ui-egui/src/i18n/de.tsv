@@ -2292,3 +2292,22 @@
 	This add-in has no {command} command	Dieses Add-In hat keinen Befehl {command}
 	The add-in didn't start a live session	Das Add-In hat keine Live-Sitzung gestartet
 	Live sessions need a co-editing add-in (a transport). Add one in File › Options › Add-ins.	Live-Sitzungen brauchen ein Add-In für gemeinsames Bearbeiten (einen Transport). Fügen Sie eines unter Datei › Optionen › Add-Ins hinzu.
+	{why}. Install {name} anyway?	{why}. {name} trotzdem installieren?
+	{name} (release {tag})	{name} (Release {tag})
+	The add-ins that need the installed version are blocked until it suits them again.	Die Add-Ins, die die installierte Version benötigen, bleiben gesperrt, bis sie wieder passt.
+	Install Anyway	Trotzdem installieren
+	{addin}; version {version} is installed	{addin}; Version {version} ist installiert
+	{name} can use {addin}. Install it too?	{name} kann {addin} nutzen. Auch installieren?
+	{name} needs {addin}. Install it too?	{name} benötigt {addin}. Auch installieren?
+	the newest release in range	die neueste Release im Bereich
+	Add-ins are programs that run with your permissions. Install them only if you trust their authors.	Add-Ins sind Programme, die mit Ihren Berechtigungen laufen. Installieren Sie sie nur, wenn Sie ihren Autoren vertrauen.
+	Install Selected	Auswahl installieren
+	Not Now	Nicht jetzt
+	Blocked	Gesperrt
+	Install Missing	Fehlende installieren
+	{who} needs {name}. Turn both off?	{who} benötigt {name}. Beide deaktivieren?
+	{who} need {name}. Turn them all off?	{who} benötigen {name}. Alle deaktivieren?
+	Turn Both Off	Beide deaktivieren
+	Turn All Off	Alle deaktivieren
+	Install Missing Add-ins	Fehlende Add-Ins installieren
+	Add-in Requirements	Add-In-Anforderungen

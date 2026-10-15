@@ -2688,3 +2688,22 @@
 	This add-in has no {command} command	Ennek a bővítménynek nincs {command} parancsa
 	The add-in didn't start a live session	A bővítmény nem indított élő munkamenetet
 	Live sessions need a co-editing add-in (a transport). Add one in File › Options › Add-ins.	Az élő munkamenetekhez közös szerkesztést biztosító bővítmény (átvitel) kell. Adjon hozzá egyet itt: Fájl › Beállítások › Bővítmények.
+	{why}. Install {name} anyway?	{why}. Mégis telepíti ezt: {name}?
+	{name} (release {tag})	{name} ({tag} kiadás)
+	The add-ins that need the installed version are blocked until it suits them again.	A telepített verziót igénylő bővítmények zárolva maradnak, amíg az ismét meg nem felel nekik.
+	Install Anyway	Telepítés mégis
+	{addin}; version {version} is installed	{addin}; a(z) {version} verzió van telepítve
+	{name} can use {addin}. Install it too?	{name} használhatja ezt: {addin}. Ezt is telepíti?
+	{name} needs {addin}. Install it too?	{name} igényli ezt: {addin}. Ezt is telepíti?
+	the newest release in range	a tartomány legújabb kiadása
+	Add-ins are programs that run with your permissions. Install them only if you trust their authors.	A bővítmények az Ön jogosultságaival futó programok. Csak akkor telepítse őket, ha megbízik a szerzőikben.
+	Install Selected	Kijelöltek telepítése
+	Not Now	Most nem
+	Blocked	Zárolva
+	Install Missing	Hiányzók telepítése
+	{who} needs {name}. Turn both off?	{who} igényli ezt: {name}. Mindkettőt kikapcsolja?
+	{who} need {name}. Turn them all off?	{who} igénylik ezt: {name}. Mindet kikapcsolja?
+	Turn Both Off	Mindkettő kikapcsolása
+	Turn All Off	Összes kikapcsolása
+	Install Missing Add-ins	Hiányzó bővítmények telepítése
+	Add-in Requirements	Bővítmény követelményei

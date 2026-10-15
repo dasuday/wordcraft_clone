@@ -2684,3 +2684,22 @@ preview	Title	Ukázka
 	This add-in has no {command} command	Tento doplněk nemá příkaz {command}
 	The add-in didn't start a live session	Doplněk nezahájil živou relaci
 	Live sessions need a co-editing add-in (a transport). Add one in File › Options › Add-ins.	Živé relace potřebují doplněk pro společné úpravy (přenos). Přidejte ho v nabídce Soubor › Možnosti › Doplňky.
+	{why}. Install {name} anyway?	{why}. Přesto nainstalovat {name}?
+	{name} (release {tag})	{name} (vydání {tag})
+	The add-ins that need the installed version are blocked until it suits them again.	Doplňky, které potřebují nainstalovanou verzi, zůstanou zablokované, dokud jim opět nebude vyhovovat.
+	Install Anyway	Přesto nainstalovat
+	{addin}; version {version} is installed	{addin}; nainstalována je verze {version}
+	{name} can use {addin}. Install it too?	{name} může využít: {addin}. Nainstalovat také?
+	{name} needs {addin}. Install it too?	{name} potřebuje: {addin}. Nainstalovat také?
+	the newest release in range	nejnovější vydání v rozsahu
+	Add-ins are programs that run with your permissions. Install them only if you trust their authors.	Doplňky jsou programy, které běží s vašimi oprávněními. Instalujte je, jen pokud důvěřujete jejich autorům.
+	Install Selected	Nainstalovat vybrané
+	Not Now	Teď ne
+	Blocked	Zablokováno
+	Install Missing	Nainstalovat chybějící
+	{who} needs {name}. Turn both off?	{who} potřebuje: {name}. Vypnout oba?
+	{who} need {name}. Turn them all off?	{who} potřebují: {name}. Vypnout všechny?
+	Turn Both Off	Vypnout oba
+	Turn All Off	Vypnout všechny
+	Install Missing Add-ins	Nainstalovat chybějící doplňky
+	Add-in Requirements	Požadavky doplňku

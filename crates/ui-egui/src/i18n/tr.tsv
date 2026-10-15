@@ -2689,3 +2689,22 @@ preview	Title	Örnek
 	This add-in has no {command} command	Bu eklentinin {command} komutu yok
 	The add-in didn't start a live session	Eklenti canlı oturum başlatmadı
 	Live sessions need a co-editing add-in (a transport). Add one in File › Options › Add-ins.	Canlı oturumlar için birlikte düzenleme eklentisi (aktarım) gerekir. Dosya › Seçenekler › Eklentiler bölümünden bir tane ekleyin.
+	{why}. Install {name} anyway?	{why}. {name} yine de yüklensin mi?
+	{name} (release {tag})	{name} (sürüm {tag})
+	The add-ins that need the installed version are blocked until it suits them again.	Yüklü sürüme ihtiyaç duyan eklentiler, sürüm yeniden uygun olana kadar engelli kalır.
+	Install Anyway	Yine de yükle
+	{addin}; version {version} is installed	{addin}; {version} sürümü yüklü
+	{name} can use {addin}. Install it too?	{name}, {addin} kullanabilir. Bu da yüklensin mi?
+	{name} needs {addin}. Install it too?	{name}, {addin} gerektiriyor. Bu da yüklensin mi?
+	the newest release in range	aralıktaki en yeni sürüm
+	Add-ins are programs that run with your permissions. Install them only if you trust their authors.	Eklentiler, sizin izinlerinizle çalışan programlardır. Yalnızca yazarlarına güveniyorsanız yükleyin.
+	Install Selected	Seçilenleri yükle
+	Not Now	Şimdi değil
+	Blocked	Engellendi
+	Install Missing	Eksikleri yükle
+	{who} needs {name}. Turn both off?	{who}, {name} gerektiriyor. İkisi de kapatılsın mı?
+	{who} need {name}. Turn them all off?	{who}, {name} gerektiriyor. Hepsi kapatılsın mı?
+	Turn Both Off	İkisini de kapat
+	Turn All Off	Tümünü kapat
+	Install Missing Add-ins	Eksik eklentileri yükle
+	Add-in Requirements	Eklenti gereksinimleri

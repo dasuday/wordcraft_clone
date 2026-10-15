@@ -2690,3 +2690,22 @@ preview	Title	Пример
 	This add-in has no {command} command	У этой надстройки нет команды {command}
 	The add-in didn't start a live session	Надстройка не начала сеанс совместной работы
 	Live sessions need a co-editing add-in (a transport). Add one in File › Options › Add-ins.	Для совместной работы нужна надстройка-транспорт. Добавьте её в разделе Файл › Параметры › Надстройки.
+	{why}. Install {name} anyway?	{why}. Всё равно установить {name}?
+	{name} (release {tag})	{name} (выпуск {tag})
+	The add-ins that need the installed version are blocked until it suits them again.	Надстройки, которым нужна установленная версия, остаются заблокированными, пока она снова им не подойдёт.
+	Install Anyway	Всё равно установить
+	{addin}; version {version} is installed	{addin}; установлена версия {version}
+	{name} can use {addin}. Install it too?	{name} может использовать {addin}. Установить и её?
+	{name} needs {addin}. Install it too?	Для {name} нужна надстройка {addin}. Установить и её?
+	the newest release in range	новейший выпуск в диапазоне
+	Add-ins are programs that run with your permissions. Install them only if you trust their authors.	Надстройки — это программы, которые работают с вашими правами. Устанавливайте их, только если доверяете их авторам.
+	Install Selected	Установить выбранные
+	Not Now	Не сейчас
+	Blocked	Заблокирована
+	Install Missing	Установить недостающие
+	{who} needs {name}. Turn both off?	Для {who} нужна надстройка {name}. Отключить обе?
+	{who} need {name}. Turn them all off?	Для {who} нужна надстройка {name}. Отключить все?
+	Turn Both Off	Отключить обе
+	Turn All Off	Отключить все
+	Install Missing Add-ins	Установить недостающие надстройки
+	Add-in Requirements	Требования надстройки

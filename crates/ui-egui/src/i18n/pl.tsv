@@ -2682,3 +2682,22 @@ preview	Title	Tytuł
 	This add-in has no {command} command	Ten dodatek nie ma polecenia {command}
 	The add-in didn't start a live session	Dodatek nie rozpoczął sesji na żywo
 	Live sessions need a co-editing add-in (a transport). Add one in File › Options › Add-ins.	Sesje na żywo wymagają dodatku do współpracy (transportu). Dodaj go w menu Plik › Opcje › Dodatki.
+	{why}. Install {name} anyway?	{why}. Czy mimo to zainstalować {name}?
+	{name} (release {tag})	{name} (wydanie {tag})
+	The add-ins that need the installed version are blocked until it suits them again.	Dodatki, które wymagają zainstalowanej wersji, pozostają zablokowane, dopóki znów nie będzie im odpowiadać.
+	Install Anyway	Zainstaluj mimo to
+	{addin}; version {version} is installed	{addin}; zainstalowana jest wersja {version}
+	{name} can use {addin}. Install it too?	{name} może korzystać z: {addin}. Zainstalować również?
+	{name} needs {addin}. Install it too?	{name} wymaga: {addin}. Zainstalować również?
+	the newest release in range	najnowsze wydanie w zakresie
+	Add-ins are programs that run with your permissions. Install them only if you trust their authors.	Dodatki to programy działające z Twoimi uprawnieniami. Instaluj je tylko wtedy, gdy ufasz ich autorom.
+	Install Selected	Zainstaluj zaznaczone
+	Not Now	Nie teraz
+	Blocked	Zablokowany
+	Install Missing	Zainstaluj brakujące
+	{who} needs {name}. Turn both off?	{who} wymaga: {name}. Wyłączyć oba?
+	{who} need {name}. Turn them all off?	{who} wymagają: {name}. Wyłączyć wszystkie?
+	Turn Both Off	Wyłącz oba
+	Turn All Off	Wyłącz wszystkie
+	Install Missing Add-ins	Zainstaluj brakujące dodatki
+	Add-in Requirements	Wymagania dodatku

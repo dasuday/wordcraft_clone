@@ -2300,3 +2300,22 @@
 	This add-in has no {command} command	Ce complément n’a pas de commande {command}
 	The add-in didn't start a live session	Le complément n’a pas démarré de session en direct
 	Live sessions need a co-editing add-in (a transport). Add one in File › Options › Add-ins.	Les sessions en direct nécessitent un complément de coédition (un transport). Ajoutez-en un dans Fichier › Options › Compléments.
+	{why}. Install {name} anyway?	{why}. Installer {name} quand même ?
+	{name} (release {tag})	{name} (version {tag})
+	The add-ins that need the installed version are blocked until it suits them again.	Les compléments qui ont besoin de la version installée restent bloqués jusqu’à ce qu’elle leur convienne de nouveau.
+	Install Anyway	Installer quand même
+	{addin}; version {version} is installed	{addin} ; la version {version} est installée
+	{name} can use {addin}. Install it too?	{name} peut utiliser {addin}. L’installer aussi ?
+	{name} needs {addin}. Install it too?	{name} a besoin de {addin}. L’installer aussi ?
+	the newest release in range	la version la plus récente dans la plage
+	Add-ins are programs that run with your permissions. Install them only if you trust their authors.	Les compléments sont des programmes qui s’exécutent avec vos autorisations. Installez-les seulement si vous faites confiance à leurs auteurs.
+	Install Selected	Installer la sélection
+	Not Now	Pas maintenant
+	Blocked	Bloqué
+	Install Missing	Installer les manquants
+	{who} needs {name}. Turn both off?	{who} a besoin de {name}. Désactiver les deux ?
+	{who} need {name}. Turn them all off?	{who} ont besoin de {name}. Tout désactiver ?
+	Turn Both Off	Désactiver les deux
+	Turn All Off	Tout désactiver
+	Install Missing Add-ins	Installer les compléments manquants
+	Add-in Requirements	Prérequis du complément

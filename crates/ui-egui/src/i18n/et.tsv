@@ -2327,3 +2327,22 @@
 	This add-in has no {command} command	Sellel lisandmoodulil pole käsku {command}
 	The add-in didn't start a live session	Lisandmoodul ei alustanud reaalajas seanssi
 	Live sessions need a co-editing add-in (a transport). Add one in File › Options › Add-ins.	Reaalajas seansid vajavad kaastöötamise lisandmoodulit (transporti). Lisage see menüüs Fail › Valikud › Lisandmoodulid.
+	{why}. Install {name} anyway?	{why}. Kas installida {name} siiski?
+	{name} (release {tag})	{name} (väljalase {tag})
+	The add-ins that need the installed version are blocked until it suits them again.	Lisandmoodulid, mis vajavad installitud versiooni, jäävad blokeerituks, kuni see neile jälle sobib.
+	Install Anyway	Installi siiski
+	{addin}; version {version} is installed	{addin}; installitud on versioon {version}
+	{name} can use {addin}. Install it too?	{name} saab kasutada: {addin}. Kas installida ka see?
+	{name} needs {addin}. Install it too?	{name} vajab: {addin}. Kas installida ka see?
+	the newest release in range	uusim väljalase vahemikus
+	Add-ins are programs that run with your permissions. Install them only if you trust their authors.	Lisandmoodulid on programmid, mis töötavad teie õigustega. Installige need ainult siis, kui usaldate nende autoreid.
+	Install Selected	Installi valitud
+	Not Now	Mitte praegu
+	Blocked	Blokeeritud
+	Install Missing	Installi puuduvad
+	{who} needs {name}. Turn both off?	{who} vajab: {name}. Kas lülitada mõlemad välja?
+	{who} need {name}. Turn them all off?	{who} vajavad: {name}. Kas lülitada kõik välja?
+	Turn Both Off	Lülita mõlemad välja
+	Turn All Off	Lülita kõik välja
+	Install Missing Add-ins	Installi puuduvad lisandmoodulid
+	Add-in Requirements	Lisandmooduli nõuded

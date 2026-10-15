@@ -6248,6 +6248,7 @@ dependencies = [
  "serde_json",
  "ureq",
  "wordcraft-collab",
+ "wordcraft-office-js",
  "zip",
 ]
 

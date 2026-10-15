@@ -2307,3 +2307,22 @@
 	This add-in has no {command} command	Овај додатак нема команду {command}
 	The add-in didn't start a live session	Додатак није започео сесију уживо
 	Live sessions need a co-editing add-in (a transport). Add one in File › Options › Add-ins.	Сесије уживо захтевају додатак за заједничко уређивање (транспорт). Додајте га у Фајл › Опције › Додаци.
+	{why}. Install {name} anyway?	{why}. Ипак инсталирати {name}?
+	{name} (release {tag})	{name} (издање {tag})
+	The add-ins that need the installed version are blocked until it suits them again.	Додаци којима је потребна инсталирана верзија остају блокирани док им поново не одговара.
+	Install Anyway	Ипак инсталирај
+	{addin}; version {version} is installed	{addin}; инсталирана је верзија {version}
+	{name} can use {addin}. Install it too?	{name} може да користи {addin}. Инсталирати и њега?
+	{name} needs {addin}. Install it too?	{name} захтева {addin}. Инсталирати и њега?
+	the newest release in range	најновије издање у опсегу
+	Add-ins are programs that run with your permissions. Install them only if you trust their authors.	Додаци су програми који раде са вашим дозволама. Инсталирајте их само ако верујете њиховим ауторима.
+	Install Selected	Инсталирај изабране
+	Not Now	Не сада
+	Blocked	Блокиран
+	Install Missing	Инсталирај недостајуће
+	{who} needs {name}. Turn both off?	{who} захтева {name}. Искључити оба?
+	{who} need {name}. Turn them all off?	{who} захтевају {name}. Искључити све?
+	Turn Both Off	Искључи оба
+	Turn All Off	Искључи све
+	Install Missing Add-ins	Инсталирај недостајуће додатке
+	Add-in Requirements	Захтеви додатка

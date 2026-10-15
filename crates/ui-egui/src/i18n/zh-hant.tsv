@@ -2294,3 +2294,22 @@
 	This add-in has no {command} command	此增益集沒有 {command} 命令
 	The add-in didn't start a live session	增益集未開始即時工作階段
 	Live sessions need a co-editing add-in (a transport). Add one in File › Options › Add-ins.	即時工作階段需要共同編輯增益集（傳輸）。請在「檔案 › 選項 › 增益集」中新增。
+	{why}. Install {name} anyway?	{why}。仍要安裝 {name} 嗎？
+	{name} (release {tag})	{name}（發行版 {tag}）
+	The add-ins that need the installed version are blocked until it suits them again.	需要已安裝版本的增益集將保持封鎖，直到該版本再次符合其需求。
+	Install Anyway	仍要安裝
+	{addin}; version {version} is installed	{addin}；已安裝版本 {version}
+	{name} can use {addin}. Install it too?	{name} 可以使用 {addin}。也要安裝嗎？
+	{name} needs {addin}. Install it too?	{name} 需要 {addin}。也要安裝嗎？
+	the newest release in range	範圍內的最新發行版
+	Add-ins are programs that run with your permissions. Install them only if you trust their authors.	增益集是以您的權限執行的程式。只有在信任其作者時才安裝。
+	Install Selected	安裝選取項目
+	Not Now	稍後再說
+	Blocked	已封鎖
+	Install Missing	安裝缺少的項目
+	{who} needs {name}. Turn both off?	{who} 需要 {name}。兩者都停用嗎？
+	{who} need {name}. Turn them all off?	{who} 需要 {name}。全部停用嗎？
+	Turn Both Off	兩者都停用
+	Turn All Off	全部停用
+	Install Missing Add-ins	安裝缺少的增益集
+	Add-in Requirements	增益集需求

@@ -2675,3 +2675,22 @@ preview	Title	Esempio
 	This add-in has no {command} command	Questo componente aggiuntivo non ha il comando {command}
 	The add-in didn't start a live session	Il componente aggiuntivo non ha avviato una sessione dal vivo
 	Live sessions need a co-editing add-in (a transport). Add one in File › Options › Add-ins.	Le sessioni dal vivo richiedono un componente aggiuntivo di co-editing (un trasporto). Aggiungine uno in File › Opzioni › Componenti aggiuntivi.
+	{why}. Install {name} anyway?	{why}. Installare comunque {name}?
+	{name} (release {tag})	{name} (release {tag})
+	The add-ins that need the installed version are blocked until it suits them again.	I componenti aggiuntivi che richiedono la versione installata restano bloccati finché non sarà di nuovo compatibile.
+	Install Anyway	Installa comunque
+	{addin}; version {version} is installed	{addin}; è installata la versione {version}
+	{name} can use {addin}. Install it too?	{name} può usare {addin}. Installare anche questo?
+	{name} needs {addin}. Install it too?	{name} richiede {addin}. Installare anche questo?
+	the newest release in range	la release più recente nell'intervallo
+	Add-ins are programs that run with your permissions. Install them only if you trust their authors.	I componenti aggiuntivi sono programmi che vengono eseguiti con le tue autorizzazioni. Installali solo se ti fidi dei loro autori.
+	Install Selected	Installa selezionati
+	Not Now	Non ora
+	Blocked	Bloccato
+	Install Missing	Installa mancanti
+	{who} needs {name}. Turn both off?	{who} richiede {name}. Disattivare entrambi?
+	{who} need {name}. Turn them all off?	{who} richiedono {name}. Disattivarli tutti?
+	Turn Both Off	Disattiva entrambi
+	Turn All Off	Disattiva tutti
+	Install Missing Add-ins	Installa componenti aggiuntivi mancanti
+	Add-in Requirements	Requisiti del componente aggiuntivo

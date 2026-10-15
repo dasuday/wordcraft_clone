@@ -2305,3 +2305,22 @@
 	This add-in has no {command} command	此加载项没有 {command} 命令
 	The add-in didn't start a live session	加载项未开始实时会话
 	Live sessions need a co-editing add-in (a transport). Add one in File › Options › Add-ins.	实时会话需要协同编辑加载项（传输）。请在“文件 › 选项 › 加载项”中添加。
+	{why}. Install {name} anyway?	{why}。仍要安装 {name} 吗？
+	{name} (release {tag})	{name}（发布版 {tag}）
+	The add-ins that need the installed version are blocked until it suits them again.	需要已安装版本的加载项将保持阻止状态，直到该版本再次符合其要求。
+	Install Anyway	仍要安装
+	{addin}; version {version} is installed	{addin}；已安装版本 {version}
+	{name} can use {addin}. Install it too?	{name} 可以使用 {addin}。也安装它吗？
+	{name} needs {addin}. Install it too?	{name} 需要 {addin}。也安装它吗？
+	the newest release in range	范围内的最新发布版
+	Add-ins are programs that run with your permissions. Install them only if you trust their authors.	加载项是以你的权限运行的程序。只有在信任其作者时才安装。
+	Install Selected	安装所选项
+	Not Now	以后再说
+	Blocked	已阻止
+	Install Missing	安装缺少的项
+	{who} needs {name}. Turn both off?	{who} 需要 {name}。两者都停用吗？
+	{who} need {name}. Turn them all off?	{who} 需要 {name}。全部停用吗？
+	Turn Both Off	两者都停用
+	Turn All Off	全部停用
+	Install Missing Add-ins	安装缺少的加载项
+	Add-in Requirements	加载项要求

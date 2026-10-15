@@ -2293,3 +2293,22 @@
 	This add-in has no {command} command	このアドインには {command} コマンドがありません
 	The add-in didn't start a live session	アドインはライブ セッションを開始しませんでした
 	Live sessions need a co-editing add-in (a transport). Add one in File › Options › Add-ins.	ライブ セッションには共同編集アドイン (トランスポート) が必要です。ファイル › オプション › アドイン で追加してください。
+	{why}. Install {name} anyway?	{why}。それでも {name} をインストールしますか?
+	{name} (release {tag})	{name}（リリース {tag}）
+	The add-ins that need the installed version are blocked until it suits them again.	インストール済みのバージョンを必要とするアドインは、再び条件を満たすまでブロックされます。
+	Install Anyway	それでもインストール
+	{addin}; version {version} is installed	{addin}。バージョン {version} がインストールされています
+	{name} can use {addin}. Install it too?	{name} は {addin} を使用できます。これもインストールしますか?
+	{name} needs {addin}. Install it too?	{name} には {addin} が必要です。これもインストールしますか?
+	the newest release in range	範囲内の最新リリース
+	Add-ins are programs that run with your permissions. Install them only if you trust their authors.	アドインは、あなたの権限で動作するプログラムです。作成者を信頼できる場合にのみインストールしてください。
+	Install Selected	選択したものをインストール
+	Not Now	後で
+	Blocked	ブロック中
+	Install Missing	不足分をインストール
+	{who} needs {name}. Turn both off?	{who} には {name} が必要です。両方を無効にしますか?
+	{who} need {name}. Turn them all off?	{who} には {name} が必要です。すべて無効にしますか?
+	Turn Both Off	両方を無効にする
+	Turn All Off	すべて無効にする
+	Install Missing Add-ins	不足しているアドインをインストール
+	Add-in Requirements	アドインの要件

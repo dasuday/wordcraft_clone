@@ -2680,3 +2680,22 @@
 	This add-in has no {command} command	Тази добавка няма команда {command}
 	The add-in didn't start a live session	Добавката не започна сесия на живо
 	Live sessions need a co-editing add-in (a transport). Add one in File › Options › Add-ins.	Сесиите на живо изискват добавка за съвместно редактиране (транспорт). Добавете такава от Файл › Опции › Добавки.
+	{why}. Install {name} anyway?	{why}. Да се инсталира ли {name} въпреки това?
+	{name} (release {tag})	{name} (издание {tag})
+	The add-ins that need the installed version are blocked until it suits them again.	Добавките, които се нуждаят от инсталираната версия, остават блокирани, докато тя отново не им подхожда.
+	Install Anyway	Инсталиране въпреки това
+	{addin}; version {version} is installed	{addin}; инсталирана е версия {version}
+	{name} can use {addin}. Install it too?	{name} може да използва {addin}. Да се инсталира ли и тя?
+	{name} needs {addin}. Install it too?	{name} се нуждае от {addin}. Да се инсталира ли и тя?
+	the newest release in range	най-новото издание в диапазона
+	Add-ins are programs that run with your permissions. Install them only if you trust their authors.	Добавките са програми, които работят с вашите разрешения. Инсталирайте ги само ако имате доверие на техните автори.
+	Install Selected	Инсталиране на избраните
+	Not Now	Не сега
+	Blocked	Блокирана
+	Install Missing	Инсталиране на липсващите
+	{who} needs {name}. Turn both off?	{who} се нуждае от {name}. Да се изключат ли и двете?
+	{who} need {name}. Turn them all off?	{who} се нуждаят от {name}. Да се изключат ли всички?
+	Turn Both Off	Изключване на двете
+	Turn All Off	Изключване на всички
+	Install Missing Add-ins	Инсталиране на липсващите добавки
+	Add-in Requirements	Изисквания на добавката

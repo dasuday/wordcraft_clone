@@ -2305,3 +2305,22 @@
 	This add-in has no {command} command	Este suplemento não tem o comando {command}
 	The add-in didn't start a live session	O suplemento não iniciou uma sessão ao vivo
 	Live sessions need a co-editing add-in (a transport). Add one in File › Options › Add-ins.	Sessões ao vivo precisam de um suplemento de coedição (um transporte). Adicione um em Arquivo › Opções › Suplementos.
+	{why}. Install {name} anyway?	{why}. Instalar {name} mesmo assim?
+	{name} (release {tag})	{name} (versão {tag})
+	The add-ins that need the installed version are blocked until it suits them again.	Os suplementos que precisam da versão instalada ficam bloqueados até que ela volte a servir.
+	Install Anyway	Instalar mesmo assim
+	{addin}; version {version} is installed	{addin}; a versão {version} está instalada
+	{name} can use {addin}. Install it too?	{name} pode usar {addin}. Instalar também?
+	{name} needs {addin}. Install it too?	{name} precisa de {addin}. Instalar também?
+	the newest release in range	a versão mais recente no intervalo
+	Add-ins are programs that run with your permissions. Install them only if you trust their authors.	Suplementos são programas executados com as suas permissões. Instale-os apenas se confiar nos autores.
+	Install Selected	Instalar selecionados
+	Not Now	Agora não
+	Blocked	Bloqueado
+	Install Missing	Instalar ausentes
+	{who} needs {name}. Turn both off?	{who} precisa de {name}. Desativar os dois?
+	{who} need {name}. Turn them all off?	{who} precisam de {name}. Desativar todos?
+	Turn Both Off	Desativar os dois
+	Turn All Off	Desativar todos
+	Install Missing Add-ins	Instalar suplementos ausentes
+	Add-in Requirements	Requisitos do suplemento
