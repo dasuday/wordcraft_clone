@@ -1783,6 +1783,14 @@ struct PageBuilder<'a> {
     /// Top of the footer of the pages being started: a footer reaching above the bottom margin
     /// pushes the body up (`f32::MAX`: no footer).
     foot_top: f32,
+    /// Top of the even pages' footer under Different Odd & Even Pages (`f32::MAX`: none, or not
+    /// set for the page being started). shortcut: pages take the default footer's room even where
+    /// they show the even one; only the leading's hang keeps clear of both, until each page
+    /// measures its own footer.
+    even_foot_top: f32,
+    /// The current page's footer top (`foot_top` as the page started: the first page's footer
+    /// may differ from the next pages'), or its bottom edge without a footer.
+    page_foot_top: f32,
 }
 
 /// Gap above the footnote separator and its length.
@@ -2214,6 +2222,7 @@ impl PageBuilder<'_> {
         self.top = body_top;
         self.bottom = if self.web { f32::MAX / 8.0 } else { bottom };
         self.orig_bottom = self.bottom;
+        self.page_foot_top = self.foot_top.min(self.even_foot_top).min(h);
         self.y = self.top;
         // Notes continued from the page before come first in this page's note area.
         // (`cap_columns` below keeps the columns above them.)
@@ -2233,6 +2242,15 @@ impl PageBuilder<'_> {
         {
             self.bottom = self.bottom.min(self.top + h);
         }
+    }
+    /// How far a last line's leading may hang below the body: into the bottom margin, not into a
+    /// footer reaching above it (that footer already pushed the body up) nor past the page edge.
+    /// None in balanced columns: a pass fits only when every line's whole box does.
+    fn hang_room(&self) -> f32 {
+        if self.balance.is_some_and(|(page, _)| page + 1 == self.pages.len()) {
+            return 0.0;
+        }
+        (self.page_foot_top - self.orig_bottom).max(0.0)
     }
     /// The bottom of the columns without balancing: above the footnotes.
     fn uncapped_bottom(&self) -> f32 {
@@ -2458,6 +2476,8 @@ fn layout_pass(
         sect_beneath: false,
         beneath: false,
         foot_top: f32::MAX,
+        even_foot_top: f32::MAX,
+        page_foot_top: f32::MAX,
     };
     // Endnotes in document order, with the section of their reference; placed at the end of a
     // section that keeps them there, else at the end of the document.
@@ -2524,6 +2544,11 @@ fn layout_pass(
         } else {
             with_pct_base(&mut ctx, fb(feet.first), |c| foot_top_for(c, sect, feet.first))
         };
+        let even_foot = if reflow || turn.is_turned() || !doc.settings.even_odd_headers {
+            f32::MAX
+        } else {
+            with_pct_base(&mut ctx, fb(feet.even), |c| foot_top_for(c, sect, feet.even))
+        };
         ctx.grid = para::Grid::of(doc, sect);
         let restart = sect.page_num_start;
         if sect.line_numbers.as_ref().is_some_and(|l| l.restart == wordcraft_doc::section::LineNumberRestart::Section) {
@@ -2557,6 +2582,7 @@ fn layout_pass(
                 pb.restart_at = restart;
             }
             pb.foot_top = first_foot;
+            pb.even_foot_top = if sect.title_page { f32::MAX } else { even_foot };
             pb.new_page(block, first_top);
             pb.foot_top = foot_top;
         } else {
@@ -2569,6 +2595,7 @@ fn layout_pass(
         }
         prev_turn = turn;
         pb.foot_top = foot_top;
+        pb.even_foot_top = even_foot;
         let last = (*end).min(doc.body.len().saturating_sub(1));
         // Newspaper columns are balanced on the section's last page when the next section starts
         // on the same page (a continuous break), as in Word. That page is laid out again from the
@@ -3477,6 +3504,12 @@ fn place_objects(
     (behind, front)
 }
 
+/// Whether `notes` ([`para_notes`]) reference a footnote before cluster `c1`: the line loop lets
+/// no leading hang below such lines.
+fn footnote_before(doc: &Document, notes: &[(usize, u32)], c1: usize) -> bool {
+    notes.iter().any(|(ci, id)| *ci < c1 && doc.parts.get(id).is_some_and(|q| q.kind == wordcraft_doc::PartKind::Footnote))
+}
+
 /// Footnotes referenced in a paragraph laid out as `pl`: in its text, and inside its text boxes
 /// (on the box's cluster), as (cluster, note id).
 fn para_notes(doc: &Document, p: &Paragraph, pl: &ParaLayout) -> Vec<(usize, u32)> {
@@ -3679,10 +3712,13 @@ fn place_para_in_flow(ctx: &mut Ctx, pb: &mut PageBuilder, p: &Paragraph, block:
     // next alone moves a paragraph only when it would fit here by itself (Word for Windows): one
     // that doesn't breaks as usual, its last lines going over with the next paragraph.
     // (Its last line's text has to fit, not the leading below it: see the line loop below.)
-    let hang = if bands.bottom > 0.0 || !pb.notes.is_empty() { 0.0 } else { pl.lines.last().map_or(0.0, |l| l.hang) };
+    // (Nor, as in the line loop, with a footnote in the paragraph.)
+    let noted = pl.lines.last().is_some_and(|l| footnote_before(ctx.doc, &para_notes(ctx.doc, p, &pl), l.c1));
+    let hang = if bands.bottom > 0.0 || !pb.notes.is_empty() || noted { 0.0 } else { pl.lines.last().map_or(0.0, |l| l.hang.min(pb.hang_room())) };
     let full_h = pl.height + bands.bottom;
     if pl.rp.keep_lines || (pl.rp.keep_next && pb.y + full_h - hang <= pb.bottom + 0.01) {
-        let need = if pl.rp.keep_next { full_h + next_first_line(ctx, block, width, 0) } else { full_h - hang };
+        let room = if pb.notes.is_empty() { pb.hang_room() } else { 0.0 };
+        let need = if pl.rp.keep_next { full_h + next_first_line(ctx, block, width, room, 0) } else { full_h - hang };
         let moved_before = pl.rp.space_before.min(0.0) + lone.top;
         // (Against the whole column: balanced columns grow to hold it.)
         if pb.y + need > pb.bottom && !at_top(pb, 0) && moved_before + need <= pb.uncapped_bottom() - pb.top {
@@ -3810,9 +3846,9 @@ fn place_para_in_flow(ctx: &mut Ctx, pb: &mut PageBuilder, p: &Paragraph, block:
                 0.0
             };
             // The line fits when its text does: the extra leading of multiple spacing may hang
-            // into the bottom margin (Word), but not into the footnotes, which need the whole
-            // line, nor past a bottom border, which has to be on the page.
-            let hang = if band <= 0.0 && !has_notes { l.hang } else { 0.0 };
+            // into the bottom margin (Word), but not into a tall footer or the footnotes, which
+            // need the whole line, nor past a bottom border, which has to be on the page.
+            let hang = if band <= 0.0 && !has_notes { l.hang.min(pb.hang_room()) } else { 0.0 };
             let over = bottom + tail - hang > limit + 0.01;
             // Notes too long for the rest of the page continue on the next one: the line still
             // fits if the notes before its last one, and that one's first line, fit below it.
@@ -4125,7 +4161,9 @@ fn space_after_kept(ctx: &Ctx, block: usize, rp: &wordcraft_doc::resolve::Resolv
 /// of it under keep lines together — or all of it and what it keeps with in turn when it is
 /// kept with the next too (a chain moves together in Word). Word carries a kept heading over
 /// when the paragraph after it cannot start on the page (#966).
-fn next_first_line(ctx: &mut Ctx, block: usize, width: f32, depth: usize) -> f32 {
+/// `hang_room`: how far a line's leading may hang below the body on this page (see
+/// [`PageBuilder::hang_room`]; none with footnotes).
+fn next_first_line(ctx: &mut Ctx, block: usize, width: f32, hang_room: f32, depth: usize) -> f32 {
     match ctx.doc.body.get(block + 1).map(|b| &**b) {
         Some(Block::Para(p)) => {
             // Don't advance list counters for a lookahead: lay out without the label.
@@ -4155,15 +4193,24 @@ fn next_first_line(ctx: &mut Ctx, block: usize, width: f32, depth: usize) -> f32
             let body = &ctx.doc.body;
             let bands = border_bands(ctx.doc, p, &pl, body.get(block).map(|b| &**b), body.get(block + 2).map(|b| &**b), None);
             if pl.rp.keep_next && depth < 8 {
-                pl.rp.space_before + bands.top + pl.height + bands.bottom + pl.rp.space_after + next_first_line(ctx, block + 1, width, depth + 1)
+                pl.rp.space_before
+                    + bands.top
+                    + pl.height
+                    + bands.bottom
+                    + pl.rp.space_after
+                    + next_first_line(ctx, block + 1, width, hang_room, depth + 1)
             } else {
                 // The room this one needs to start on the page with the kept paragraph before
                 // it (#966), and its top border's band. The last line it needs there has to fit
-                // with its text only (the leading below may hang into the bottom margin), or with
-                // the bottom border's band when that line ends the paragraph.
+                // with its text only (the leading below may hang into the bottom margin, as far as
+                // the page lets it), or with the bottom border's band when that line ends the paragraph.
+                // Nor (as in the line loop) once a footnote comes with the lines.
+                let (doc, notes) = (ctx.doc, para_notes(ctx.doc, p, &pl));
+                let noted = |c1: usize| footnote_before(doc, &notes, c1);
                 let fit = |h: f32, k: usize| match pl.lines.get(k) {
                     Some(_) if k + 1 >= pl.lines.len() && bands.bottom > 0.0 => h + bands.bottom,
-                    Some(l) => h - l.hang,
+                    Some(l) if noted(l.c1) => h,
+                    Some(l) => h - l.hang.min(hang_room),
                     None => h,
                 };
                 let to = |k: usize| match (pl.lines.first(), pl.lines.get(k)) {

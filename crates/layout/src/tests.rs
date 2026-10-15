@@ -6169,6 +6169,22 @@ fn columns_before_a_continuous_break_are_balanced() {
     }
 }
 
+/// Balanced columns of multiple-spaced paragraphs come out level too: a column's last line
+/// doesn't hang its leading below the balanced height (which made that height fail and the
+/// columns end up uneven).
+#[test]
+fn balanced_columns_of_multiple_spaced_lines_are_level() {
+    use wordcraft_doc::props::LineSpacing;
+    use wordcraft_doc::section::SectionStart;
+    for k in 3..=12 {
+        let m = k as f32 * 0.5;
+        let mut d = two_column_section(SectionStart::Continuous, vec![]);
+        d.format_paragraphs(&Pos::body(0, 0), &Pos::body(9, 0), &|p| p.line_spacing = Some(LineSpacing::Multiple(m))).unwrap();
+        let (nl, _, nr, _, _) = column_bottoms(&lay(&d));
+        assert!(nl == 5 || nl == 6, "spacing {m}: {nl} left, {nr} right");
+    }
+}
+
 #[test]
 fn columns_before_a_page_break_or_a_column_break_are_not_balanced() {
     use wordcraft_doc::section::SectionStart;
