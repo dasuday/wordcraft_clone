@@ -1,0 +1,103 @@
+//! "Collapsed by default" headings (#1745): what a collapsed heading hides takes no room and isn't
+//! drawn, in Print Layout (so in PDF and print, which lay out the same pages) and the other views;
+//! the heading itself shows. Laid out exactly as if the hidden blocks weren't there.
+use super::*;
+use wordcraft_doc::props::ParaProps;
+use wordcraft_doc::{Table, para_block};
+
+fn para(text: &str, props: ParaProps) -> Arc<Block> {
+    let mut p = Paragraph::with_text(text, Default::default());
+    p.props = props;
+    para_block(p)
+}
+
+fn heading(text: &str, level: u8, collapsed: bool) -> Arc<Block> {
+    para(text, ParaProps { style: Some(format!("Heading{level}")), collapsed: collapsed.then_some(true), ..ParaProps::default() })
+}
+
+fn lay(doc: &Document, view: ViewMode) -> DocLayout {
+    layout(doc, &mut LayoutCache::new(), &LayoutOptions { view, ..LayoutOptions::default() })
+}
+
+/// Each body paragraph laid out (by its text, cells included): its page and top.
+fn placed(doc: &Document, l: &DocLayout) -> Vec<(String, usize, f32)> {
+    let mut out = Vec::new();
+    for (i, pg) in l.pages.iter().enumerate() {
+        for it in &pg.items {
+            if let Placed::Lines { story: StoryRef::Body, path, y, l0: 0, .. } = it
+                && let Some(p) = doc.para(StoryRef::Body, path)
+            {
+                out.push((p.text.clone(), i, *y));
+            }
+        }
+    }
+    out
+}
+
+/// Filler, a collapsed Heading 1 over a long kept-together paragraph, a Heading 2 and a table,
+/// then the next Heading 1.
+fn doc(filler: usize) -> Document {
+    let mut d = Document::new();
+    d.body = (0..filler).map(|i| para(&format!("Filler {i}"), ParaProps::default())).collect();
+    d.body.push(heading("Intro", 1, true));
+    d.body.push(para(&"Hidden words ".repeat(120), ParaProps { keep_lines: Some(true), ..ParaProps::default() }));
+    d.body.push(heading("Part", 2, false));
+    let mut t = Table::new(2, 2, 100.0);
+    if let Some(Block::Para(p)) = t.rows.first_mut().and_then(|r| r.cells.first_mut()).and_then(|c| c.blocks.first_mut()).map(Arc::make_mut) {
+        *p = Paragraph::with_text("In a hidden cell", Default::default());
+    }
+    d.body.push(Arc::new(Block::Table(t)));
+    d.body.push(heading("Next", 1, false));
+    d.body.push(para("End", ParaProps::default()));
+    d
+}
+
+/// The same document without what "Intro" hides.
+fn without_hidden(d: &Document) -> Document {
+    let mut v = d.clone();
+    let intro = v.body.iter().position(|b| b.as_para().is_some_and(|p| p.text == "Intro")).unwrap();
+    v.body.drain(intro + 1..intro + 4);
+    v
+}
+
+#[test]
+fn hidden_blocks_take_no_room_and_are_not_drawn() {
+    for view in [ViewMode::Print, ViewMode::Web, ViewMode::Draft, ViewMode::Read] {
+        for filler in [0, 30, 38, 40, 42, 44, 46] {
+            let d = doc(filler);
+            let l = lay(&d, view);
+            let got = placed(&d, &l);
+            let texts: Vec<&str> = got.iter().map(|(t, ..)| t.as_str()).collect();
+            assert!(texts.contains(&"Intro") && texts.contains(&"Next") && texts.contains(&"End"), "{view:?} {filler}: {texts:?}");
+            assert!(!texts.iter().any(|t| t.starts_with("Hidden") || *t == "Part" || *t == "In a hidden cell"), "{view:?} {filler}: {texts:?}");
+            // Nothing of the hidden table is drawn either (its cell borders, its cell paragraphs).
+            assert!(!l.index.keys().any(|(_, p)| p.0.first().is_some_and(|b| (filler + 1..filler + 4).contains(&(*b as usize)))), "{view:?} {filler}");
+            // Pages, positions and keep-with-next are as if the hidden blocks weren't there.
+            let v = without_hidden(&d);
+            let lv = lay(&v, view);
+            assert_eq!(l.pages.len(), lv.pages.len(), "{view:?} {filler}");
+            assert_eq!(got, placed(&v, &lv), "{view:?} {filler}");
+        }
+    }
+}
+
+/// Unfolded, the same document shows everything (the flag is what hides it).
+#[test]
+fn expanded_heading_shows_its_section() {
+    let mut d = doc(0);
+    for b in &mut d.body {
+        if let Block::Para(p) = Arc::make_mut(b) {
+            p.props.collapsed = None;
+        }
+    }
+    let got = placed(&d, &lay(&d, ViewMode::Print));
+    assert!(got.iter().any(|(t, ..)| t == "Part") && got.iter().any(|(t, ..)| t == "In a hidden cell"));
+}
+
+/// Outline view has its own collapsing (view state); the stored flag doesn't hide anything there.
+#[test]
+fn outline_view_ignores_the_stored_flag() {
+    let d = doc(0);
+    let got = placed(&d, &lay(&d, ViewMode::Outline));
+    assert!(got.iter().any(|(t, ..)| t == "Part"), "{got:?}");
+}
