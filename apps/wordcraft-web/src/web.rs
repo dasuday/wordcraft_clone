@@ -81,13 +81,16 @@ pub fn start() {
                         if let Some(author) = query_param("author") {
                             let _ = app.session.run("file.setAuthor", &serde_json::json!({ "name": author }));
                         }
-                        bridge.post_ready();
+                        // `?readonly=1`: start locked, so the editor is never editable before the
+                        // host's first `wordcraft:readonly`.
+                        app.session.editing_locked = matches!(query_param("readonly").as_deref(), Some("1" | "true"));
+                        bridge.post_ready(app.session.editing_locked);
                     } else if !sample {
                         // No document to show: start on File › Home, as the desktop app does (#766).
                         // (A host page sends the document to open instead.)
                         app.start_screen();
                     }
-                    Ok(Box::new(WebShell { app, inbox, messages }))
+                    Ok(Box::new(WebShell { app, inbox, messages, bridge: app_bridge }))
                 }),
             )
             .await;
@@ -117,6 +120,8 @@ struct WebShell {
     app: WordApp,
     inbox: Inbox,
     messages: Rc<RefCell<Vec<String>>>,
+    /// The host page, in host mode (`?host=parent`).
+    bridge: Option<host::Bridge>,
 }
 
 impl eframe::App for WebShell {
@@ -139,6 +144,17 @@ impl eframe::App for WebShell {
         let msgs = std::mem::take(&mut *self.messages.borrow_mut());
         for msg in msgs {
             self.app.status(msg);
+        }
+        if let Some(locked) = self.bridge.as_ref().and_then(host::Bridge::take_readonly) {
+            self.app.session.editing_locked = locked;
+            self.app.status(if locked {
+                wordcraft_ui_egui::tl!("Editing is locked by the page WordCraft is embedded in.")
+            } else {
+                wordcraft_ui_egui::tl!("Editing is unlocked.")
+            });
+            if let Some(bridge) = &self.bridge {
+                bridge.post_readonly(locked);
+            }
         }
         self.app.logic(ctx);
     }
@@ -607,7 +623,8 @@ fn mime_for(name: &str) -> &'static str {
 /// The `postMessage` bridge to a same-origin parent page (`?host=parent`). Messages are plain
 /// objects with a `type`:
 ///
-/// - `wordcraft:ready` (to the parent): the app is listening; send a document now.
+/// - `wordcraft:ready` (to the parent): `{ version, readonly }`; the app is listening, send a
+///   document now.
 /// - `wordcraft:open` (from the parent): `{ name, bytes }`, bytes an `ArrayBuffer` or
 ///   `Uint8Array`. It opens like a file picked with File › Open.
 /// - `wordcraft:save` (to the parent): `{ name, bytes }` (a transferred `ArrayBuffer`) for Save,
@@ -619,6 +636,11 @@ fn mime_for(name: &str) -> &'static str {
 ///   cancels.
 /// - `wordcraft:dirty` (to the parent): `{ dirty }` whenever unsaved changes appear or go away.
 /// - `wordcraft:failed` (to the parent): `{ error }` when the app couldn't start.
+/// - `wordcraft:readonly` (from the parent): `{ readonly }` locks editing (true) or unlocks it
+///   (false): while locked, nothing that changes the document runs (typing, the ribbon, Undo);
+///   reading, selecting, copying, saving and opening still work. Answered with
+///   `wordcraft:readonly` `{ readonly }` (to the parent) once applied. `?readonly=1` starts
+///   locked; `wordcraft:ready` carries `{ readonly }` too.
 ///
 /// Only the parent window on the page's own origin is heard or answered.
 mod host {
@@ -641,6 +663,8 @@ mod host {
         /// Save locations asked of the parent and not answered yet, by request id.
         pending: Rc<RefCell<HashMap<u32, Sender<FileDialogAnswer>>>>,
         next_id: Rc<Cell<u32>>,
+        /// The latest editing lock the parent asked for, not applied yet.
+        readonly: Rc<Cell<Option<bool>>>,
     }
 
     impl Bridge {
@@ -652,7 +676,7 @@ mod host {
                 return None;
             }
             let origin = window.location().origin().ok()?;
-            Some(Self { window, parent, origin, pending: Rc::default(), next_id: Rc::default() })
+            Some(Self { window, parent, origin, pending: Rc::default(), next_id: Rc::default(), readonly: Rc::default() })
         }
 
         /// Route Save, Export, save locations and the unsaved-changes state to the parent, and
@@ -673,8 +697,18 @@ mod host {
             }));
         }
 
-        pub fn post_ready(&self) {
-            self.send(&[("type", "wordcraft:ready".into()), ("version", env!("CARGO_PKG_VERSION").into())]);
+        pub fn post_ready(&self, readonly: bool) {
+            self.send(&[("type", "wordcraft:ready".into()), ("version", env!("CARGO_PKG_VERSION").into()), ("readonly", readonly.into())]);
+        }
+
+        /// The editing lock the parent asked for since the last call, if any.
+        pub fn take_readonly(&self) -> Option<bool> {
+            self.readonly.take()
+        }
+
+        /// Tell the parent the editing lock it asked for is in place.
+        pub fn post_readonly(&self, readonly: bool) {
+            self.send(&[("type", "wordcraft:readonly".into()), ("readonly", readonly.into())]);
         }
 
         pub fn post_failed(&self, error: &str) {
@@ -709,6 +743,7 @@ mod host {
             let parent = self.parent.clone();
             let origin = self.origin.clone();
             let pending = self.pending.clone();
+            let readonly = self.readonly.clone();
             let on_message = Closure::<dyn FnMut(web_sys::MessageEvent)>::new(move |event: web_sys::MessageEvent| {
                 if event.origin() != origin || !event.source().is_some_and(|s| js_sys::Object::is(&s, &parent)) {
                     return;
@@ -726,6 +761,10 @@ mod host {
                             return;
                         };
                         inbox.lock().unwrap_or_else(|e| e.into_inner()).push((name, bytes));
+                    }
+                    Some("wordcraft:readonly") => {
+                        let Some(locked) = js_sys::Reflect::get(&data, &JsValue::from_str("readonly")).ok().and_then(|v| v.as_bool()) else { return };
+                        readonly.set(Some(locked));
                     }
                     Some("wordcraft:picked") => {
                         let Some(id) = number(&data, "id") else { return };
