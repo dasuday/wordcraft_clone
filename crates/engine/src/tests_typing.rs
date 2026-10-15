@@ -1140,3 +1140,94 @@ fn typing_after_a_citation_goes_outside_its_field() {
     let inside = Pos { off: f[0].start.off + wordcraft_doc::para::OBJ.len_utf8(), ..f[0].start.clone() };
     assert_eq!(s.doc.copy_range(&inside, &f[0].end).plain_text(), "(Smith 2020)");
 }
+
+/// Intro (Heading 1, collapsed) / Body one. / Part (Heading 2) / Body two. / Next (Heading 1) /
+/// Body three.: Word for Mac's check document for collapsed headings (#1745).
+fn collapsed_doc() -> Session {
+    use wordcraft_doc::Paragraph;
+    use wordcraft_doc::props::{CharProps, ParaProps};
+    let mut doc = wordcraft_doc::Document::new();
+    let para = |text: &str, style: Option<&str>, collapsed: bool| {
+        let mut p = Paragraph::with_text(text, CharProps::default());
+        p.props = ParaProps { style: style.map(str::to_string), collapsed: collapsed.then_some(true), ..ParaProps::default() };
+        wordcraft_doc::para_block(p)
+    };
+    doc.body = vec![
+        para("Intro", Some("Heading1"), true),
+        para("Body one.", None, false),
+        para("Part", Some("Heading2"), false),
+        para("Body two.", None, false),
+        para("Next", Some("Heading1"), false),
+        para("Body three.", None, false),
+    ];
+    Session::new(doc)
+}
+
+/// Whether body block `i` is laid out (shown) in the current view.
+fn shown(s: &mut Session, i: usize) -> bool {
+    s.layout().index.contains_key(&(StoryRef::Body, wordcraft_doc::Path::top(i)))
+}
+
+/// Word for Mac (checked 2026-10-15): End then Right from the end of a collapsed heading goes to
+/// the start of the next heading it shows (typing X there gives "XNext"); the arrows and
+/// Ctrl+Down skip what the heading hides both ways.
+#[test]
+fn arrows_skip_what_a_collapsed_heading_hides() {
+    let mut s = collapsed_doc();
+    assert!(shown(&mut s, 0) && !shown(&mut s, 1) && !shown(&mut s, 3) && shown(&mut s, 4));
+    s.sel = crate::Selection::caret(Pos::body(0, 2));
+    run(&mut s, "caret.end", json!({}));
+    assert_eq!(s.sel.focus, Pos::body(0, 5));
+    run(&mut s, "caret.right", json!({}));
+    assert_eq!(s.sel.focus, Pos::body(4, 0));
+    typ(&mut s, "X");
+    assert_eq!(s.doc.para(StoryRef::Body, &wordcraft_doc::Path::top(4)).unwrap().text, "XNext");
+    // Back again: Left from the start of "Next" lands at the end of "Intro".
+    s.sel = crate::Selection::caret(Pos::body(4, 0));
+    run(&mut s, "caret.left", json!({}));
+    assert_eq!(s.sel.focus, Pos::body(0, 5));
+    // Word Right, Down and Ctrl+Down skip it too; Up comes back.
+    run(&mut s, "caret.wordRight", json!({}));
+    assert_eq!(s.sel.focus, Pos::body(4, 0));
+    s.sel = crate::Selection::caret(Pos::body(0, 2));
+    run(&mut s, "caret.down", json!({}));
+    assert_eq!(s.sel.focus.path, wordcraft_doc::Path::top(4));
+    run(&mut s, "caret.up", json!({}));
+    assert_eq!(s.sel.focus.path, wordcraft_doc::Path::top(0));
+    run(&mut s, "caret.paraDown", json!({}));
+    assert_eq!(s.sel.focus, Pos::body(4, 0));
+    run(&mut s, "caret.paraUp", json!({}));
+    assert_eq!(s.sel.focus, Pos::body(0, 0));
+    // Shift+Right selects across the fold the same way.
+    s.sel = crate::Selection::caret(Pos::body(0, 5));
+    run(&mut s, "caret.right", json!({"extend": true}));
+    assert_eq!((s.sel.anchor.clone(), s.sel.focus.clone()), (Pos::body(0, 5), Pos::body(4, 0)));
+}
+
+/// Word for Mac: typing at the end of a collapsed heading doesn't expand it.
+#[test]
+fn typing_at_the_end_of_a_collapsed_heading_keeps_it_collapsed() {
+    let mut s = collapsed_doc();
+    s.sel = crate::Selection::caret(Pos::body(0, 5));
+    typ(&mut s, "duction");
+    let p = s.doc.para(StoryRef::Body, &wordcraft_doc::Path::top(0)).unwrap();
+    assert_eq!((p.text.as_str(), p.props.collapsed), ("Introduction", Some(true)));
+    assert!(!shown(&mut s, 1) && !shown(&mut s, 2) && shown(&mut s, 4));
+    // Backspace at its end deletes heading text, not hidden text.
+    typ(&mut s, "\u{8}");
+    assert_eq!(s.doc.para(StoryRef::Body, &wordcraft_doc::Path::top(0)).unwrap().text, "Introductio");
+    assert_eq!(s.doc.para(StoryRef::Body, &wordcraft_doc::Path::top(1)).unwrap().text, "Body one.");
+}
+
+/// Enter at the end of a collapsed heading expands it (WordCraft's choice; not checked in Word):
+/// the new paragraph and what follows show, so nothing is typed out of sight.
+#[test]
+fn enter_at_the_end_of_a_collapsed_heading_expands_it() {
+    let mut s = collapsed_doc();
+    s.sel = crate::Selection::caret(Pos::body(0, 5));
+    typ(&mut s, "\nNew");
+    let texts: Vec<String> = s.doc.body.iter().filter_map(|b| b.as_para()).map(|p| p.text.clone()).collect();
+    assert_eq!(texts.get(..3).unwrap(), ["Intro", "New", "Body one."]);
+    assert!(s.doc.body.iter().filter_map(|b| b.as_para()).all(|p| p.props.collapsed != Some(true)));
+    assert!((0..7).all(|i| shown(&mut s, i)));
+}

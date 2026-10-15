@@ -189,6 +189,45 @@ pub fn specs() -> Vec<CommandSpec> {
     ]
 }
 
+/// What "Collapsed by default" headings hide in the body (#1745), by top-level block: nothing
+/// in Outline view, which collapses headings its own way (as the layout does).
+pub(crate) fn folded(s: &Session) -> Vec<bool> {
+    if s.view.mode == ViewMode::Outline && !s.view.read_mode {
+        return Vec::new();
+    }
+    ol::folded(&s.doc)
+}
+
+/// Whether body block `i` is a heading its stored flag collapses.
+fn folds(s: &Session, i: usize) -> bool {
+    let Some(Block::Para(p)) = s.doc.body.get(i).map(|b| &**b) else { return false };
+    let rp = s.doc.styles.resolve_para(&p.props);
+    rp.collapsed && rp.outline_level.is_some()
+}
+
+/// Collapse or expand body heading `i` through its stored flag, with as little direct formatting
+/// as it takes: none when its style already says so, `false` over a style that collapses.
+fn set_fold(s: &mut Session, i: usize, on: bool) -> Result<(), CmdError> {
+    let Some(Block::Para(p)) = s.doc.body.get(i).map(|b| &**b) else { return Ok(()) };
+    let mut inherited = p.props.clone();
+    inherited.collapsed = None;
+    let style_on = s.doc.styles.resolve_para(&inherited).collapsed;
+    let want = if on { (!style_on).then_some(true) } else { style_on.then_some(false) };
+    if p.props.collapsed != want {
+        let para = s.doc.para_mut(StoryRef::Body, &wordcraft_doc::Path::top(i))?;
+        para.props.collapsed = want;
+        para.touch();
+    }
+    Ok(())
+}
+
+/// Expand body heading `i` when it is collapsed (Enter in a collapsed heading).
+pub(crate) fn expand_heading(s: &mut Session, i: usize) {
+    if folds(s, i) {
+        let _ = set_fold(s, i, false);
+    }
+}
+
 /// The top-level body blocks the selection touches (none outside the body text or in a table).
 fn selected_blocks(s: &Session) -> Option<(usize, usize)> {
     let (a, b) = s.sel.ordered();
