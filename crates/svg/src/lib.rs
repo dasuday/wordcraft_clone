@@ -311,17 +311,10 @@ const TREFS_TOO_MANY: &str = "SVG with this many text references is not supporte
 /// those nested before it); `<use>` links that copy without end; and `<tref>` links that would
 /// cost more than [`MAX_TREF_WORK`] to find.
 fn check_copies(xml: &usvg::roxmltree::Document, budget: &Budget) -> Result<(), Error> {
-    // The text as written: each outermost text element's text, once.
-    let written = xml
-        .descendants()
-        .filter(|n| kind(*n) == Kind::Text && !n.ancestors().skip(1).any(|a| kind(a) == Kind::Text))
-        .flat_map(|n| n.descendants())
-        .filter_map(|n| n.text().filter(|_| n.is_text()))
-        .fold(0u64, |a, t| a.saturating_add(t.len() as u64));
-    if budget.text.fetch_add(written, Ordering::Relaxed).saturating_add(written) > MAX_TEXT_BYTES {
+    let c = copies(xml);
+    if budget.text.fetch_add(c.written, Ordering::Relaxed).saturating_add(c.written) > MAX_TEXT_BYTES {
         return budget.refuse(TEXT_TOO_LONG);
     }
-    let c = copies(xml);
     if c.endless {
         return budget.refuse(ENDLESS_COPIES);
     }
@@ -335,9 +328,12 @@ fn check_copies(xml: &usvg::roxmltree::Document, budget: &Budget) -> Result<(), 
     Ok(())
 }
 
-/// What usvg builds of a picture's text, `<use>` copies (and copies of copies) included.
+/// What usvg builds of a picture's text, `<use>` copies (and copies of copies) included, and the
+/// copies markers, clip paths, masks, patterns and filters may make of it.
 #[derive(Clone, Copy, Default, Debug)]
 struct Copies {
+    /// Text as written: the text in each outermost text element, once (only on the total).
+    written: u64,
     /// Text elements built.
     texts: u64,
     /// Bytes of text in them, `<tref>` text included.
@@ -346,17 +342,29 @@ struct Copies {
     trefs: u64,
     /// The copies never end (usvg would give up deep down, after building a great deal).
     endless: bool,
+    /// Places a clip path, mask, filter or pattern may be drawn: a few per element (the paint it
+    /// inherits, and each `url(` it or a style sheet names).
+    slots: u64,
+    /// Places a marker may be drawn: three per vertex of each shape, when the file has markers.
+    marks: u64,
+    /// Something built names a `url(`.
+    url: bool,
 }
 
 impl Copies {
-    const ENDLESS: Copies = Copies { texts: u64::MAX, bytes: u64::MAX, trefs: u64::MAX, endless: true };
+    const ENDLESS: Copies =
+        Copies { written: 0, texts: u64::MAX, bytes: u64::MAX, trefs: u64::MAX, endless: true, slots: u64::MAX, marks: u64::MAX, url: true };
 
     fn add(self, o: Copies) -> Copies {
         Copies {
+            written: self.written.saturating_add(o.written),
             texts: self.texts.saturating_add(o.texts),
             bytes: self.bytes.saturating_add(o.bytes),
             trefs: self.trefs.saturating_add(o.trefs),
             endless: self.endless || o.endless,
+            slots: self.slots.saturating_add(o.slots),
+            marks: self.marks.saturating_add(o.marks),
+            url: self.url || o.url,
         }
     }
 }
@@ -408,7 +416,9 @@ fn link<'a, 'i>(
 /// so the text adds up along every path; work shared by many copies is done once (each node is
 /// worked out once, with an explicit stack: linear, no recursion), and copies that lead back to
 /// themselves are endless. Where usvg's rules are not mirrored (a `<use>` without the SVG
-/// namespace that links back to its copy), this counts more, never less.
+/// namespace that links back to its copy), this counts more, never less. The text drawn by
+/// markers, clip paths, masks, patterns and filter images (usvg's converter builds them per
+/// use) is bounded from above rather than counted.
 fn copies<'a, 'i>(xml: &'a usvg::roxmltree::Document<'i>) -> Copies {
     type Node<'a, 'i> = usvg::roxmltree::Node<'a, 'i>;
     let all: Vec<Node> = xml.descendants().collect();
@@ -433,8 +443,61 @@ fn copies<'a, 'i>(xml: &'a usvg::roxmltree::Document<'i>) -> Copies {
             *ts = t;
         }
     }
-    let inside = |a: Node, d: Node| at(a) < at(d) && last.get(at(a)).is_some_and(|l| at(d) <= *l);
+    // `url(`s: each names a clip path, mask, filter, paint or marker. Per element, and (for text
+    // elements, whose spans are drawn with them) per subtree.
     let svg_element = |n: Node| n.is_element() && matches!(n.tag_name().namespace(), None | Some(SVG_NS));
+    let mut urls = vec![0u64; len];
+    let mut sub_slots = vec![0u64; len];
+    let mut sub_url = vec![false; len];
+    let sheet_urls = all
+        .iter()
+        .filter(|n| svg_element(**n) && n.tag_name().name() == "style")
+        .flat_map(|n| n.descendants())
+        .filter_map(|d| d.text().filter(|_| d.is_text()))
+        .fold(0u64, |a, t| a.saturating_add(url_count(t)));
+    let own_slots = |u: u64| 2u64.saturating_add(u).saturating_add(sheet_urls);
+    for n in all.iter().rev() {
+        let i = at(*n);
+        let u = if svg_element(*n) { n.attributes().fold(0u64, |a, at| a.saturating_add(url_count(at.value()))) } else { 0 };
+        let (slots, url) = n.children().fold((if svg_element(*n) { own_slots(u) } else { 0 }, u > 0), |(a, b), c| {
+            (a.saturating_add(sub_slots.get(at(c)).copied().unwrap_or(0)), b || sub_url.get(at(c)).copied().unwrap_or(false))
+        });
+        if let (Some(us), Some(ss), Some(su)) = (urls.get_mut(i), sub_slots.get_mut(i), sub_url.get_mut(i)) {
+            *us = u;
+            *ss = slots;
+            *su = url;
+        }
+    }
+    // Whether an ancestor names a `url(` (its content inherits it), and whether a text element
+    // holds the node; parents come before their children.
+    let mut above_url = vec![false; len];
+    let mut in_text = vec![false; len];
+    for n in &all {
+        if let Some(p) = n.parent() {
+            let (pu, pt) = (above_url.get(at(p)).copied().unwrap_or(false), in_text.get(at(p)).copied().unwrap_or(false));
+            let p_url = urls.get(at(p)).is_some_and(|u| *u > 0);
+            if let (Some(a), Some(t)) = (above_url.get_mut(at(*n)), in_text.get_mut(at(*n))) {
+                *a = pu || p_url;
+                *t = pt || kind(p) == Kind::Text;
+            }
+        }
+    }
+    let has_markers = all.iter().any(|n| svg_element(*n) && n.tag_name().name() == "marker");
+    // Marker places on a shape: a start, middle and end marker per vertex. A path or point list
+    // has at most one vertex per byte (arcs, split into curves, take more bytes than they make).
+    let marks = |n: Node| -> u64 {
+        if !has_markers {
+            return 0;
+        }
+        let vertices = match n.tag_name().name() {
+            "path" => n.attribute("d").map_or(0, |d| d.len() as u64),
+            "polyline" | "polygon" => n.attribute("points").map_or(0, |p| p.len() as u64),
+            "line" | "rect" | "circle" | "ellipse" => 16,
+            _ => return 0,
+        };
+        vertices.saturating_add(2).saturating_mul(3)
+    };
+    let inside = |a: Node, d: Node| at(a) < at(d) && last.get(at(a)).is_some_and(|l| at(d) <= *l);
     // usvg skips a `<use>` whose target holds a `<use>` (in the SVG namespace) linking to that
     // target (LOOPS on the target) or to the `<use>` itself (LOOPS_BACK on the `<use>`).
     const LOOPS: u8 = 1;
@@ -478,20 +541,34 @@ fn copies<'a, 'i>(xml: &'a usvg::roxmltree::Document<'i>) -> Copies {
         let bytes = link(*r, &ids).filter(|t| svg_element(*t)).and_then(|t| text.get(at(t)).copied()).unwrap_or(0);
         for a in r.ancestors().skip(1).filter(|a| kind(*a) == Kind::Text) {
             let e = trefs.entry(at(a)).or_default();
-            *e = e.add(Copies { texts: 0, bytes, trefs: 1, endless: false });
+            *e = e.add(Copies { bytes, trefs: 1, ..Copies::default() });
         }
     }
     // What each node builds where it stands, worked out after what it builds from.
     let own = |n: Node| match kind(n) {
         Kind::Text => {
-            let t = Copies { texts: 1, bytes: text.get(at(n)).copied().unwrap_or(0), trefs: 0, endless: false };
+            let t = Copies {
+                texts: 1,
+                bytes: text.get(at(n)).copied().unwrap_or(0),
+                slots: sub_slots.get(at(n)).copied().unwrap_or(0),
+                url: sub_url.get(at(n)).copied().unwrap_or(false),
+                ..Copies::default()
+            };
             t.add(trefs.get(&at(n)).copied().unwrap_or_default())
+        }
+        Kind::Group | Kind::Use if n != xml.root() => {
+            let u = urls.get(at(n)).copied().unwrap_or(0);
+            Copies { slots: own_slots(u), marks: marks(n), url: u > 0, ..Copies::default() }
         }
         _ => Copies::default(),
     };
     let from = |n: Node<'a, 'i>| -> Vec<Node<'a, 'i>> {
         match kind(n) {
             _ if n == xml.root() => n.children().filter(|c| kind(*c) != Kind::Skip).collect(),
+            // A filter image draws the element it links to (usvg's `feImage`).
+            Kind::Group if n.tag_name().name() == "feImage" => {
+                n.children().filter(|c| kind(*c) != Kind::Skip).chain(link(n, &ids).filter(|t| *t != n && svg_element(*t))).collect()
+            }
             Kind::Group => n.children().filter(|c| kind(*c) != Kind::Skip).collect(),
             Kind::Use => copied(n).into_iter().collect(),
             Kind::Text | Kind::Skip => Vec::new(),
@@ -526,7 +603,58 @@ fn copies<'a, 'i>(xml: &'a usvg::roxmltree::Document<'i>) -> Copies {
             }
         }
     }
-    built.get(at(xml.root())).copied().unwrap_or_default()
+    let mut total = built.get(at(xml.root())).copied().unwrap_or_default();
+    total.written = all
+        .iter()
+        .filter(|n| kind(**n) == Kind::Text && !in_text.get(at(**n)).copied().unwrap_or(true))
+        .fold(0u64, |a, n| a.saturating_add(text.get(at(*n)).copied().unwrap_or(0)));
+    if total.endless || !(total.url || sheet_urls > 0) {
+        return total;
+    }
+    // usvg draws a marker's content at every marker place of the shapes that name it, and builds
+    // a clip path, mask, filter or pattern again for each element that names it (unless it can
+    // share one, which isn't counted on). The text in all of them, times every place one may be
+    // drawn, bounds what they draw. Their own content may name others (when it, or an ancestor
+    // whose properties it inherits, or a style sheet names a `url(`): each such one may nest the
+    // places once more.
+    let (mut in_marks, mut in_others) = (Copies::default(), Copies::default());
+    let mut places_inside = 0u64;
+    let mut nesting = 0u32;
+    for n in &all {
+        let name = n.tag_name().name();
+        if !(svg_element(*n) && matches!(name, "marker" | "clipPath" | "mask" | "pattern" | "filter")) || state.get(at(*n)) != Some(&2) {
+            continue;
+        }
+        let b = built.get(at(*n)).copied().unwrap_or_default();
+        if name == "marker" {
+            in_marks = in_marks.add(b);
+        } else {
+            in_others = in_others.add(b);
+        }
+        places_inside = places_inside.saturating_add(b.slots).saturating_add(b.marks);
+        if sheet_urls > 0 || b.url || above_url.get(at(*n)).copied().unwrap_or(true) {
+            nesting = nesting.saturating_add(1);
+        }
+    }
+    let reach = |m: u64, o: u64| -> u64 {
+        if nesting == 0 {
+            m.saturating_mul(total.marks).saturating_add(o.saturating_mul(total.slots))
+        } else {
+            let mut r = m.saturating_add(o).saturating_mul(total.marks.saturating_add(total.slots));
+            for _ in 0..nesting.min(64) {
+                r = r.saturating_mul(places_inside.saturating_add(1));
+            }
+            r
+        }
+    };
+    total.bytes = total.bytes.saturating_add(reach(in_marks.bytes, in_others.bytes));
+    total.texts = total.texts.saturating_add(reach(in_marks.texts, in_others.texts));
+    total
+}
+
+/// The number of `url(` in `s` (any case).
+fn url_count(s: &str) -> u64 {
+    s.as_bytes().windows(4).filter(|w| w.eq_ignore_ascii_case(b"url(")).count() as u64
 }
 
 /// The length of character data once its entity references are expanded.

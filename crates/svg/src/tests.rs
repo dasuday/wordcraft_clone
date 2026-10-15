@@ -440,14 +440,22 @@ fn many_trefs_in_a_large_file_are_refused_quickly() {
     assert!(t.elapsed() < std::time::Duration::from_secs(2), "{:?}", t.elapsed());
 }
 
-/// The number of text elements in a parsed picture (usvg's tree after conversion).
+/// The number of text elements in a parsed picture (usvg's tree after conversion), counting those
+/// drawn in markers, clip paths, masks, patterns and filter images too.
 fn usvg_texts(g: &usvg::Group) -> u64 {
     g.children()
         .iter()
-        .map(|n| match n {
-            usvg::Node::Group(g) => usvg_texts(g),
-            usvg::Node::Text(_) => 1,
-            _ => 0,
+        .map(|n| {
+            let mut k = match n {
+                usvg::Node::Group(g) => usvg_texts(g),
+                usvg::Node::Text(_) => 1,
+                _ => 0,
+            };
+            // A nested picture's text is its own (counted when it is read).
+            if !matches!(n, usvg::Node::Image(_)) {
+                n.subroots(|r| k += usvg_texts(r));
+            }
+            k
         })
         .sum()
 }
@@ -476,14 +484,99 @@ fn text_copies_match_usvg() {
         r##"<text id="s">a</text><text>b<tref href="#s"/></text><g id="g"><text>c</text><use href="#g"/></g><use href="#g"/>"##,
         // Elements outside the SVG namespace aren't built.
         r##"<text id="t">a</text><z:g><text>b</text><use href="#t"/></z:g>"##,
+        // Links are groups.
+        r##"<a id="l" href="https://example.com"><text>a</text></a><use href="#l"/>"##,
+        // A nested `data:` picture's text is counted when that picture is read, not here.
+        &format!(r#"<text>a</text>{}"#, nested_text_picture(3)),
     ];
-    for body in cases {
-        let doc = format!(
+    let svg = |body: &str| {
+        format!(
             r#"<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:z="urn:z" width="100" height="100" font-family="Source Sans 3" font-size="10">{body}</svg>"#
-        );
+        )
+    };
+    for body in cases {
+        let doc = svg(body);
         let xml = usvg::roxmltree::Document::parse(&doc).unwrap();
         let counted = copies(&xml).texts;
         let built = usvg_texts(parse(doc.as_bytes()).unwrap().tree().root());
         assert_eq!(counted, built, "{body}");
     }
+    // Where usvg builds elements it doesn't draw (`<symbol>`, `<defs>`, the other `<switch>`
+    // children), or draws copies the check bounds rather than counts (markers, clip paths, masks,
+    // patterns, filter images), the count is at least what usvg draws.
+    let bounded = [
+        r##"<symbol id="s"><text>a</text></symbol><use href="#s"/><use href="#s"/>"##,
+        r##"<defs><text id="t">a</text></defs><use href="#t"/>"##,
+        r##"<switch><text>a</text><text>b</text></switch>"##,
+        r##"<marker id="m" markerWidth="9" markerHeight="9" overflow="visible"><text>a</text></marker><polyline points="1,1 5,5 9,1 20,20" stroke="black" marker-start="url(#m)" marker-mid="url(#m)" marker-end="url(#m)"/>"##,
+        r##"<clipPath id="c" clipPathUnits="objectBoundingBox"><text y="1" font-size="1">a</text></clipPath><rect width="9" height="9" clip-path="url(#c)"/><rect x="20" width="9" height="9" clip-path="url(#c)"/>"##,
+        r##"<mask id="k"><text y="9">a</text></mask><rect width="9" height="9" mask="url(#k)"/><rect x="20" width="9" height="9" mask="url(#k)"/>"##,
+        r##"<pattern id="p" width="9" height="9" patternUnits="userSpaceOnUse"><text y="9">a</text></pattern><rect width="9" height="9" fill="url(#p)"/><rect x="20" width="9" height="9" fill="url(#p)"/>"##,
+        r##"<text id="t" y="9">a</text><filter id="f"><feImage href="#t"/></filter><rect width="9" height="9" filter="url(#f)"/><rect x="20" width="9" height="9" filter="url(#f)"/>"##,
+    ];
+    for body in bounded {
+        let doc = svg(body);
+        let xml = usvg::roxmltree::Document::parse(&doc).unwrap();
+        let counted = copies(&xml).texts;
+        let built = usvg_texts(parse(doc.as_bytes()).unwrap().tree().root());
+        assert!(built > 0 && counted >= built, "{body}: counted {counted}, usvg drew {built}");
+    }
+}
+
+/// `body` in a picture, with `TEXT` replaced by `n` bytes of text.
+fn picture_with_text(body: &str, n: usize) -> String {
+    format!(r#"<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100">{}</svg>"#, body.replace("TEXT", &"c".repeat(n)))
+}
+
+fn refused_quickly(doc: &str) -> bool {
+    let t = std::time::Instant::now();
+    let r = parse(doc.as_bytes());
+    let fast = t.elapsed() < std::time::Duration::from_secs(2);
+    matches!(&r, Err(Error::Parse(m)) if m.contains("text")) && fast
+}
+
+/// Review 5 I-1: usvg draws a marker's content once per vertex of every shape that uses it.
+#[test]
+fn text_in_markers_counts_per_vertex() {
+    let points: String = (0..2000).map(|i| format!("{i},{} ", i % 7)).collect();
+    let marker = |text: &str, n| {
+        picture_with_text(
+            &format!(r##"<marker id="m" overflow="visible">{text}</marker><polyline points="{points}" stroke="black" marker-mid="url(#m)"/>"##),
+            n,
+        )
+    };
+    assert!(refused_quickly(&marker("<text>TEXT</text>", 100_000)), "200 MB of marker text");
+    // A chart's dot markers (no text) on 2000 points, with a caption, opens.
+    let chart = picture_with_text(
+        &format!(r##"<marker id="m"><circle r="2"/></marker><polyline points="{points}" marker-mid="url(#m)"/><text y="20">TEXT</text>"##),
+        200,
+    );
+    assert!(parse(chart.as_bytes()).is_ok());
+    // A short label on a few points opens.
+    let few = picture_with_text(r##"<marker id="m"><text>TEXT</text></marker><polyline points="1,1 5,5 9,1" marker-mid="url(#m)"/>"##, 10);
+    assert!(parse(few.as_bytes()).is_ok());
+}
+
+/// `n` rects using `attr`, after `def`.
+fn many_users(def: &str, attr: &str, n: usize) -> String {
+    format!("{def}{}", format!(r#"<rect width="9" height="9" {attr}/>"#).repeat(n))
+}
+
+/// Review 5 I-1: usvg builds an `objectBoundingBox` clip path's or mask's content once per
+/// element that uses it.
+#[test]
+fn text_in_clip_paths_and_masks_counts_per_use() {
+    let clip = r##"<clipPath id="c" clipPathUnits="objectBoundingBox"><text>TEXT</text></clipPath>"##;
+    assert!(refused_quickly(&picture_with_text(&many_users(clip, r##"clip-path="url(#c)""##, 2000), 10_000)), "clip path");
+    let mask = r##"<mask id="k"><text>TEXT</text></mask>"##;
+    assert!(refused_quickly(&picture_with_text(&many_users(mask, r##"mask="url(#k)""##, 2000), 10_000)), "mask");
+    let filter = r##"<text id="t">TEXT</text><filter id="f"><feImage href="#t"/></filter>"##;
+    assert!(refused_quickly(&picture_with_text(&many_users(filter, r##"filter="url(#f)""##, 2000), 10_000)), "filter image");
+    // Ordinary clip paths and masks open.
+    let plain = r##"<clipPath id="c"><rect width="5" height="5"/></clipPath><mask id="k"><rect width="5" height="5" fill="white"/></mask>"##;
+    let doc = picture_with_text(&format!("{}<text>TEXT</text>", many_users(plain, r##"clip-path="url(#c)" mask="url(#k)""##, 2000)), 200);
+    assert!(parse(doc.as_bytes()).is_ok());
+    // A short text clip used a few times opens.
+    let few = picture_with_text(&many_users(clip, r##"clip-path="url(#c)""##, 5), 20);
+    assert!(parse(few.as_bytes()).is_ok());
 }
