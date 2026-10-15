@@ -1896,7 +1896,7 @@ fn ink_and_freeforms_round_trip_as_custom_geometry() {
     let triangle = Freeform {
         w: 40.0,
         h: 40.0,
-        paths: vec![FreePath { pts: vec![[0.0, 40.0], [20.0, 0.0], [40.0, 40.0]], closed: true }],
+        paths: vec![FreePath { pts: vec![[0.0, 40.0], [20.0, 0.0], [40.0, 40.0]], closed: true, joined: false }],
         ..Default::default()
     };
     let tri = shape(Some(Rgb(0, 0x80, 0)), 1.0, Wrap::Square, triangle);
@@ -1920,6 +1920,40 @@ fn ink_and_freeforms_round_trip_as_custom_geometry() {
     let InlineObject::Shape { freeform: Some(m), float, stroke_width, .. } = &objs[1] else { panic!("{:?}", objs[1]) };
     assert_eq!((m.ink, m.alpha, float.wrap, *stroke_width), (Some(InkTool::Highlighter), 0.5, Wrap::BehindText, 12.0));
     assert_eq!(objs[2], pen, "the pen stroke comes back point for point");
+}
+
+/// A freeform with a hole (a letter's counter: two subpaths of one `a:path`) is written back as
+/// one `a:path`, so Word still fills it as one shape with a hole, and reads back the same.
+#[test]
+fn freeform_subpaths_round_trip_in_one_path() {
+    use wordcraft_doc::freeform::{FreePath, Freeform};
+    let square = |a: f32, b: f32, joined: bool| FreePath { pts: vec![[a, a], [b, a], [b, b], [a, b]], closed: true, joined };
+    let ring = Freeform { w: 40.0, h: 40.0, paths: vec![square(0.0, 40.0, false), square(10.0, 30.0, true)], ..Default::default() };
+    let shape = InlineObject::Shape {
+        kind: ShapeKind::Freeform,
+        w: 40.0,
+        h: 40.0,
+        fill: Some(Rgb(0x20, 0x2E, 0x55)),
+        stroke: None,
+        stroke_width: 0.0,
+        float: Float { wrap: Wrap::Square, ..Default::default() },
+        story: None,
+        freeform: Some(Arc::new(ring)),
+        effects: Default::default(),
+        extra: Default::default(),
+    };
+    let mut p = Paragraph::with_text("Logo", CharProps::default());
+    p.insert_object(0, shape.clone(), &CharProps::default()).unwrap();
+    let d = doc_with(vec![p]);
+    let bytes = wordcraft_docx::write(&d).unwrap();
+    let mut z = zip::ZipArchive::new(std::io::Cursor::new(&bytes)).unwrap();
+    let mut xml = String::new();
+    std::io::Read::read_to_string(&mut z.by_name("word/document.xml").unwrap(), &mut xml).unwrap();
+    assert_eq!((xml.matches("<a:path ").count(), xml.matches("<a:moveTo>").count()), (1, 2), "{xml}");
+    let r = rt(&d);
+    let Some(InlineObject::Shape { freeform: Some(back), .. }) = paras(&r)[0].objects.first() else { panic!("no freeform") };
+    let InlineObject::Shape { freeform: Some(sent), .. } = &shape else { panic!("not a freeform") };
+    assert_eq!(back, sent, "the hole comes back joined to its outline");
 }
 
 /// Shape effects (#275): `a:effectLst` with an outer shadow, a glow and soft edges round-trips,

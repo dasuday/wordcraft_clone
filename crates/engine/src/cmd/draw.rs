@@ -710,7 +710,7 @@ fn convert_at(s: &mut Session, pos: &Pos) -> Result<Option<&'static str>, CmdErr
     let [bx, by, bw, bh] = found.bounds();
     let (bw, bh) = (bw.max(1.0), bh.max(1.0));
     let outline = |pts: Vec<[f32; 2]>, closed: bool| {
-        Some(Arc::new(Freeform { w: bw, h: bh, paths: vec![FreePath { pts, closed }], ..Default::default() }.sanitized()))
+        Some(Arc::new(Freeform { w: bw, h: bh, paths: vec![FreePath { pts, closed, joined: false }], ..Default::default() }.sanitized()))
     };
     let local = |c: &[[f32; 2]]| c.iter().map(|[x, y]| [x - bx, y - by]).collect::<Vec<_>>();
     let (new_kind, geometry) = match &found {

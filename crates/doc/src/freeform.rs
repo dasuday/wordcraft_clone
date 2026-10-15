@@ -71,6 +71,15 @@ impl InkTool {
 pub struct FreePath {
     pub pts: Vec<[f32; 2]>,
     pub closed: bool,
+    /// Continues the path before it: another subpath of the same DrawingML `a:path`, such as a
+    /// letter's counter or a ring's hole. Joined closed paths are filled together with the
+    /// even-odd rule, so an outline inside another cuts a hole in it.
+    #[serde(skip_serializing_if = "is_false")]
+    pub joined: bool,
+}
+
+fn is_false(v: &bool) -> bool {
+    !*v
 }
 
 /// A freeform shape's geometry: paths in a `w` × `h` coordinate space that is stretched over the
@@ -103,7 +112,7 @@ impl Default for Freeform {
 impl Freeform {
     /// An ink stroke through `pts` (shape-local points, already in the `w` × `h` frame).
     pub fn ink(tool: InkTool, w: f32, h: f32, pts: Vec<[f32; 2]>) -> Freeform {
-        Freeform { w, h, paths: vec![FreePath { pts, closed: false }], alpha: tool.alpha(), ink: Some(tool), order: None }.sanitized()
+        Freeform { w, h, paths: vec![FreePath { pts, closed: false, joined: false }], alpha: tool.alpha(), ink: Some(tool), order: None }.sanitized()
     }
 
     /// The same geometry with non-finite points dropped, coordinates clamped, the counts capped
@@ -187,7 +196,8 @@ mod tests {
     fn hostile_geometry_is_sanitized() {
         let mut pts = vec![[f32::NAN, 1.0], [2.0, f32::INFINITY], [1.0, 2.0], [1e30, -1e30]];
         pts.extend(std::iter::repeat_n([3.0, 3.0], MAX_POINTS * 2));
-        let f = Freeform { w: f32::NAN, h: -4.0, paths: vec![FreePath { pts, closed: false }], alpha: 7.0, ink: None, order: None }.sanitized();
+        let f = Freeform { w: f32::NAN, h: -4.0, paths: vec![FreePath { pts, closed: false, joined: false }], alpha: 7.0, ink: None, order: None }
+            .sanitized();
         assert_eq!((f.w, f.h, f.alpha), (0.0, 0.0, 1.0));
         let p = &f.paths[0].pts;
         assert_eq!(p.len(), MAX_POINTS);

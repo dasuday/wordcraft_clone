@@ -849,7 +849,7 @@ fn draw(ctx: &mut RenderContext, doc: &Document, it: &Draw, view: Affine, visibl
                 ctx.pop_layer();
             }
         }
-        Draw::Path { segs, fill, stroke, stroke_width } => {
+        Draw::Path { segs, fill, stroke, stroke_width, even_odd } => {
             let path = wordcraft_layout::display::seg_path(segs);
             if path.elements().is_empty() {
                 return;
@@ -857,7 +857,11 @@ fn draw(ctx: &mut RenderContext, doc: &Document, it: &Draw, view: Affine, visibl
             ctx.set_transform(view);
             if let Some(f) = fill {
                 ctx.set_paint(color(opts.ink(*f), 1.0));
+                if *even_odd {
+                    ctx.set_fill_rule(peniko::Fill::EvenOdd);
+                }
                 ctx.fill_path(&path);
+                ctx.set_fill_rule(peniko::Fill::NonZero);
             }
             if let Some(s) = stroke {
                 // Width 0 (or none) is a hairline.
