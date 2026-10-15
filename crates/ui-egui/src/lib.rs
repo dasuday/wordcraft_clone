@@ -61,6 +61,7 @@ pub mod icons;
 pub mod ink;
 pub mod keys;
 pub mod keytips;
+mod local_time;
 pub mod mini_toolbar;
 pub mod objects;
 pub mod options;
@@ -323,6 +324,9 @@ pub struct UiState {
     pub update_fields_before_print: bool,
     /// The custom dictionary (File › Options › Proofing, Add to Dictionary), kept between runs.
     pub dictionary: Vec<String>,
+    /// New Comment has asked for the user name once (while it was still the default), so it
+    /// doesn't ask again: File › Options › General changes it after that.
+    pub comment_name_asked: bool,
 }
 
 /// The ribbon tab the app opens on, and the one it falls back to when the tab that was showing
@@ -378,6 +382,7 @@ impl Default for UiState {
             print_backgrounds: false,
             update_fields_before_print: false,
             dictionary: Vec::new(),
+            comment_name_asked: false,
         }
     }
 }
@@ -543,6 +548,8 @@ pub struct WordApp {
     /// the session's document, no document is open: the window shows no page and only the File
     /// tab, Help and settings work. See [`WordApp::has_document`].
     no_document: Option<u64>,
+    /// Comment and reply text typed but not yet written to the document (#1348).
+    pub(crate) comment_drafts: panes::CommentDrafts,
 }
 
 /// The answer to "Do you want to save changes?" (`ui.saveChanges`).
@@ -639,6 +646,7 @@ impl WordApp {
             info_editing: None,
             recovery_seen: false,
             no_document: None,
+            comment_drafts: Default::default(),
         }
     }
 
@@ -751,6 +759,11 @@ impl WordApp {
     /// Close, Envelopes, Labels and Finish & Merge on a document with unsaved changes first ask
     /// Save / Don't Save / Cancel, and the command runs once that is answered (`ui.saveChanges`).
     pub fn run(&mut self, id: &str, params: Value) -> Result<Value, String> {
+        // Comment text still being typed is written first, so a save or export has it and a
+        // close, New or Open counts it as a change (#1348). A draft the document refuses is not
+        // part of it: saving and exporting go on without it (the refusal stays on the status
+        // line), and replacing the document asks Save / Don't Save / Cancel about it.
+        let refused = if flushes_comment_drafts(id, &params) { panes::flush_comment_drafts(self).err() } else { None };
         if id == "file.recover" && params.as_object().is_none_or(|p| p.is_empty()) {
             self.ui.backstage = true;
             self.ui.backstage_page = "recover".into();
@@ -762,7 +775,23 @@ impl WordApp {
             self.dialog = dialogs::Dialog::open(name, self);
             return Ok(json!({"pending": name}));
         }
-        if (self.session.dirty || self.save_unconfirmed()) && discards_document(id, &params) {
+        // New Comment without text opens a field for it at its place (the balloon, else the
+        // Comments pane), and the comment is added when it is posted. The first time, while the
+        // user name is still the default, it asks for the name first. A document that refuses
+        // comments refuses this one now, with the engine's reason, instead of after it is typed.
+        if id == "review.newComment"
+            && params.get("text").and_then(Value::as_str).is_none_or(|t| t.trim().is_empty())
+            && widgets::enabled(self, id)
+            && wordcraft_engine::cmd::protect::refuses(&self.session, id).is_none()
+        {
+            if self.session.author == wordcraft_engine::DEFAULT_AUTHOR && !self.ui.comment_name_asked {
+                self.ui.comment_name_asked = true;
+                self.dialog = dialogs::Dialog::open("commentAuthor", self);
+                return Ok(json!({"pending": "commentAuthor"}));
+            }
+            return Ok(panes::start_comment(self, None));
+        }
+        if (self.session.dirty || self.save_unconfirmed() || refused.is_some()) && discards_document(id, &params) {
             let name = self.prompt_name();
             self.dialog = Some(dialogs::Dialog::SaveChanges {
                 name,
@@ -789,6 +818,9 @@ impl WordApp {
             return r;
         }
         let r = self.execute_user(id, params);
+        if let Some(e) = refused {
+            self.status(e);
+        }
         if matches!(id, "insert.picture" | "insert.icon") {
             self.select_inserted_picture(&r);
         }
@@ -1163,8 +1195,16 @@ impl WordApp {
             self.status(tl!("Wait for the print job to finish submitting before closing."));
             return false;
         }
+        if self.quit_requested {
+            return true;
+        }
         // No document open (#1129): nothing to save.
-        if self.quit_requested || !self.session.dirty || !self.has_document() {
+        if !self.has_document() {
+            return true;
+        }
+        // A comment draft the document refuses is an unsaved change: the prompt can drop it.
+        let refused = panes::flush_comment_drafts(self).is_err();
+        if !self.session.dirty && !refused {
             return true;
         }
         let _ = self.run("file.close", json!({}));
@@ -1540,6 +1580,20 @@ impl WordApp {
                 self.status(tl!("Click the empty text box the text should continue in (Esc cancels)"));
                 json!({"pending": "link"})
             }
+            // A comment written the way the user writes one: `ui.newComment` opens its field at
+            // the selection (with `text` typed in), `ui.postComment` adds it to the document and
+            // `ui.cancelComment` drops it. `review.newComment` with text adds one at once.
+            "ui.newComment" => {
+                if !widgets::enabled(self, "review.newComment") {
+                    return Some(Err("comments can't be added here".into()));
+                }
+                if let Some(why) = wordcraft_engine::cmd::protect::refuses(&self.session, "review.newComment") {
+                    return Some(Err(why));
+                }
+                panes::start_comment(self, s("text").map(str::to_string))
+            }
+            "ui.postComment" => return Some(panes::post_comment(self)),
+            "ui.cancelComment" => json!({"cancelled": panes::cancel_comment(self)}),
             _ => return None,
         }))
     }
@@ -2394,6 +2448,25 @@ pub(crate) fn works_without_document(id: &str) -> bool {
             | "ui.caretAnimation"
             | "ui.startScreen"
     ) || id.starts_with("help.")
+}
+
+/// Commands that save, export, print, send or replace the document: comment text still being
+/// typed is written before them (#1348).
+fn flushes_comment_drafts(id: &str, params: &Value) -> bool {
+    matches!(
+        id,
+        "file.save"
+            | "file.saveAs"
+            | "file.saveTemplate"
+            | "file.open"
+            | "file.exportPdf"
+            | "file.exportPng"
+            | "file.print"
+            | "file.printPdf"
+            | "file.share"
+            | "ui.print"
+            | "ui.printSubmit"
+    ) || discards_document(id, params)
 }
 
 /// User commands that replace or close the document (`file.open` without a path only shows the
@@ -3553,6 +3626,52 @@ mod tests {
         frame(&mut a, vec![btn(body, true)]);
         frame(&mut a, vec![btn(body, false)]);
         assert_eq!(a.canvas.balloon, None, "a click on the page leaves the balloon");
+    }
+
+    /// Scripts and agents add comments as before: New Comment with text adds it at once (an empty
+    /// one without), with no prompt and no field. `ui.newComment`, `ui.postComment` and
+    /// `ui.cancelComment` write one the user's way.
+    #[test]
+    fn scripts_add_comments_at_once_or_through_the_field() {
+        let mut a = app();
+        a.run("text.insert", json!({"text": "Alpha paragraph one."})).unwrap();
+        a.run("select.text", json!({"text": "paragraph"})).unwrap();
+        for (how, text) in [("run", "From run"), ("execute", "From execute")] {
+            let p = json!({"text": text});
+            let r = if how == "run" { a.run("review.newComment", p) } else { a.execute("review.newComment", p) };
+            assert!(r.unwrap()["id"].is_u64(), "{how} added the comment");
+        }
+        assert!(a.execute("review.newComment", json!({})).unwrap()["id"].is_u64(), "an agent's empty comment, as before");
+        assert_eq!(a.session.doc.comments.len(), 3);
+        assert!(a.dialog.is_none() && !panes::writing(&a), "no prompt, no field");
+        assert!(!a.ui.comment_name_asked);
+        // The user's way, step by step.
+        let r = a.execute("ui.newComment", json!({"text": "Typed by an agent"})).unwrap();
+        assert_eq!(r["pending"], "comment");
+        assert!(a.dialog.is_none(), "programmatic calls never ask for the name");
+        assert_eq!(a.session.doc.comments.len(), 3, "nothing is added before Post");
+        let id = a.execute("ui.postComment", json!({})).unwrap()["id"].as_u64().unwrap() as u32;
+        let part = a.session.doc.comments[&id].part;
+        assert_eq!(a.session.doc.plain_text(wordcraft_doc::StoryRef::Part(part)), "Typed by an agent");
+        assert!(a.execute("ui.postComment", json!({})).is_err(), "nothing left to post");
+        a.execute("ui.newComment", json!({})).unwrap();
+        assert!(a.execute("ui.postComment", json!({})).is_err(), "an empty comment isn't posted");
+        let (rev, depth) = (a.session.rev(), a.session.undo_depth());
+        assert_eq!(a.execute("ui.cancelComment", json!({})).unwrap(), json!({"cancelled": true}));
+        assert_eq!(a.execute("ui.cancelComment", json!({})).unwrap(), json!({"cancelled": false}));
+        assert_eq!((a.session.rev(), a.session.undo_depth()), (rev, depth), "cancelling changed nothing");
+        assert_eq!(a.session.doc.comments.len(), 4);
+        // Junk is refused or ignored, never a panic.
+        for junk in [json!(null), json!({"text": 7}), json!({"text": ["x"]}), json!("text")] {
+            let _ = a.execute("ui.newComment", junk.clone());
+            let _ = a.execute("ui.postComment", junk.clone());
+            let _ = a.execute("ui.cancelComment", junk);
+        }
+        // Where comments can't be added, the field doesn't open, and New Comment says why.
+        a.session.doc.settings.protection = Some("readOnly".into());
+        assert!(a.execute("ui.newComment", json!({})).is_err());
+        assert!(a.run("review.newComment", json!({})).is_err());
+        assert!(!panes::writing(&a));
     }
 
     /// #1055: with "only for the selected text" the margin column is gone and just the comment

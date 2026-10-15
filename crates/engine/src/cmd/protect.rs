@@ -226,6 +226,13 @@ pub(crate) fn check_before(s: &Session, id: &str, params: &Value) -> Result<bool
     }
 }
 
+/// Why a protected document refuses command `id` wherever it is run, if it does. A field whose
+/// text the command would add (a new comment's) doesn't open when the command is sure to be
+/// refused. Where only some places are editable, the command itself decides.
+pub fn refuses(s: &Session, id: &str) -> Option<String> {
+    check_before(s, id, &Value::Null).err().map(|e| e.to_string())
+}
+
 /// Formatting limited to a selection of styles: no direct formatting, and no locked style.
 fn check_formatting(s: &Session, id: &str, params: &Value) -> Result<(), CmdError> {
     let style = match id {

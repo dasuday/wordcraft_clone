@@ -1,9 +1,9 @@
 //! Review dialogs and the Restrict Editing pane (#412): Compare / Combine Documents (with the
 //! More >> comparison settings), AutoCorrect Options (AutoCorrect, AutoFormat As You Type and
-//! Math AutoCorrect) and the Restrict Editing side pane. Each ends by running a command
-//! (`review.compare`, `review.combine`, `tools.autocorrect`, `review.restrict`), so scripts and
-//! agents get the same result without them. Shown through [`crate::dialogs::Dialog::Review`] and
-//! [`crate::panes`].
+//! Math AutoCorrect), the user name asked for on the first comment, and the Restrict Editing side
+//! pane. Each ends by running a command (`review.compare`, `review.combine`, `tools.autocorrect`,
+//! `file.setAuthor`, `review.restrict`), so scripts and agents get the same result without them.
+//! Shown through [`crate::dialogs::Dialog::Review`] and [`crate::panes`].
 
 use egui::{Ui, vec2};
 use serde::Serialize;
@@ -19,6 +19,7 @@ use crate::theme::semibold;
 pub enum ReviewDialog {
     Compare(CompareForm),
     AutoCorrect(Box<AutoCorrectForm>),
+    CommentAuthor(AuthorForm),
 }
 
 impl ReviewDialog {
@@ -27,6 +28,7 @@ impl ReviewDialog {
             ReviewDialog::Compare(f) if f.combine => "combine",
             ReviewDialog::Compare(_) => "compare",
             ReviewDialog::AutoCorrect(_) => "autoCorrect",
+            ReviewDialog::CommentAuthor(_) => "commentAuthor",
         }
     }
 
@@ -36,16 +38,18 @@ impl ReviewDialog {
             ReviewDialog::Compare(f) if f.combine => "Combine Documents",
             ReviewDialog::Compare(_) => "Compare Documents",
             ReviewDialog::AutoCorrect(_) => "AutoCorrect",
+            ReviewDialog::CommentAuthor(_) => "User Name",
         }
     }
 }
 
-/// The dialog `ui.dialog` opens by `name`: `compare`, `combine` or `autoCorrect`.
-/// `restrictEditing` opens the Restrict Editing pane instead (no dialog).
+/// The dialog `ui.dialog` opens by `name`: `compare`, `combine`, `autoCorrect` or
+/// `commentAuthor`. `restrictEditing` opens the Restrict Editing pane instead (no dialog).
 pub fn open(name: &str, app: &mut WordApp) -> Option<ReviewDialog> {
     Some(match name {
         "compare" | "combine" => ReviewDialog::Compare(CompareForm::new(app, name == "combine")),
         "autoCorrect" => ReviewDialog::AutoCorrect(Box::new(AutoCorrectForm::new(app))),
+        "commentAuthor" => ReviewDialog::CommentAuthor(AuthorForm::new()),
         "restrictEditing" => {
             app.restrict.open = true;
             return None;
@@ -59,6 +63,7 @@ pub fn body(app: &mut WordApp, ui: &mut Ui, d: &mut ReviewDialog) -> bool {
     match d {
         ReviewDialog::Compare(f) => compare_ui(app, ui, f),
         ReviewDialog::AutoCorrect(f) => autocorrect_ui(app, ui, f),
+        ReviewDialog::CommentAuthor(f) => author_ui(app, ui, f),
     }
 }
 
@@ -89,6 +94,124 @@ fn error(ui: &mut Ui, message: &str) {
     if !message.is_empty() {
         ui.label(egui::RichText::new(message).small().color(ui.visuals().error_fg_color));
     }
+}
+
+// ---------------------------------------------------------------------------------------------
+// The user name, asked for on the first comment
+
+/// New Comment asks once for the name comments go under, while it is still the default
+/// ([`wordcraft_engine::DEFAULT_AUTHOR`]): filled in with the name the system has for the user.
+/// OK sets it (`file.setAuthor`, as File › Options does) and Skip keeps the default. Either way
+/// the comment's field opens next.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AuthorForm {
+    pub name: String,
+    pub message: String,
+    #[serde(skip)]
+    focus: bool,
+}
+
+impl AuthorForm {
+    pub fn new() -> AuthorForm {
+        AuthorForm { name: system_user_name().unwrap_or_default(), message: String::new(), focus: true }
+    }
+}
+
+impl Default for AuthorForm {
+    fn default() -> Self {
+        AuthorForm::new()
+    }
+}
+
+fn author_ui(app: &mut WordApp, ui: &mut Ui, f: &mut AuthorForm) -> bool {
+    ui.label(tl!("Your comments and tracked changes show this name. You can change it later in Options."));
+    ui.add_space(6.0);
+    ui.label(tl!("User name:"));
+    let r = ui.add(egui::TextEdit::singleline(&mut f.name).desired_width(320.0).char_limit(wordcraft_engine::cmd::file::MAX_AUTHOR_CHARS));
+    if std::mem::take(&mut f.focus) {
+        r.request_focus();
+    }
+    error(ui, &f.message);
+    let can = !f.name.trim().is_empty();
+    let (mut ok, mut skip) = (false, false);
+    ui.add_space(8.0);
+    ui.horizontal(|ui| {
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            skip = ui.button(tl!("Skip")).clicked() || ui.input(|i| i.key_pressed(egui::Key::Escape));
+            ok = ui.add_enabled(can, crate::widgets::primary_button(ui, tl!("OK"))).clicked()
+                || (can && ui.input(|i| i.key_pressed(egui::Key::Enter)));
+        });
+    });
+    if ok {
+        if let Err(e) = app.run("file.setAuthor", json!({"name": f.name.trim()})) {
+            f.message = e;
+            return false;
+        }
+    } else if !skip {
+        return false;
+    }
+    if crate::widgets::enabled(app, "review.newComment") {
+        crate::panes::start_comment(app, None);
+    }
+    true
+}
+
+/// The name the system has for the user: the account's full name where there is one (Linux and
+/// the BSDs: `/etc/passwd`, macOS: `id -F`), else the login name. None on the web.
+pub fn system_user_name() -> Option<String> {
+    let clean = |s: &str| {
+        let s: String = s.chars().filter(|c| !c.is_control()).take(wordcraft_engine::cmd::file::MAX_AUTHOR_CHARS).collect();
+        Some(s.trim().to_string()).filter(|s| !s.is_empty())
+    };
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let login = ["USER", "USERNAME", "LOGNAME"].into_iter().find_map(|k| std::env::var(k).ok().and_then(|v| clean(&v)));
+        #[cfg(all(unix, not(target_os = "macos")))]
+        if let Some(name) = passwd_full_name(login.as_deref()).and_then(|n| clean(&n)) {
+            return Some(name);
+        }
+        #[cfg(target_os = "macos")]
+        if let Some(name) =
+            std::process::Command::new("id").arg("-F").output().ok().and_then(|o| String::from_utf8(o.stdout).ok()).and_then(|n| clean(&n))
+        {
+            return Some(name);
+        }
+        login
+    }
+    #[cfg(target_arch = "wasm32")]
+    {
+        let _ = clean;
+        None
+    }
+}
+
+/// The full name (the GECOS field up to its first comma, `&` standing for the login name) of the
+/// account running WordCraft, from `/etc/passwd`: the account owning `/proc/self`, else the one
+/// named `login`.
+#[cfg(all(unix, not(target_os = "macos"), not(target_arch = "wasm32")))]
+fn passwd_full_name(login: Option<&str>) -> Option<String> {
+    use std::io::Read;
+    use std::os::unix::fs::MetadataExt;
+    let uid = std::fs::metadata("/proc/self").ok().map(|m| m.uid().to_string());
+    let mut passwd = String::new();
+    std::fs::File::open("/etc/passwd").ok()?.take(4 << 20).read_to_string(&mut passwd).ok()?;
+    gecos_name(&passwd, uid.as_deref(), login)
+}
+
+/// [`passwd_full_name`] on the text of a passwd file.
+#[cfg(any(test, all(unix, not(target_os = "macos"), not(target_arch = "wasm32"))))]
+fn gecos_name(passwd: &str, uid: Option<&str>, login: Option<&str>) -> Option<String> {
+    let entry = passwd.lines().map(|l| l.split(':').collect::<Vec<_>>()).find(|f| match uid {
+        Some(uid) => f.get(2) == Some(&uid),
+        None => login.is_some_and(|l| f.first() == Some(&l)),
+    })?;
+    let user = entry.first()?;
+    let full = entry.get(4)?.split(',').next()?.trim();
+    // `&` in the field is the login name, capitalized.
+    let mut chars = user.chars();
+    let cap: String = chars.next().map(|c| c.to_uppercase().chain(chars).collect()).unwrap_or_default();
+    Some(full.replace('&', &cap)).filter(|n| !n.is_empty())
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -829,5 +952,25 @@ mod tests {
         assert_eq!(p["caseChanges"], false);
         assert_eq!(p["showIn"], "new");
         assert!(p.get("original").is_none());
+    }
+
+    /// The first comment's name prompt starts from the account's full name: the GECOS field up to
+    /// its first comma, `&` read as the login name, and nothing for a blank or missing entry.
+    #[test]
+    fn the_name_prompt_reads_the_full_name() {
+        let passwd = "root:x:0:0:root:/root:/bin/sh\n\
+                      alpha:x:1000:1000:Alpha Writer,Room 1,,:/home/alpha:/bin/sh\n\
+                      beta:x:1001:1001:& Example:/home/beta:/bin/sh\n\
+                      gamma:x:1002:1002::/home/gamma:/bin/sh\n\
+                      broken";
+        assert_eq!(gecos_name(passwd, Some("1000"), None).as_deref(), Some("Alpha Writer"));
+        assert_eq!(gecos_name(passwd, None, Some("beta")).as_deref(), Some("Beta Example"));
+        assert_eq!(gecos_name(passwd, Some("1002"), Some("gamma")), None);
+        assert_eq!(gecos_name(passwd, Some("4242"), Some("alpha")), None);
+        assert_eq!(gecos_name("", None, None), None);
+        // Whatever it finds, the prompt's name is clean text within the author limit.
+        let name = system_user_name().unwrap_or_default();
+        assert!(name.chars().count() <= wordcraft_engine::cmd::file::MAX_AUTHOR_CHARS && !name.chars().any(char::is_control));
+        assert_eq!(name.trim(), name);
     }
 }

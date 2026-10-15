@@ -147,6 +147,8 @@ impl Exempt {
         for m in crate::credits::MODELS {
             names.extend([m.company, m.model, m.version].map(str::to_string));
         }
+        // The user's name, which New Comment's first prompt fills in from the system.
+        names.extend(crate::dialogs_review::system_user_name());
         Exempt { body: app.session.doc.plain_text(wordcraft_doc::StoryRef::Body), names }
     }
 

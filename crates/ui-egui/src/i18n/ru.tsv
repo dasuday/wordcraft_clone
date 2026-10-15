@@ -2630,3 +2630,7 @@ preview	Title	Пример
 # Reading Mode column widths (#1040)
 	Narrow	Узкая
 	Medium	Средняя
+	Edit	Изменить
+	Post	Опубликовать
+	Skip	Пропустить
+	Your comments and tracked changes show this name. You can change it later in Options.	Это имя будет у ваших комментариев и отслеживаемых изменений. Его можно изменить позже в разделе «Параметры».

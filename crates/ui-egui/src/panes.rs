@@ -2,6 +2,8 @@
 //! Accessibility and Alt Text (see `a11y_pane`), Restrict Editing ([`crate::dialogs_review`]), Comments,
 //! and the SmartArt Text Pane.
 
+use std::collections::BTreeMap;
+
 use egui::{Stroke, Ui, vec2};
 use serde_json::{Value, json};
 use wordcraft_doc::{Pos, StoryRef};
@@ -353,100 +355,466 @@ fn comments(app: &mut WordApp, ui: &mut Ui) {
         return;
     }
     if crate::widgets::icon_text_button(ui, "newComment", tl!("New Comment"), regular(12.5)).clicked() {
-        let _ = app.run("review.newComment", json!({"text": ""}));
+        let _ = app.run("review.newComment", json!({}));
     }
     ui.separator();
     let list = app.session.run("review.comments", &json!({})).unwrap_or_default();
     let t = Tokens::get(ui.ctx());
+    let card = egui::Frame::NONE.fill(t.input).stroke(Stroke::new(1.0, t.border)).corner_radius(6).inner_margin(8);
     egui::ScrollArea::vertical().show(ui, |ui| {
-        for c in list.as_array().cloned().unwrap_or_default() {
-            let id = c.get("id").and_then(Value::as_u64).unwrap_or(0);
-            let reply = c.get("parent").is_some_and(|p| !p.is_null());
-            egui::Frame::NONE.fill(t.input).stroke(Stroke::new(1.0, t.border)).corner_radius(6).inner_margin(8).show(ui, |ui| {
+        // The comment being written comes first, until it is posted or cancelled.
+        if writing(app) {
+            card.show(ui, |ui| {
                 ui.set_width(ui.available_width());
-                if reply {
-                    ui.add_space(0.0);
-                }
+                ui.label(egui::RichText::new(crate::canvas::author_name(&app.session.author)).font(semibold(12.0)));
+                compose_field(app, ui, None, None);
+            });
+            ui.add_space(6.0);
+        }
+        for c in list.as_array().cloned().unwrap_or_default() {
+            let Some(id) = c.get("id").and_then(Value::as_u64).and_then(|i| u32::try_from(i).ok()) else { continue };
+            let Some(comment) = app.session.doc.comments.get(&id).cloned() else { continue };
+            card.show(ui, |ui| {
+                ui.set_width(ui.available_width());
                 ui.horizontal(|ui| {
-                    ui.label(egui::RichText::new(c.get("author").and_then(Value::as_str).unwrap_or("")).font(semibold(12.0)));
-                    ui.label(egui::RichText::new(comment_stamp(c.get("date").and_then(Value::as_str).unwrap_or(""))).small().weak());
-                    if c.get("resolved").and_then(Value::as_bool).unwrap_or(false) {
+                    ui.label(egui::RichText::new(crate::canvas::author_name(&comment.author)).font(semibold(12.0)));
+                    ui.label(egui::RichText::new(crate::local_time::comment_time(&comment)).small().weak());
+                    if comment.resolved {
                         ui.label(egui::RichText::new(tl!("Resolved")).small().color(t.green));
                     }
                 });
-                // Editable comment text (one undo step per edit, like the balloons).
-                comment_editor(app, ui, id as u32, None, false);
-                let open_key = egui::Id::new(("comment_reply_open", id));
-                let mut replying = ui.data(|d| d.get_temp::<bool>(open_key)).unwrap_or(false);
-                ui.horizontal(|ui| {
+                // Posted: the text reads as written, and only its author can edit it.
+                comment_body(app, ui, id, None, None);
+                ui.horizontal_wrapped(|ui| {
                     if ui.small_button(tl!("Go to")).clicked()
                         && let Some(a) = c.get("anchor").filter(|a| !a.is_null())
                     {
                         let _ = app.run("caret.set", json!({"pos": a}));
                     }
-                    if ui.small_button(tl!("Reply")).clicked() {
-                        replying = true;
-                        ui.data_mut(|d| d.insert_temp(open_key, true));
-                        ui.data_mut(|d| d.insert_temp(egui::Id::new(("comment_reply_focus", id)), true));
+                    if !replying(app, id)
+                        && ui.add_enabled(crate::widgets::enabled(app, "review.reply"), egui::Button::new(tl!("Reply")).small()).clicked()
+                    {
+                        begin_reply(app, id);
                     }
-                    let resolved = c.get("resolved").and_then(Value::as_bool).unwrap_or(false);
-                    if ui.small_button(if resolved { tl!("Reopen") } else { tl!("Resolve") }).clicked() {
+                    if can_edit(app, id) && !editing(app, id) && ui.small_button(tl!("Edit")).clicked() {
+                        begin_edit(app, id);
+                    }
+                    if ui.small_button(if comment.resolved { tl!("Reopen") } else { tl!("Resolve") }).clicked() {
                         let _ = app.run("review.resolveComment", json!({"id": id}));
                     }
                     if ui.small_button(tl!("Delete")).clicked() {
                         let _ = app.run("review.deleteComment", json!({"id": id}));
                     }
                 });
-                if replying {
-                    let focus = ui.data_mut(|d| d.remove_temp::<bool>(egui::Id::new(("comment_reply_focus", id)))).unwrap_or(false);
-                    if reply_editor(app, ui, id as u32, None, focus) {
-                        ui.data_mut(|d| d.remove::<bool>(open_key));
-                    }
-                }
+                reply_field(app, ui, id, None, None);
             });
             ui.add_space(6.0);
         }
     });
 }
 
-fn edit_key(id: u32) -> egui::Id {
-    egui::Id::new(("comment_edit", id))
+/// Comment text being written and not yet in the document: a new comment, edits of posted
+/// comments and replies. Nothing reaches the document until it is posted (or saved, for an edit),
+/// and leaving a field keeps what was typed in it. Cancel or Escape throws it away. Saving,
+/// exporting, printing and closing write what is pending first ([`flush_comment_drafts`], #1348).
+/// Drafts belong to one document ([`Session::document_id`](wordcraft_engine::Session::document_id)):
+/// when another document replaces it they are dropped, so a comment there with the same id never
+/// shows them. A draft is removed only once its command succeeds, so a refused one stays.
+#[derive(Default)]
+pub(crate) struct CommentDrafts {
+    document: u64,
+    /// The new comment being written (New Comment opened its field).
+    new: Option<NewComment>,
+    /// Posted comments whose Edit is open, with their edited text.
+    edits: BTreeMap<u32, String>,
+    /// Comments with an open reply field, with what has been typed in it.
+    replies: BTreeMap<u32, String>,
+    /// The field that gets the keyboard on its next frame.
+    focus: Option<Field>,
 }
 
-fn reply_key(id: u32) -> egui::Id {
-    egui::Id::new(("comment_reply", id))
+impl CommentDrafts {
+    /// The drafts for `document`, dropping any left from another one.
+    fn of(&mut self, document: u64) -> &mut Self {
+        if self.document != document {
+            *self = CommentDrafts { document, ..Default::default() };
+        }
+        self
+    }
 }
 
-/// A comment's text, editable in place (the Comments pane and the balloons). Typing stays in a
-/// draft until the field loses focus; then [`commit_comment`] writes it back with one
-/// `review.editComment`, so each editing session is one undo step.
-pub(crate) fn comment_editor(app: &mut WordApp, ui: &mut Ui, id: u32, font: Option<egui::FontId>, focus: bool) {
+/// A comment field.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Field {
+    New,
+    Edit(u32),
+    Reply(u32),
+}
+
+/// A new comment being written: its place and its text.
+pub(crate) struct NewComment {
+    /// Where it goes: the selection when New Comment was chosen, else the word at the caret.
+    anchor: (Pos, Pos),
+    /// The document revision the place was last checked at, and the text it covered then (None
+    /// when it spans paragraphs). See [`refresh_anchor`].
+    rev: u64,
+    quoted: Option<String>,
+    text: String,
+}
+
+/// The drafts of the open document, when there are any.
+fn current(app: &WordApp) -> Option<&CommentDrafts> {
+    let d = &app.comment_drafts;
+    (d.document == app.session.document_id()).then_some(d)
+}
+
+fn drafts(app: &mut WordApp) -> &mut CommentDrafts {
+    let document = app.session.document_id();
+    app.comment_drafts.of(document)
+}
+
+/// A new comment is being written in the open document.
+pub(crate) fn writing(app: &WordApp) -> bool {
+    current(app).is_some_and(|d| d.new.is_some())
+}
+
+/// The new comment's field is in its balloon: balloons show comments. Else it is in the
+/// Comments pane.
+pub(crate) fn writing_in_balloon(app: &WordApp) -> bool {
+    writing(app) && app.session.balloons_shown() && app.session.prefs.markup.comments
+}
+
+/// Comment `id`'s Edit is open.
+pub(crate) fn editing(app: &WordApp, id: u32) -> bool {
+    current(app).is_some_and(|d| d.edits.contains_key(&id))
+}
+
+/// Comment `id` has an open reply field.
+pub(crate) fn replying(app: &WordApp, id: u32) -> bool {
+    current(app).is_some_and(|d| d.replies.contains_key(&id))
+}
+
+/// The pending edit of comment `id`'s text in the open document, if any.
+#[cfg(test)]
+pub(crate) fn comment_draft(app: &WordApp, id: u32) -> Option<String> {
+    current(app).and_then(|d| d.edits.get(&id).cloned())
+}
+
+/// What has been typed in comment `id`'s reply field, while it is open.
+#[cfg(test)]
+pub(crate) fn reply_draft(app: &WordApp, id: u32) -> Option<String> {
+    current(app).and_then(|d| d.replies.get(&id).cloned())
+}
+
+/// Give comment field `which` the keyboard on the next frame, as a click in it does.
+#[cfg(test)]
+pub(crate) fn focus_field(app: &mut WordApp, which: Field) {
+    drafts(app).focus = Some(which);
+}
+
+/// What has been typed for the new comment, while its field is open.
+#[cfg(test)]
+pub(crate) fn new_comment_text(app: &WordApp) -> Option<String> {
+    current(app).and_then(|d| d.new.as_ref()).map(|n| n.text.clone())
+}
+
+/// The new comment being written, for `ui.inspect`: its text and where its field is.
+pub(crate) fn writing_state(app: &WordApp) -> Value {
+    match current(app).and_then(|d| d.new.as_ref()) {
+        Some(n) => json!({"text": n.text, "in": if writing_in_balloon(app) { "balloon" } else { "pane" }}),
+        None => Value::Null,
+    }
+}
+
+/// New Comment for the user: a field for the comment opens where it will show and takes the
+/// keyboard, and nothing goes into the document until Post. The field is in the comment's balloon
+/// when balloons show comments, else in the Comments pane, which opens for it where there are no
+/// balloons (Draft and Web Layout, Read Mode, markup shown inline), as Word's Reviewing Pane does.
+/// A comment already being written keeps its place and gets the keyboard back. `text` fills the
+/// field.
+pub(crate) fn start_comment(app: &mut WordApp, text: Option<String>) -> Value {
+    let anchor = wordcraft_engine::cmd::review::comment_anchor(&app.session);
+    let (rev, quoted) = (app.session.rev(), quoted(&app.session.doc, &anchor));
+    let d = drafts(app);
+    match d.new.as_mut() {
+        Some(n) => {
+            if let Some(t) = text {
+                n.text = t;
+            }
+        }
+        None => d.new = Some(NewComment { anchor, rev, quoted, text: text.unwrap_or_default() }),
+    }
+    d.focus = Some(Field::New);
+    crate::canvas::deselect_balloon(app);
+    let balloon = writing_in_balloon(app);
+    if !balloon {
+        app.session.view.comments_pane = true;
+    }
+    json!({"pending": "comment", "in": if balloon { "balloon" } else { "pane" }})
+}
+
+/// The text from `a` to `b` when they are in one paragraph.
+fn quoted(doc: &wordcraft_doc::Document, (a, b): &(Pos, Pos)) -> Option<String> {
+    if a.story != b.story || a.path != b.path {
+        return None;
+    }
+    doc.para_at(a)?.text.get(a.off..b.off).map(str::to_string)
+}
+
+/// Keep the new comment's place as the document changes while it is written: it stays while it
+/// still covers the text it was opened on, follows that text when it moved within its paragraph,
+/// and else goes to the selection.
+fn refresh_anchor(app: &mut WordApp) {
+    let rev = app.session.rev();
+    let Some(n) = current(app).and_then(|d| d.new.as_ref()).filter(|n| n.rev != rev) else { return };
+    let ((a, b), was) = (n.anchor.clone(), n.quoted.clone());
+    let doc = &app.session.doc;
+    let fits = |p: &Pos| doc.para_at(p).is_some_and(|para| para.text.is_char_boundary(p.off));
+    let anchor = if fits(&a) && fits(&b) && (was.is_none() || quoted(doc, &(a.clone(), b.clone())) == was) {
+        (a, b)
+    } else {
+        was.as_deref()
+            .filter(|q| !q.is_empty())
+            .and_then(|q| {
+                let text = &doc.para_at(&a)?.text;
+                let at = text.match_indices(q).take(10_000).map(|(i, _)| i).min_by_key(|i| i.abs_diff(a.off))?;
+                Some((Pos { off: at, ..a.clone() }, Pos { off: at + q.len(), ..a.clone() }))
+            })
+            .unwrap_or_else(|| wordcraft_engine::cmd::review::comment_anchor(&app.session))
+    };
+    let quoted = quoted(&app.session.doc, &anchor);
+    if let Some(n) = drafts(app).new.as_mut() {
+        n.anchor = anchor;
+        n.quoted = quoted;
+        n.rev = rev;
+    }
+}
+
+/// Where the new comment's balloon hangs: the start of its place.
+pub(crate) fn writing_at(app: &mut WordApp) -> Option<Pos> {
+    refresh_anchor(app);
+    current(app).and_then(|d| d.new.as_ref()).map(|n| n.anchor.0.clone())
+}
+
+/// Post the new comment: `review.newComment` with its text at its place, one undo step. The field
+/// closes and the caret and selection stay where they were. A refusal is on the status line and
+/// the field keeps its text.
+pub(crate) fn post_comment(app: &mut WordApp) -> Result<Value, String> {
+    refresh_anchor(app);
+    let Some(n) = current(app).and_then(|d| d.new.as_ref()) else { return Err("no comment is being written".into()) };
+    let ((a, b), text) = (n.anchor.clone(), n.text.trim_end().to_string());
+    if text.trim().is_empty() {
+        return Err("the comment is empty".into());
+    }
+    let keep = std::mem::replace(&mut app.session.sel, wordcraft_engine::Selection { anchor: a.clone(), focus: b.clone() });
+    let r = app.run("review.newComment", json!({"text": text}));
+    if r.is_ok() {
+        // Its end mark went in at `b`, then its start mark at `a`: the selection keeps its text.
+        let past = |p: &Pos| past_mark(&past_mark(p, &b, false), &a, true);
+        app.session.sel = wordcraft_engine::Selection { anchor: past(&keep.anchor), focus: past(&keep.focus) };
+        let d = drafts(app);
+        d.new = None;
+        if d.focus == Some(Field::New) {
+            d.focus = None;
+        }
+        app.canvas.want_focus = true;
+    } else {
+        app.session.sel = keep;
+    }
+    r
+}
+
+/// `p` once a comment mark went in at `at`: a place after it moves past the mark, and one right
+/// at it too when `at_too` (a start mark, which goes before the text there).
+fn past_mark(p: &Pos, at: &Pos, at_too: bool) -> Pos {
+    if p.story == at.story && p.path == at.path && (p.off > at.off || (at_too && p.off == at.off)) {
+        Pos { off: p.off + wordcraft_doc::para::OBJ.len_utf8(), ..p.clone() }
+    } else {
+        p.clone()
+    }
+}
+
+/// Cancel the new comment: its field closes and the document is as it was. True when one was
+/// being written.
+pub(crate) fn cancel_comment(app: &mut WordApp) -> bool {
+    let d = drafts(app);
+    let was = d.new.take().is_some();
+    if d.focus == Some(Field::New) {
+        d.focus = None;
+    }
+    if was {
+        app.canvas.want_focus = true;
+    }
+    was
+}
+
+/// The new comment's field with Post and Cancel. Ctrl+Enter (Cmd+Enter on a Mac) posts and Escape
+/// cancels. Enter starts a new line.
+pub(crate) fn compose_field(app: &mut WordApp, ui: &mut Ui, font: Option<egui::FontId>, small: Option<egui::FontId>) {
+    let Some(mut text) = current(app).and_then(|d| d.new.as_ref()).map(|n| n.text.clone()) else { return };
+    let can = crate::widgets::enabled(app, "review.newComment");
+    let r = field(app, ui, Field::New, &mut text, tl!("Add a comment"), font, can);
+    if r.changed()
+        && let Some(n) = drafts(app).new.as_mut()
+    {
+        n.text = text.clone();
+    }
+    let key = field_key(ui, &r);
+    let (post, cancel) = field_buttons(ui, tl!("Post"), can && !text.trim().is_empty(), small);
+    if post || key == Some(FieldKey::Submit) {
+        let _ = post_comment(app);
+    } else if cancel || key == Some(FieldKey::Cancel) {
+        cancel_comment(app);
+    }
+}
+
+/// A posted comment's text, read-only. While its Edit is open, it is a field with Save and
+/// Cancel (Ctrl+Enter saves, Escape cancels). Saving is one `review.editComment`, so one undo step.
+pub(crate) fn comment_body(app: &mut WordApp, ui: &mut Ui, id: u32, font: Option<egui::FontId>, small: Option<egui::FontId>) {
+    let Some((part, resolved)) = app.session.doc.comments.get(&id).map(|c| (c.part, c.resolved)) else { return };
+    let Some(mut text) = current(app).and_then(|d| d.edits.get(&id).cloned()) else {
+        let t = Tokens::get(ui.ctx());
+        let body = app.session.doc.plain_text(StoryRef::Part(part));
+        let font = font.unwrap_or_else(|| egui::TextStyle::Body.resolve(ui.style()));
+        crate::canvas::comment_text(ui, body.trim(), font, if resolved { t.text_dim } else { t.text });
+        return;
+    };
+    let can = crate::widgets::enabled(app, "review.editComment");
+    let r = field(app, ui, Field::Edit(id), &mut text, tl!("Add a comment"), font, can);
+    if r.changed() {
+        drafts(app).edits.insert(id, text);
+    }
+    let key = field_key(ui, &r);
+    let (save, cancel) = field_buttons(ui, tl!("Save"), can, small);
+    if save || key == Some(FieldKey::Submit) {
+        // A refusal is on the status line, and the field keeps the text.
+        let _ = commit_comment(app, id);
+    } else if cancel || key == Some(FieldKey::Cancel) {
+        drafts(app).edits.remove(&id);
+    }
+}
+
+/// Edit is offered on the user's own comments (by author name, as Word tells them apart), where
+/// comments can change.
+pub(crate) fn can_edit(app: &WordApp, id: u32) -> bool {
+    app.session.doc.comments.get(&id).is_some_and(|c| c.author == app.session.author) && crate::widgets::enabled(app, "review.editComment")
+}
+
+/// Open comment `id`'s Edit: its text in a field, with the keyboard.
+pub(crate) fn begin_edit(app: &mut WordApp, id: u32) {
     let Some(part) = app.session.doc.comments.get(&id).map(|c| c.part) else { return };
-    let key = edit_key(id);
-    let mut text = ui.data(|d| d.get_temp::<String>(key)).unwrap_or_else(|| app.session.doc.plain_text(StoryRef::Part(part)));
-    let mut edit = egui::TextEdit::multiline(&mut text).desired_rows(1).desired_width(f32::INFINITY).hint_text(tl!("Add a comment"));
+    let text = app.session.doc.plain_text(StoryRef::Part(part));
+    let d = drafts(app);
+    d.edits.entry(id).or_insert(text);
+    d.focus = Some(Field::Edit(id));
+}
+
+/// Open a reply field under comment `id`, with the keyboard.
+pub(crate) fn begin_reply(app: &mut WordApp, id: u32) {
+    let d = drafts(app);
+    d.replies.entry(id).or_default();
+    d.focus = Some(Field::Reply(id));
+}
+
+/// Comment `id`'s reply field, while it is open, with Post and Cancel: Ctrl+Enter posts and Escape
+/// cancels. Leaving the field posts nothing: what was typed stays in it.
+pub(crate) fn reply_field(app: &mut WordApp, ui: &mut Ui, id: u32, font: Option<egui::FontId>, small: Option<egui::FontId>) {
+    let Some(mut text) = current(app).and_then(|d| d.replies.get(&id).cloned()) else { return };
+    let can = crate::widgets::enabled(app, "review.reply");
+    let r = field(app, ui, Field::Reply(id), &mut text, tl!("Write a reply"), font, can);
+    if r.changed() {
+        drafts(app).replies.insert(id, text.clone());
+    }
+    let key = field_key(ui, &r);
+    let blank = text.trim().is_empty();
+    let (post, cancel) = field_buttons(ui, tl!("Post"), can && !blank, small);
+    if (post || key == Some(FieldKey::Submit)) && !blank {
+        // A refusal is on the status line, and the field keeps the text.
+        let _ = commit_reply(app, id);
+    } else if cancel || key == Some(FieldKey::Cancel) {
+        drafts(app).replies.remove(&id);
+    }
+}
+
+/// A comment field: several lines, the panel's width, `hint` while empty. It takes the keyboard
+/// when [`CommentDrafts::focus`] asks for it.
+fn field(app: &mut WordApp, ui: &mut Ui, which: Field, text: &mut String, hint: &str, font: Option<egui::FontId>, enabled: bool) -> egui::Response {
+    let (kind, id, rows) = match which {
+        Field::New => ("comment_new", 0, 2),
+        Field::Edit(id) => ("comment_edit", id, 1),
+        Field::Reply(id) => ("comment_reply", id, 1),
+    };
+    let mut edit = egui::TextEdit::multiline(text)
+        .id(field_id(app, ui, kind, id))
+        .interactive(enabled)
+        .desired_rows(rows)
+        .desired_width(f32::INFINITY)
+        .hint_text(hint);
     if let Some(f) = font {
         edit = edit.font(f);
     }
     let r = ui.add(edit);
-    if focus {
+    if current(app).is_some_and(|d| d.focus == Some(which)) {
+        drafts(app).focus = None;
         r.request_focus();
+        // The page doesn't take the keyboard back after the command that opened the field (a
+        // ribbon button hands it to the page otherwise).
+        app.canvas.want_focus = false;
     }
-    if r.changed() {
-        ui.data_mut(|d| d.insert_temp(key, text));
-    }
-    if r.lost_focus() {
-        commit_comment(app, ui.ctx(), id);
-    }
+    r
 }
 
-/// Write a comment's draft text back, when it has one that differs from the comment.
-pub(crate) fn commit_comment(app: &mut WordApp, ctx: &egui::Context, id: u32) {
-    let Some(text) = ctx.data_mut(|d| d.remove_temp::<String>(edit_key(id))) else { return };
-    let Some(part) = app.session.doc.comments.get(&id).map(|c| c.part) else { return };
-    if text != app.session.doc.plain_text(StoryRef::Part(part)) {
-        let _ = app.run("review.editComment", json!({"id": id, "text": text}));
+/// A comment field's widget id, per document: egui's own state for the field (its cursor and
+/// undo history) never carries over to another document's comment with the same id.
+fn field_id(app: &WordApp, ui: &Ui, kind: &str, id: u32) -> egui::Id {
+    ui.id().with((kind, app.session.document_id(), id))
+}
+
+/// What a comment field's keys asked for this frame.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum FieldKey {
+    /// Ctrl+Enter (Cmd+Enter on a Mac): post, or save an edit.
+    Submit,
+    /// Escape: cancel.
+    Cancel,
+}
+
+fn field_key(ui: &mut Ui, r: &egui::Response) -> Option<FieldKey> {
+    // Escape takes the keyboard from the field (egui's own handling) before this sees it.
+    if r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+        return Some(FieldKey::Cancel);
     }
+    // The field leaves Ctrl+Enter alone (Enter alone is a new line).
+    (r.has_focus() && ui.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::Enter))).then_some(FieldKey::Submit)
+}
+
+/// A comment field's buttons: `ok` (Post or Save, greyed out unless `can`) and Cancel. Returns
+/// which was clicked.
+fn field_buttons(ui: &mut Ui, ok: &str, can: bool, small: Option<egui::FontId>) -> (bool, bool) {
+    let t = Tokens::get(ui.ctx());
+    let label = |s: &str| match &small {
+        Some(f) => egui::RichText::new(s).font(f.clone()),
+        None => egui::RichText::new(s),
+    };
+    ui.horizontal(|ui| {
+        let ok = ui.add_enabled(can, egui::Button::new(label(ok).color(t.on_accent)).fill(t.accent).small()).clicked();
+        let cancel = ui.add(egui::Button::new(label(tl!("Cancel"))).small()).clicked();
+        (ok, cancel)
+    })
+    .inner
+}
+
+/// Write a comment's edited text back, when it differs from the comment, and close its Edit. A
+/// refused edit keeps it open with the text.
+pub(crate) fn commit_comment(app: &mut WordApp, id: u32) -> Result<(), String> {
+    let Some(text) = current(app).and_then(|d| d.edits.get(&id).map(|t| t.trim_end().to_string())) else { return Ok(()) };
+    if let Some(part) = app.session.doc.comments.get(&id).map(|c| c.part)
+        && text != app.session.doc.plain_text(StoryRef::Part(part))
+    {
+        app.run("review.editComment", json!({"id": id, "text": text}))?;
+    }
+    drafts(app).edits.remove(&id);
+    Ok(())
 }
 
 /// The comment a reply to `id` answers: replies to a reply join its thread.
@@ -457,36 +825,82 @@ fn thread_root(app: &WordApp, id: u32) -> u32 {
     }
 }
 
-/// A field for replying to a comment. When it loses focus a non-empty reply is posted with
-/// `review.reply`; returns true when the field is done (posted or left empty).
-pub(crate) fn reply_editor(app: &mut WordApp, ui: &mut Ui, id: u32, font: Option<egui::FontId>, focus: bool) -> bool {
-    let key = reply_key(id);
-    let mut text = ui.data(|d| d.get_temp::<String>(key)).unwrap_or_default();
-    let mut edit = egui::TextEdit::multiline(&mut text).desired_rows(1).desired_width(f32::INFINITY).hint_text(tl!("Write a reply"));
-    if let Some(f) = font {
-        edit = edit.font(f);
+/// Post the reply typed under comment `id` (nothing when it is blank) and close its field. A
+/// refused reply keeps the field open with the text.
+pub(crate) fn commit_reply(app: &mut WordApp, id: u32) -> Result<(), String> {
+    let Some(text) = current(app).and_then(|d| d.replies.get(&id).cloned()) else { return Ok(()) };
+    if !text.trim().is_empty() && app.session.doc.comments.contains_key(&id) {
+        let root = thread_root(app, id);
+        app.run("review.reply", json!({"id": root, "text": text.trim_end()}))?;
     }
-    let r = ui.add(edit);
-    if focus {
-        r.request_focus();
-    }
-    if r.changed() {
-        ui.data_mut(|d| d.insert_temp(key, text));
-    }
-    if r.lost_focus() {
-        commit_reply(app, ui.ctx(), id);
-        return true;
-    }
-    false
+    drafts(app).replies.remove(&id);
+    Ok(())
 }
 
-/// Post a pending reply draft to comment `id` (nothing when there is none or it is blank).
-pub(crate) fn commit_reply(app: &mut WordApp, ctx: &egui::Context, id: u32) {
-    let Some(text) = ctx.data_mut(|d| d.remove_temp::<String>(reply_key(id))) else { return };
-    if !text.trim().is_empty() {
-        let root = thread_root(app, id);
-        let _ = app.run("review.reply", json!({"id": root, "text": text.trim_end()}));
+/// A click on the page: empty comment fields (and Edits with nothing changed) close, and what has
+/// been typed stays in its field, unposted, until it is posted or cancelled.
+pub(crate) fn leave_fields(app: &mut WordApp) {
+    let unchanged: Vec<u32> = current(app)
+        .map(|d| {
+            d.edits
+                .iter()
+                .filter(|(id, t)| app.session.doc.comments.get(id).is_none_or(|c| app.session.doc.plain_text(StoryRef::Part(c.part)) == **t))
+                .map(|(id, _)| *id)
+                .collect()
+        })
+        .unwrap_or_default();
+    let d = drafts(app);
+    if d.new.as_ref().is_some_and(|n| n.text.trim().is_empty()) {
+        d.new = None;
     }
+    d.replies.retain(|_, t| !t.trim().is_empty());
+    d.edits.retain(|id, _| !unchanged.contains(id));
+    d.focus = None;
+}
+
+/// Any comment field is open in the open document.
+pub(crate) fn has_fields(app: &WordApp) -> bool {
+    current(app).is_some_and(|d| d.new.is_some() || !d.edits.is_empty() || !d.replies.is_empty())
+}
+
+/// A field is open in comment `id`'s balloon: its Edit or a reply's, or its reply field.
+pub(crate) fn thread_has_fields(app: &WordApp, id: u32) -> bool {
+    current(app).is_some_and(|d| {
+        d.replies.contains_key(&id) || d.edits.keys().any(|k| *k == id || app.session.doc.comments.get(k).is_some_and(|c| c.parent == Some(id)))
+    })
+}
+
+/// Write every pending comment, edit and reply to the document, so a save has them and a close,
+/// New or Open sees them as unsaved changes (#1348). Every one is tried. The first refusal is
+/// returned (and is on the status line), and refused ones stay. A new comment with nothing typed
+/// is no change and stays as it is.
+pub(crate) fn flush_comment_drafts(app: &mut WordApp) -> Result<(), String> {
+    let (edits, replies, new): (Vec<u32>, Vec<u32>, bool) = match current(app) {
+        Some(d) => {
+            (d.edits.keys().copied().collect(), d.replies.keys().copied().collect(), d.new.as_ref().is_some_and(|n| !n.text.trim().is_empty()))
+        }
+        None => return Ok(()),
+    };
+    let mut first = Ok(());
+    for id in edits {
+        let r = commit_comment(app, id);
+        if first.is_ok() {
+            first = r;
+        }
+    }
+    for id in replies {
+        let r = commit_reply(app, id);
+        if first.is_ok() {
+            first = r;
+        }
+    }
+    if new {
+        let r = post_comment(app).map(|_| ());
+        if first.is_ok() {
+            first = r;
+        }
+    }
+    first
 }
 
 /// Style Inspector: the paragraph and character levels at the caret, each with its style and the
@@ -707,11 +1121,6 @@ fn trim_num(x: f64) -> String {
     s.trim_end_matches('0').trim_end_matches('.').to_string()
 }
 
-/// `2026-10-12T04:44:00Z` → `2026-10-12 04:44` (date and time, no seconds) for comment cards.
-fn comment_stamp(iso: &str) -> String {
-    iso.chars().take(16).map(|c| if c == 'T' { ' ' } else { c }).collect()
-}
-
 /// `dotDash` → `Dot dash` (enum values from the document model).
 fn camel_words(s: &str) -> String {
     let mut out = String::with_capacity(s.len() + 4);
@@ -726,18 +1135,6 @@ fn camel_words(s: &str) -> String {
         }
     }
     out
-}
-
-#[cfg(test)]
-mod tests {
-    use super::comment_stamp;
-
-    #[test]
-    fn comment_stamp_keeps_date_and_time() {
-        assert_eq!(comment_stamp("2026-10-12T04:44:31Z"), "2026-10-12 04:44");
-        assert_eq!(comment_stamp("2026-10-12"), "2026-10-12");
-        assert_eq!(comment_stamp(""), "");
-    }
 }
 
 #[cfg(test)]

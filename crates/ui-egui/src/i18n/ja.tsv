@@ -2233,3 +2233,7 @@
 # Reading Mode column widths (#1040)
 	Narrow	狭い
 	Medium	中
+	Edit	編集
+	Post	投稿
+	Skip	スキップ
+	Your comments and tracked changes show this name. You can change it later in Options.	コメントと変更履歴にはこの名前が表示されます。後でオプションから変更できます。

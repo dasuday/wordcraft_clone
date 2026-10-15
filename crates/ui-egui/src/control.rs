@@ -58,6 +58,8 @@ pub fn inspect(app: &mut WordApp, ctx: &egui::Context) -> Value {
         "caret": caret,
         "balloons": app.canvas.balloon_rects.iter().map(|(id, r)| json!({"id": id, "rect": [r.left(), r.top(), r.width(), r.height()]})).collect::<Vec<_>>(),
         "balloon": app.canvas.balloon,
+        "commentDraft": crate::panes::writing_state(app),
+        "commentDraftRect": app.canvas.draft_rect.map(|r| [r.left(), r.top(), r.width(), r.height()]),
         "focused": app.canvas.focused,
         "title": app.title_stem(),
         "dirty": app.session.dirty,
