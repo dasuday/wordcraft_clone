@@ -72,16 +72,40 @@ fn extend_page_range(bytes: &[u8], from: usize) -> usize {
     if i == digit_start { from } else { i }
 }
 
+/// `text` with every non-ASCII space (a nonbreaking space between `S.W.` and `3d`, a thin or
+/// narrow space) read as a plain space, so a rule's literal space and the pin-cite scan match it
+/// as a reader would. Returns the text to scan and, for each of its byte offsets (and its end),
+/// the offset in `text`; `None` when there is nothing to change.
+fn plain_spaces(text: &str) -> Option<(String, Vec<usize>)> {
+    let odd = |c: char| !c.is_ascii() && c.is_whitespace();
+    if !text.chars().any(odd) {
+        return None;
+    }
+    let mut out = String::with_capacity(text.len());
+    let mut map = Vec::with_capacity(text.len() + 1);
+    for (i, c) in text.char_indices() {
+        let c = if odd(c) { ' ' } else { c };
+        for _ in 0..c.len_utf8() {
+            map.push(i);
+        }
+        out.push(c);
+    }
+    map.push(text.len());
+    Some((out, map))
+}
+
 /// Scan the document with `pack` and return form suggestions.
 pub fn check_document(doc: &Document, pack: &CompiledPack) -> Vec<Finding> {
     let mut out = Vec::new();
     for story in doc.counted_stories() {
         for path in doc.para_paths(story) {
             let Some(para) = doc.para(story, &path) else { continue };
-            let text = &para.text;
-            if text.is_empty() {
+            if para.text.is_empty() {
                 continue;
             }
+            let plain = plain_spaces(&para.text);
+            let text = plain.as_ref().map_or(para.text.as_str(), |(t, _)| t.as_str());
+            let orig = |off: usize| plain.as_ref().map_or(off, |(_, map)| map[off]);
             for rule in &pack.rules {
                 for m in rule.detect.find_iter(text) {
                     let end = if rule.extend_tail { extend_span(text, m.end()) } else { m.end() };
@@ -89,8 +113,8 @@ pub fn check_document(doc: &Document, pack: &CompiledPack) -> Vec<Finding> {
                     if rule.valid.as_ref().is_some_and(|v| v.is_match(slice)) {
                         continue;
                     }
-                    let start = Pos { story, path: path.clone(), off: m.start() };
-                    let end_pos = Pos { story, path: path.clone(), off: end };
+                    let start = Pos { story, path: path.clone(), off: orig(m.start()) };
+                    let end_pos = Pos { story, path: path.clone(), off: orig(end) };
                     let msg = format!("{} ({})", rule.message, rule.source);
                     out.push(Finding::at(rule.id.clone(), "warning", msg, start, end_pos));
                     if out.len() >= MAX_FINDINGS {
@@ -168,6 +192,26 @@ mod tests {
     fn double_space_before_parenthetical_is_ok() {
         let ids = check_text("missouri", "Thummel v. King, 570 S.W.2d 679  (Mo. banc 1978)");
         assert!(!ids.iter().any(|id| id == "moCaseParenthetical"));
+    }
+
+    #[test]
+    fn nonbreaking_spaces_read_as_spaces() {
+        // A correct cite typed with nonbreaking spaces is still correct.
+        let good = "Thummel v. King, 570\u{a0}S.W.2d\u{a0}679,\u{a0}680 (Mo.\u{a0}banc 1978)";
+        let ids = check_text("missouri", good);
+        assert!(!ids.iter().any(|id| id == "moCaseParenthetical"), "{ids:?}");
+        let ids = check_text("federal", "Smith v. Jones, 100 F.\u{a0}Supp.\u{a0}3d 200 (D.\u{a0}Mo. 2015)");
+        assert!(!ids.iter().any(|id| id == "federalCourtParen"), "{ids:?}");
+        // A rule written with a plain space still finds the cite typed with nonbreaking ones.
+        let ids = check_text("federal", "Smith v. Jones, 100 F.\u{a0}Supp.\u{a0}3d 200");
+        assert!(ids.iter().any(|id| id == "federalCourtParen"), "{ids:?}");
+        // A bad one is flagged, and the span lands on the original text's offsets.
+        let bad = "See\u{a0}Thummel v. King, 570\u{a0}S.W.2d 679,\u{a0}680";
+        let fs = findings("missouri", bad);
+        let f = fs.iter().find(|f| f.check_id == "moCaseParenthetical").expect("flagged");
+        assert_eq!(f.end.as_ref().expect("end").off, bad.len());
+        let start = f.start.as_ref().expect("start").off;
+        assert!(bad.is_char_boundary(start) && bad[start..].starts_with("570"), "{start}");
     }
 
     #[test]
