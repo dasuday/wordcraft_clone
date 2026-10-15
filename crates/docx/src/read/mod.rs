@@ -458,6 +458,7 @@ fn toc_field_to_heading(body: &mut Blocks) {
                         dirty: *dirty,
                         code: false,
                         form: String::new(),
+                        code_xml: String::new(),
                     },
                     Some(toc_range_end(body, i)?),
                 ),
