@@ -666,11 +666,11 @@ fn loop_mask_filter_image() {
 fn loop_through_inherited_paint() {
     let d = pic(&format!(r##"<g fill="url(#p)"><pattern id="p" {PAT}><rect width="5" height="5"/></pattern><rect width="50" height="50"/></g>"##));
     assert!(refused_as_loop(&d));
-    // A pattern template that leads back to itself.
-    let href = pic(&format!(
-        r##"<pattern id="a" {PAT} href="#b"/><pattern id="b" {PAT} href="#a"><rect width="5" height="5"/></pattern><rect width="50" height="50" fill="url(#a)"/>"##
+    // A pattern template chain that comes back to a later link (usvg's template walk never ends).
+    let rho = pic(&format!(
+        r##"<pattern id="a" {PAT} href="#b"/><pattern id="b" {PAT} href="#c"/><pattern id="c" {PAT} href="#b"><rect width="5" height="5"/></pattern><rect width="50" height="50" fill="url(#a)"/>"##
     ));
-    assert!(refused_as_loop(&href));
+    assert!(refused_as_loop(&rho));
     // A pattern's own fill or stroke naming itself (in a style sheet, a `style` attribute, or
     // through a `<use>`) is removed by usvg, so these are drawn.
     let ok = |body: &str| {
@@ -758,5 +758,150 @@ fn elements_built_through_markers_and_clips_are_capped() {
     let chart =
         pic(&format!(r##"<marker id="m"><circle r="2"/><circle r="1"/><circle r="3"/></marker><polyline points="{points}" marker-mid="url(#m)"/>"##));
     let r = parse(chart.as_bytes());
+    assert!(r.is_ok(), "{:?}", r.err());
+}
+
+/// Review 7 (n1): an earlier element with the same id doesn't hide a pattern from the check.
+#[test]
+fn loop_behind_a_duplicate_id() {
+    let d = pic(&format!(
+        r##"<defs><g id="p"/><pattern id="p" {PAT}><rect width="5" height="5" mask="url(#m)"/></pattern><mask id="m" maskUnits="userSpaceOnUse" x="0" y="0" width="50" height="50"><rect width="50" height="50" fill="url(#p)"/></mask></defs><rect width="50" height="50" fill="url(#p)"/>"##
+    ));
+    assert!(refused_as_loop(&d));
+    let later = d.replace(r##"<g id="p"/>"##, "").replace("</defs>", r##"<g id="p"/></defs>"##);
+    assert!(refused_as_loop(&later));
+}
+
+/// Review 7 (n2): a filter image draws its target's whole subtree, which may use the filter.
+#[test]
+fn loop_below_a_filter_image_target() {
+    let d = pic(
+        r##"<filter id="f"><feImage href="#g"/></filter><g id="g"><rect width="5" height="5" filter="url(#f)"/></g><rect width="50" height="50" filter="url(#f)"/>"##,
+    );
+    assert!(refused_as_loop(&d));
+}
+
+/// Review 7 (n3): style sheets are read in any namespace, as usvg reads them.
+#[test]
+fn loop_through_a_sheet_in_another_namespace() {
+    let m = |a: &str, c: &str| {
+        format!(
+            r##"<mask id="{a}" maskUnits="userSpaceOnUse" x="0" y="0" width="50" height="50"><rect class="{c}" width="50" height="50" fill="white"/></mask>"##
+        )
+    };
+    let d = pic(&format!(
+        r##"<x:style xmlns:x="urn:x">.a{{mask:url(#m2)}} .b{{mask:url(#m3)}} .c{{mask:url(#m1)}}</x:style><defs>{}{}{}</defs><rect width="50" height="50" mask="url(#m1)"/>"##,
+        m("m1", "a"),
+        m("m2", "b"),
+        m("m3", "c")
+    ));
+    assert!(refused_as_loop(&d));
+}
+
+/// Review 7 (n4): a comment in a `style` attribute doesn't hide the property.
+#[test]
+fn loop_through_a_style_attribute_with_a_comment() {
+    let d = pic(&format!(
+        r##"<g style="/**/fill:url(#p)"><pattern id="p" {PAT}><rect width="5" height="5"/></pattern><rect width="50" height="50"/></g>"##
+    ));
+    assert!(refused_as_loop(&d));
+}
+
+/// Review 7 (n5): a pattern's template is the first `href` attribute, whichever the `<use>` rule picks.
+#[test]
+fn loop_through_either_href() {
+    let d = pic(&format!(
+        r##"<pattern id="s" {PAT} href="#t" xlink:href="#u"/><pattern id="t" {PAT}><rect width="5" height="5" fill="url(#s)"/></pattern><pattern id="u" {PAT}><rect width="5" height="5"/></pattern><rect width="50" height="50" fill="url(#s)"/>"##
+    ));
+    assert!(refused_as_loop(&d));
+}
+
+/// Review 7 (n6): the same for a filter image.
+#[test]
+fn loop_through_either_filter_image_href() {
+    let d = pic(&format!(
+        r##"<defs><filter id="f"><feImage href="#r" xlink:href="#ok"/></filter><rect id="r" width="5" height="5" fill="url(#p)"/><rect id="ok" width="5" height="5"/><pattern id="p" {PAT}><rect width="5" height="5" filter="url(#f)"/></pattern></defs><rect width="50" height="50" filter="url(#f)"/>"##
+    ));
+    assert!(refused_as_loop(&d));
+}
+
+/// Review 7 (n7): a marker beside a loop that doesn't go through it must not hide the loop.
+#[test]
+fn loop_beside_a_marker() {
+    let d = pic(&format!(
+        r##"<defs><pattern id="p" {PAT}><path d="M0 0L5 5L9 0" stroke="black" marker-mid="url(#m)"/><rect width="5" height="5" mask="url(#q)"/></pattern><marker id="m" markerWidth="4" markerHeight="4"><rect width="2" height="2" mask="url(#q)"/></marker><mask id="q" maskUnits="userSpaceOnUse" x="0" y="0" width="50" height="50"><rect width="50" height="50" fill="url(#p)"/></mask></defs><rect width="50" height="50" fill="url(#p)"/>"##
+    ));
+    assert!(refused_as_loop(&d));
+}
+
+/// Review 7 C-3: a marker holding a long path, used by a long path, builds a segment per segment pair.
+#[test]
+fn big_paths_in_markers_are_weighted() {
+    let long = format!("M0 0{}", "h1".repeat(60_000));
+    let d = pic(&format!(r##"<marker id="m" overflow="visible"><path d="{long}"/></marker><path d="{long}" stroke="black" marker-mid="url(#m)"/>"##));
+    let t = std::time::Instant::now();
+    let r = parse(d.as_bytes());
+    assert!(matches!(&r, Err(Error::Parse(m)) if m.contains("many elements")), "{:?}", r.err());
+    assert!(t.elapsed() < std::time::Duration::from_secs(5));
+}
+
+fn refused_as_selectors(doc: &str) -> bool {
+    let t = std::time::Instant::now();
+    let r = parse(doc.as_bytes());
+    matches!(&r, Err(Error::Parse(m)) if m.contains("selectors")) && t.elapsed() < std::time::Duration::from_secs(5)
+}
+
+/// Review 7 C-4: simplecss matches a selector by recursion along its combinators, deep enough to
+/// overflow the stack; in any namespace, with or without clip paths and the like.
+#[test]
+fn long_selectors_are_refused() {
+    let sel = "*+".repeat(100_000);
+    let plain = pic(&format!("<style>{sel}*{{fill:red}}</style>{}", "<g/>".repeat(100_000)));
+    assert!(refused_as_selectors(&plain));
+    let foreign = pic(&format!(
+        r##"<x:style xmlns:x="urn:x">{sel}*{{fill:red}}</x:style><clipPath id="c"><rect width="5" height="5"/></clipPath><rect width="9" height="9" clip-path="url(#c)"/>{}"##,
+        "<g/>".repeat(100_000)
+    ));
+    assert!(refused_as_selectors(&foreign));
+}
+
+/// Review 7 I-3: a descendant selector with many hops against a deep tree backtracks forever.
+#[test]
+fn backtracking_selectors_are_refused() {
+    let deep = format!("{}<rect width=\"5\" height=\"5\"/>{}", "<g>".repeat(200), "</g>".repeat(200));
+    let d = pic(&format!("<style>q g g g g g g g g g g g g rect{{fill:red}}</style>{deep}"));
+    assert!(refused_as_selectors(&d));
+    // A few hops in an ordinary tree are fine.
+    let ok = pic("<style>g g rect{fill:red} g > rect{fill:blue} .a + .b{fill:green}</style><g><g><rect width=\"5\" height=\"5\"/></g></g>");
+    assert!(parse(ok.as_bytes()).is_ok());
+}
+
+/// Review 7 I-3: a gradient template chain that comes back to a later link never ends in usvg.
+#[test]
+fn gradient_template_chains_that_loop_are_refused() {
+    let d = pic(
+        r##"<linearGradient id="a" href="#b"/><linearGradient id="b" href="#c"/><linearGradient id="c" href="#b"><stop offset="0" stop-color="red"/></linearGradient><rect width="50" height="50" fill="url(#a)"/>"##,
+    );
+    assert!(refused_as_loop(&d));
+    let ok = pic(
+        r##"<linearGradient id="a" href="#b"/><linearGradient id="b"><stop offset="0" stop-color="red"/></linearGradient><rect width="50" height="50" fill="url(#a)"/>"##,
+    );
+    assert!(parse(ok.as_bytes()).is_ok());
+}
+
+/// Review 7 I-2: a web font and a long comment in a sheet are ordinary.
+#[test]
+fn sheets_with_fonts_and_comments_are_accepted() {
+    let font = "A".repeat(40_000);
+    let d = pic(&format!(
+        r##"<style>@font-face{{font-family:"F";src:url(data:font/woff2;base64,{font})}} .a{{clip-path:url(#c)}}</style><clipPath id="c"><rect width="5" height="5"/></clipPath><rect class="a" width="9" height="9"/>"##
+    ));
+    let r = parse(d.as_bytes());
+    assert!(r.is_ok(), "{:?}", r.err());
+    let comment = "x".repeat(2800);
+    let d = pic(&format!(
+        r##"<style>/* generated by {comment} */ .a{{clip-path:url(#c)}}</style><clipPath id="c"><rect width="5" height="5"/></clipPath><rect class="a" width="9" height="9"/>"##
+    ));
+    let r = parse(d.as_bytes());
     assert!(r.is_ok(), "{:?}", r.err());
 }

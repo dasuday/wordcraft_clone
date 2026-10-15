@@ -7,7 +7,7 @@
 
 use std::collections::HashMap;
 
-use super::{SVG_NS, link};
+use super::SVG_NS;
 
 type Node<'a, 'i> = usvg::roxmltree::Node<'a, 'i>;
 
@@ -17,8 +17,11 @@ const MAX_SPECIALS: usize = 1 << 19;
 const MAX_EDGES: usize = 1 << 22;
 /// Most elements, links and style rules looked at while finding the references.
 const MAX_STEPS: u64 = 1 << 25;
-/// Longest rule selector read (the matcher recurses along a selector's parts).
-const MAX_SELECTOR: usize = 2048;
+/// Most combinators one selector may have (the matcher recurses along them).
+const MAX_COMBINATORS: usize = 32;
+/// Most matching work the style sheets may cost: for each selector, the elements times the
+/// ancestors it may try for each descendant combinator.
+const MAX_MATCH_WORK: u64 = 1 << 30;
 /// Most rules naming a `url(` that are matched.
 const MAX_URL_RULES: usize = 4096;
 
@@ -29,6 +32,10 @@ pub(crate) enum Refusal {
     Loop,
     /// More than the bounds above.
     TooBig,
+    /// A `style` attribute names an id in text the CSS reader can't parse.
+    Unreadable,
+    /// A style sheet selector that matching would recurse or backtrack too far on.
+    Selectors,
 }
 
 /// The clip paths, masks, patterns, filters and markers of a picture, and who refers to whom.
@@ -43,12 +50,15 @@ pub(crate) struct Graph {
     pub edges: Vec<Vec<u32>>,
     /// Every one after all that refer to it.
     pub order: Vec<u32>,
+    /// Edges left out because they close a loop through a marker (usvg builds a marker inside
+    /// itself once at most): `(from, to)`.
+    pub closing: Vec<(u32, u32)>,
 }
 
 fn is_special(n: Node) -> bool {
     n.is_element()
         && matches!(n.tag_name().namespace(), None | Some(SVG_NS))
-        && matches!(n.tag_name().name(), "marker" | "clipPath" | "mask" | "pattern" | "filter")
+        && matches!(n.tag_name().name(), "marker" | "clipPath" | "mask" | "pattern" | "filter" | "linearGradient" | "radialGradient")
 }
 
 /// The properties an element passes on to what it holds.
@@ -95,22 +105,194 @@ impl simplecss::Element for Css<'_, '_> {
     }
 }
 
+/// The `id`s in `v` named by `url(#id)`.
+fn url_count(v: &str) -> usize {
+    let mut n = 0usize;
+    url_ids(v, |_| n += 1);
+    n
+}
+
 /// A style sheet rule that names ids: `(name, ids)` for each such declaration.
 struct Rule<'a> {
     selector: simplecss::Selector<'a>,
     names: Vec<(&'a str, Vec<&'a str>)>,
 }
 
-/// The graph for `xml`. `ids` maps an id to the first element holding it.
-pub(crate) fn graph<'a, 'i>(xml: &'a usvg::roxmltree::Document<'i>, ids: &HashMap<&str, Node<'a, 'i>>) -> Result<Graph, Refusal> {
+/// Elements called `style` in any namespace (usvg reads sheets by local name).
+fn style_texts<'a>(xml: &'a usvg::roxmltree::Document<'_>) -> Vec<&'a str> {
+    xml.descendants()
+        .filter(|e| e.is_element() && e.tag_name().name() == "style")
+        .flat_map(|e| e.descendants())
+        .filter_map(|d| d.text().filter(|_| d.is_text()))
+        .collect()
+}
+
+/// The selectors in a style sheet's text: what comes before each `{` outside a block, with
+/// comments, strings, at-rules and declaration blocks left out.
+fn preludes(text: &str) -> Result<Vec<String>, Refusal> {
+    let b = text.as_bytes();
+    let (mut out, mut cur): (Vec<String>, Vec<u8>) = (Vec::new(), Vec::new());
+    let (mut depth, mut i) = (0usize, 0usize);
+    while let Some(&c) = b.get(i) {
+        i += 1;
+        match c {
+            b'/' if b.get(i) == Some(&b'*') => {
+                i = b.get(i + 1..).and_then(|r| r.windows(2).position(|w| w == b"*/")).map_or(b.len(), |p| i + 1 + p + 2);
+            }
+            b'"' | b'\'' => {
+                // A string: to its closing quote (backslash escapes the next byte).
+                while let Some(&d) = b.get(i) {
+                    i += 1;
+                    if d == b'\\' {
+                        i += 1;
+                    } else if d == c {
+                        break;
+                    }
+                }
+                if depth == 0 {
+                    cur.push(b' ');
+                }
+            }
+            b'{' => {
+                if depth == 0 && !cur.trim_ascii().starts_with(b"@") {
+                    out.push(String::from_utf8_lossy(cur.trim_ascii()).into_owned());
+                }
+                if depth == 0 {
+                    cur.clear();
+                }
+                depth += 1;
+            }
+            b'}' => depth = depth.saturating_sub(1),
+            b';' if depth == 0 => cur.clear(),
+            _ if depth == 0 => {
+                cur.push(c);
+                if cur.len() > (1 << 20) {
+                    return Err(Refusal::Selectors);
+                }
+            }
+            _ => {}
+        }
+    }
+    Ok(out)
+}
+
+/// Refuses style sheets whose selectors usvg's matcher (simplecss) would overflow the stack on
+/// (it recurses once per combinator) or take forever on (it tries every ancestor for each
+/// descendant combinator). Reads every `style` element, in any namespace.
+pub(crate) fn check_css(xml: &usvg::roxmltree::Document<'_>) -> Result<(), Refusal> {
+    let sheets = style_texts(xml);
+    if sheets.is_empty() {
+        return Ok(());
+    }
+    let (mut depth, mut deepest, mut count) = (HashMap::<usize, u64>::new(), 0u64, 0u64);
+    for n in xml.descendants() {
+        count += 1;
+        if n.is_element() {
+            let d = n.parent().and_then(|p| depth.get(&p.id().get_usize()).copied()).map_or(1, |d| d + 1);
+            depth.insert(n.id().get_usize(), d);
+            deepest = deepest.max(d);
+        }
+    }
+    let mut work = 0u64;
+    for t in sheets {
+        for sel in preludes(t)? {
+            for one in sel.split(',') {
+                let (mut combinators, mut descendants) = (0usize, 0u32);
+                for tok in simplecss::SelectorTokenizer::from(one) {
+                    match tok {
+                        Ok(simplecss::SelectorToken::DescendantCombinator) => {
+                            combinators += 1;
+                            descendants += 1;
+                        }
+                        Ok(simplecss::SelectorToken::ChildCombinator | simplecss::SelectorToken::AdjacentCombinator) => combinators += 1,
+                        Ok(_) => {}
+                        Err(_) => break,
+                    }
+                    if combinators > MAX_COMBINATORS {
+                        return Err(Refusal::Selectors);
+                    }
+                }
+                let mut tries = count;
+                for _ in 0..descendants {
+                    tries = tries.saturating_mul(deepest);
+                    if tries > MAX_MATCH_WORK {
+                        return Err(Refusal::Selectors);
+                    }
+                }
+                work = work.saturating_add(tries);
+                if work > MAX_MATCH_WORK {
+                    return Err(Refusal::Selectors);
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+/// A depth-first walk with an explicit stack over `edges` (leaving out nodes `skip` names).
+/// Returns the nodes in the order they finish, and the edges that lead back to a node on the
+/// walk's path (each closes a loop).
+fn walk(edges: &[Vec<u32>], skip: &dyn Fn(usize) -> bool) -> (Vec<u32>, Vec<(usize, u32)>) {
+    let n = edges.len();
+    let mut colour = vec![0u8; n]; // 0 new, 1 on the path, 2 done
+    let (mut order, mut back) = (Vec::with_capacity(n), Vec::new());
+    for root in 0..n {
+        if skip(root) || colour.get(root) != Some(&0) {
+            continue;
+        }
+        let mut stack: Vec<(usize, usize)> = vec![(root, 0)];
+        if let Some(c) = colour.get_mut(root) {
+            *c = 1;
+        }
+        while let Some(&(v, k)) = stack.last() {
+            match edges.get(v).and_then(|e| e.get(k)).copied() {
+                Some(t) => {
+                    if let Some(top) = stack.last_mut() {
+                        top.1 = k + 1;
+                    }
+                    if skip(t as usize) {
+                        continue;
+                    }
+                    match colour.get(t as usize).copied() {
+                        Some(0) => {
+                            if let Some(c) = colour.get_mut(t as usize) {
+                                *c = 1;
+                            }
+                            stack.push((t as usize, 0));
+                        }
+                        Some(1) => back.push((v, t)),
+                        _ => {}
+                    }
+                }
+                None => {
+                    if let Some(c) = colour.get_mut(v) {
+                        *c = 2;
+                    }
+                    order.push(v as u32);
+                    stack.pop();
+                }
+            }
+        }
+    }
+    (order, back)
+}
+
+/// The graph for `xml`. It reads references more widely than usvg does, so that whichever way
+/// usvg reads one, the loop is there to find: an id names every element that carries it, every
+/// `href` attribute is followed, sheets are read in any namespace, and a `style` attribute is
+/// read like a sheet's declarations.
+pub(crate) fn graph(xml: &usvg::roxmltree::Document<'_>) -> Result<Graph, Refusal> {
+    type Node<'a, 'i> = usvg::roxmltree::Node<'a, 'i>;
     let all: Vec<Node> = xml.descendants().collect();
     let len = all.iter().map(|n| n.id().get_usize() + 1).max().unwrap_or(0);
     let mut special_at = vec![u32::MAX; len];
-    let mut nodes = Vec::new();
-    let mut marker = Vec::new();
+    let (mut nodes, mut marker): (Vec<usize>, Vec<bool>) = (Vec::new(), Vec::new());
     let mut specials: Vec<Node> = Vec::new();
+    let mut by_id: HashMap<&str, Vec<Node>> = HashMap::new();
+    let mut spec_by_id: HashMap<&str, Vec<u32>> = HashMap::new();
     for n in &all {
-        if is_special(*n) {
+        let special = is_special(*n);
+        if special {
             if specials.len() >= MAX_SPECIALS {
                 return Err(Refusal::TooBig);
             }
@@ -119,6 +301,16 @@ pub(crate) fn graph<'a, 'i>(xml: &'a usvg::roxmltree::Document<'i>, ids: &HashMa
             }
             nodes.push(n.id().get_usize());
             marker.push(n.tag_name().name() == "marker");
+        }
+        if n.is_element()
+            && let Some(id) = n.attribute("id")
+        {
+            by_id.entry(id).or_default().push(*n);
+            if special {
+                spec_by_id.entry(id).or_default().push(specials.len() as u32);
+            }
+        }
+        if special {
             specials.push(*n);
         }
     }
@@ -126,31 +318,24 @@ pub(crate) fn graph<'a, 'i>(xml: &'a usvg::roxmltree::Document<'i>, ids: &HashMa
     let mut named = vec![false; n];
     let mut edges: Vec<Vec<u32>> = vec![Vec::new(); n];
     if n == 0 {
-        return Ok(Graph { nodes, marker, named, edges, order: Vec::new() });
+        return Ok(Graph { nodes, marker, named, edges, order: Vec::new(), closing: Vec::new() });
     }
-    let special_named = |id: &str| ids.get(id).and_then(|e| special_at.get(e.id().get_usize()).copied()).filter(|s| *s != u32::MAX);
-
-    // Style sheet rules that name ids. (The sheet is matched as usvg does, so an id a rule names
-    // is reached only from the elements the rule's selector matches.)
-    let sheet_text: Vec<&str> = all
-        .iter()
-        .filter(|e| e.is_element() && matches!(e.tag_name().namespace(), None | Some(SVG_NS)) && e.tag_name().name() == "style")
-        .flat_map(|e| e.descendants())
-        .filter_map(|d| d.text().filter(|_| d.is_text()))
-        .collect();
-    let mut sheet = simplecss::StyleSheet::new();
-    for t in &sheet_text {
-        // The text before a `{` is a selector; long ones are refused rather than matched.
-        let mut run = 0usize;
-        for c in t.bytes() {
-            match c {
-                b'{' | b'}' => run = 0,
-                _ => run += 1,
-            }
-            if run > MAX_SELECTOR {
-                return Err(Refusal::TooBig);
+    let no_specials: Vec<u32> = Vec::new();
+    let named_by = |id: &str| spec_by_id.get(id).unwrap_or(&no_specials);
+    // Every element a `href` of `e` (in any namespace) links to.
+    let links = |e: Node| -> Vec<Node> {
+        let mut v = Vec::new();
+        for a in e.attributes().filter(|a| a.name() == "href") {
+            if let Some(id) = svgtypes::IRI::from_str(a.value()).ok().map(|i| i.0) {
+                v.extend(by_id.get(id).into_iter().flatten().copied());
             }
         }
+        v
+    };
+
+    // Style sheet rules that name ids, read as usvg reads them (its matcher is simplecss).
+    let mut sheet = simplecss::StyleSheet::new();
+    for t in style_texts(xml) {
         sheet.parse_more(t);
     }
     let mut rules: Vec<Rule> = Vec::new();
@@ -167,11 +352,9 @@ pub(crate) fn graph<'a, 'i>(xml: &'a usvg::roxmltree::Document<'i>, ids: &HashMa
         if names.is_empty() {
             continue;
         }
-        for (_, v) in &names {
-            for id in v {
-                if let Some(s) = special_named(id)
-                    && let Some(f) = named.get_mut(s as usize)
-                {
+        for id in names.iter().flat_map(|(_, v)| v) {
+            for s in named_by(id) {
+                if let Some(f) = named.get_mut(*s as usize) {
                     *f = true;
                 }
             }
@@ -182,24 +365,23 @@ pub(crate) fn graph<'a, 'i>(xml: &'a usvg::roxmltree::Document<'i>, ids: &HashMa
         rules.push(Rule { selector: r.selector.clone(), names });
     }
 
-    // What the file names anywhere: `url(#…)` in attributes, and links to patterns and filters.
-    for e in &all {
-        if !(e.is_element() && matches!(e.tag_name().namespace(), None | Some(SVG_NS))) {
-            continue;
-        }
+    // What the file names anywhere: `url(#…)` in attributes, and links.
+    for e in all.iter().filter(|e| e.is_element()) {
         for a in e.attributes() {
             if a.name() == "href" {
-                if let Some(s) = svgtypes::IRI::from_str(a.value()).ok().and_then(|i| special_named(i.0))
-                    && let Some(f) = named.get_mut(s as usize)
-                {
-                    *f = true;
+                if let Some(id) = svgtypes::IRI::from_str(a.value()).ok().map(|i| i.0) {
+                    for s in named_by(id) {
+                        if let Some(f) = named.get_mut(*s as usize) {
+                            *f = true;
+                        }
+                    }
                 }
             } else {
                 url_ids(a.value(), |id| {
-                    if let Some(s) = special_named(id)
-                        && let Some(f) = named.get_mut(s as usize)
-                    {
-                        *f = true;
+                    for s in named_by(id) {
+                        if let Some(f) = named.get_mut(*s as usize) {
+                            *f = true;
+                        }
                     }
                 });
             }
@@ -209,40 +391,56 @@ pub(crate) fn graph<'a, 'i>(xml: &'a usvg::roxmltree::Document<'i>, ids: &HashMa
     // Edges: from each one to the ones its content, ancestors, own attributes and links name.
     let mut steps = 0u64;
     let mut total_edges = 0usize;
-    let mut stamp = vec![0u32; len];
+    // Visited per special: through plain content, and through a filter image (where usvg's
+    // fix for a filter naming itself does not reach).
+    let (mut plain, mut image) = (vec![0u32; len], vec![0u32; len]);
     for (si, s) in specials.iter().enumerate() {
-        let mut out: Vec<u32> = Vec::new();
-        // The ids `e` names itself (attributes, `style`, and matching rules); only the properties
-        // that pass down to what an element holds if `down`.
-        let collect = |e: Node, down: bool, out: &mut Vec<u32>, steps: &mut u64| -> Result<(), Refusal> {
+        let mark = si as u32 + 1;
+        let (mut out, over, unreadable) = (Vec::<u32>::new(), std::cell::Cell::new(false), std::cell::Cell::new(false));
+        // usvg removes a pattern's own fill or stroke, and a clip path's, mask's or filter's own
+        // clip path, mask or filter, from what it holds when it names the element itself, so
+        // such a link is no loop (an inherited one, or one reached through a filter image, is
+        // not removed).
+        let removed = |name: &str| match s.tag_name().name() {
+            "pattern" => matches!(name, "fill" | "stroke"),
+            "clipPath" => name == "clip-path",
+            "mask" => name == "mask",
+            "filter" => name == "filter",
+            _ => false,
+        };
+        // The ids `e` names itself (attributes, `style`, and matching rules); only the
+        // properties that pass down to what an element holds if `down`.
+        let collect = |e: Node, down: bool, exempt: bool, out: &mut Vec<u32>, steps: &mut u64| -> Result<(), Refusal> {
             *steps = steps.saturating_add(1).saturating_add(rules.len() as u64);
             if *steps > MAX_STEPS {
                 return Err(Refusal::TooBig);
             }
-            // usvg removes a pattern's own fill or stroke, and a clip path's, mask's or filter's
-            // own clip path, mask or filter, from what it holds when it names the element
-            // itself, so such a link is no loop (an inherited one is not removed).
-            let removed = |name: &str| match s.tag_name().name() {
-                "pattern" => matches!(name, "fill" | "stroke"),
-                "clipPath" => name == "clip-path",
-                other => name == other.to_ascii_lowercase() && matches!(other, "mask" | "filter"),
-            };
+            let before = out.len();
             let mut push = |id: &str, name: &str| {
-                if let Some(t) = special_named(id)
-                    && !(t as usize == si && !down && removed(name))
-                {
-                    out.push(t);
+                for t in named_by(id) {
+                    if t.eq(&(si as u32)) && !down && exempt && removed(name) {
+                        continue;
+                    }
+                    if out.len() >= MAX_EDGES {
+                        over.set(true);
+                    } else {
+                        out.push(*t);
+                    }
                 }
             };
             for a in e.attributes() {
                 if a.name() == "style" {
-                    for d in a.value().split(';') {
-                        if let Some((k, v)) = d.split_once(':')
-                            && (!down || inherited(k.trim()))
-                        {
-                            let k = k.trim();
-                            url_ids(v, |id| push(id, k));
+                    let mut found = 0usize;
+                    for d in simplecss::DeclarationTokenizer::from(a.value()) {
+                        found += url_count(d.value);
+                        if !down || inherited(d.name) {
+                            url_ids(d.value, |id| push(id, d.name));
                         }
+                    }
+                    // Text the CSS reader skipped: if it names an id, read it as a property that
+                    // passes down.
+                    if url_count(a.value()) > found {
+                        unreadable.set(true);
                     }
                 } else if a.name() != "href" && (!down || inherited(a.name())) {
                     url_ids(a.value(), |id| push(id, a.name()));
@@ -257,52 +455,59 @@ pub(crate) fn graph<'a, 'i>(xml: &'a usvg::roxmltree::Document<'i>, ids: &HashMa
                     }
                 }
             }
+            *steps = steps.saturating_add((out.len() - before) as u64);
             Ok(())
         };
         // Ancestors pass their inheritable properties down to it.
-        for a in s.ancestors().skip(1) {
-            if a.is_element() {
-                collect(a, true, &mut out, &mut steps)?;
+        for a in s.ancestors().skip(1).filter(|a| a.is_element()) {
+            collect(a, true, false, &mut out, &mut steps)?;
+        }
+        let mut stack: Vec<(Node, bool)> = vec![(*s, false)];
+        if let Some(m) = plain.get_mut(s.id().get_usize()) {
+            *m = mark;
+        }
+        while let Some((e, via_image)) = stack.pop() {
+            collect(e, false, !via_image, &mut out, &mut steps)?;
+            if over.get() {
+                return Err(Refusal::TooBig);
             }
-        }
-        let mut stack = vec![*s];
-        if let Some(m) = stamp.get_mut(s.id().get_usize()) {
-            *m = si as u32 + 1;
-        }
-        while let Some(e) = stack.pop() {
-            collect(e, false, &mut out, &mut steps)?;
+            if unreadable.get() {
+                return Err(Refusal::Unreadable);
+            }
             let name = e.tag_name().name();
-            // A pattern or filter built from a template, a `<use>` or filter image drawing what it
-            // links to.
-            let follows = matches!(name, "use" | "feImage") || (e == *s && matches!(name, "pattern" | "filter"));
-            // A link to a special is a reference; one that merely stands inside this one is not
-            // built with it, and is skipped below.
-            let mut next: Vec<Node> = Vec::new();
-            if follows && let Some(t) = link(e, ids) {
-                match special_at.get(t.id().get_usize()).copied().filter(|t| *t != u32::MAX) {
-                    Some(t) => out.push(t),
-                    None => next.push(t),
+            // Content it draws from elsewhere: a `<use>`, a filter image, a template.
+            let follows =
+                matches!(name, "use" | "feImage") || (e == *s && matches!(name, "pattern" | "filter" | "linearGradient" | "radialGradient"));
+            let image_next = via_image || name == "feImage";
+            let mut next: Vec<(Node, bool)> = Vec::new();
+            if follows {
+                for t in links(e) {
+                    match special_at.get(t.id().get_usize()).copied().filter(|t| *t != u32::MAX) {
+                        Some(t) => out.push(t),
+                        None => next.push((t, image_next)),
+                    }
                 }
             }
             for c in e.children() {
                 if c.is_element()
-                    && matches!(c.tag_name().namespace(), None | Some(SVG_NS))
                     && c.tag_name().name() != "style"
+                    && matches!(c.tag_name().namespace(), None | Some(SVG_NS))
                     && special_at.get(c.id().get_usize()) == Some(&u32::MAX)
                 {
-                    next.push(c);
+                    next.push((c, via_image));
                 }
             }
-            for c in next {
-                if let Some(m) = stamp.get_mut(c.id().get_usize())
-                    && *m != si as u32 + 1
+            for (c, img) in next {
+                let seen = if img { image.get_mut(c.id().get_usize()) } else { plain.get_mut(c.id().get_usize()) };
+                if let Some(m) = seen
+                    && *m != mark
                 {
-                    *m = si as u32 + 1;
+                    *m = mark;
                     steps = steps.saturating_add(1);
                     if steps > MAX_STEPS {
                         return Err(Refusal::TooBig);
                     }
-                    stack.push(c);
+                    stack.push((c, img));
                 }
             }
         }
@@ -315,76 +520,33 @@ pub(crate) fn graph<'a, 'i>(xml: &'a usvg::roxmltree::Document<'i>, ids: &HashMa
         if let Some(slot) = edges.get_mut(si) {
             *slot = out;
         }
-        for t in edges.get(si).into_iter().flatten() {
-            if let Some(f) = named.get_mut(*t as usize) {
-                *f = true;
-            }
+    }
+    for t in edges.iter().flatten() {
+        if let Some(f) = named.get_mut(*t as usize) {
+            *f = true;
         }
     }
 
-    // Loops, by a depth-first walk with an explicit stack. Colours: 0 new, 1 on the path, 2 done.
-    // usvg stops a marker from being built inside itself, so a loop through a marker ends there;
-    // the edge that closes such a loop is left out. Any other loop is refused.
-    let mut colour = vec![0u8; n];
-    let mut order: Vec<u32> = Vec::with_capacity(n);
-    let mut back: Vec<(usize, u32)> = Vec::new();
-    // Where each node on the path stands in the stack.
-    let mut at = vec![0usize; n];
-    for root in 0..n {
-        if colour.get(root) != Some(&0) {
-            continue;
-        }
-        // (node, next edge, markers on the path up to and including it)
-        let is_marker = |v: usize| usize::from(marker.get(v) == Some(&true));
-        let mut stack: Vec<(usize, usize, usize)> = vec![(root, 0, is_marker(root))];
-        if let (Some(c), Some(a)) = (colour.get_mut(root), at.get_mut(root)) {
-            *c = 1;
-            *a = 0;
-        }
-        while let Some(&(v, k, marks)) = stack.last() {
-            let next = edges.get(v).and_then(|e| e.get(k)).copied();
-            match next {
-                Some(t) => {
-                    if let Some(top) = stack.last_mut() {
-                        top.1 = k + 1;
-                    }
-                    match colour.get(t as usize).copied() {
-                        Some(0) => {
-                            if let (Some(c), Some(a)) = (colour.get_mut(t as usize), at.get_mut(t as usize)) {
-                                *c = 1;
-                                *a = stack.len();
-                            }
-                            stack.push((t as usize, 0, marks + is_marker(t as usize)));
-                        }
-                        Some(1) => {
-                            // The loop is the path from `t` to here; markers on it, counted
-                            // from the path's running total.
-                            let before = at.get(t as usize).and_then(|i| i.checked_sub(1)).and_then(|i| stack.get(i)).map_or(0, |e| e.2);
-                            if marks > before || marker.get(t as usize) == Some(&true) {
-                                back.push((v, t));
-                            } else {
-                                return Err(Refusal::Loop);
-                            }
-                        }
-                        _ => {}
-                    }
-                }
-                None => {
-                    if let Some(c) = colour.get_mut(v) {
-                        *c = 2;
-                    }
-                    order.push(v as u32);
-                    stack.pop();
-                }
-            }
+    // Loops. usvg never builds a marker inside itself, so a loop must avoid markers to go on
+    // without end: the graph without them has to be loop free. Loops through markers are then
+    // left out of the walk's order, and counted once.
+    let is_marker = |v: usize| marker.get(v) == Some(&true);
+    if !walk(&edges, &is_marker).1.is_empty() {
+        return Err(Refusal::Loop);
+    }
+    let (order, back) = walk(&edges, &|_| false);
+    for (v, t) in &back {
+        if let Some(e) = edges.get_mut(*v) {
+            e.retain(|x| x != t);
         }
     }
-    for (v, t) in back {
-        if let Some(e) = edges.get_mut(v) {
-            e.retain(|x| *x != t);
-        }
+    // The order must hold for what is left: finished last = refers to the others.
+    let (mut order2, again) = walk(&edges, &|_| false);
+    if !again.is_empty() {
+        return Err(Refusal::Loop);
     }
-    // Finished last = refers to the others: a referrer comes after what it refers to.
-    order.reverse();
-    Ok(Graph { nodes, marker, named, edges, order })
+    order2.reverse();
+    let _ = order;
+    let closing = back.into_iter().map(|(v, t)| (v as u32, t)).collect();
+    Ok(Graph { nodes, marker, named, edges, order: order2, closing })
 }

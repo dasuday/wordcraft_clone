@@ -306,10 +306,21 @@ const XLINK_NS: &str = "http://www.w3.org/1999/xlink";
 /// the links resolved (copies counted) times the nodes in the file.
 const MAX_TREF_WORK: u64 = 1 << 26;
 const ENDLESS_COPIES: &str = "SVG whose copies of itself never end is not supported";
+const SELECTORS_TOO_COMPLEX: &str = "SVG style sheet with selectors this complex is not supported";
+const STYLE_UNREADABLE: &str = "SVG with style text that can't be read is not supported";
 const REFERENCE_LOOP: &str = "SVG whose clip paths, masks, patterns, filters or markers refer to each other in a loop is not supported";
 const TOO_MANY_REFERENCES: &str = "SVG with this many clip paths, masks, patterns, filters or markers is not supported";
 const TOO_MANY_ELEMENTS: &str = "SVG that draws this many elements is not supported";
-/// Most elements a picture may build, copies made by `<use>`, markers, clip paths, masks, patterns
+fn refusal(r: refs::Refusal) -> &'static str {
+    match r {
+        refs::Refusal::Loop => REFERENCE_LOOP,
+        refs::Refusal::TooBig => TOO_MANY_REFERENCES,
+        refs::Refusal::Unreadable => STYLE_UNREADABLE,
+        refs::Refusal::Selectors => SELECTORS_TOO_COMPLEX,
+    }
+}
+
+/// Most elements a picture may build, counting a path or point list by its size, copies made by `<use>`, markers, clip paths, masks, patterns
 /// and filters counted.
 const MAX_ELEMENTS: u64 = 4_000_000;
 const TREFS_TOO_MANY: &str = "SVG with this many text references is not supported";
@@ -320,6 +331,10 @@ const TREFS_TOO_MANY: &str = "SVG with this many text references is not supporte
 /// those nested before it); `<use>` links that copy without end; and `<tref>` links that would
 /// cost more than [`MAX_TREF_WORK`] to find.
 fn check_copies(xml: &usvg::roxmltree::Document, budget: &Budget) -> Result<(), Error> {
+    // Before anything matches a selector (usvg's matcher recurses along combinators).
+    if let Err(r) = refs::check_css(xml) {
+        return budget.refuse(refusal(r));
+    }
     let c = match copies(xml) {
         Ok(c) => c,
         Err(why) => return budget.refuse(why),
@@ -479,7 +494,7 @@ fn copies<'a, 'i>(xml: &'a usvg::roxmltree::Document<'i>) -> Result<Copies, &'st
     let mut sub_url = vec![false; len];
     let sheet_urls = all
         .iter()
-        .filter(|n| svg_element(**n) && n.tag_name().name() == "style")
+        .filter(|n| n.is_element() && n.tag_name().name() == "style")
         .flat_map(|n| n.descendants())
         .filter_map(|d| d.text().filter(|_| d.is_text()))
         .fold(0u64, |a, t| a.saturating_add(url_count(t)));
@@ -524,6 +539,16 @@ fn copies<'a, 'i>(xml: &'a usvg::roxmltree::Document<'i>) -> Result<Copies, &'st
             _ => return 0,
         };
         vertices.saturating_add(2).saturating_mul(3)
+    };
+    // What building an element costs, in elements: one, and for a path or point list, its
+    // segments or points (usvg parses the data again for every copy).
+    let weight = |n: Node| -> u64 {
+        let data = match n.tag_name().name() {
+            "path" => n.attribute("d"),
+            "polyline" | "polygon" => n.attribute("points"),
+            _ => None,
+        };
+        1u64.saturating_add(data.map_or(0, |d| d.len() as u64 / 8))
     };
     let inside = |a: Node, d: Node| at(a) < at(d) && last.get(at(a)).is_some_and(|l| at(d) <= *l);
     // usvg skips a `<use>` whose target holds a `<use>` (in the SVG namespace) linking to that
@@ -587,7 +612,7 @@ fn copies<'a, 'i>(xml: &'a usvg::roxmltree::Document<'i>) -> Result<Copies, &'st
         }
         Kind::Group | Kind::Use if n != xml.root() => {
             let u = urls.get(at(n)).copied().unwrap_or(0);
-            Copies { elements: 1, slots: own_slots(u), marks: marks(n), url: u > 0, ..Copies::default() }
+            Copies { elements: weight(n), slots: own_slots(u), marks: marks(n), url: u > 0, ..Copies::default() }
         }
         _ => Copies::default(),
     };
@@ -643,10 +668,7 @@ fn copies<'a, 'i>(xml: &'a usvg::roxmltree::Document<'i>) -> Result<Copies, &'st
     // limit: a loop is refused. Along the references (what each one holds, inherits or names), a
     // special is built once for every place any referrer may name it, times how often that
     // referrer is built.
-    let graph = refs::graph(xml, &ids).map_err(|r| match r {
-        refs::Refusal::Loop => REFERENCE_LOOP,
-        refs::Refusal::TooBig => TOO_MANY_REFERENCES,
-    })?;
+    let graph = refs::graph(xml).map_err(refusal)?;
     if total.endless {
         return Ok(total);
     }
@@ -666,6 +688,14 @@ fn copies<'a, 'i>(xml: &'a usvg::roxmltree::Document<'i>) -> Result<Copies, &'st
             if let Some(m) = times.get_mut(t as usize) {
                 *m = m.saturating_add(places.saturating_mul(k));
             }
+        }
+    }
+    // A loop through a marker is built once more (usvg won't build a marker inside itself).
+    for &(v, t) in &graph.closing {
+        let (b, k) = (held(v as usize), times.get(v as usize).copied().unwrap_or(0));
+        let places = if graph.marker.get(t as usize) == Some(&true) { b.marks } else { b.slots };
+        if let Some(m) = times.get_mut(t as usize) {
+            *m = m.saturating_add(places.saturating_mul(k));
         }
     }
     for (i, k) in times.iter().enumerate() {
