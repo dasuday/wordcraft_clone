@@ -23,6 +23,9 @@ pub fn specs() -> Vec<CommandSpec> {
         CommandSpec::new("list.get", "List Definition", "Home › Paragraph › Multilevel List", get)
             .params(r#"{"num"?: list id (default: the caret's list)} → {"num", "levels": [as list.define]}"#)
             .pure(),
+        CommandSpec::new("list.multilevelPreset", "Multilevel List Library", "Home › Paragraph › Multilevel List", preset).params(
+            r#"{"preset": "headings" (1 / 1.1 / 1.1.1) | "article" (Article I. / Section 1.01 / (a)) | "outlineHeadings" (I. / A. / 1.) | "chapter" (Chapter 1, lower levels unnumbered)} — a new list whose nine levels are linked to Heading 1–9: every paragraph in those styles is numbered, and selected body text becomes Heading 1"#,
+        ),
     ]
 }
 
@@ -226,6 +229,93 @@ fn define(s: &mut Session, v: &Value) -> CmdResult {
     Ok(r)
 }
 
+/// The heading-linked lists of the Multilevel List gallery's library, by preset id: level `i`
+/// is linked to Heading `i + 1`.
+fn preset_levels(preset: &str) -> Option<Vec<Level>> {
+    use NumFormat as F;
+    let levels = (0..LEVELS)
+        .map(|i| {
+            let n = i + 1;
+            // Numbers start at the margin; each level's text a little further in.
+            let at = |indent: f32| Level { indent, hanging: indent, style: Some(format!("Heading{n}")), ..Level::default() };
+            let (format, text, indent) = match preset {
+                "headings" => (F::Decimal, (1..=n).map(|k| format!("%{k}")).collect::<Vec<_>>().join("."), 21.6 + 7.2 * i as f32),
+                "article" => match i {
+                    0 => (F::UpperRoman, "Article %1.".to_string(), 0.0),
+                    1 => (F::DecimalZero, "Section %1.%2".to_string(), 0.0),
+                    _ => {
+                        let f = [F::LowerLetter, F::LowerRoman, F::Decimal, F::LowerLetter, F::LowerRoman, F::LowerLetter, F::LowerRoman];
+                        let t = if i < 4 {
+                            format!("(%{n})")
+                        } else if i < 7 {
+                            format!("%{n})")
+                        } else {
+                            format!("%{n}.")
+                        };
+                        (f.get(i - 2).copied().unwrap_or(F::Decimal), t, 36.0 + 7.2 * (i - 2) as f32)
+                    }
+                },
+                "outlineHeadings" => {
+                    let f = [
+                        F::UpperRoman,
+                        F::UpperLetter,
+                        F::Decimal,
+                        F::LowerLetter,
+                        F::Decimal,
+                        F::LowerLetter,
+                        F::LowerRoman,
+                        F::LowerLetter,
+                        F::LowerRoman,
+                    ];
+                    let t = match i {
+                        0..=2 => format!("%{n}."),
+                        3 => format!("%{n})"),
+                        _ => format!("(%{n})"),
+                    };
+                    (f.get(i).copied().unwrap_or(F::Decimal), t, 36.0 * n as f32)
+                }
+                "chapter" if i == 0 => (F::Decimal, "Chapter %1".to_string(), 0.0),
+                "chapter" => (F::None, String::new(), 0.0),
+                _ => return None,
+            };
+            // "Section 1.01" shows the article number in digits (legal numbering).
+            Some(Level { format, text, legal: preset == "article" && i == 1, ..at(indent) })
+        })
+        .collect::<Option<Vec<_>>>()?;
+    Some(levels)
+}
+
+/// A Multilevel List gallery preset: a new list linked to Heading 1–9. The heading styles carry
+/// the number, so every heading (and every heading added later) is numbered and keeps its style.
+fn preset(s: &mut Session, v: &Value) -> CmdResult {
+    let id = p::req_str(v, "preset")?;
+    let levels = preset_levels(id).ok_or_else(|| CmdError::Params("`preset` must be headings, article, outlineHeadings or chapter".into()))?;
+    let num = s.doc.numbering.try_add_levels(None, levels)?;
+    let mut linked = Vec::new();
+    for n in 1..=LEVELS as u8 {
+        let id = super::para::ensure_heading_style(s, n);
+        if let Some(st) = s.doc.styles.get_mut(&id) {
+            st.para.numbering = Some(NumRef { num, level: n - 1 });
+            linked.push(id);
+        }
+    }
+    touch_styles(s, &linked)?;
+    super::para::fmt(s, &|pp| {
+        // A heading takes its number from its style; body text becomes the first level's heading.
+        if !pp.style.as_ref().is_some_and(|st| linked.contains(st)) {
+            pp.style = linked.first().cloned();
+        }
+        pp.numbering = None;
+        pp.indent_left = None;
+        pp.indent_first = None;
+        pp.indent_left_chars = None;
+        pp.indent_first_chars = None;
+    })?;
+    let mut r = sel_result(s)?;
+    r["num"] = json!(num);
+    Ok(r)
+}
+
 /// Lay out again every paragraph in one of `nums`.
 fn touch_lists(s: &mut Session, nums: &[u32]) -> Result<(), CmdError> {
     touch_where(s, &|p| p.props.numbering.is_some_and(|n| nums.contains(&n.num)))
@@ -308,5 +398,83 @@ mod tests {
         assert_eq!(l[2]["follow"], "nothing");
         // Programmatic calls without levels are an error, not a dialog.
         assert!(s.run("list.define", &json!({})).is_err());
+    }
+
+    /// Each body paragraph's number as laid out (`None`: no number), and its style.
+    fn numbered(s: &mut Session) -> Vec<(Option<String>, String)> {
+        let l = s.layout();
+        let labels: Vec<Option<String>> = l
+            .pages
+            .iter()
+            .flat_map(|p| &p.items)
+            .filter_map(|i| if let Placed::Lines { para, l0: 0, .. } = i { Some(para.label.as_ref().map(|lb| lb.text.clone())) } else { None })
+            .collect();
+        let styles = s.doc.body.iter().filter_map(|b| b.as_para()).map(|p| p.props.style.clone().unwrap_or_else(|| "Normal".into()));
+        labels.into_iter().zip(styles).collect()
+    }
+
+    fn n(label: Option<&str>, style: &str) -> (Option<String>, String) {
+        (label.map(str::to_string), style.to_string())
+    }
+
+    /// Paragraphs "One" (Heading 1), "Two" (Heading 2), "Three" (`third`), all selected.
+    fn headings(third: &str) -> Session {
+        let mut s = Session::new(Document::new());
+        for (i, (t, st)) in [("One", "Heading1"), ("Two", "Heading2"), ("Three", third)].iter().enumerate() {
+            if i > 0 {
+                s.run("text.newParagraph", &json!({})).unwrap();
+            }
+            s.run("text.insert", &json!({"text": t})).unwrap();
+            s.run("para.style", &json!({"style": st})).unwrap();
+        }
+        s.run("select.all", &json!({})).unwrap();
+        s
+    }
+
+    /// #1793: the Multilevel List gallery's heading presets number headings through their styles
+    /// (Word: One=1, Two=1.1, Three=2), keep the styles, and survive a save to .docx and back.
+    #[test]
+    fn a_heading_preset_numbers_headings_and_keeps_their_styles() {
+        let mut s = headings("Heading1");
+        s.run("list.multilevelPreset", &json!({"preset": "headings"})).unwrap();
+        let want = [n(Some("1"), "Heading1"), n(Some("1.1"), "Heading2"), n(Some("2"), "Heading1")];
+        assert_eq!(numbered(&mut s), want);
+        // The number comes from the style, so a heading added later is numbered too.
+        let h2 = s.doc.styles.get("Heading2").and_then(|st| st.para.numbering).unwrap();
+        assert_eq!(h2.level, 1);
+        let back = wordcraft_docx::read(&wordcraft_docx::write(&s.doc).unwrap()).unwrap();
+        assert_eq!(back.styles.get("Heading2").and_then(|st| st.para.numbering).map(|x| x.level), Some(1), "numPr on the style");
+        let mut b = Session::new(back);
+        assert_eq!(numbered(&mut b), want);
+    }
+
+    /// #1793: the other heading presets of Word's List Library, level by level.
+    #[test]
+    fn every_heading_preset_numbers_three_heading_levels() {
+        for (preset, want) in [
+            ("headings", [Some("1"), Some("1.1"), Some("1.1.1")]),
+            ("article", [Some("Article I."), Some("Section 1.01"), Some("(a)")]),
+            ("outlineHeadings", [Some("I."), Some("A."), Some("1.")]),
+            ("chapter", [Some("Chapter 1"), None, None]),
+        ] {
+            let mut s = headings("Heading3");
+            s.run("list.multilevelPreset", &json!({"preset": preset})).unwrap();
+            let got: Vec<Option<String>> = numbered(&mut s).into_iter().map(|x| x.0).collect();
+            assert_eq!(got, want.map(|x| x.map(str::to_string)), "{preset}");
+        }
+        let mut s = headings("Heading3");
+        assert!(s.run("list.multilevelPreset", &json!({"preset": "nope"})).is_err());
+        assert!(s.run("list.multilevelPreset", &json!({})).is_err());
+    }
+
+    /// #1793: a body-text paragraph in the selection becomes the first level's heading, as when
+    /// Word applies a list whose levels are linked to styles; body text elsewhere stays unnumbered.
+    #[test]
+    fn a_heading_preset_leaves_body_text_outside_the_selection_alone() {
+        let mut s = headings("Normal");
+        // Only One and Two.
+        s.sel = crate::Selection { anchor: wordcraft_doc::Pos::body(0, 0), focus: wordcraft_doc::Pos::body(1, 1) };
+        s.run("list.multilevelPreset", &json!({"preset": "headings"})).unwrap();
+        assert_eq!(numbered(&mut s), [n(Some("1"), "Heading1"), n(Some("1.1"), "Heading2"), n(None, "Normal")]);
     }
 }
