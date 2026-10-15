@@ -127,7 +127,7 @@ fn decode_latin2(bytes: &[u8]) -> String {
 }
 
 /// Decode an `.aff`/`.dic` pair to UTF-8 from the encoding the `.aff`'s `SET` line names
-/// (UTF-8 when there is none; ISO 8859-2 is the other one Polish dictionaries use).
+/// (UTF-8 when there is none; ISO 8859-2 for Polish and ISO 8859-1 for German dictionaries).
 pub fn decode(aff: &[u8], dic: &[u8]) -> Result<(String, String), String> {
     let head = String::from_utf8_lossy(aff.get(..aff.len().min(8192)).unwrap_or_default()).to_string();
     let set = head.lines().find_map(|l| l.trim_start_matches('\u{feff}').strip_prefix("SET ")).map(str::trim).unwrap_or("UTF-8").to_ascii_uppercase();
@@ -137,6 +137,10 @@ pub fn decode(aff: &[u8], dic: &[u8]) -> Result<(String, String), String> {
             Ok((text(aff, ".aff")?, text(dic, ".dic")?))
         }
         "ISO8859-2" | "ISO-8859-2" => Ok((decode_latin2(aff), decode_latin2(dic))),
+        "ISO8859-1" | "ISO-8859-1" | "LATIN1" => {
+            let latin1 = |b: &[u8]| b.iter().map(|&c| char::from(c)).collect();
+            Ok((latin1(aff), latin1(dic)))
+        }
         other => Err(format!("unsupported encoding {other}")),
     }
 }
@@ -155,6 +159,13 @@ mod tests {
         assert_eq!(d, "żółw");
         assert!(decode(b"SET KOI8-R\n", b"").is_err());
         assert!(decode(b"SET UTF-8\n", b"\xff\xfe").is_err());
+    }
+
+    #[test]
+    fn decodes_german_latin1_without_replacing_umlauts_or_sharp_s() {
+        let (aff, dic) = decode(b"SET ISO8859-1\nTRY \xe4\xf6\xfc\xdf\n", b"3\nStra\xdfe\nT\xfcr\nR\xfcebli\n").unwrap();
+        assert!(aff.contains("äöüß"));
+        assert_eq!(dic, "3\nStraße\nTür\nRüebli\n");
     }
 
     #[test]

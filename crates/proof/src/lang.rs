@@ -26,6 +26,12 @@ pub enum ProofLang {
     It,
     /// Croatian (`hr`, `hr-HR`)
     Hr,
+    /// German (`de`, `de-DE`): the installed German dictionary, including compound nouns.
+    De,
+    /// Austrian Standard German (`de-AT`), with its own dictionary.
+    DeAt,
+    /// Swiss Standard German (`de-CH`), with its own dictionary and `ss` instead of `ß`.
+    DeCh,
     /// A language without proofing tools here (`fr-FR`, `ja-JP`, `x-none`…). Like Word without
     /// the language's proofing tools: no spelling or grammar marks, so its words are never
     /// flagged as English misspellings. Hyphenation keeps using the English patterns, as before
@@ -35,10 +41,12 @@ pub enum ProofLang {
 
 impl ProofLang {
     /// Every language with a spelling dictionary, in display order.
-    pub const PROOFED: [ProofLang; 5] = [ProofLang::En, ProofLang::Pl, ProofLang::Pt, ProofLang::It, ProofLang::Hr];
+    pub const PROOFED: [ProofLang; 8] =
+        [ProofLang::En, ProofLang::Pl, ProofLang::Pt, ProofLang::It, ProofLang::Hr, ProofLang::De, ProofLang::DeAt, ProofLang::DeCh];
 
     /// The proofing language of a BCP 47 tag (`pl-PL`, `en_GB`, `PL`…). Only the primary subtag
-    /// counts. No tag (or an empty one) is English, WordCraft's default editing language.
+    /// counts, except German retains its Austrian or Swiss region. No tag (or an empty one)
+    /// is English, WordCraft's default editing language.
     pub fn from_tag(tag: Option<&str>) -> ProofLang {
         let Some(tag) = tag.map(str::trim).filter(|t| !t.is_empty()) else { return ProofLang::En };
         let primary = tag.split(['-', '_']).next().unwrap_or("");
@@ -54,12 +62,20 @@ impl ProofLang {
             ProofLang::It
         } else if primary.eq_ignore_ascii_case("hr") || primary.eq_ignore_ascii_case("hrv") {
             ProofLang::Hr
+        } else if primary.eq_ignore_ascii_case("de") || primary.eq_ignore_ascii_case("deu") || primary.eq_ignore_ascii_case("ger") {
+            // Stop before extensions/private use: `de-x-ch` is not Swiss German.
+            let region = tag.split(['-', '_']).skip(1).take_while(|p| p.len() != 1).find(|p| p.len() == 2 || p.contains('.'));
+            match region.and_then(|r| r.split('.').next()) {
+                Some(r) if r.eq_ignore_ascii_case("CH") => ProofLang::DeCh,
+                Some(r) if r.eq_ignore_ascii_case("AT") => ProofLang::DeAt,
+                _ => ProofLang::De,
+            }
         } else {
             ProofLang::Other
         }
     }
 
-    /// The primary language subtag (`en`, `pl`, `bg`); empty for [`ProofLang::Other`].
+    /// The language code, with the region for Austrian/Swiss German; empty for [`ProofLang::Other`].
     pub fn code(self) -> &'static str {
         match self {
             ProofLang::En => "en",
@@ -68,6 +84,9 @@ impl ProofLang {
             ProofLang::Pt => "pt",
             ProofLang::It => "it",
             ProofLang::Hr => "hr",
+            ProofLang::De => "de",
+            ProofLang::DeAt => "de-AT",
+            ProofLang::DeCh => "de-CH",
             ProofLang::Other => "",
         }
     }
@@ -153,7 +172,16 @@ mod tests {
         for t in ["bg", "bg-BG", "BG_bg", "bg_BG.UTF-8", "bul"] {
             assert_eq!(ProofLang::from_tag(Some(t)), ProofLang::Bg, "{t}");
         }
-        for t in ["fr-FR", "de", "x-none", "ja-JP", "plx", "bgx", "e", "-"] {
+        for t in ["de", "de-DE", "DE_de", "de-Latn-DE", "deu", "ger", "de-x-ch"] {
+            assert_eq!(ProofLang::from_tag(Some(t)), ProofLang::De, "{t}");
+        }
+        for t in ["de-CH", "DE_ch", "de_CH.UTF-8", "de-Latn-CH", "de-CH-u-co-phonebk"] {
+            assert_eq!(ProofLang::from_tag(Some(t)), ProofLang::DeCh, "{t}");
+        }
+        for t in ["de-AT", "DE_at", "de_AT.UTF-8", "de-Latn-AT"] {
+            assert_eq!(ProofLang::from_tag(Some(t)), ProofLang::DeAt, "{t}");
+        }
+        for t in ["fr-FR", "x-none", "ja-JP", "plx", "bgx", "e", "-"] {
             assert_eq!(ProofLang::from_tag(Some(t)), ProofLang::Other, "{t}");
         }
         assert_eq!(ProofLang::from_tag(None), ProofLang::En);
