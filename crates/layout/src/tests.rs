@@ -1928,7 +1928,7 @@ fn freeform_arrow_end_draws_at_the_last_point() {
         freeform: Some(Arc::new(Freeform {
             w: 60.0,
             h: 40.0,
-            paths: vec![FreePath { pts: vec![[0.0, 40.0], [60.0, 0.0]], closed: false }],
+            paths: vec![FreePath { pts: vec![[0.0, 40.0], [60.0, 0.0]], closed: false, joined: false }],
             ..Default::default()
         })),
         effects: Default::default(),
@@ -1950,6 +1950,86 @@ fn freeform_arrow_end_draws_at_the_last_point() {
         _ => None,
     });
     assert_eq!(arrow_tip, endpoint, "the arrowhead tip meets the custom path's final point");
+}
+
+/// A freeform's subpaths from one DrawingML `a:path` (a letter and its counter) are drawn as one
+/// even-odd path, so the counter is a hole; a separate closed path stays its own draw.
+#[test]
+fn joined_freeform_subpaths_draw_as_one_even_odd_path() {
+    use std::sync::Arc;
+    use wordcraft_doc::freeform::{FreePath, Freeform};
+    use wordcraft_doc::para::{Float, ShapeKind};
+    use wordcraft_doc::props::Rgb;
+
+    let square = |a: f32, b: f32, joined: bool| FreePath { pts: vec![[a, a], [b, a], [b, b], [a, b]], closed: true, joined };
+    let shape = InlineObject::Shape {
+        kind: ShapeKind::Freeform,
+        w: 60.0,
+        h: 60.0,
+        fill: Some(Rgb(0x20, 0x2E, 0x55)),
+        stroke: None,
+        stroke_width: 0.0,
+        float: Float::default(),
+        story: None,
+        freeform: Some(Arc::new(Freeform {
+            w: 60.0,
+            h: 60.0,
+            paths: vec![square(0.0, 40.0, false), square(10.0, 30.0, true), square(45.0, 60.0, false)],
+            ..Default::default()
+        })),
+        effects: Default::default(),
+        extra: Default::default(),
+    };
+    let mut doc = Document::from_text("Logo");
+    doc.insert_object(&Pos::body(0, 0), shape, &Default::default()).unwrap();
+
+    let draws = flat(display::page_display(&doc, &lay(&doc).pages[0], &Default::default()));
+    let paths: Vec<(usize, bool)> = draws
+        .iter()
+        .filter_map(|d| match d {
+            display::Draw::Path { segs, fill: Some(_), even_odd, .. } => {
+                Some((segs.iter().filter(|s| matches!(s, wordcraft_doc::graphic::PathSeg::Move(..))).count(), *even_odd))
+            }
+            _ => None,
+        })
+        .collect();
+    assert_eq!(paths, vec![(2, true), (1, false)], "the ring and its hole are one even-odd path; the third square is apart");
+}
+
+/// Word dims a header it isn't editing to about 57%, text and shapes alike: a header shape is
+/// drawn faded as one layer, and nothing is faded when headers aren't dimmed (print, PDF).
+#[test]
+fn a_header_shape_fades_with_the_header() {
+    use wordcraft_doc::para::{Float, ShapeKind};
+    use wordcraft_doc::props::Rgb;
+
+    let shape = InlineObject::Shape {
+        kind: ShapeKind::Rectangle,
+        w: 40.0,
+        h: 20.0,
+        fill: Some(Rgb(0x20, 0x2E, 0x55)),
+        stroke: Some(Rgb::BLACK),
+        stroke_width: 1.0,
+        float: Float::default(),
+        story: None,
+        freeform: None,
+        effects: Default::default(),
+        extra: Default::default(),
+    };
+    let mut d = Document::from_text("Body");
+    let id = d.add_part(wordcraft_doc::PartKind::Header, vec![wordcraft_doc::para_block(wordcraft_doc::Paragraph::new())]);
+    d.last_section.headers.default = Some(id);
+    d.insert_object(&Pos { story: StoryRef::Part(id), path: Path::top(0), off: 0 }, shape, &Default::default()).unwrap();
+    let l = lay(&d);
+    let faded = |dim: bool| {
+        let opts = display::DisplayOptions { dim_header: dim, ..Default::default() };
+        let draws = display::page_display(&d, &l.pages[0], &opts);
+        let alphas: Vec<f32> = draws.iter().filter_map(|x| if let display::Draw::Faded { alpha, .. } = x { Some(*alpha) } else { None }).collect();
+        let bare = draws.iter().any(|x| matches!(x, display::Draw::Shape { .. }));
+        (alphas, bare)
+    };
+    assert_eq!(faded(true), (vec![display::HEADER_DIM], false));
+    assert_eq!(faded(false), (vec![], true));
 }
 
 #[test]

@@ -75,8 +75,9 @@ pub fn cust_geom(sppr: &El, w: f32, h: f32) -> Option<Freeform> {
             let back = cur.len() > 2 && cur.first() == cur.last();
             done.push((cur, back));
         }
-        for (pts, closed) in done.into_iter().take(MAX_PATHS.saturating_sub(paths.len())) {
-            paths.push(FreePath { pts: pts.into_iter().take(MAX_POINTS).map(scale).collect(), closed: closed && !fill_none });
+        // The subpaths after the first are joined to it: filled together, so inner outlines cut holes.
+        for (i, (pts, closed)) in done.into_iter().take(MAX_PATHS.saturating_sub(paths.len())).enumerate() {
+            paths.push(FreePath { pts: pts.into_iter().take(MAX_POINTS).map(scale).collect(), closed: closed && !fill_none, joined: i > 0 });
         }
     }
     let f = Freeform { w, h, paths, alpha: 1.0, ink: None, order: None }.sanitized();
@@ -182,7 +183,7 @@ pub fn vml_path(path: &str, coordsize: Option<&str>, coordorigin: Option<&str>, 
         }
     }
     d.end(false);
-    let paths = d.done.into_iter().map(|(pts, closed)| FreePath { pts: pts.into_iter().map(scale).collect(), closed }).collect();
+    let paths = d.done.into_iter().map(|(pts, closed)| FreePath { pts: pts.into_iter().map(scale).collect(), closed, joined: false }).collect();
     let freeform = Freeform { w, h, paths, alpha: 1.0, ink: None, order: None }.sanitized();
     (!freeform.paths.is_empty()).then_some(VmlPath { freeform, no_fill, no_stroke })
 }
@@ -359,6 +360,18 @@ mod tests {
              <a:moveTo><a:pt x=\"0\" y=\"0\"/></a:moveTo>{seg}</a:path></a:pathLst></a:custGeom></wps:spPr>"
         );
         crate::xml::parse(xml.as_bytes()).expect("parse spPr")
+    }
+
+    #[test]
+    fn subpaths_of_one_path_are_joined_to_it() {
+        // A letter "o" as one `a:path` (outline, then counter), and a dot as a second `a:path`.
+        let ring = "<a:lnTo><a:pt x=\"100\" y=\"0\"/></a:lnTo><a:lnTo><a:pt x=\"100\" y=\"100\"/></a:lnTo><a:close/>\
+                    <a:moveTo><a:pt x=\"20\" y=\"20\"/></a:moveTo><a:lnTo><a:pt x=\"80\" y=\"20\"/></a:lnTo><a:lnTo><a:pt x=\"80\" y=\"80\"/></a:lnTo><a:close/>\
+                    </a:path><a:path w=\"100\" h=\"100\"><a:moveTo><a:pt x=\"0\" y=\"90\"/></a:moveTo><a:lnTo><a:pt x=\"10\" y=\"90\"/></a:lnTo>\
+                    <a:lnTo><a:pt x=\"10\" y=\"100\"/></a:lnTo><a:close/>";
+        let f = cust_geom(&sppr(ring), 100.0, 100.0).expect("paths");
+        let shape: Vec<(bool, bool)> = f.paths.iter().map(|p| (p.closed, p.joined)).collect();
+        assert_eq!(shape, vec![(true, false), (true, true), (true, false)]);
     }
 
     #[test]

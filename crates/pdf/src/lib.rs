@@ -942,11 +942,12 @@ impl Exporter<'_> {
             }
             Draw::Line { x0, y0, x1, y1, width, color, stroke, alpha, .. } => self.line(s, (*x0, *y0, *x1, *y1), *width, *color, *stroke, *alpha),
             Draw::Image { rect, media, crop, alpha, .. } => self.picture(s, rect, media, crop, *alpha),
-            Draw::Path { segs, fill: f, stroke, stroke_width } => {
+            Draw::Path { segs, fill: f, stroke, stroke_width, even_odd, fill_alpha } => {
                 let mut pb = PathBuilder::new();
                 append_path(&mut pb, &wordcraft_layout::display::seg_path(segs));
                 let Some(p) = pb.finish() else { return };
-                s.set_fill(f.map(|c| fill(c, 1.0)));
+                let rule = if *even_odd { FillRule::EvenOdd } else { FillRule::NonZero };
+                s.set_fill(f.map(|c| Fill { rule, ..fill(c, *fill_alpha) }));
                 s.set_stroke(stroke.map(|c| Stroke {
                     paint: rgb::Color::new(c.0, c.1, c.2).into(),
                     // Width 0 (or none) is a hairline.
@@ -989,7 +990,7 @@ impl Exporter<'_> {
                 s.draw_path(&p);
                 s.set_stroke(None);
             }
-            Draw::Shape { rect, kind, fill: f, stroke, stroke_width, effects, corner } => {
+            Draw::Shape { rect, kind, fill: f, stroke, stroke_width, effects, corner, fill_alpha } => {
                 let Some(p) = shape_path(*kind, rect, *corner) else { return };
                 let can_fill = *kind != ShapeKind::Line;
                 let fx = effects.sanitized();
@@ -1002,14 +1003,14 @@ impl Exporter<'_> {
                     s.set_stroke(None);
                     for (g, a) in wordcraft_doc::effects::bands(-rad, 0.0, 1.0) {
                         if let Some(p) = shape_path(*kind, &grown(rect, g, 0.0, 0.0), *corner) {
-                            s.set_fill(Some(fill(*c, a)));
+                            s.set_fill(Some(fill(*c, a * *fill_alpha)));
                             s.draw_path(&p);
                         }
                     }
                     s.set_fill(None);
                     return;
                 }
-                s.set_fill(f.filter(|_| can_fill).map(|c| fill(c, 1.0)));
+                s.set_fill(f.filter(|_| can_fill).map(|c| fill(c, *fill_alpha)));
                 s.set_stroke(stroke.map(|c| Stroke {
                     paint: rgb::Color::new(c.0, c.1, c.2).into(),
                     width: if stroke_width.is_finite() { stroke_width.clamp(0.25, 200.0) } else { 0.75 },
@@ -1075,6 +1076,13 @@ impl Exporter<'_> {
             Draw::Clip { rect, items } => {
                 let Some(clip) = rect_path(rect) else { return };
                 s.push_clip_path(&clip, &FillRule::NonZero);
+                for it in items {
+                    self.draw(s, it);
+                }
+                s.pop();
+            }
+            Draw::Faded { alpha, items } => {
+                s.push_opacity(norm(*alpha));
                 for it in items {
                     self.draw(s, it);
                 }

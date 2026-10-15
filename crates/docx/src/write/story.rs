@@ -1024,7 +1024,14 @@ impl Writer<'_> {
         match fill.filter(|_| !ink && !kind.is_open()) {
             Some(c) => {
                 w.open("a:solidFill", &[]);
-                w.empty("a:srgbClr", &[("val", &c.hex())]);
+                let opacity = extra.fill_opacity();
+                if opacity < 1.0 {
+                    w.open("a:srgbClr", &[("val", &c.hex())]);
+                    w.empty("a:alpha", &[("val", &n((opacity * 100_000.0).round() as i64))]);
+                    w.close("a:srgbClr");
+                } else {
+                    w.empty("a:srgbClr", &[("val", &c.hex())]);
+                }
                 w.close("a:solidFill");
             }
             None => w.empty("a:noFill", &[]),
@@ -1465,13 +1472,21 @@ fn cust_geom(w: &mut W, f: &wordcraft_doc::freeform::Freeform, sw: f32, sh: f32)
         w.empty("a:pt", &[("x", &emu(x)), ("y", &emu(y))]);
         w.close(tag);
     };
+    // A joined path is another subpath of the `a:path` before it (a counter, a hole).
+    let mut open = false;
     for p in f.paths.iter().take(wordcraft_doc::freeform::MAX_PATHS) {
-        let mut attrs = vec![("w", emu(pw)), ("h", emu(ph))];
-        if !p.closed || f.is_ink() {
-            attrs.push(("fill", "none".to_string()));
+        if !(p.joined && open) {
+            if open {
+                w.close("a:path");
+            }
+            let mut attrs = vec![("w", emu(pw)), ("h", emu(ph))];
+            if !p.closed || f.is_ink() {
+                attrs.push(("fill", "none".to_string()));
+            }
+            let attrs: Vec<(&str, &str)> = attrs.iter().map(|(k, v)| (*k, v.as_str())).collect();
+            w.open("a:path", &attrs);
+            open = true;
         }
-        let attrs: Vec<(&str, &str)> = attrs.iter().map(|(k, v)| (*k, v.as_str())).collect();
-        w.open("a:path", &attrs);
         for (i, xy) in p.pts.iter().take(wordcraft_doc::freeform::MAX_POINTS).enumerate() {
             pt(w, if i == 0 { "a:moveTo" } else { "a:lnTo" }, *xy);
         }
@@ -1482,6 +1497,8 @@ fn cust_geom(w: &mut W, f: &wordcraft_doc::freeform::Freeform, sw: f32, sh: f32)
         if p.closed {
             w.empty("a:close", &[]);
         }
+    }
+    if open {
         w.close("a:path");
     }
     w.close("a:pathLst");
