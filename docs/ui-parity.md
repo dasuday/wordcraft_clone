@@ -62,6 +62,7 @@ The Language dialog reads effective character formatting, including document def
 | Date | Change | Summary |
 |---|---|---|
 | 2026-10-17 | trivial | Language dialog keeps inherited proofing language and no-proof choices (#2717); readiness estimates unchanged |
+| 2026-10-15 | trivial | AutoCorrect Options › Exceptions: "Automatically add words to list" switches for First Letter and INitial CAps (#1857) |
 | 2026-10-13 | trivial | New/Modify Table Style: No Border on a part that inherits its lines hides them; emptying the font box makes the part's font inherited again (#1288) |
 | 2026-10-14 | trivial | Tab stops edited on the ruler: corner kind selector, click to set, drag to move or off to clear, per-kind markers mirrored for RTL; each gesture one `para.tabs` call and one undo step; Rulers 85% → 90% |
 | 2026-10-12 | trivial | Tables on the page: one selected cell (Select Cell, or a click along its left edge) is a cell selection when its border is dragged: the border moves in its row only (#962) |
