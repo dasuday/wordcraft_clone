@@ -353,6 +353,10 @@ pub struct ParaLayout {
     /// equations) rather than for the paragraph's own text, by cluster index, sorted, with each of
     /// the cluster's glyphs' byte range in that text (a ligature's glyph spans its letters).
     pub shown: Vec<(usize, String, Vec<std::ops::Range<usize>>)>,
+    /// Clusters standing for an object whose glyphs come from more than one face (a field result
+    /// mixing Latin and Chinese text, #2491), by cluster index, sorted: each face's style and its
+    /// glyphs. A glyph id only means something in its own face, so each run is drawn in its own.
+    pub faces: Vec<(usize, Vec<FaceRun>)>,
     /// Shapes drawn around overstruck field text (enclosed characters, `EQ \o`), by cluster index.
     pub enclosures: Vec<(usize, Enclosed)>,
 }
@@ -508,6 +512,37 @@ struct Builder<'a> {
     levels: Vec<u8>,
     /// Text drawn by clusters that stand for an object, by cluster index (see `ParaLayout::shown`).
     shown: Vec<(usize, String, Vec<std::ops::Range<usize>>)>,
+    /// Those of them drawn in more than one face (see `ParaLayout::faces`).
+    faces: Vec<(usize, Vec<FaceRun>)>,
+}
+
+/// Glyphs `glyphs` of a cluster, drawn in style `style`'s face (see [`ParaLayout::faces`]).
+#[derive(Clone, Debug, PartialEq)]
+pub struct FaceRun {
+    pub style: u32,
+    pub glyphs: std::ops::Range<u32>,
+}
+
+/// The face runs of `clusters`' glyphs (`faces` holding those already known to mix faces), or
+/// none when they all share one face.
+fn face_runs(clusters: &[(usize, Cluster)], faces: &[(usize, Vec<FaceRun>)]) -> Vec<FaceRun> {
+    let mut runs: Vec<FaceRun> = Vec::new();
+    for (k, c) in clusters {
+        let own = match faces.binary_search_by_key(k, |(i, _)| *i) {
+            Ok(i) => faces.get(i).map(|(_, r)| r.clone()).unwrap_or_default(),
+            Err(_) => vec![FaceRun { style: c.style, glyphs: c.g0..c.g1 }],
+        };
+        for r in own.into_iter().filter(|r| r.glyphs.start < r.glyphs.end) {
+            match runs.last_mut() {
+                Some(last) if last.style == r.style && last.glyphs.end == r.glyphs.start => last.glyphs.end = r.glyphs.end,
+                _ => runs.push(r),
+            }
+        }
+    }
+    if runs.windows(2).all(|w| w.first().map(|a| a.style) == w.get(1).map(|b| b.style)) {
+        runs.clear();
+    }
+    runs
 }
 
 /// What a piece of text is shaped as: one face, case, script formatting and direction.
@@ -948,6 +983,9 @@ impl<'a> Builder<'a> {
         let before = self.clusters.len();
         self.shape_with(text, start, rc, None, false);
         let added: Vec<Cluster> = self.clusters.drain(before..).collect();
+        // Shaping picks a face per character (an East Asian font, a fallback): the merged cluster
+        // keeps which glyphs are in which face (#2491).
+        let runs = face_runs(&added.iter().cloned().map(|c| (usize::MAX, c)).collect::<Vec<_>>(), &[]);
         let Some(first) = added.first() else {
             let si = self.style(rc, None, false);
             let g = self.glyphs.len() as u32;
@@ -988,6 +1026,9 @@ impl<'a> Builder<'a> {
         let style = first.style;
         let g1 = added.last().map(|c| c.g1).unwrap_or(g0);
         self.shown.push((self.clusters.len(), text.to_string(), ranges));
+        if !runs.is_empty() {
+            self.faces.push((self.clusters.len(), runs));
+        }
         self.clusters.push(Cluster { start, end, adv: x, kind: ClKind::Text, style, g0, g1, break_after: false, obj_h: 0.0, obj_d: 0.0, dot: false });
     }
 
@@ -1005,12 +1046,17 @@ impl<'a> Builder<'a> {
         dy: f32,
     ) -> Option<usize> {
         use wordcraft_doc::eq::OAlign;
-        let (c0, s0) = (self.clusters.len(), self.shown.len());
+        let (c0, s0, f0) = (self.clusters.len(), self.shown.len(), self.faces.len());
         for t in texts {
             self.shape_atomic(t, start, end, rc);
         }
         let added: Vec<Cluster> = self.clusters.drain(c0..).collect();
         let shown: Vec<(usize, String, Vec<std::ops::Range<usize>>)> = self.shown.drain(s0..).collect();
+        let faces: Vec<(usize, Vec<FaceRun>)> = self.faces.drain(f0..).collect();
+        let runs = face_runs(
+            &added.iter().cloned().enumerate().map(|(i, c)| (c0 + i, c)).filter(|(_, c)| c.kind == ClKind::Text).collect::<Vec<_>>(),
+            &faces,
+        );
         let adv = added.iter().filter(|c| c.kind == ClKind::Text).map(|c| c.adv).fold(width.max(0.0), f32::max);
         let (mut text, mut ranges) = (String::new(), Vec::new());
         let (mut g0, mut g1) = (u32::MAX, 0u32);
@@ -1040,6 +1086,9 @@ impl<'a> Builder<'a> {
         let k = self.clusters.len();
         if !text.is_empty() {
             self.shown.push((k, text, ranges));
+        }
+        if !runs.is_empty() {
+            self.faces.push((k, runs));
         }
         self.clusters.push(Cluster { start, end, adv, kind: ClKind::Text, style, g0, g1, break_after: false, obj_h: 0.0, obj_d: 0.0, dot: false });
         Some(k)
@@ -1071,7 +1120,7 @@ fn overstrike(
     let style = Enclosure::parse(instr).map(|e| e.style).unwrap_or_default();
     let s = rc.size.clamp(1.0, 1638.0);
     // The widest text at the run's own size.
-    let (c0, g0, s0) = (b.clusters.len(), b.glyphs.len(), b.shown.len());
+    let (c0, g0, s0, f0) = (b.clusters.len(), b.glyphs.len(), b.shown.len(), b.faces.len());
     for t in &texts {
         b.shape_atomic(t, start, end, rc);
     }
@@ -1079,6 +1128,7 @@ fn overstrike(
     b.clusters.truncate(c0);
     b.glyphs.truncate(g0);
     b.shown.truncate(s0);
+    b.faces.truncate(f0);
     // The shape's box (`bw` × `bh`, centred `cy` above the baseline) and the text's size.
     let cy = s * 0.34;
     let (bw, bh, size) = match style {
@@ -1233,8 +1283,16 @@ pub fn layout_para(p: &Paragraph, env: &ParaEnv) -> ParaLayout {
     }
     let resolve = |c: &CharProps| -> Arc<ResolvedChar> { Arc::new(doc.styles.resolve_char_in(para_style, table_chr, c)) };
     let levels = bidi_levels(&p.text, rp.bidi);
-    let mut b =
-        Builder { env, styles: Vec::new(), style_index: Default::default(), glyphs: Vec::new(), clusters: Vec::new(), levels, shown: Vec::new() };
+    let mut b = Builder {
+        env,
+        styles: Vec::new(),
+        style_index: Default::default(),
+        glyphs: Vec::new(),
+        clusters: Vec::new(),
+        levels,
+        shown: Vec::new(),
+        faces: Vec::new(),
+    };
     let mark_rc = resolve(&p.mark);
     let mark_style = b.style(&mark_rc, None, false);
     let mut has_page_fields = false;
@@ -1561,6 +1619,7 @@ pub fn layout_para(p: &Paragraph, env: &ParaEnv) -> ParaLayout {
         glyphs: b.glyphs,
         clusters: b.clusters,
         shown: b.shown,
+        faces: b.faces,
         lines: Vec::new(),
         label,
         height: 0.0,

@@ -739,13 +739,18 @@ fn lines(
                 text_bg: None,
             });
         }
-        // Glyph runs grouped by style.
+        // Glyph runs grouped by style. A cluster whose glyphs come from several faces (a field
+        // result mixing scripts, #2491) is drawn alone, one run per face: `seg` is the next one.
+        let faces_of = |k: usize| pl.faces.binary_search_by_key(&k, |(i, _)| *i).ok().and_then(|i| pl.faces.get(i)).map(|(_, r)| r.as_slice());
         let mut k = line.c0;
+        let mut seg = 0;
         while k < line.c1 {
             let Some(c) = pl.clusters.get(k) else { break };
-            let si = c.style;
+            let face_run = faces_of(k).and_then(|r| r.get(seg)).cloned();
+            let si = face_run.as_ref().map_or(c.style, |r| r.style);
             let Some(st) = pl.styles.get(si as usize) else {
                 k += 1;
+                seg = 0;
                 continue;
             };
             let mut glyphs = Vec::new();
@@ -754,7 +759,7 @@ fn lines(
             let run_start = k;
             while k < line.c1 {
                 let Some(c) = pl.clusters.get(k) else { break };
-                if c.style != si {
+                if k != run_start && (c.style != si || faces_of(k).is_some() || face_run.is_some()) {
                     break;
                 }
                 let cx = x + line.cl_left(k).unwrap_or(0.0);
@@ -807,8 +812,28 @@ fn lines(
                                     from..to
                                 }
                             };
+                            // Of a cluster in several faces, only this run's glyphs.
+                            if face_run.as_ref().is_some_and(|f| !f.glyphs.contains(&(c.g0 + n as u32))) {
+                                continue;
+                            }
                             glyphs.push((g.gid, cx + g.dx, base - st.shift - g.dy));
                             ranges.push(r.start..r.end.max(r.start));
+                        }
+                        if face_run.is_some() {
+                            // Its text: what these glyphs were shaped from.
+                            let from = ranges.iter().map(|r| r.start).min().unwrap_or(a);
+                            let to = ranges.iter().map(|r| r.end).max().unwrap_or(from).max(from);
+                            text = text.get(from..to).unwrap_or("").to_string();
+                            for r in &mut ranges {
+                                *r = r.start.saturating_sub(from)..r.end.saturating_sub(from);
+                            }
+                            // The cluster's next run, or the cluster after it.
+                            if faces_of(k).is_some_and(|r| seg + 1 < r.len()) {
+                                seg += 1;
+                            } else {
+                                (k, seg) = (k + 1, 0);
+                            }
+                            break;
                         }
                         k += 1;
                         continue;
@@ -826,7 +851,7 @@ fn lines(
                         ranges.push(a..b);
                     }
                 }
-                k += 1;
+                (k, seg) = (k + 1, 0);
             }
             let run_end = k;
             let rc = &st.rc;
