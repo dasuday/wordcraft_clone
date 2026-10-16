@@ -261,6 +261,44 @@ fn encrypt(s: &mut Session, v: &Value) -> CmdResult {
     Ok(json!({"encrypted": s.password.is_some()}))
 }
 
+/// A document prepared to be written to disk: `file.save` writes it right away, and the
+/// desktop AutoSave hands it to a worker thread so typing never waits for the disk. Plain
+/// data (the document is an owned copy already stamped), so it can cross a thread.
+pub struct PreparedSave {
+    /// Where the document is written.
+    pub path: std::path::PathBuf,
+    /// The stamped document: a header/footer just made and left empty isn't saved (#960).
+    pub doc: Document,
+    /// Like Word, a document opened with a password is saved with it again.
+    pub password: Option<crate::io::Password>,
+    /// Print Markup and Word 2003 options, as `file.save` would apply them.
+    pub opts: crate::io::ExportOptions,
+}
+
+/// Stamp and copy the document for a save to `path`, everything `file.save` does to it before
+/// the bytes are written: save metadata (`Session::stamp_save`), export options (Print Markup
+/// from `v` or the settings; for an `.xml` file, Word 2003 when that is what the file holds)
+/// and the empty-header cleanup. Writing is [`write_prepared`].
+pub fn prepare_save(s: &mut Session, path: &std::path::Path, v: &Value) -> Result<PreparedSave, String> {
+    let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
+    let mut opts = export_options(s, v);
+    if v.get("format").filter(|f| !f.is_null()).is_none() && ext == "xml" {
+        // Saving over a Word 2003 XML file (one opened as such, say) keeps its format.
+        opts.word2003 = is_word_2003_file(path);
+    }
+    s.stamp_save();
+    let password = s.password.clone();
+    // A header/footer just made and left empty isn't saved (#960).
+    let copy = super::insert::saved_copy(s);
+    Ok(PreparedSave { path: path.into(), doc: copy.unwrap_or_else(|| s.doc.clone()), password, opts })
+}
+
+/// Write a [`PreparedSave`] to disk: the sibling-temp-file safe save, encrypted when the
+/// document has a password. Thread-safe: takes only plain data, so a worker thread can run it.
+pub fn write_prepared(save: &PreparedSave) -> Result<(), String> {
+    crate::io::save_path_with(&save.path, &save.doc, save.password.as_ref().map(|p| p.as_str()), &save.opts)
+}
+
 fn save(s: &mut Session, v: &Value) -> CmdResult {
     let path = match p::str(v, "path").map(std::path::PathBuf::from).or_else(|| s.path.clone()) {
         Some(p) => p,
@@ -281,23 +319,16 @@ fn save(s: &mut Session, v: &Value) -> CmdResult {
         s.password = Some(crate::io::Password::new(pw));
     }
     let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
-    let mut opts = export_options(s, v);
     match v.get("format").filter(|f| !f.is_null()) {
-        None => {
-            // Saving over a Word 2003 XML file (one opened as such, say) keeps its format.
-            opts.word2003 = ext == "xml" && is_word_2003_file(&path);
-        }
+        None => {}
         Some(f) if matches!(f.as_str(), Some(FORMAT_WORD_2003 | FORMAT_FLAT_OPC)) && ext == "xml" => {}
         Some(_) => {
             return Err(CmdError::Params(format!("`format` is \"{FORMAT_WORD_2003}\" or \"{FORMAT_FLAT_OPC}\", and only for an .xml file")));
         }
     }
-    s.stamp_save();
-    let password = s.password.as_ref().map(crate::io::Password::as_str);
-    // A header/footer just made and left empty isn't saved (#960).
-    let copy = super::insert::saved_copy(s);
-    crate::io::save_path_with(&path, copy.as_ref().unwrap_or(&s.doc), password, &opts).map_err(CmdError::Failed)?;
-    let encrypted = password.is_some() && crate::io::can_encrypt(&path.to_string_lossy());
+    let prepared = prepare_save(s, &path, v).map_err(CmdError::Failed)?;
+    write_prepared(&prepared).map_err(CmdError::Failed)?;
+    let encrypted = prepared.password.is_some() && crate::io::can_encrypt(&path.to_string_lossy());
     if ["docx", "docm", "dotx", "dotm", "odt", "rtf", "json", "xml"].contains(&ext.as_str()) {
         s.path = Some(path.clone());
         s.dirty = false;

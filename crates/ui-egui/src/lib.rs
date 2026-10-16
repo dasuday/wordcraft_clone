@@ -23,6 +23,8 @@ macro_rules! tl {
 pub mod a11y;
 pub mod a11y_pane;
 pub mod async_saves;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod autosave_worker;
 pub mod autoscroll;
 pub mod backstage;
 pub mod canvas;
@@ -524,6 +526,14 @@ pub struct WordApp {
     /// there. A file that was merely opened isn't rewritten until the user saves it: saving drops
     /// whatever WordCraft can't represent (content controls, charts, macros…).
     autosave_path: Option<std::path::PathBuf>,
+    /// Desktop: AutoSave writes through this worker, so the UI thread never waits for the disk
+    /// ([`autosave_worker`]). `None` on the web, where AutoSave is blocked anyway.
+    #[cfg(not(target_arch = "wasm32"))]
+    autosave_worker: Option<autosave_worker::AutoSaveWorker>,
+    /// Desktop: the document revision of the AutoSave copy in flight, so a failed write only
+    /// re-dirties the document when nothing has changed it since the copy was captured.
+    #[cfg(not(target_arch = "wasm32"))]
+    autosave_pending_rev: Option<u64>,
     /// Web: saves the browser's picker hasn't finished yet ([`async_saves`], #1315).
     saves_in_flight: Vec<SaveInFlight>,
     /// Web: the command a Save Changes prompt held back until its picker save ends (#1315).
@@ -627,6 +637,10 @@ impl WordApp {
             read_aloud_at: None,
             read_aloud_error: None,
             autosave_path: None,
+            #[cfg(not(target_arch = "wasm32"))]
+            autosave_worker: Some(autosave_worker::AutoSaveWorker::spawn()),
+            #[cfg(not(target_arch = "wasm32"))]
+            autosave_pending_rev: None,
             saves_in_flight: Vec::new(),
             awaiting_save: None,
             change_picture_target: None,
@@ -1165,6 +1179,8 @@ impl WordApp {
         }
         // No document open (#1129): nothing to save.
         if self.quit_requested || !self.session.dirty || !self.has_document() {
+            #[cfg(not(target_arch = "wasm32"))]
+            self.finish_pending_autosave();
             return true;
         }
         let _ = self.run("file.close", json!({}));
@@ -1752,6 +1768,7 @@ impl WordApp {
         }
         options::sync(self);
         self.settle_async_saves();
+        self.settle_autosave();
         // Chinese text wants the Chinese face before the Japanese one (one glyph style per line).
         // An installed CJK font is read only once CJK text is shown (#241): a CJK interface, the
         // language names in Options, or a file name the caption is drawing. A file opened later
@@ -1942,17 +1959,81 @@ impl WordApp {
         Ok(json!({"value": on}))
     }
 
-    /// AutoSave: write a saved document a couple of seconds after the last change. A failure is
-    /// shown in the status bar and turns AutoSave off for the file until the user saves it again.
+    /// AutoSave: write a saved document a couple of seconds after the last change. The write
+    /// itself happens off the UI thread ([`autosave_worker`]): the document is stamped and
+    /// copied here, and its outcome is applied by [`Self::settle_autosave`]. A failure is shown
+    /// in the status bar and turns AutoSave off for the file until the user saves it again.
     fn autosave_tick(&mut self, now: f64) {
-        if self.autosaves() && self.session.dirty && now - self.last_autosave > 2500.0 && now - self.canvas.caret_visible_since > 1500.0 {
-            self.last_autosave = now;
-            if let Err(e) = self.session.run("file.save", &json!({})) {
-                log::warn!("AutoSave failed: {e}");
-                self.autosave_path = None;
-                self.status(i18n::fmt(tl!("AutoSave failed: {error}. Save the document to turn AutoSave back on."), &[("error", &e.to_string())]));
-            }
+        if !self.autosaves() || !self.session.dirty || now - self.last_autosave <= 2500.0 || now - self.canvas.caret_visible_since <= 1500.0 {
+            return;
         }
+        // One write at a time: while one is in flight, a later frame's tick tries again with
+        // the then-current document.
+        #[cfg(not(target_arch = "wasm32"))]
+        if self.autosave_worker.as_ref().is_some_and(|w| w.is_busy()) {
+            return;
+        }
+        match self.autosave_write() {
+            Ok(()) => self.last_autosave = now,
+            Err(e) => self.autosave_failure(e),
+        }
+    }
+
+    /// Prepare the document for AutoSave and start its write: stamp and copy on the UI thread,
+    /// then hand the copy to the worker (or write inline when there is none, e.g. the web
+    /// build). The captured state counts as saved; later edits dirty the document again.
+    fn autosave_write(&mut self) -> Result<(), String> {
+        let Some(path) = self.session.path.clone() else { return Err("no file path".into()) };
+        let prepared = wordcraft_engine::cmd::file::prepare_save(&mut self.session, &path, &json!({}))?;
+        self.session.dirty = false;
+        #[cfg(not(target_arch = "wasm32"))]
+        if let Some(w) = &mut self.autosave_worker {
+            self.autosave_pending_rev = Some(self.session.rev());
+            w.submit(prepared);
+            return Ok(());
+        }
+        if let Err(e) = wordcraft_engine::cmd::file::write_prepared(&prepared) {
+            self.session.dirty = true;
+            return Err(e);
+        }
+        Ok(())
+    }
+
+    /// Wait (bounded) for a background AutoSave in flight to land — used when the window
+    /// closes, so closing never cuts a write short (and by hosts that need the file on disk
+    /// right now).
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn finish_pending_autosave(&mut self) {
+        let Some(w) = &mut self.autosave_worker else { return };
+        if let Some((_, Err(e))) = w.settle(std::time::Duration::from_secs(5))
+            && self.autosave_pending_rev == Some(self.session.rev())
+        {
+            self.autosave_failure(e);
+        }
+    }
+
+    /// Apply the outcome of a background AutoSave ([`Self::autosave_write`]); a failure puts
+    /// the document back to unsaved and turns AutoSave off for the file, like an inline
+    /// failure would — unless the document was explicitly saved (or edited) since the copy was
+    /// captured, in which case the file on disk is already newer than the failed write. Called
+    /// every frame.
+    fn settle_autosave(&mut self) {
+        #[cfg(not(target_arch = "wasm32"))]
+        if let Some(w) = &mut self.autosave_worker
+            && let Some((_, Err(e))) = w.poll()
+            && self.autosave_pending_rev == Some(self.session.rev())
+        {
+            self.autosave_failure(e);
+        }
+    }
+
+    /// AutoSave failed: put the document back to unsaved and turn AutoSave off for the file
+    /// until the user saves it again.
+    fn autosave_failure(&mut self, error: String) {
+        log::warn!("AutoSave failed: {error}");
+        self.autosave_path = None;
+        self.session.dirty = true;
+        self.status(i18n::fmt(tl!("AutoSave failed: {error}. Save the document to turn AutoSave back on."), &[("error", &error)]));
     }
 
     /// Read a Control-click as the right-click on macOS, then inject synthetic input events from
@@ -5009,6 +5090,28 @@ mod tests {
         }
     }
 
+    /// AutoSave's write runs off the UI thread: the tick captures the document (which counts
+    /// as saved at once) and returns before the file is written; the file lands when the
+    /// worker finishes, and the app is then free to type again (#bug: typing froze on every
+    /// AutoSave because the write ran on the thread that paints).
+    #[test]
+    fn autosave_writes_off_the_ui_thread() {
+        let dir = scratch("autosave-async");
+        let path = dir.join("notes.docx");
+        let mut a = typed();
+        a.run("file.save", json!({"path": path.to_string_lossy()})).unwrap();
+        a.run("text.insert", json!({"text": "Typed "})).unwrap();
+        a.autosave_tick(now_ms() + 10_000.0);
+        // The tick handed the stamped document to the worker and marked the state saved.
+        assert!(a.autosave_worker.as_ref().is_some_and(|w| w.is_busy()), "the write is in flight");
+        assert!(!a.session.dirty, "the captured state counts as saved");
+        a.finish_pending_autosave();
+        assert!(!a.autosave_worker.as_ref().is_some_and(|w| w.is_busy()), "the worker is re-armed");
+        let saved = wordcraft_engine::io::open_path(&path).unwrap();
+        assert!(saved.plain_text(wordcraft_doc::StoryRef::Body).contains("Typed "));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     /// Macro-enabled documents and templates keep everything (#172), so once saved in this
     /// session AutoSave covers them like a .docx.
     #[test]
@@ -5021,6 +5124,7 @@ mod tests {
             assert!(a.autosaves(), "{ext}");
             a.run("text.insert", json!({"text": "More "})).unwrap();
             a.autosave_tick(now_ms() + 10_000.0);
+            a.finish_pending_autosave();
             assert!(!a.session.dirty, "{ext}: AutoSave wrote the file");
             let saved = wordcraft_engine::io::open_path(&path).unwrap();
             assert!(saved.plain_text(wordcraft_doc::StoryRef::Body).contains("More "), "{ext}");
@@ -5043,6 +5147,7 @@ mod tests {
         assert!(!a.ui.recent.contains(&path.to_string_lossy().to_string()), "{:?}", a.ui.recent);
         a.run("text.insert", json!({"text": "More "})).unwrap();
         a.autosave_tick(now_ms() + 10_000.0);
+        a.finish_pending_autosave();
         assert!(!a.session.dirty, "AutoSave wrote the renamed file");
         let saved = wordcraft_engine::io::open_path(&renamed).unwrap();
         assert!(saved.plain_text(wordcraft_doc::StoryRef::Body).contains("More "));
@@ -5431,11 +5536,13 @@ mod tests {
             assert_ne!(a.title_stem(), "contract", "{id}: titled as a new document");
             a.run("text.insert", json!({"text": "Note "})).unwrap();
             a.autosave_tick(now_ms() + 10_000.0);
+            a.finish_pending_autosave();
             a.run("file.save", json!({})).unwrap();
             a.run("edit.undo", json!({})).unwrap();
             a.run("edit.undo", json!({})).unwrap();
             a.run("file.save", json!({})).unwrap();
             a.autosave_tick(now_ms() + 20_000.0);
+            a.finish_pending_autosave();
             assert_eq!(std::fs::read(&path).unwrap(), saved, "{id}: the original file is never overwritten");
             let _ = std::fs::remove_dir_all(&dir);
         }
@@ -5505,6 +5612,7 @@ mod tests {
             assert_eq!(body_text(&a), result, "{id}: nothing to redo");
             a.run("file.save", json!({})).unwrap();
             a.autosave_tick(now_ms() + 10_000.0);
+            a.finish_pending_autosave();
             assert_eq!(on_file(&copy), written, "{id}");
             assert!(on_file(&path).contains("Signed contract"), "{id}: the original is untouched");
             let _ = std::fs::remove_dir_all(&dir);
@@ -5522,6 +5630,7 @@ mod tests {
         a.run("file.open", json!({"path": path.to_string_lossy()})).unwrap();
         a.run("text.insert", json!({"text": "Typed "})).unwrap();
         a.autosave_tick(now_ms() + 10_000.0);
+        a.finish_pending_autosave();
         assert!(std::fs::read(&path).unwrap() == before, "an opened file is never rewritten behind the user's back");
         assert!(a.session.dirty);
 
@@ -5530,6 +5639,7 @@ mod tests {
         a.run("text.insert", json!({"text": "More "})).unwrap();
         assert!(a.session.dirty);
         a.autosave_tick(now_ms() + 10_000.0);
+        a.finish_pending_autosave();
         assert!(!a.session.dirty);
         let saved = wordcraft_engine::io::open_path(&path).unwrap();
         assert!(saved.plain_text(wordcraft_doc::StoryRef::Body).contains("Typed More Original"));
@@ -5566,6 +5676,7 @@ mod tests {
         assert!(a.autosaves());
         a.run("text.insert", json!({"text": "More "})).unwrap();
         a.autosave_tick(now_ms() + 10_000.0);
+        a.finish_pending_autosave();
         assert!(!a.session.dirty, "AutoSave wrote the .docx");
         assert_eq!(a.run("file.autosave", json!({})).unwrap(), json!({"value": false}), "toggling turns it off");
         assert!(!a.autosaves());
@@ -5600,6 +5711,7 @@ mod tests {
 
         a.run("text.insert", json!({"text": " continues"})).unwrap();
         a.autosave_tick(now_ms() + 10_000.0);
+        a.finish_pending_autosave();
         assert!(!a.session.dirty);
         let saved = wordcraft_engine::io::open_path(&path).unwrap();
         assert!(saved.plain_text(wordcraft_doc::StoryRef::Body).contains("chapter continues"));
@@ -5619,6 +5731,7 @@ mod tests {
         a.run("text.insert", json!({"text": "More "})).unwrap();
         a.status_msg = None;
         a.autosave_tick(now_ms() + 10_000.0);
+        a.finish_pending_autosave();
         let msg = a.status_msg.as_ref().map(|(m, _)| m.clone()).unwrap_or_default();
         assert!(msg.contains("AutoSave"), "the failure shows in the status bar: {msg:?}");
         assert!(a.session.dirty);
@@ -5626,6 +5739,7 @@ mod tests {
         // Not retried until the user saves again.
         a.status_msg = None;
         a.autosave_tick(now_ms() + 20_000.0);
+        a.finish_pending_autosave();
         assert!(a.status_msg.is_none());
         let _ = std::fs::remove_dir_all(&dir);
     }
