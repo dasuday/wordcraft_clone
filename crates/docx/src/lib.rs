@@ -29,7 +29,7 @@ pub use crypt::{
 pub use flat::{XmlKind, sniff_xml, write as write_flat};
 pub use fonts::embedded_fonts;
 pub use read::read;
-pub use smart_art::smart_art_items;
+pub use smart_art::{smart_art_item_at, smart_art_item_box, smart_art_items};
 pub use wordml2003_write::write as write_wordml2003;
 pub use write::{write, write_as};
 

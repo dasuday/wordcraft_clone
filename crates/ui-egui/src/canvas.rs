@@ -1037,7 +1037,10 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
     let out = scroll_area.show_viewport(&mut ui_area, |ui, viewport| {
         origin = ui.min_rect().min - viewport.min.to_vec2();
         let content = Rect::from_min_size(ui.min_rect().min, geo.size);
-        let resp = ui.allocate_rect(content, Sense::click_and_drag());
+        // A fixed id: a pane opening beside the page (the SmartArt Text Pane as you type, #2467)
+        // would otherwise give the page a new one, and the keyboard focus with the next keys.
+        ui.advance_cursor_after_rect(content);
+        let resp = ui.interact(content, egui::Id::new("wordcraft_page"), Sense::click_and_drag());
         if let Some(tr) = scroll_target {
             ui.scroll_to_rect(Rect::from_min_size(ui.min_rect().min + tr.min.to_vec2(), tr.size()), None);
         }
@@ -1410,6 +1413,8 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
             }
         }
         crate::objects::paint(app, &painter, &t, &layout, &rects, geo.scale);
+        crate::dialogs_smart_art::paint_item(app, &painter, &t, &layout, &rects, geo.scale);
+        crate::dialogs_smart_art::frame_button(app, ui.ctx(), &layout, &rects, geo.scale, ui.clip_rect());
         crate::ink::paint(app, &painter, &rects, &layout, geo.scale);
         crate::table_pen::paint(app, &painter, &t, &layout, &rects, geo.scale);
         crate::table_resize::paint(app, &painter, &t, &layout, &rects, geo.scale);
@@ -4790,5 +4795,74 @@ mod tests {
 
     fn page_at_index(rects: &[Rect], p: Pos2) -> Option<usize> {
         nearest_page(rects, p)
+    }
+
+    #[test]
+    fn clicking_a_smart_art_shape_types_into_its_item() {
+        use egui::{Event, PointerButton};
+        let mut a = WordApp::new(wordcraft_engine::Session::new(wordcraft_doc::Document::new()), Default::default());
+        a.run("view.commentsPane", json!({"value": false})).unwrap();
+        a.run("insert.smartArt", json!({"layout": "hierarchy"})).unwrap();
+        let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(1440.0, 900.0)).with_step_dt(1.0 / 60.0).build_ui_state(
+            |ui, app: &mut WordApp| {
+                let ctx = ui.ctx().clone();
+                app.logic(&ctx);
+                app.ui(ui);
+            },
+            a,
+        );
+        for _ in 0..6 {
+            h.step();
+        }
+        let click = |h: &mut egui_kittest::Harness<'_, WordApp>, at: Pos2| {
+            h.event(Event::PointerMoved(at));
+            h.event(Event::PointerButton { pos: at, button: PointerButton::Primary, pressed: true, modifiers: Default::default() });
+            h.step();
+            h.event(Event::PointerButton { pos: at, button: PointerButton::Primary, pressed: false, modifiers: Default::default() });
+            // Past the double-click time.
+            for _ in 0..40 {
+                h.step();
+            }
+        };
+        let send = |h: &mut egui_kittest::Harness<'_, WordApp>, e: Event| {
+            h.event(e);
+            for _ in 0..3 {
+                h.step();
+            }
+        };
+        let key = |k: egui::Key| Event::Key { key: k, physical_key: None, pressed: true, repeat: false, modifiers: Default::default() };
+        let items = |h: &egui_kittest::Harness<'_, WordApp>| {
+            wordcraft_engine::cmd::smart_art::selected_smart_art(&h.state().session)
+                .map(|g| g.items.iter().map(|i| i.text.clone()).collect::<Vec<_>>())
+        };
+        let layout = h.state_mut().session.layout();
+        let (hit, _) = crate::objects::active(h.state(), &layout).expect("the new graphic is selected");
+        let g = wordcraft_engine::cmd::smart_art::selected_smart_art(&h.state().session).unwrap();
+        assert_eq!(g.items[3].text, "Build");
+        let [bx, by, bw, bh] = wordcraft_engine::cmd::smart_art::item_box(&g, hit.rect.w, hit.rect.h, 3).unwrap();
+        let build = page_to_screen(h.state_mut(), hit.page, hit.rect.x + bx + bw / 2.0, hit.rect.y + by + bh / 2.0).expect("on screen");
+        click(&mut h, build);
+        assert_eq!(h.state().smart_art_item, Some(3), "the clicked shape's item is picked");
+        // Key by key: the Text Pane opening on the first one doesn't take the next ones.
+        send(&mut h, Event::Text("X".into()));
+        send(&mut h, Event::Text("Y".into()));
+        let now = items(&h).expect("the graphic stays");
+        assert_eq!((now[0].as_str(), now[3].as_str()), ("Lead", "BuildXY"), "typing goes into the clicked item");
+        // Backspace erases in the item, never the graphic.
+        for _ in 0..8 {
+            send(&mut h, key(egui::Key::Backspace));
+        }
+        assert_eq!(items(&h).expect("the graphic stays")[3], "");
+        send(&mut h, Event::Text("Ship".into()));
+        assert_eq!(items(&h).unwrap()[3], "Ship");
+        // Escape goes back to the whole graphic; the next text goes to the first item again.
+        send(&mut h, key(egui::Key::Escape));
+        assert_eq!(h.state().smart_art_item, None);
+        assert!(items(&h).is_some(), "the graphic is still selected");
+        // The graphic's background picks no item.
+        click(&mut h, build);
+        let corner = page_to_screen(h.state_mut(), hit.page, hit.rect.x + 2.0, hit.rect.y + 2.0).expect("on screen");
+        click(&mut h, corner);
+        assert_eq!(h.state().smart_art_item, None);
     }
 }
