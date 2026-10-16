@@ -2633,11 +2633,11 @@ preview	Title	Tytuł
 	Model connection	Połączenie z modelem
 	OpenAI-compatible chat completions URL	Adres URL uzupełniania czatu zgodny z OpenAI
 	Model name	Nazwa modelu
-	API key (if required by your server; kept only in memory)	Klucz API (jeśli wymaga go serwer; przechowywany tylko w pamięci)
+	API key (saved unencrypted with local preferences)	Klucz API (zapisywany bez szyfrowania w lokalnych preferencjach)
 	Rewrite	Przeredaguj
 	Summarize	Podsumuj
 	Instructions	Instrukcje
-	Generate sends your instructions and selected text to the endpoint above. No other document content is sent.	Generowanie wysyła instrukcje i zaznaczony tekst do powyższego serwera. Pozostała treść dokumentu nie jest wysyłana.
+	Generate sends your instructions and selected text to the configured endpoint. No other document content is sent.	Generowanie wysyła instrukcje i zaznaczony tekst do skonfigurowanej usługi. Pozostała treść dokumentu nie jest wysyłana.
 	Generate	Generuj
 	Discard	Odrzuć
 	Discarded; waiting for request to finish…	Odrzucono; oczekiwanie na zakończenie żądania…

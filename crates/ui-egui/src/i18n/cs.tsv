@@ -2635,11 +2635,11 @@ preview	Title	Ukázka
 	Model connection	Připojení k modelu
 	OpenAI-compatible chat completions URL	URL dokončování chatu kompatibilní s OpenAI
 	Model name	Název modelu
-	API key (if required by your server; kept only in memory)	Klíč API (pokud jej server vyžaduje; uložen pouze v paměti)
+	API key (saved unencrypted with local preferences)	Klíč API (uložen nešifrovaně v místních předvolbách)
 	Rewrite	Přeformulovat
 	Summarize	Shrnout
 	Instructions	Pokyny
-	Generate sends your instructions and selected text to the endpoint above. No other document content is sent.	Generování odešle pokyny a vybraný text výše uvedenému serveru. Jiný obsah dokumentu se neodesílá.
+	Generate sends your instructions and selected text to the configured endpoint. No other document content is sent.	Generovat odešle pokyny a vybraný text na nastavený server. Žádný další obsah dokumentu se neodesílá.
 	Generate	Generovat
 	Discard	Zahodit
 	Discarded; waiting for request to finish…	Zahozeno; čeká se na dokončení požadavku…

@@ -266,6 +266,8 @@ pub struct UiState {
     pub language: String,
     /// Editing preferences; the session owns them while running (see [`WordApp::prefs`]).
     pub editing: wordcraft_engine::Prefs,
+    /// File > Options > Writing Assistant: external writing model, saved with other local preferences.
+    pub assistant_connection: assistant::Connection,
     /// Read Aloud speed (1 = normal) and whether it skips citations and bibliographies.
     pub read_aloud_rate: f32,
     pub read_aloud_skip_citations: bool,
@@ -357,6 +359,7 @@ impl Default for UiState {
             window: None,
             language: i18n::AUTO.into(),
             editing: wordcraft_engine::Prefs::default(),
+            assistant_connection: assistant::Connection::default(),
             read_aloud_rate: 1.0,
             read_aloud_skip_citations: true,
             keytips_enabled: true,

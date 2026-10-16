@@ -2647,12 +2647,12 @@ preview	Title	Esempio
 	Prepare Writing Request	Prepara richiesta di scrittura
 	Accept Writing Suggestion	Accetta suggerimento di testo
 	Assistant	Assistente
-	API key (if required by your server; kept only in memory)	Chiave API (se richiesta dal server; conservata solo in memoria)
+	API key (saved unencrypted with local preferences)	Chiave API (salvata in chiaro nelle preferenze locali)
 	Discard	Scarta
 	Discarded; waiting for request to finish…	Scartato; in attesa che la richiesta termini…
 	Draft new text, rewrite a selection, or summarize it.	Crea nuovo testo, riscrivi una selezione o riassumila.
 	Generate	Genera
-	Generate sends your instructions and selected text to the endpoint above. No other document content is sent.	Genera invia le istruzioni e il testo selezionato al servizio indicato sopra. Non invia altro contenuto del documento.
+	Generate sends your instructions and selected text to the configured endpoint. No other document content is sent.	Genera invia le istruzioni e il testo selezionato al servizio configurato. Non invia altro contenuto del documento.
 	Generating…	Generazione in corso…
 	Insert after selection	Inserisci dopo la selezione
 	Instructions	Istruzioni

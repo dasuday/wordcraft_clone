@@ -2643,11 +2643,11 @@ preview	Title	Naslov
 	Model connection	Povezivanje s modelom
 	OpenAI-compatible chat completions URL	URL za dovršavanje razgovora kompatibilan s OpenAI-jem
 	Model name	Naziv modela
-	API key (if required by your server; kept only in memory)	API ključ (ako ga poslužitelj zahtijeva; čuva se samo u memoriji)
+	API key (saved unencrypted with local preferences)	API ključ (sprema se nešifriran u lokalnim postavkama)
 	Rewrite	Prepiši
 	Summarize	Sažmi
 	Instructions	Upute
-	Generate sends your instructions and selected text to the endpoint above. No other document content is sent.	Generiranje šalje vaše upute i odabrani tekst gore navedenom poslužitelju. Ostali sadržaj dokumenta ne šalje se.
+	Generate sends your instructions and selected text to the configured endpoint. No other document content is sent.	Generiranje šalje upute i odabrani tekst na postavljenu krajnju točku. Ostali sadržaj dokumenta ne šalje se.
 	Generate	Generiraj
 	Discard	Odbaci
 	Discarded; waiting for request to finish…	Odbačeno; čeka se završetak zahtjeva…

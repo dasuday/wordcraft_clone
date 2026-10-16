@@ -2640,11 +2640,11 @@ preview	Title	Örnek
 	Model connection	Model bağlantısı
 	OpenAI-compatible chat completions URL	OpenAI uyumlu sohbet tamamlama URL'si
 	Model name	Model adı
-	API key (if required by your server; kept only in memory)	API anahtarı (sunucunuz gerektiriyorsa; yalnızca bellekte tutulur)
+	API key (saved unencrypted with local preferences)	API anahtarı (yerel tercihlerde şifrelenmeden kaydedilir)
 	Rewrite	Yeniden yaz
 	Summarize	Özetle
 	Instructions	Talimatlar
-	Generate sends your instructions and selected text to the endpoint above. No other document content is sent.	Oluştur düğmesi, talimatlarınızı ve seçili metni yukarıdaki sunucuya gönderir. Belgenin başka içeriği gönderilmez.
+	Generate sends your instructions and selected text to the configured endpoint. No other document content is sent.	Oluşturma, talimatlarınızı ve seçili metni yapılandırılmış uç noktaya gönderir. Belgenin diğer içeriği gönderilmez.
 	Generate	Oluştur
 	Discard	Vazgeç
 	Discarded; waiting for request to finish…	Vazgeçildi; isteğin tamamlanması bekleniyor…

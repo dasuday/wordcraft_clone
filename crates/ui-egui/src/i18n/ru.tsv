@@ -2641,11 +2641,11 @@ preview	Title	Пример
 	Model connection	Подключение к модели
 	OpenAI-compatible chat completions URL	URL завершений чата, совместимый с OpenAI
 	Model name	Название модели
-	API key (if required by your server; kept only in memory)	Ключ API (если требуется сервером; хранится только в памяти)
+	API key (saved unencrypted with local preferences)	Ключ API (сохраняется без шифрования в локальных настройках)
 	Rewrite	Переписать
 	Summarize	Кратко изложить
 	Instructions	Инструкции
-	Generate sends your instructions and selected text to the endpoint above. No other document content is sent.	При создании текста инструкции и выделенный текст отправляются указанному серверу. Остальное содержимое документа не отправляется.
+	Generate sends your instructions and selected text to the configured endpoint. No other document content is sent.	Генерация отправляет инструкции и выделенный текст настроенному серверу. Остальное содержимое документа не отправляется.
 	Generate	Создать
 	Discard	Отбросить
 	Discarded; waiting for request to finish…	Отброшено; ожидание завершения запроса…

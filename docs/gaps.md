@@ -1,6 +1,6 @@
 # Where WordCraft falls short of Word
 
-> **Last reviewed:** 2026-10-16 · **Last updated:** 2026-10-16 · **Change:** minor (desktop Writing Assistant: live streaming previews with reviewed acceptance; see [writing-assistant.md](writing-assistant.md)) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4
+> **Last reviewed:** 2026-10-16 · **Last updated:** 2026-10-16 · **Change:** minor (desktop Writing Assistant: saved model connection in Writing Assistant options; see [writing-assistant.md](writing-assistant.md)) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4
 
 > **Printing update:** 2026-10-12 · direct desktop printing through craft-print; details below.
 
@@ -48,7 +48,7 @@ Document renaming: desktop renaming requires a filesystem that supports hard lin
 | 22 | **Ecosystem**: no VBA execution (macros preserved only), no Office add-ins, no cloud storage, no real-time co-authoring | | `.docm` keeps macros (#172) | Enterprise users with macro templates; teams | 40–80 + owner decisions | [target-app-parity.md](target-app-parity.md) |
 | 23 | **PDF Reflow** (open a PDF as an editable document, Word for Windows) | | | Users who edit PDFs they receive | 30–50 | [file-format-parity.md](file-format-parity.md) |
 | 24 | **Default shortcuts**: 140 (macOS) / 158 (Linux/Windows) of Word's ~250 (#330, #339, #343; Customize Keyboard #368, Customize Ribbon and Quick Access Toolbar #379; inspector, macros, strikethrough, file/edit keys) | | [ui-parity.md](ui-parity.md) | Power users | 1–3 | [ui-parity.md](ui-parity.md) |
-| 25 | **In-app AI assistant** | partial | Desktop draft/rewrite/summarize with configurable model endpoint, streaming preview and Undo implemented. Browser generation and saved credentials remain; external-agent chat PR #178 is complementary | Users expecting Copilot | not re-estimated | [writing-assistant.md](writing-assistant.md) |
+| 25 | **In-app AI assistant** | partial | Desktop draft/rewrite/summarize with configurable model endpoint, streaming preview and Undo implemented. Browser generation and encrypted credential storage remain; external-agent chat PR #178 is complementary | Users expecting Copilot | not re-estimated | [writing-assistant.md](writing-assistant.md) |
 | 27 | **View windows**: Side by Side, Synchronous Scrolling, Arrange All, Switch Windows | | [parity-checklist.md](parity-checklist.md) (View 25/29); PR #331 open | Comparing documents | 3–5 | [ui-parity.md](ui-parity.md) |
 | 26 | **Minor formats**: MHT, Works/WordPerfect | | Word XML Document (Flat OPC) opens and saves, Word 2003 XML opens (#548) and saves (#1081, not yet checked in Word) | Rare | 14–26 | [file-format-parity.md](file-format-parity.md) |
 | 28 | **Dictate** | | `tools.dictate` missing | Dictation users | 8–15 + owner (speech model) | [hardware-parity.md](hardware-parity.md) |
@@ -87,6 +87,7 @@ The same gaps grouped the way the parity documents are, for agents working in on
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-16 | minor | Assistant connection moved to Writing Assistant options; endpoint, model and plain-text key persist across restarts. |
 | 2026-10-16 | minor | Live streaming assistant previews and guarded completion added; readiness estimates unchanged. |
 | 2026-10-16 | minor | Desktop Writing Assistant added; browser generation, streaming and saved credentials remain. Readiness estimates unchanged. |
 | 2026-10-14 | trivial | Row table border exceptions fixed; other row table exceptions remain unsupported |

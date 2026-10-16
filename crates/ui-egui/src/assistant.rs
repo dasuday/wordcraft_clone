@@ -3,6 +3,45 @@ use crate::WordApp;
 use serde_json::{Value, json};
 use zeroize::Zeroize;
 
+/// Connection preferences use the same local settings file and save lifecycle as other options.
+#[derive(Clone, Default, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Connection {
+    #[serde(default)]
+    pub(crate) endpoint: String,
+    #[serde(default)]
+    pub(crate) model: String,
+    #[serde(default)]
+    pub(crate) key: String,
+}
+
+impl std::fmt::Debug for Connection {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Connection").field("endpoint", &self.endpoint).field("model", &self.model).finish_non_exhaustive()
+    }
+}
+
+impl Drop for Connection {
+    fn drop(&mut self) {
+        self.key.zeroize();
+    }
+}
+
+/// Called only by File > Options > Writing Assistant; the assistant window contains writing controls.
+pub(crate) fn settings(connection: &mut Connection, ui: &mut egui::Ui) {
+    ui.label(tl!("OpenAI-compatible chat completions URL"));
+    ui.add(
+        egui::TextEdit::singleline(&mut connection.endpoint)
+            .hint_text(tl!("https://your-server/v1/chat/completions"))
+            .char_limit(2048)
+            .desired_width(f32::INFINITY),
+    );
+    ui.label(tl!("Model name"));
+    ui.add(egui::TextEdit::singleline(&mut connection.model).char_limit(256).desired_width(320.0));
+    ui.label(tl!("API key (saved unencrypted with local preferences)"));
+    ui.add(egui::TextEdit::singleline(&mut connection.key).char_limit(8192).desired_width(320.0));
+}
+
 #[derive(Debug)]
 #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
 enum Update {
@@ -12,9 +51,6 @@ enum Update {
 
 pub struct State {
     pub open: bool,
-    endpoint: String,
-    model: String,
-    key: String,
     mode: String,
     prompt: String,
     request: Option<Value>,
@@ -28,9 +64,6 @@ impl Default for State {
     fn default() -> Self {
         Self {
             open: false,
-            endpoint: String::new(),
-            model: String::new(),
-            key: String::new(),
             mode: "draft".into(),
             prompt: String::new(),
             request: None,
@@ -42,14 +75,8 @@ impl Default for State {
     }
 }
 
-impl Drop for State {
-    fn drop(&mut self) {
-        self.key.zeroize();
-    }
-}
-
-/// UI commands are also available through the control channel. Configuration, including the
-/// password field, stays in memory and is never included in preferences or document saves.
+/// UI commands are also available through the control channel. Credentials are read from
+/// local preferences, never recorded in document commands or document saves.
 pub fn command(app: &mut WordApp, id: &str, v: &Value) -> Result<Value, String> {
     match id {
         "ui.assistant.generate" => {
@@ -60,7 +87,7 @@ pub fn command(app: &mut WordApp, id: &str, v: &Value) -> Result<Value, String> 
                 .session
                 .run("assistant.prepare", &json!({"mode":app.assistant.mode, "prompt":app.assistant.prompt}))
                 .map_err(|e| e.to_string())?;
-            let rx = start(&app.assistant, &request)?;
+            let rx = start(&app.ui.assistant_connection, &request)?;
             app.assistant.request = Some(request);
             app.assistant.pending = Some(rx);
             app.assistant.cancelled = false;
@@ -89,7 +116,7 @@ pub fn command(app: &mut WordApp, id: &str, v: &Value) -> Result<Value, String> 
 }
 
 #[cfg(target_arch = "wasm32")]
-fn start(_: &State, _: &Value) -> Result<std::sync::mpsc::Receiver<Update>, String> {
+fn start(_: &Connection, _: &Value) -> Result<std::sync::mpsc::Receiver<Update>, String> {
     Err("Model connections are available in the desktop app. The web editor can still use assistant.prepare and assistant.apply through an external host.".into())
 }
 
@@ -109,7 +136,10 @@ fn endpoint(value: &str) -> Result<reqwest::Url, String> {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-fn start(state: &State, request: &Value) -> Result<std::sync::mpsc::Receiver<Update>, String> {
+fn start(state: &Connection, request: &Value) -> Result<std::sync::mpsc::Receiver<Update>, String> {
+    if state.endpoint.len() > 2048 {
+        return Err("Model endpoint is too long".into());
+    }
     let url = endpoint(&state.endpoint)?;
     if state.model.trim().is_empty() || state.model.len() > 256 {
         return Err("Enter a model name (up to 256 bytes)".into());
@@ -301,19 +331,9 @@ pub fn show(app: &mut WordApp, ctx: &egui::Context) {
         ui.label(tl!("Draft new text, rewrite a selection, or summarize it."));
         #[cfg(target_arch = "wasm32")]
         ui.label(tl!("Model connections require the desktop app."));
-        egui::CollapsingHeader::new(tl!("Model connection")).default_open(state.model.is_empty()).show(ui, |ui| {
-            ui.label(tl!("OpenAI-compatible chat completions URL"));
-            ui.add(
-                egui::TextEdit::singleline(&mut state.endpoint)
-                    .hint_text(tl!("https://your-server/v1/chat/completions"))
-                    .char_limit(2048)
-                    .desired_width(f32::INFINITY),
-            );
-            ui.label(tl!("Model name"));
-            ui.add(egui::TextEdit::singleline(&mut state.model).char_limit(256));
-            ui.label(tl!("API key (if required by your server; kept only in memory)"));
-            ui.add(egui::TextEdit::singleline(&mut state.key).password(true).char_limit(8192));
-        });
+        if ui.button(tl!("Model connection")).clicked() {
+            action = Some(("file.options", json!({"pane":"assistant"})));
+        }
         ui.horizontal(|ui| {
             for (mode, label) in [("draft", tl!("Draft")), ("rewrite", tl!("Rewrite")), ("summarize", tl!("Summarize"))] {
                 ui.selectable_value(&mut state.mode, mode.into(), label);
@@ -321,7 +341,7 @@ pub fn show(app: &mut WordApp, ctx: &egui::Context) {
         });
         ui.label(tl!("Instructions"));
         ui.add(egui::TextEdit::multiline(&mut state.prompt).desired_rows(3).char_limit(8192).desired_width(f32::INFINITY));
-        ui.label(tl!("Generate sends your instructions and selected text to the endpoint above. No other document content is sent."));
+        ui.label(tl!("Generate sends your instructions and selected text to the configured endpoint. No other document content is sent."));
         ui.horizontal(|ui| {
             if ui.add_enabled(state.pending.is_none() && !cfg!(target_arch = "wasm32"), egui::Button::new(tl!("Generate"))).clicked() {
                 action = Some(("ui.assistant.generate", json!({})));
@@ -363,7 +383,7 @@ pub fn show(app: &mut WordApp, ctx: &egui::Context) {
             });
         }
     });
-    app.assistant.open = open;
+    app.assistant.open = open && !action.as_ref().is_some_and(|(id, _)| *id == "file.options");
     if let Some((id, params)) = action
         && let Err(e) = app.run(id, params)
     {
@@ -374,6 +394,50 @@ pub fn show(app: &mut WordApp, ctx: &egui::Context) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn connection_preferences_survive_restart_without_saving_writing_content() {
+        let mut app = WordApp::new(wordcraft_engine::Session::new(wordcraft_engine::doc::Document::new()), crate::Services::default());
+        app.ui.assistant_connection = Connection {
+            endpoint: "https://models.example.com/v1/chat/completions".into(),
+            model: "my-model".into(),
+            key: "test-persisted-key".into(),
+        };
+        app.assistant.prompt = "private instructions".into();
+        app.assistant.result = "private draft".into();
+        let saved = serde_json::to_vec(&app.prefs()).unwrap();
+        let json: Value = serde_json::from_slice(&saved).unwrap();
+        assert_eq!(json["assistantConnection"]["key"], "test-persisted-key");
+        assert!(!String::from_utf8_lossy(&saved).contains("private"));
+        let mut restored = WordApp::new(wordcraft_engine::Session::new(wordcraft_engine::doc::Document::new()), crate::Services::default());
+        restored.apply_prefs(crate::UiState::from_json(&saved).unwrap());
+        assert_eq!(restored.ui.assistant_connection.endpoint, app.ui.assistant_connection.endpoint);
+        assert_eq!(restored.ui.assistant_connection.model, "my-model");
+        assert_eq!(restored.ui.assistant_connection.key, "test-persisted-key");
+        assert!(!format!("{:?}", restored.prefs()).contains("test-persisted-key"));
+        let inspection = crate::control::inspect(&mut restored, &egui::Context::default());
+        assert!(!inspection.to_string().contains("test-persisted-key"));
+        assert_eq!(restored.ui.assistant_connection.key, "test-persisted-key");
+        // Clearing a key is saved too; an old key must not come back on restart.
+        restored.ui.assistant_connection.key.clear();
+        let cleared = serde_json::to_vec(&restored.prefs()).unwrap();
+        assert!(crate::UiState::from_json(&cleared).unwrap().assistant_connection.key.is_empty());
+    }
+
+    #[test]
+    fn old_and_malformed_preferences_keep_valid_fields() {
+        let old = crate::UiState::from_json(br#"{"author":"Writer"}"#).unwrap();
+        assert!(old.assistant_connection.endpoint.is_empty());
+        assert_eq!(old.author, "Writer");
+        let saved = crate::UiState::from_json(
+            br#"{"assistantConnection":{"endpoint":"https://example.com/v1/chat/completions","model":42,"key":"saved-key"},"author":"Writer"}"#,
+        )
+        .unwrap();
+        assert_eq!(saved.assistant_connection.endpoint, "https://example.com/v1/chat/completions");
+        assert!(saved.assistant_connection.model.is_empty());
+        assert_eq!(saved.assistant_connection.key, "saved-key");
+        assert_eq!(saved.author, "Writer");
+    }
 
     fn event(text: &str, reason: Value) -> String {
         format!("data: {}\r\n\r\n", json!({"choices":[{"index":0,"delta":{"content":text},"finish_reason":reason}]}))
@@ -571,9 +635,12 @@ mod tests {
             .unwrap();
         });
         let mut app = WordApp::new(wordcraft_engine::Session::new(wordcraft_engine::doc::Document::new()), crate::Services::default());
-        app.assistant.endpoint = format!("http://{address}/v1/chat/completions");
-        app.assistant.model = "test-model".into();
-        app.assistant.key = "test-key".into();
+        app.ui.assistant_connection.endpoint = format!("http://{address}/v1/chat/completions");
+        app.ui.assistant_connection.model = "test-model".into();
+        app.ui.assistant_connection.key = "test-key".into();
+        let saved = serde_json::to_vec(&app.prefs()).unwrap();
+        let mut app = WordApp::new(wordcraft_engine::Session::new(wordcraft_engine::doc::Document::new()), crate::Services::default());
+        app.apply_prefs(crate::UiState::from_json(&saved).unwrap());
         app.assistant.prompt = "A greeting".into();
         command(&mut app, "ui.assistant.generate", &json!({})).unwrap();
         let rx = app.assistant.pending.take().unwrap();

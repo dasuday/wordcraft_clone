@@ -2632,11 +2632,11 @@
 	Model connection	Връзка с модела
 	OpenAI-compatible chat completions URL	URL за допълване на чат, съвместим с OpenAI
 	Model name	Име на модела
-	API key (if required by your server; kept only in memory)	API ключ (ако се изисква от сървъра; пази се само в паметта)
+	API key (saved unencrypted with local preferences)	API ключ (запазва се нешифрован в локалните настройки)
 	Rewrite	Пренаписване
 	Summarize	Обобщаване
 	Instructions	Указания
-	Generate sends your instructions and selected text to the endpoint above. No other document content is sent.	Генерирането изпраща указанията и избрания текст към сървъра по-горе. Друго съдържание на документа не се изпраща.
+	Generate sends your instructions and selected text to the configured endpoint. No other document content is sent.	Генерирането изпраща инструкциите и избрания текст до настроения сървър. Друго съдържание на документа не се изпраща.
 	Generate	Генериране
 	Discard	Отхвърляне
 	Discarded; waiting for request to finish…	Отхвърлено; изчакване на края на заявката…

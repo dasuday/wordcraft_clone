@@ -2639,11 +2639,11 @@
 	Model connection	Kapcsolódás a modellhez
 	OpenAI-compatible chat completions URL	OpenAI-kompatibilis csevegéskiegészítési URL
 	Model name	Modell neve
-	API key (if required by your server; kept only in memory)	API-kulcs (ha a kiszolgáló kéri; csak a memóriában tárolva)
+	API key (saved unencrypted with local preferences)	API-kulcs (titkosítás nélkül, a helyi beállításokban mentve)
 	Rewrite	Átfogalmazás
 	Summarize	Összefoglalás
 	Instructions	Utasítások
-	Generate sends your instructions and selected text to the endpoint above. No other document content is sent.	A létrehozás elküldi az utasításokat és a kijelölt szöveget a fenti kiszolgálónak. A dokumentum más tartalma nem kerül elküldésre.
+	Generate sends your instructions and selected text to the configured endpoint. No other document content is sent.	A generálás elküldi az utasításokat és a kijelölt szöveget a beállított végpontra. A dokumentum más tartalmát nem küldi el.
 	Generate	Létrehozás
 	Discard	Elvetés
 	Discarded; waiting for request to finish…	Elvetve; várakozás a kérés befejezésére…

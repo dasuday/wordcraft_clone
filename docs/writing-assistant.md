@@ -1,15 +1,19 @@
 # Writing Assistant
 
-> **Last reviewed:** 2026-10-16 · **Last updated:** 2026-10-16 · **Change:** minor (live streaming preview)
+> **Last reviewed:** 2026-10-16 · **Last updated:** 2026-10-16 · **Change:** minor (model connection in dedicated options pane)
 
 ## Use
 
 Open **Home › Assistant › Writing Assistant**, or search for **Writing Assistant** in the
 command search. Place the caret for a draft, or select the text to rewrite or summarize.
 
-1. Expand **Model connection**. Enter the full chat completions endpoint and a model name
-   supported by that server. Supply an API key if required. Settings last for this app window;
-   the key is masked, stays in memory, and is not written into documents or preferences.
+1. Go to **File › Options › Writing Assistant**, or click **Model connection** in the
+   assistant to open Writing Assistant options. Enter the full chat completions endpoint and a model name
+   supported by that server. Supply an API key if required. All three values use WordCraft's
+   normal preferences: saved in local `ui.json` on normal exit and restored on the next launch.
+   The key is visible in Options and saved in plain text, as requested. It is omitted from
+   diagnostic inspection and debug output and never stored in documents. Clear the key field
+   to remove it from the next saved preferences. Runs with `WORDCRAFT_NO_PREFS` do not retain settings.
 2. Choose **Draft**, **Rewrite**, or **Summarize** and enter instructions. Draft requires
    instructions; Rewrite and Summarize require selected text. For example: “Make this more
    concise while keeping the technical details” or “Summarize in three sentences.”
@@ -48,8 +52,8 @@ The response body is capped at 1 MiB. Empty, malformed, truncated or filtered ou
 Provider error bodies and credentials are not displayed in errors.
 
 The desktop app performs network generation on a worker thread. Web builds retain the portable
-engine commands but disable the model connection UI; browser transport and persistent secure
-credential storage and conversation history are follow-up work. While streaming, the preview is
+engine commands but disable generation; browser transport, encrypted credential storage and
+conversation history are follow-up work. While streaming, the preview is
 read-only and acceptance is disabled. Interrupted or filtered streams retain their partial preview
 for copying, but cannot be inserted or used to replace a selection.
 
@@ -59,7 +63,7 @@ for copying, but cannot be inserted or used to replace a selection.
    bounded plain-text extraction, document/selection freshness checks, and normal editing guards.
 2. Add a desktop transport for compatible chat completions servers, bounded responses, timeouts,
    explicit errors and discard handling. Keep network dependencies outside the portable engine.
-3. Add a discoverable assistant window with three modes, connection settings, an editable preview,
+3. Add a discoverable assistant window with three modes, saved connection settings in Options, an editable preview,
    and explicit acceptance. Route generation, discard and acceptance through UI commands.
 4. Verify engine semantics, provider handling, UI lifecycle, hostile input and the headless UI;
    run repository quality gates and document any environment or baseline blockers.
@@ -116,6 +120,13 @@ on one run and the existing renderer colour-emoji tests on the final run; the st
 only modifies the UI crate and documentation.
 The complete UI library suite passes: 561 tests passed, two ignored.
 
+Saved-options follow-up: the full UI suite passes (563 tests, two ignored), including twelve
+assistant tests. An additional navigation test passes for the dedicated Writing Assistant pane.
+Preference tests cover restart restoration, clearing the key, old/malformed settings and
+diagnostic redaction; both HTTP mock tests generate using restored preferences. The new pane
+and its assistant shortcut were rendered and visually checked. Formatting, Clippy, assets,
+layers and WASM checks pass; full CI still encounters the existing PDF right-to-left tests.
+
 Network generation uses native TLS and the platform certificate store. Linux/BSD builds require
 the native TLS backend's system OpenSSL build/runtime dependencies; cross-platform packaging
 and a live connection to your particular hosted model have not been verified here.
@@ -124,5 +135,6 @@ and a live connection to your particular hosted model have not been verified her
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-16 | minor | Connection settings moved to Writing Assistant options and retained through the normal preferences lifecycle; plain-text key storage |
 | 2026-10-16 | minor | Live streaming previews, completion guards and incremental transport tests |
 | 2026-10-16 | minor | Initial implementation and scoped comparison with PR #178 |
