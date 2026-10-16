@@ -1102,6 +1102,7 @@ preview	Title	Örnek
 	Preview	Önizleme
 	getartcraft.com/apps/wordcraft	getartcraft.com/apps/wordcraft
 	Browse…	Gözat…
+	Browse templates…	Şablonlara gözat…
 
 # Equation gallery, themes, watermarks, paper sizes, table styles and other strings the
 # interface audit (`i18n/audit.rs`) found without a Russian entry.

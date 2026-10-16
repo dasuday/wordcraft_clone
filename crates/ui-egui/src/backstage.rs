@@ -319,6 +319,10 @@ fn home_page(app: &mut WordApp, ui: &mut Ui) {
 fn new_page(app: &mut WordApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
     heading(ui, "New");
+    if ui.button(tl!("Browse templates…")).clicked() {
+        app.new_from_template_dialog();
+    }
+    ui.add_space(10.0);
     let id = egui::Id::new("backstage_template_search");
     let mut query = ui.ctx().data(|d| d.get_temp::<String>(id)).unwrap_or_default();
     let search = ui.add(egui::TextEdit::singleline(&mut query).hint_text(tl!("Search for templates")).desired_width(360.0));
@@ -388,6 +392,9 @@ fn save_as_page(app: &mut WordApp, ui: &mut Ui) {
     heading(ui, "Save As");
     if ui.button(egui::RichText::new(tl!("Browse…")).font(medium(14.0))).clicked() {
         app.save_as_dialog();
+    }
+    if ui.button(egui::RichText::new(tl!("Save as Template…")).font(medium(14.0))).clicked() {
+        app.save_template_dialog();
     }
 }
 
@@ -630,6 +637,7 @@ mod tests {
         h.run_steps(4);
         assert_eq!(h.state().ui.backstage_page, "new", "the link opens New");
         assert!(h.query_by_label("Report").is_some(), "New shows every template");
+        assert!(h.query_by_label("Browse templates…").is_some(), "New can create from a saved template");
         assert!(h.query_by_label("Recent").is_none(), "New has no Recent list");
     }
 
@@ -709,6 +717,7 @@ mod tests {
         );
         h.run_steps(4);
         assert!(h.query_by_label("Browse…").is_some(), "Save As has Browse button");
+        assert!(h.query_by_label("Save as Template…").is_some(), "Save As can save a reusable template");
         assert!(h.query_by_label("Recent").is_none(), "Save As has no list that opens documents");
     }
 
