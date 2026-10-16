@@ -260,6 +260,12 @@ impl Spin {
         (w * c + h * s, w * s + h * c)
     }
 
+    /// The turn of the text in a shape turned by this spin. Word never mirrors text: a horizontal
+    /// flip leaves it as it is, a vertical flip turns it upside down.
+    pub fn for_text(self) -> Spin {
+        Spin::new(if self.flip_v { self.deg + 180.0 } else { self.deg }, false, false)
+    }
+
     /// This spin applied inside `outer` (a group member's own spin within its group's): the one
     /// spin doing both.
     pub fn within(self, outer: Spin) -> Spin {
@@ -362,6 +368,15 @@ mod tests {
         assert!(a.contains(Point::new(5.0, 5.0)));
         assert_eq!(Rect::new(0.0, 0.0, -5.0, f32::NAN).w, 0.0);
         assert_eq!(a.inset(1.0, 2.0, 3.0, 4.0), Rect::new(1.0, 2.0, 6.0, 4.0));
+    }
+
+    #[test]
+    fn text_in_a_flipped_shape_is_never_mirrored() {
+        assert_eq!(Spin::new(30.0, false, false).for_text(), Spin::new(30.0, false, false));
+        assert_eq!(Spin::new(30.0, true, false).for_text(), Spin::new(30.0, false, false));
+        assert_eq!(Spin::new(30.0, false, true).for_text(), Spin::new(210.0, false, false));
+        assert_eq!(Spin::new(0.0, true, true).for_text(), Spin::new(180.0, false, false));
+        assert!(Spin::new(0.0, true, false).for_text().is_identity());
     }
 
     #[test]

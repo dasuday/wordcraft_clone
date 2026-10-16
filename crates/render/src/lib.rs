@@ -1388,6 +1388,47 @@ mod tests {
         assert!(light > 30, "light {light}");
     }
 
+    /// #2458: a rotated text box's letters turn with it. A line across the box at 0° runs down
+    /// the page at 90°, about the box's centre.
+    #[test]
+    fn rotated_text_box_text_turns_on_the_page() {
+        use wordcraft_doc::para::{Anchor, Float, InlineObject, ShapeKind, Wrap};
+        let ink = |rot: f32| {
+            let mut d = Document::new();
+            let cp = wordcraft_doc::CharProps { size: Some(20.0), ..Default::default() };
+            let text = vec![wordcraft_doc::para_block(wordcraft_doc::Paragraph::with_text("MMMMMMMM", cp))];
+            let id = d.add_part(wordcraft_doc::PartKind::TextBox, text);
+            let float = Float { wrap: Wrap::InFrontOfText, h_rel: Anchor::Page, v_rel: Anchor::Page, x: 150.0, y: 300.0, rot, ..Default::default() };
+            let shape = InlineObject::Shape {
+                kind: ShapeKind::TextBox,
+                w: 200.0,
+                h: 40.0,
+                fill: None,
+                stroke: None,
+                stroke_width: 0.0,
+                float,
+                story: Some(id),
+                effects: Default::default(),
+                freeform: None,
+                extra: Default::default(),
+            };
+            d.insert_object(&wordcraft_doc::Pos::body(0, 0), shape, &Default::default()).unwrap();
+            let l = layout(&d, &mut LayoutCache::new(), &LayoutOptions::default());
+            let img = render_page(&d, &l.pages[0], 1.0, &RenderOptions::default());
+            let dark: Vec<(u32, u32)> =
+                (0..img.height).flat_map(|y| (0..img.width).map(move |x| (x, y))).filter(|(x, y)| img.pixel(*x, *y)[0] < 128).collect();
+            let (x0, x1) = (dark.iter().map(|p| p.0).min().unwrap(), dark.iter().map(|p| p.0).max().unwrap());
+            let (y0, y1) = (dark.iter().map(|p| p.1).min().unwrap(), dark.iter().map(|p| p.1).max().unwrap());
+            (x0, y0, x1 - x0, y1 - y0)
+        };
+        let (_, _, w, h) = ink(0.0);
+        assert!(w > 3 * h, "level text is a row: {w}×{h}");
+        let (x, y, w, h) = ink(90.0);
+        assert!(h > 3 * w, "turned a quarter, it is a column: {w}×{h}");
+        // The box's centre is (250, 320); the text starts at its top left, so it ends up above.
+        assert!((x as f32 + w as f32 / 2.0 - 250.0).abs() < 30.0 && (y as f32 + h as f32 / 2.0 - 320.0).abs() < 60.0, "{x},{y} {w}×{h}");
+    }
+
     /// A document whose only text is a yellow-highlighted run.
     fn yellow_highlight_doc() -> (Document, wordcraft_layout::DocLayout) {
         let cp = wordcraft_doc::CharProps { highlight: Some(wordcraft_doc::props::Highlight::Yellow), size: Some(24.0), ..Default::default() };

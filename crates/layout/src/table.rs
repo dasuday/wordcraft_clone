@@ -6,10 +6,10 @@ use wordcraft_doc::numbering::Counters;
 use wordcraft_doc::props::{Align, Border, Borders, HeightRule, Rgb, TextDirection, VAlign, VMerge};
 use wordcraft_doc::styles::{PartSet, TablePart, TableStyleProps};
 use wordcraft_doc::{Block, Blocks, Paragraph, StoryRef, Table};
-use wordcraft_geom::Rect;
+use wordcraft_geom::{Point, Rect};
 
 use crate::para::{CellText, ClKind, ParaLayout};
-use crate::{BoxContext, BoxLayout, Ctx, Placed, layout_box};
+use crate::{BoxContext, BoxLayout, BoxSpin, Ctx, Placed, layout_box};
 
 /// Largest preferred table width, as a share of the text column, that a file can ask for.
 const MAX_WIDTH_SHARE: f32 = 10.0;
@@ -744,6 +744,7 @@ pub fn layout_table(ctx: &mut Ctx, story: StoryRef, t: &Table, path: &[u32], ava
                 cell: ci,
                 story,
                 clip: exact && c.h > span_h + 0.01,
+                spin: None,
             });
             parts.push(CellPart { items: first..items.len(), end });
         }
@@ -873,7 +874,7 @@ pub fn split_row(row: &RowLayout, cut: f32) -> Option<(RowLayout, RowLayout)> {
                 continue;
             }
             match it {
-                Placed::Lines { story, path, para, l0, l1, x, y, turn } => {
+                Placed::Lines { story, path, para, l0, l1, x, y, turn, spin } => {
                     let base = para.lines.get(*l0).map(|l| l.top).unwrap_or(0.0);
                     if split > *l0 {
                         a.push(Placed::Lines {
@@ -885,6 +886,7 @@ pub fn split_row(row: &RowLayout, cut: f32) -> Option<(RowLayout, RowLayout)> {
                             x: *x,
                             y: *y,
                             turn: *turn,
+                            spin: *spin,
                         });
                     }
                     if split < *l1 {
@@ -898,6 +900,7 @@ pub fn split_row(row: &RowLayout, cut: f32) -> Option<(RowLayout, RowLayout)> {
                             x: *x,
                             y: top - shift,
                             turn: *turn,
+                            spin: spin.map(|b| BoxSpin { centre: Point::new(b.centre.x, b.centre.y - shift), ..b }),
                         });
                     }
                 }
@@ -921,10 +924,18 @@ pub fn split_row(row: &RowLayout, cut: f32) -> Option<(RowLayout, RowLayout)> {
                     a.extend(above.map(|rect| Placed::Fill { rect, color: *color }));
                     b.extend(below.map(|rect| Placed::Fill { rect, color: *color }));
                 }
-                Placed::Cell { rect, covered, table, row: r, cell, story, clip } => {
+                Placed::Cell { rect, covered, table, row: r, cell, story, clip, spin } => {
                     let (above, below) = split_rect(*rect, cut, geo_shift(rect.bottom(), shift));
-                    let cell_at =
-                        |rect| Placed::Cell { rect, covered: *covered, table: table.clone(), row: *r, cell: *cell, story: *story, clip: *clip };
+                    let cell_at = |rect| Placed::Cell {
+                        rect,
+                        covered: *covered,
+                        table: table.clone(),
+                        row: *r,
+                        cell: *cell,
+                        story: *story,
+                        clip: *clip,
+                        spin: *spin,
+                    };
                     a.extend(above.map(cell_at));
                     b.extend(below.map(cell_at));
                 }

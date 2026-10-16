@@ -192,12 +192,49 @@ impl LayoutOptions {
     }
 }
 
+/// The turn of the text in a rotated or flipped text box: `spin` (see [`Spin::for_text`]) about
+/// page point `centre`, the centre of the box's frame.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct BoxSpin {
+    pub spin: Spin,
+    pub centre: Point,
+}
+
+impl BoxSpin {
+    /// Where frame point (`x`, `y`) is drawn on the page.
+    pub fn apply(&self, x: f32, y: f32) -> (f32, f32) {
+        self.spin.apply(self.centre.x, self.centre.y, x, y)
+    }
+
+    /// The frame point drawn at page point (`x`, `y`).
+    pub fn unapply(&self, x: f32, y: f32) -> (f32, f32) {
+        self.spin.unapply(self.centre.x, self.centre.y, x, y)
+    }
+
+    /// The corners of frame rectangle `r` on the page: top left, top right, bottom right, bottom left.
+    pub fn quad(&self, r: Rect) -> [Point; 4] {
+        [(r.x, r.y), (r.right(), r.y), (r.right(), r.bottom()), (r.x, r.bottom())].map(|(x, y)| {
+            let (u, v) = self.apply(x, y);
+            Point::new(u, v)
+        })
+    }
+
+    /// The page area frame rectangle `r` covers once turned.
+    pub fn bounds(&self, r: Rect) -> Rect {
+        let q = self.quad(r);
+        let (x0, x1) = q.iter().fold((f32::INFINITY, f32::NEG_INFINITY), |(a, b), p| (a.min(p.x), b.max(p.x)));
+        let (y0, y1) = q.iter().fold((f32::INFINITY, f32::NEG_INFINITY), |(a, b), p| (a.min(p.y), b.max(p.y)));
+        Rect::new(x0, y0, x1 - x0, y1 - y0)
+    }
+}
+
 /// Something placed on a page (page coordinates, points, y down).
 #[derive(Clone, Debug)]
 pub enum Placed {
     /// Lines `l0..l1` of a paragraph; `y` is the top of line `l0`; `x` the column's left edge.
     /// Turned lines (a table cell's text direction) run as `turn` says from the page point
-    /// (`x`, `y`): see [`turn_point`].
+    /// (`x`, `y`): see [`turn_point`]. Lines in a rotated text box are placed in its unturned
+    /// frame and drawn turned by `spin`.
     Lines {
         story: StoryRef,
         path: Path,
@@ -207,6 +244,7 @@ pub enum Placed {
         x: f32,
         y: f32,
         turn: TextDirection,
+        spin: Option<BoxSpin>,
     },
     Fill {
         rect: Rect,
@@ -273,6 +311,8 @@ pub enum Placed {
         /// Its row is exactly as tall as it says and the content is taller: what runs past the
         /// cell is cut off when drawn, as in Word.
         clip: bool,
+        /// In a rotated text box: `rect` is in its unturned frame, drawn turned by this.
+        spin: Option<BoxSpin>,
     },
     /// The area of a picture, shape or text box, for hit testing, selection handles and dragging
     /// (drawn by `Image`/`Shape`/`Lines`). The object is the U+FFFC at byte `off` of paragraph
@@ -295,17 +335,25 @@ pub enum Placed {
 impl Placed {
     fn translate(&mut self, dx: f32, dy: f32) {
         match self {
-            Placed::Lines { x, y, .. } => {
+            Placed::Lines { x, y, spin, .. } => {
                 *x += dx;
                 *y += dy;
+                if let Some(b) = spin {
+                    b.centre.x += dx;
+                    b.centre.y += dy;
+                }
             }
-            Placed::Fill { rect, .. }
-            | Placed::Image { rect, .. }
-            | Placed::Shape { rect, .. }
-            | Placed::Graphic { rect, .. }
-            | Placed::Cell { rect, .. } => {
+            Placed::Fill { rect, .. } | Placed::Image { rect, .. } | Placed::Shape { rect, .. } | Placed::Graphic { rect, .. } => {
                 rect.x += dx;
                 rect.y += dy;
+            }
+            Placed::Cell { rect, spin, .. } => {
+                rect.x += dx;
+                rect.y += dy;
+                if let Some(b) = spin {
+                    b.centre.x += dx;
+                    b.centre.y += dy;
+                }
             }
             Placed::Object { rect, origin, .. } => {
                 rect.x += dx;
@@ -349,19 +397,25 @@ impl Placed {
             return;
         }
         match self {
-            Placed::Lines { x: lx, y: ly, turn: t, .. } => {
+            Placed::Lines { x: lx, y: ly, turn: t, spin, .. } => {
                 (*lx, *ly) = turn_point(turn, x, y, *lx, *ly);
+                // A text box's turn is a plain rotation: it turns the same either side of this one.
+                if let Some(b) = spin {
+                    (b.centre.x, b.centre.y) = turn_point(turn, x, y, b.centre.x, b.centre.y);
+                }
                 // Turned text inside turned text keeps its own direction (no 180° text).
                 if !t.is_turned() {
                     *t = turn;
                 }
             }
-            Placed::Fill { rect, .. }
-            | Placed::Image { rect, .. }
-            | Placed::Shape { rect, .. }
-            | Placed::Graphic { rect, .. }
-            | Placed::Cell { rect, .. } => {
+            Placed::Fill { rect, .. } | Placed::Image { rect, .. } | Placed::Shape { rect, .. } | Placed::Graphic { rect, .. } => {
                 *rect = turn_rect(turn, x, y, *rect);
+            }
+            Placed::Cell { rect, spin, .. } => {
+                *rect = turn_rect(turn, x, y, *rect);
+                if let Some(b) = spin {
+                    (b.centre.x, b.centre.y) = turn_point(turn, x, y, b.centre.x, b.centre.y);
+                }
             }
             Placed::Object { rect, origin, .. } => {
                 *rect = turn_rect(turn, x, y, *rect);
@@ -1305,7 +1359,7 @@ fn fit_box(items: Vec<Placed>, height: f32) -> Vec<Placed> {
             continue;
         }
         match it {
-            Placed::Lines { story, path, para, l0, l1, x, y, turn } => {
+            Placed::Lines { story, path, para, l0, l1, x, y, turn, spin } => {
                 let Some(first) = para.lines.get(l0) else { continue };
                 let mut end = l0;
                 for k in l0..l1 {
@@ -1317,7 +1371,7 @@ fn fit_box(items: Vec<Placed>, height: f32) -> Vec<Placed> {
                     kept_line = true;
                 }
                 if end > l0 {
-                    out.push(Placed::Lines { story, path, para, l0, l1: end, x, y, turn });
+                    out.push(Placed::Lines { story, path, para, l0, l1: end, x, y, turn, spin });
                 }
             }
             Placed::Fill { rect, color } if rect.y < limit => {
@@ -1357,7 +1411,7 @@ fn push_para(items: &mut Vec<Placed>, story: StoryRef, path: &[u32], pl: &Arc<Pa
         let pad = pl.rp.borders.as_ref().map(|b| b.left.map(|l| l.space).unwrap_or(4.0)).unwrap_or(0.0);
         items.push(Placed::Fill { rect: Rect::new(left - pad, y, right - left + pad * 2.0, h), color: c });
     }
-    items.push(Placed::Lines { story, path: Path(path.to_vec()), para: pl.clone(), l0, l1, x, y, turn: TextDirection::Horizontal });
+    items.push(Placed::Lines { story, path: Path(path.to_vec()), para: pl.clone(), l0, l1, x, y, turn: TextDirection::Horizontal, spin: None });
     if let Some(b) = &pl.rp.borders {
         let sp = |o: &Option<Border>| o.map(|b| b.space).unwrap_or(0.0);
         let (lx, rx) = (left - sp(&b.left), right + sp(&b.right));
@@ -1605,17 +1659,17 @@ impl NoteBox {
                 continue;
             }
             match it {
-                Placed::Lines { story, path, para, l0, l1, x, y, turn } => {
+                Placed::Lines { story, path, para, l0, l1, x, y, turn, spin } => {
                     let Some(first) = para.lines.get(l0) else { continue };
                     let ft = first.top;
                     // The first line that ends below the cut starts the tail.
                     let k = (l0..l1).find(|&k| para.lines.get(k).is_none_or(|l| y + l.top - ft + l.height > cut + 0.01)).unwrap_or(l1);
                     let ky = para.lines.get(k).map_or(y, |l| y + l.top - ft);
                     if k > l0 {
-                        head.push(Placed::Lines { story, path: path.clone(), para: para.clone(), l0, l1: k, x, y, turn });
+                        head.push(Placed::Lines { story, path: path.clone(), para: para.clone(), l0, l1: k, x, y, turn, spin });
                     }
                     if k < l1 {
-                        tail.push(Placed::Lines { story, path, para, l0: k, l1, x, y: ky, turn });
+                        tail.push(Placed::Lines { story, path, para, l0: k, l1, x, y: ky, turn, spin });
                     }
                 }
                 Placed::Fill { rect, color } => {
@@ -2833,6 +2887,72 @@ fn float_items(o: &InlineObject, rect: Rect, outer: (Spin, Point), story: StoryR
     }
 }
 
+/// A text box's `items`, laid out in its unturned frame `rect`, turned with the box by `spin`
+/// (its text's turn) about the frame's centre. Lines keep their place and are drawn turned;
+/// objects move where the turn carries them and turn with it; shading and borders are drawn
+/// turned, clipped to the frame. Nothing changes for an unturned box.
+fn spin_box(items: Vec<Placed>, rect: Rect, spin: Spin) -> Vec<Placed> {
+    if spin.is_identity() {
+        return items;
+    }
+    let c = Point::new(rect.x + rect.w / 2.0, rect.y + rect.h / 2.0);
+    let mut out = Vec::with_capacity(items.len());
+    let mut decor = Vec::new();
+    for mut it in items {
+        if matches!(it, Placed::Fill { .. } | Placed::Rule { .. }) {
+            decor.push(it);
+            continue;
+        }
+        if !decor.is_empty() {
+            out.push(Placed::Clip { rect, spin, items: std::mem::take(&mut decor) });
+        }
+        // Text and cell areas keep their place and take the turn; one already turned (a box
+        // inside the box) moves where this turn carries its centre and turns both ways.
+        let carry = |own: &mut Option<BoxSpin>| {
+            let inner = own.unwrap_or(BoxSpin { spin: Spin::default(), centre: c });
+            let (nx, ny) = spin.apply(c.x, c.y, inner.centre.x, inner.centre.y);
+            *own = Some(BoxSpin { spin: inner.spin.within(spin), centre: Point::new(nx, ny) });
+            (nx - inner.centre.x, ny - inner.centre.y)
+        };
+        match &mut it {
+            Placed::Lines { x, y, spin: own, .. } => {
+                let (dx, dy) = carry(own);
+                *x += dx;
+                *y += dy;
+            }
+            Placed::Cell { rect: r, spin: own, .. } => {
+                let (dx, dy) = carry(own);
+                r.x += dx;
+                r.y += dy;
+            }
+            Placed::Image { rect: r, spin: own, .. } | Placed::Shape { rect: r, spin: own, .. } | Placed::Graphic { rect: r, spin: own, .. } => {
+                *r = carried(*r, spin, c);
+                *own = own.within(spin);
+            }
+            Placed::Object { rect: r, spin: own, origin, .. } => {
+                let moved = carried(*r, spin, c);
+                (origin.x, origin.y) = (origin.x + moved.x - r.x, origin.y + moved.y - r.y);
+                *r = moved;
+                *own = own.within(spin);
+            }
+            Placed::Clip { rect: r, spin: own, items } => {
+                let moved = carried(*r, spin, c);
+                for i in items.iter_mut() {
+                    i.translate(moved.x - r.x, moved.y - r.y);
+                }
+                *r = moved;
+                *own = own.within(spin);
+            }
+            Placed::Fill { .. } | Placed::Rule { .. } => {}
+        }
+        out.push(it);
+    }
+    if !decor.is_empty() {
+        out.push(Placed::Clip { rect, spin, items: decor });
+    }
+    out
+}
+
 /// A group's members, each with its rectangle when the group is at `rect`.
 /// `rect` moved (not turned) to where `spin` about `centre` takes its centre: a group member's
 /// frame inside its turned group.
@@ -2977,23 +3097,26 @@ fn place_objects(
                 wrap: float.wrap,
                 origin: Point::new(at.col.0, at.para_y),
             });
-            // Its text (a group: its text boxes', each where the group's turn carries it; the
-            // text itself stays upright), unless the box budget says no (a box inside itself,
-            // too deep, too many).
+            // Its text (a group: its text boxes', each where the group's turn carries it), turned
+            // with its box, unless the box budget says no (a box inside itself, too deep, too many).
             let centre = Point::new(rect.x + rect.w / 2.0, rect.y + rect.h / 2.0);
-            let boxes: Vec<(u32, Rect)> = match obj {
+            let boxes: Vec<(u32, Rect, Spin)> = match obj {
                 InlineObject::Group { .. } => group_members(obj, rect)
                     .into_iter()
                     .filter_map(|(r, c)| {
+                        let own = c.frame().map(|(_, _, f)| f.spin()).unwrap_or_default();
                         c.text_box()
                             .filter(|id| ctx.doc.parts.get(id).is_some_and(|p| p.kind == wordcraft_doc::PartKind::TextBox))
-                            .map(|id| (id, carried(r, float.spin(), centre)))
+                            .map(|id| (id, carried(r, float.spin(), centre), own.within(float.spin())))
                     })
                     .collect(),
-                _ => text_box.map(|id| (id, rect)).into_iter().collect(),
+                _ => text_box.map(|id| (id, rect, float.spin())).into_iter().collect(),
             };
-            for (id, rect) in boxes {
-                let items = textbox::box_items(ctx, id, rect, depth);
+            for (id, rect, spin) in boxes {
+                // Do not rotate text: it stays level whatever the box's turn.
+                let upright = ctx.doc.parts.get(&id).is_some_and(|p| p.body.upright);
+                let turn = if upright { Spin::default() } else { spin.for_text() };
+                let items = spin_box(textbox::box_items(ctx, id, rect, depth), rect, turn);
                 let layer = if float.wrap == Wrap::BehindText { &mut behind } else { &mut front };
                 layer.extend(items);
             }
@@ -3430,6 +3553,7 @@ fn place_para_in_flow(ctx: &mut Ctx, pb: &mut PageBuilder, p: &Paragraph, block:
                     x: pb.sect.margin_left + pb.sect.gutter - dist - w,
                     y: ly,
                     turn: TextDirection::Horizontal,
+                    spin: None,
                 });
             }
         }

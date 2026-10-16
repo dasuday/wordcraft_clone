@@ -51,7 +51,8 @@ pub struct ColumnBlock {
     /// The stream selection the block was made with (its corners). The block is current only
     /// while `Session::sel` still equals it, so any ordinary caret move or selection drops it.
     pub sel: Selection,
-    /// Page x of the anchor and focus corners (points); the block spans the range between.
+    /// x of the anchor and focus corners (points) in the frame their lines are placed in: page x,
+    /// except in a rotated text box (its unturned frame). The block spans the range between.
     pub anchor_x: f32,
     pub focus_x: f32,
     /// One `(start, end)` per line, in document order, each inside one paragraph.

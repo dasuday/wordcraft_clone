@@ -9,7 +9,7 @@ use egui::{Color32, Pos2, Rect, Sense, Stroke, TextureHandle, Ui, pos2, vec2};
 use serde_json::json;
 use wordcraft_doc::{PartKind, Pos, StoryRef};
 use wordcraft_layout::display::CommentDisplay;
-use wordcraft_layout::{DocLayout, Page, Placed};
+use wordcraft_layout::{BoxSpin, DocLayout, Page, Placed};
 
 use crate::WordApp;
 use crate::theme::{Tokens, regular, semibold};
@@ -632,8 +632,9 @@ fn page_content_key(page: &Page) -> u64 {
         list.len().hash(&mut h);
         for it in list.iter() {
             match it {
-                Placed::Lines { para, l0, l1, x, y, turn, .. } => {
+                Placed::Lines { para, l0, l1, x, y, turn, spin, .. } => {
                     (std::sync::Arc::as_ptr(para) as usize, l0, l1, x.to_bits(), y.to_bits(), turn).hash(&mut h);
+                    spin.map(|b| (b.spin.deg.to_bits(), b.spin.flip_h, b.spin.flip_v, b.centre.x.to_bits(), b.centre.y.to_bits())).hash(&mut h);
                 }
                 Placed::Fill { rect, color } => format!("{rect:?}{color:?}").hash(&mut h),
                 Placed::Rule { x0, y0, x1, y1, border } => format!("{x0}{y0}{x1}{y1}{border:?}").hash(&mut h),
@@ -753,10 +754,11 @@ fn drawing_grid(body: wordcraft_geom::Rect, step: (f32, f32)) -> (Vec<f32>, Vec<
 }
 
 /// The cells Table Layout › View Gridlines outlines on a page: the body's tables and the
-/// header's and footer's (#1628), skipping cells covered by a merge.
-fn gridline_cells(page: &Page) -> impl Iterator<Item = wordcraft_geom::Rect> + '_ {
+/// header's and footer's (#1628), skipping cells covered by a merge; each with the turn of the
+/// rotated text box it is in.
+fn gridline_cells(page: &Page) -> impl Iterator<Item = (wordcraft_geom::Rect, Option<BoxSpin>)> + '_ {
     page.items.iter().chain(&page.header).chain(&page.footer).filter_map(|it| match it {
-        Placed::Cell { rect, covered: false, .. } => Some(*rect),
+        Placed::Cell { rect, covered: false, spin, .. } => Some((*rect, *spin)),
         _ => None,
     })
 }
@@ -1208,12 +1210,22 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
             }
             // Table Layout › View Gridlines: table cell outlines (on screen only).
             if app.session.view.table_gridlines {
-                for rect in gridline_cells(page) {
+                let stroke = Stroke::new(0.5, t.blue.linear_multiply(0.6));
+                for (rect, spin) in gridline_cells(page) {
                     let r = Rect::from_min_size(
                         pos2(visual_sr.min.x + rect.x * page_scale, visual_sr.min.y + rect.y * page_scale),
                         vec2(rect.w * page_scale, rect.h * page_scale),
                     );
-                    painter.rect_stroke(r, 0.0, Stroke::new(0.5, t.blue.linear_multiply(0.6)), egui::StrokeKind::Middle);
+                    match spin {
+                        // In a rotated text box: the cell's outline turned with it.
+                        Some(b) => {
+                            let at = |p: wordcraft_geom::Point| pos2(visual_sr.min.x + p.x * page_scale, visual_sr.min.y + p.y * page_scale);
+                            painter.add(egui::Shape::closed_line(b.quad(rect).iter().map(|p| at(*p)).collect(), stroke));
+                        }
+                        None => {
+                            painter.rect_stroke(r, 0.0, stroke, egui::StrokeKind::Middle);
+                        }
+                    }
                 }
             }
         }
@@ -1254,27 +1266,26 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
         // Find › Reading Highlight.
         let marks: Vec<(Pos, Pos)> = app.session.find_highlights().iter().take(5000).cloned().collect();
         for (a, b) in &marks {
-            for (pi, r) in layout.selection_rects(&app.session.doc, a, b, app.session.page_hint) {
+            for (pi, r, spin) in layout.selection_areas(&app.session.doc, a, b, app.session.page_hint) {
                 if let Some(pr) = rects.get(pi) {
                     let scale = layout.pages.get(pi).map_or(geo.scale, |page| page_screen_scale(*pr, page, geo.scale));
-                    let hr = Rect::from_min_size(pos2(pr.min.x + r.x * scale, pr.min.y + r.y * scale), vec2(r.w * scale, r.h * scale));
-                    painter.rect_filled(hr, 0.0, t.find_highlight);
+                    shade(&painter, *pr, scale, r, spin, t.find_highlight);
                 }
             }
         }
         // Selection (a selected object shows its frame instead): whole table cells shade the
         // cells (an empty one too), a column selection each row's piece, text running into or
         // across a table the whole cells of the rows it takes.
-        let selected: Vec<_> = if crate::objects::selected(app).is_some() {
+        let selected: Vec<(usize, wordcraft_geom::Rect, Option<BoxSpin>)> = if crate::objects::selected(app).is_some() {
             Vec::new()
         } else if let Some(range) = app.session.cell_range() {
             wordcraft_engine::cmd::table_mouse::cell_rects(&layout, &app.session.doc, range)
         } else if !app.session.sel.is_collapsed() {
             match app.session.column_segments() {
-                Some(segs) => segs.iter().flat_map(|(a, b)| layout.selection_rects(&app.session.doc, a, b, app.session.page_hint)).collect(),
+                Some(segs) => segs.iter().flat_map(|(a, b)| layout.selection_areas(&app.session.doc, a, b, app.session.page_hint)).collect(),
                 None => {
                     let (a, b) = app.session.sel.ordered();
-                    wordcraft_engine::cmd::table_mouse::selection_rects(&layout, &app.session.doc, &a, &b, app.session.page_hint)
+                    wordcraft_engine::cmd::table_mouse::selection_areas(&layout, &app.session.doc, &a, &b, app.session.page_hint)
                 }
             }
         } else {
@@ -1282,12 +1293,10 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
         };
         let visible_clip = ui.clip_rect();
         let mut screen_rects: Vec<Rect> = Vec::with_capacity(selected.len());
-        for (pi, r) in selected {
+        for (pi, r, spin) in selected {
             if let Some(pr) = rects.get(pi) {
                 let scale = layout.pages.get(pi).map_or(geo.scale, |page| page_screen_scale(*pr, page, geo.scale));
-                let sr = Rect::from_min_size(pos2(pr.min.x + r.x * scale, pr.min.y + r.y * scale), vec2(r.w * scale, r.h * scale));
-                painter.rect_filled(sr, 0.0, t.selection);
-                screen_rects.push(sr);
+                screen_rects.push(shade(&painter, *pr, scale, r, spin, t.selection));
             }
         }
         // Anchor only to visible selection geometry. A selection can span pages, and its
@@ -1298,12 +1307,20 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
         crate::content_controls::paint(app, &painter, &t, &layout, &rects, geo.scale);
         // Read Aloud: the sentence being spoken.
         if let Some((a, b)) = crate::read_aloud::highlight(app) {
-            for (pi, r) in layout.selection_rects(&app.session.doc, &a, &b, app.session.page_hint) {
+            for (pi, r, spin) in layout.selection_areas(&app.session.doc, &a, &b, app.session.page_hint) {
                 if let Some(pr) = rects.get(pi) {
-                    let sr =
-                        Rect::from_min_size(pos2(pr.min.x + r.x * geo.scale, pr.min.y + r.y * geo.scale), vec2(r.w * geo.scale, r.h * geo.scale));
-                    painter.rect_filled(sr, 0.0, t.accent.gamma_multiply(0.16));
-                    painter.hline(sr.x_range(), sr.max.y - 0.5, egui::Stroke::new(1.5, t.accent));
+                    let sr = shade(&painter, *pr, geo.scale, r, spin, t.accent.gamma_multiply(0.16));
+                    match spin {
+                        // Under the turned text: along the turned rectangle's bottom edge.
+                        Some(b) => {
+                            let [.., br, bl] = b.quad(wordcraft_geom::Rect::new(r.x, r.y, r.w, (r.h - 0.5 / geo.scale).max(0.0)));
+                            let at = |p: wordcraft_geom::Point| pos2(pr.min.x + p.x * geo.scale, pr.min.y + p.y * geo.scale);
+                            painter.line_segment([at(bl), at(br)], egui::Stroke::new(1.5, t.accent));
+                        }
+                        None => {
+                            painter.hline(sr.x_range(), sr.max.y - 0.5, egui::Stroke::new(1.5, t.accent));
+                        }
+                    }
                 }
             }
         }
@@ -1312,31 +1329,46 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
         // Editing an equation: shade it and draw the caret inside it.
         let mut math_caret = false;
         if let Some(m) = app.session.math.clone()
-            && let Some((pi, ex, base, ml)) = layout.equation_geom(&m.at, app.session.page_hint)
+            && let Some((pi, ex, base, ml, spin)) = layout.equation_geom(&m.at, app.session.page_hint)
             && let Some(pr) = rects.get(pi)
         {
             math_caret = true;
             let s = geo.scale;
-            let zone = Rect::from_min_max(
-                pos2(pr.min.x + ex * s - 2.0, pr.min.y + (base - ml.ascent) * s - 2.0),
-                pos2(pr.min.x + (ex + ml.width) * s + 2.0, pr.min.y + (base + ml.descent) * s + 2.0),
-            );
-            painter.rect_filled(zone, 2.0, Color32::from_black_alpha(16));
+            // Page point (`x`, `y`) of the equation's frame on screen: turned in a rotated text box.
+            let page_pt = |x: f32, y: f32| spin.map_or((x, y), |b| b.apply(x, y));
+            let at = |x: f32, y: f32| {
+                let (u, v) = page_pt(x, y);
+                pos2(pr.min.x + u * s, pr.min.y + v * s)
+            };
+            let pad = 2.0 / s.max(0.01);
+            let frame = wordcraft_geom::Rect::new(ex - pad, base - ml.ascent - pad, ml.width + pad * 2.0, ml.ascent + ml.descent + pad * 2.0);
+            match spin {
+                Some(b) => {
+                    let quad = b.quad(frame).iter().map(|p| pos2(pr.min.x + p.x * s, pr.min.y + p.y * s)).collect();
+                    painter.add(egui::Shape::convex_polygon(quad, Color32::from_black_alpha(16), Stroke::NONE));
+                }
+                None => {
+                    let zone = Rect::from_min_max(at(frame.x, frame.y), at(frame.right(), frame.bottom()));
+                    painter.rect_filled(zone, 2.0, Color32::from_black_alpha(16));
+                }
+            }
             if let Some(slot) = ml.slot(&m.pos.path, m.pos.off) {
-                let x = (pr.min.x + (ex + slot.x) * s).round() + 0.5;
-                let y0 = pr.min.y + (base - slot.y - slot.a) * s;
-                let y1 = pr.min.y + (base - slot.y + slot.d) * s;
+                let cx = ex + slot.x;
+                let (top, bottom) = (at(cx, base - slot.y - slot.a), at(cx, base - slot.y + slot.d));
+                // Upright, the bar sits on the pixel grid; turned, it leans with the text.
+                let bar = if spin.is_some() { [top, bottom] } else { [pos2(top.x.round() + 0.5, top.y), pos2(top.x.round() + 0.5, bottom.y)] };
                 let since = crate::now_ms() - app.canvas.caret_visible_since;
                 // The caret glides and fades like Word's (`caret_glide`).
                 let on = ((since / 530.0) as u64).is_multiple_of(2);
-                let look = crate::caret_glide::look(app, ui, content_origin, &geo, [pos2(x, y0), pos2(x, y1)], focused, since, on);
+                let look = crate::caret_glide::look(app, ui, content_origin, &geo, bar, focused, since, on);
                 if look.opacity > 0.0 && focused {
-                    let caret_color = caret_color_at(app, &layout, pi, ex + slot.x, base - slot.y + (slot.d - slot.a) / 2.0, view, dim_body);
+                    let (px, py) = page_pt(cx, base - slot.y + (slot.d - slot.a) / 2.0);
+                    let caret_color = caret_color_at(app, &layout, pi, px, py, view, dim_body);
                     painter.line_segment(look.bar, Stroke::new(1.5, caret_color.gamma_multiply(look.opacity)));
                 }
                 if focused {
                     ui.ctx().request_repaint_after(std::time::Duration::from_millis(530 - (since as u64 % 530)));
-                    let cr = Rect::from_min_max(pos2(x, y0), pos2(x + 1.0, y1));
+                    let cr = Rect::from_two_pos(bar[0], bar[1] + vec2(1.0, 0.0));
                     ui.ctx().output_mut(|o| {
                         o.ime = Some(egui::output::IMEOutput {
                             rect: cr,
@@ -1361,7 +1393,11 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
             // The caret contrasts with what lies under it, like Word's inverted caret (#299):
             // worked out only when something is drawn in it.
             let caret_color = |app: &mut WordApp| caret_color_at(app, &layout, c.page, c.x + c.width / 2.0, c.top + c.height / 2.0, view, dim_body);
-            let bar = if c.width > 0.0 {
+            let leans = c.width != 0.0 && c.height != 0.0;
+            let bar = if leans {
+                // In a rotated text box: the caret leans with the text.
+                [pos2(x, y0), pos2(x + c.width * scale, y1)]
+            } else if c.width > 0.0 {
                 // Turned text (a table cell's text direction): the caret lies across the page.
                 [pos2(x, y0.round() + 0.5), pos2(x + c.width * scale, y0.round() + 0.5)]
             } else {
@@ -1377,7 +1413,7 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
                 ui.ctx().request_repaint_after(std::time::Duration::from_millis(530 - (since as u64 % 530)));
             }
             // IME candidate window placement.
-            let cr = Rect::from_min_max(pos2(x, y0), pos2(x + 1.0, y1));
+            let cr = if leans { Rect::from_two_pos(bar[0], bar[1]) } else { Rect::from_min_max(pos2(x, y0), pos2(x + 1.0, y1)) };
             if focused {
                 ui.ctx().output_mut(|o| {
                     o.ime =
@@ -1490,9 +1526,10 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
         && let Some(p) = resp.interact_pointer_pos()
         && let Some((page, x, y)) = page_at(&rects, &layout, geo.scale, p)
     {
-        let at = wordcraft_geom::Point::new(x, y);
-        let on_cells =
-            wordcraft_engine::cmd::table_mouse::cell_rects(&layout, &app.session.doc, range).iter().any(|(pi, r)| *pi == page && r.contains(at));
+        let on_cells = wordcraft_engine::cmd::table_mouse::cell_rects(&layout, &app.session.doc, range).iter().any(|(pi, r, spin)| {
+            let (x, y) = spin.map_or((x, y), |b| b.unapply(x, y));
+            *pi == page && r.contains(wordcraft_geom::Point::new(x, y))
+        });
         if !on_cells && let Some(pos) = layout.hit(page, x, y, app.session.sel.focus.story) {
             app.session.sel = wordcraft_engine::Selection::caret(pos);
         }
@@ -2694,6 +2731,26 @@ fn margin_handle(app: &mut WordApp, ui: &Ui, edge: MarginEdge, zone: Rect, to_pt
     }
 }
 
+/// Shade highlight rectangle `r` (page points) of the page shown at `pr`, `scale` screen points
+/// per page point; turned with its text when it is in a rotated text box (`spin`). The screen
+/// area it covers.
+fn shade(painter: &egui::Painter, pr: Rect, scale: f32, r: wordcraft_geom::Rect, spin: Option<BoxSpin>, color: Color32) -> Rect {
+    let at = |x: f32, y: f32| pos2(pr.min.x + x * scale, pr.min.y + y * scale);
+    match spin {
+        None => {
+            let sr = Rect::from_min_size(at(r.x, r.y), vec2(r.w * scale, r.h * scale));
+            painter.rect_filled(sr, 0.0, color);
+            sr
+        }
+        Some(b) => {
+            let pts: Vec<Pos2> = b.quad(r).iter().map(|p| at(p.x, p.y)).collect();
+            let sr = Rect::from_points(&pts);
+            painter.add(egui::Shape::convex_polygon(pts, color, Stroke::NONE));
+            sr
+        }
+    }
+}
+
 /// Convert a page position (points) to screen coordinates (for agents and tests).
 pub fn page_to_screen(app: &mut WordApp, page: usize, x: f32, y: f32) -> Option<Pos2> {
     let r = app.canvas.page_rects.get(page)?;
@@ -2755,7 +2812,7 @@ pub fn caret_screen(app: &mut WordApp) -> Option<(Pos2, f32)> {
         .get(c.page)
         .and_then(|r| l.pages.get(c.page).map(|page| page_screen_scale(*r, page, app.canvas.scale)))
         .unwrap_or(app.canvas.scale);
-    Some((p, c.height.max(c.width) * scale))
+    Some((p, c.height.hypot(c.width) * scale))
 }
 
 pub fn pos_from_screen(app: &mut WordApp, p: Pos2) -> Option<Pos> {
@@ -3043,12 +3100,16 @@ pub(crate) fn screen_render_options() -> wordcraft_render::RenderOptions {
 fn link_under(app: &WordApp, layout: &DocLayout, page: usize, x: f32, y: f32, pos: &Pos) -> Option<String> {
     let doc = &app.session.doc;
     let para = doc.para_at(pos)?;
-    let at = wordcraft_geom::Point::new(x, y);
     // The caret falls between characters: the one under the point is on either side of it.
     [(pos.off, para.next_boundary(pos.off)), (para.prev_boundary(pos.off), pos.off)].into_iter().filter(|(a, b)| a < b).find_map(|(a, b)| {
         let link = para.props_of_char(a).link.clone().filter(|l| !l.is_empty())?;
         let (from, to) = (Pos { off: a, ..pos.clone() }, Pos { off: b, ..pos.clone() });
-        layout.selection_rects(doc, &from, &to, page).into_iter().any(|(pi, r)| pi == page && r.contains(at)).then_some(link)
+        // In a rotated text box, the point is taken into the turned text's frame.
+        let on = |(pi, r, spin): (usize, wordcraft_geom::Rect, Option<BoxSpin>)| {
+            let (x, y) = spin.map_or((x, y), |b| b.unapply(x, y));
+            pi == page && r.contains(wordcraft_geom::Point::new(x, y))
+        };
+        layout.selection_areas(doc, &from, &to, page).into_iter().any(on).then_some(link)
     })
 }
 
@@ -3254,6 +3315,92 @@ mod tests {
         assert_eq!(press_count(Some((5.0, at, 1)), 5.5, at, 0.3, 6.0), 1, "too slow");
         assert_eq!(press_count(Some((5.0, at, 1)), 5.1, at + vec2(20.0, 0.0), 0.3, 6.0), 1, "too far");
         assert_eq!(press_count(Some((5.0, at, 1)), 4.0, at, 0.3, 6.0), 1, "the clock went back");
+    }
+
+    /// #2458: a click where a rotated text box draws a word puts the caret in that word, and the
+    /// caret leans with the text.
+    #[test]
+    fn a_click_on_a_word_in_a_rotated_text_box_puts_the_caret_there() {
+        use egui::{Event, PointerButton};
+        let mut a = WordApp::new(wordcraft_engine::Session::new(wordcraft_doc::Document::new()), Default::default());
+        a.run("view.commentsPane", json!({"value": false})).unwrap();
+        let id = a.run("insert.textBox", json!({"text": "Alpha beta gamma"})).unwrap()["story"].as_u64().unwrap() as u32;
+        let bx = a.session.layout().text_box(id, 0).unwrap();
+        let end = Pos { off: bx.off + '\u{FFFC}'.len_utf8(), ..bx.pos() };
+        a.run("select.range", json!({"anchor": bx.pos(), "focus": end})).unwrap();
+        a.run("arrange.bounds", json!({"page": 0, "x": 150, "y": 200, "width": 200, "height": 80})).unwrap();
+        a.run("arrange.rotation", json!({"degrees": 30})).unwrap();
+        let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(1440.0, 900.0)).with_step_dt(1.0 / 60.0).build_ui_state(
+            |ui, app: &mut WordApp| {
+                let ctx = ui.ctx().clone();
+                app.logic(&ctx);
+                app.ui(ui);
+            },
+            a,
+        );
+        for _ in 0..6 {
+            h.step();
+        }
+        // Where "gamma" is drawn: its middle, worked out in the box's frame and turned with it.
+        let story = StoryRef::Part(id);
+        let layout = h.state_mut().session.layout();
+        let (x, y, spin, mid) = layout.pages[0]
+            .items
+            .iter()
+            .find_map(|i| match i {
+                Placed::Lines { story: s, x, y, spin, para, .. } if *s == story => {
+                    Some((*x, *y, *spin, (para.x_of(0, 13)?, para.lines.first()?.height / 2.0)))
+                }
+                _ => None,
+            })
+            .unwrap();
+        let (px, py) = spin.expect("turned with the box").apply(x + mid.0, y + mid.1);
+        let at = page_to_screen(h.state_mut(), 0, px, py).unwrap();
+        let button = |pressed: bool| Event::PointerButton { pos: at, button: PointerButton::Primary, pressed, modifiers: Default::default() };
+        h.event(Event::PointerMoved(at));
+        h.event(button(true));
+        h.step();
+        h.event(button(false));
+        for _ in 0..3 {
+            h.step();
+        }
+        let focus = h.state().session.sel.focus.clone();
+        assert_eq!(focus.story, story, "{focus:?}");
+        assert!((11..=16).contains(&focus.off), "in \"gamma\": {focus:?}");
+        let (_, len) = caret_screen(h.state_mut()).unwrap();
+        let c = h.state_mut().session.layout().caret(&focus).unwrap();
+        assert!(c.width < 0.0 && c.height > 0.0 && len > 0.0, "leans with the text: {c:?}");
+    }
+
+    /// #2458: in a rotated text box, Ctrl/⌘+click follows a link only on its turned letters, not
+    /// in the corners of the page area they cover.
+    #[test]
+    fn links_in_a_rotated_text_box_are_found_on_their_turned_letters() {
+        let mut a = WordApp::new(wordcraft_engine::Session::new(wordcraft_doc::Document::new()), Default::default());
+        let id = a.run("insert.textBox", json!({"width": 200, "height": 80})).unwrap()["story"].as_u64().unwrap() as u32;
+        a.run("insert.link", json!({"url": "https://example.com", "text": "Link"})).unwrap();
+        let bx = a.session.layout().text_box(id, 0).unwrap();
+        let end = Pos { off: bx.off + '\u{FFFC}'.len_utf8(), ..bx.pos() };
+        a.run("select.range", json!({"anchor": bx.pos(), "focus": end})).unwrap();
+        a.run("arrange.rotation", json!({"degrees": 30})).unwrap();
+        let layout = a.session.layout();
+        let at = Pos { story: StoryRef::Part(id), path: wordcraft_doc::Path::top(0), off: 0 };
+        let (_, r, spin) = layout.selection_areas(&a.session.doc, &at, &Pos { off: 1, ..at.clone() }, 0)[0];
+        let b = spin.expect("turned with the box");
+        let (x, y) = b.apply(r.x + r.w / 2.0, r.y + r.h / 2.0);
+        assert_eq!(link_under(&a, &layout, 0, x, y, &at).as_deref(), Some("https://example.com"));
+        // A corner of the page area the turned "L" covers is beside it, not on it.
+        let area = b.bounds(r);
+        let corners = [(area.x, area.y), (area.right(), area.y), (area.x, area.bottom()), (area.right(), area.bottom())];
+        let (x, y) = corners
+            .into_iter()
+            .map(|(x, y)| (x + (area.x + area.w / 2.0 - x) * 0.05, y + (area.y + area.h / 2.0 - y) * 0.05))
+            .find(|(x, y)| {
+                let (u, v) = b.unapply(*x, *y);
+                !r.contains(wordcraft_geom::Point::new(u, v))
+            })
+            .expect("a corner off the letter");
+        assert_eq!(link_under(&a, &layout, 0, x, y, &at), None);
     }
 
     /// #549: double-click a word and drag: the selection grows by whole words; triple-click and
@@ -4354,6 +4501,7 @@ mod tests {
             cell: 0,
             story,
             clip: false,
+            spin: None,
         };
         let page = Page {
             items: vec![cell(100.0, false, StoryRef::Body), cell(110.0, true, StoryRef::Body)],
@@ -4361,7 +4509,7 @@ mod tests {
             footer: vec![cell(200.0, false, StoryRef::Part(2))],
             ..Default::default()
         };
-        let ys: Vec<f32> = gridline_cells(&page).map(|r| r.y).collect();
+        let ys: Vec<f32> = gridline_cells(&page).map(|(r, _)| r.y).collect();
         assert_eq!(ys, [100.0, 10.0, 200.0]);
     }
 

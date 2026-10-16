@@ -1698,6 +1698,113 @@ mod tests {
         assert_eq!(v_rel(&s), Anchor::Page);
     }
 
+    /// #2458: a rotated text box's text turns with it. At 90° its lines run down the page, and a
+    /// click where a letter is drawn puts the caret there.
+    #[test]
+    fn a_rotated_text_box_takes_clicks_on_its_turned_text() {
+        let mut s = Session::new(wordcraft_doc::Document::new());
+        let id = s.run("insert.textBox", &json!({"text": "First"})).unwrap()["story"].as_u64().unwrap() as u32;
+        s.run("text.insert", &json!({"text": "\rSecond line"})).unwrap();
+        let story = StoryRef::Part(id);
+        // The box itself selected, turned a quarter clockwise.
+        let bx = s.layout().text_box(id, 0).unwrap();
+        s.sel = Selection { anchor: bx.pos(), focus: Pos { off: bx.off + '\u{FFFC}'.len_utf8(), ..bx.pos() } };
+        s.run("arrange.rotation", &json!({"degrees": 90})).unwrap();
+        let l = s.layout();
+        let at = |off: usize| l.caret(&Pos { story, path: wordcraft_doc::Path::top(1), off }).unwrap();
+        let (c0, c5) = (at(0), at(5));
+        assert!(c0.height.abs() < 0.01 && c0.width > 4.0, "the caret lies across the page: {c0:?}");
+        assert!(c5.top > c0.top + 10.0 && (c5.x - c0.x).abs() < 0.5, "the line runs down the page: {c0:?} {c5:?}");
+        let first = l.caret(&Pos { story, path: wordcraft_doc::Path::top(0), off: 0 }).unwrap();
+        assert!(first.x > c0.x + 5.0, "the first line stands right of the second: {first:?} {c0:?}");
+        s.run("caret.set", &json!({"page": 0, "x": c5.x + c5.width / 2.0, "y": c5.top + 1.0, "story": {"part": id}})).unwrap();
+        assert_eq!(s.sel.focus, Pos { story, path: wordcraft_doc::Path::top(1), off: 5 });
+    }
+
+    /// A text box (story id) turned `deg` with the box itself selected; `fill` runs in it first.
+    fn turned_box(s: &mut Session, deg: f32, fill: impl FnOnce(&mut Session)) -> u32 {
+        let id = s.run("insert.textBox", &json!({"width": 240, "height": 120})).unwrap()["story"].as_u64().unwrap() as u32;
+        fill(s);
+        let bx = s.layout().text_box(id, 0).unwrap();
+        s.sel = Selection { anchor: bx.pos(), focus: Pos { off: bx.off + '\u{FFFC}'.len_utf8(), ..bx.pos() } };
+        s.run("arrange.rotation", &json!({"degrees": deg})).unwrap();
+        id
+    }
+
+    /// #2458: selected table cells in a rotated text box are shaded turned with their text, and a
+    /// click on a turned cell finds it.
+    #[test]
+    fn table_cells_in_a_rotated_text_box_turn_with_it() {
+        let mut s = Session::new(wordcraft_doc::Document::new());
+        let id = turned_box(&mut s, 30.0, |s| {
+            s.run("insert.table", &json!({"rows": 2, "cols": 2})).unwrap();
+            s.run("text.insert", &json!({"text": "Alpha"})).unwrap();
+        });
+        let story = StoryRef::Part(id);
+        let cell = Pos { story, path: wordcraft_doc::Path(vec![0, 0, 0, 0]), off: 0 };
+        s.run("caret.set", &json!({"pos": cell})).unwrap();
+        s.run("table.selectRow", &json!({})).unwrap();
+        let range = s.cell_range().expect("the row's cells").clone();
+        let l = s.layout();
+        let cells = super::super::table_mouse::cell_rects(&l, &s.doc, &range);
+        assert_eq!(cells.len(), 2, "{cells:?}");
+        // Each cell's shading turns as the text in it does.
+        let text_spin = l.caret_in_frame(&cell, 0).unwrap().1.expect("turned text");
+        assert!(cells.iter().all(|(_, _, spin)| *spin == Some(text_spin)), "{cells:?} vs {text_spin:?}");
+        let (_, r, _) = cells[0];
+        let (cx, cy) = (r.x + r.w / 2.0, r.y + r.h / 2.0);
+        let (px, py) = text_spin.apply(cx, cy);
+        assert!((px - cx).hypot(py - cy) > 5.0, "the turn moves the cell");
+        let hit = l.cell_at(0, px, py).expect("the turned cell");
+        assert_eq!((hit.0, hit.2, hit.3), (story, 0, 0));
+        assert!(l.cell_at(0, cx, cy).is_none_or(|h| (h.2, h.3) != (0, 0)), "not where it would be unturned");
+    }
+
+    /// #2458: a column (Alt+drag) selection in a rotated text box takes the same columns of each
+    /// line, measured along the turned lines.
+    #[test]
+    fn column_selection_in_a_rotated_text_box_follows_its_lines() {
+        let mut s = Session::new(wordcraft_doc::Document::new());
+        let id = turned_box(&mut s, 30.0, |s| {
+            s.run("text.insert", &json!({"text": "abcdef\rabcdef\rabcdef"})).unwrap();
+        });
+        let at = |para: usize, off: usize| Pos { story: StoryRef::Part(id), path: wordcraft_doc::Path::top(para), off };
+        let r = s.run("select.column", &json!({"anchor": at(0, 1), "focus": at(2, 3)})).unwrap();
+        assert_eq!(r["rows"], json!(["bc", "bc", "bc"]), "{r}");
+        // From and to page points over the turned letters.
+        let l = s.layout();
+        let mid = |p: &Pos| {
+            let c = l.caret(p).unwrap();
+            (c.x + c.width / 2.0, c.top + c.height / 2.0)
+        };
+        let ((fx, fy), (tx, ty)) = (mid(&at(0, 1)), mid(&at(2, 3)));
+        let r = s
+            .run("select.column", &json!({"from": {"page": 0, "x": fx, "y": fy}, "to": {"page": 0, "x": tx, "y": ty}, "story": {"part": id}}))
+            .unwrap();
+        assert_eq!(r["rows"], json!(["bc", "bc", "bc"]), "{r}");
+    }
+
+    /// #2458: an equation in a rotated text box is found where it is drawn, turned, and its
+    /// editing geometry says how it is turned.
+    #[test]
+    fn equations_in_a_rotated_text_box_are_found_turned() {
+        let mut s = Session::new(wordcraft_doc::Document::new());
+        let id = turned_box(&mut s, 90.0, |s| {
+            s.run("text.insert", &json!({"text": "x "})).unwrap();
+            s.run("insert.equation", &json!({"linear": "a+b", "edit": false})).unwrap();
+        });
+        let story = StoryRef::Part(id);
+        let eq = s.doc.para(story, &wordcraft_doc::Path::top(0)).unwrap().object_offsets()[0];
+        let at = Pos { story, path: wordcraft_doc::Path::top(0), off: eq };
+        let l = s.layout();
+        let (_, ex, base, ml, spin) = l.equation_geom(&at, 0).unwrap();
+        let b = spin.expect("turned with the box");
+        assert_eq!(b.spin.deg, 90.0);
+        let (px, py) = b.apply(ex + ml.width / 2.0, base - ml.ascent / 2.0);
+        assert_eq!(l.equation_hit(0, px, py, story).map(|(p, _)| p), Some(at));
+        assert!(l.equation_hit(0, ex + ml.width / 2.0, base - ml.ascent / 2.0, story).is_none(), "not where it would be unturned");
+    }
+
     /// #332: Rotate and Flip turn the frame (an angle and mirroring), never the pixels; an exact
     /// angle is normalised; each is one undo step; the rotated frame takes its rotated room.
     #[test]

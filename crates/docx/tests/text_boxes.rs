@@ -195,3 +195,30 @@ fn hidden_drawings_stay_hidden() {
     assert_eq!((marked("wp:docPr"), marked("wps:cNvPr")), (3, 1), "{xml}");
     assert_eq!(hidden(&wordcraft_docx::read(&saved).unwrap()), want);
 }
+
+/// #2458: a turned and flipped text box keeps its turn and its text through save and load. Its
+/// text turns with the shape unless Do not rotate text (`bodyPr` `upright`) keeps it level.
+#[test]
+fn rotated_text_box_round_trips() {
+    let mut d = Document::from_text("a\nb");
+    for (para, text, upright) in [(0, "Turned text", false), (1, "Level text", true)] {
+        let mut o = text_box(&mut d, text, TextBody { upright, ..Default::default() });
+        if let Some(f) = o.float_mut() {
+            (f.rot, f.flip_v) = (30.0, true);
+        }
+        d.insert_object(&wordcraft_doc::Pos::body(para, 1), o, &Default::default()).unwrap();
+    }
+    let bytes = wordcraft_docx::write(&d).unwrap();
+    let xml = document_xml(&bytes);
+    assert_eq!(xml.matches(r#"<a:xfrm rot="1800000" flipV="1">"#).count(), 2, "{xml}");
+    assert_eq!(xml.matches(r#"upright="1""#).count(), 1, "only the level box says so: {xml}");
+    let r = wordcraft_docx::read(&bytes).unwrap();
+    let ids = boxes(&r);
+    let text = |id: u32| r.plain_text(wordcraft_doc::StoryRef::Part(id));
+    let upright = |id: u32| r.parts.get(&id).unwrap().body.upright;
+    assert_eq!((text(ids[0]).as_str(), upright(ids[0])), ("Turned text", false));
+    assert_eq!((text(ids[1]).as_str(), upright(ids[1])), ("Level text", true));
+    let mut spins = Vec::new();
+    r.objects_in_reading_order(&mut |o| spins.extend(o.frame().map(|(_, _, f)| f.spin())));
+    assert_eq!(spins, [wordcraft_geom::Spin::new(30.0, false, true); 2]);
+}

@@ -22,6 +22,7 @@
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 #![forbid(unsafe_code)]
 
+use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::num::NonZeroU16;
 use std::sync::Arc;
@@ -814,24 +815,30 @@ impl Exporter<'_> {
         for it in &page.items {
             let draws = self.draws(page, it, &dopts);
             match it {
-                Placed::Lines { story, path, para, .. } => {
+                Placed::Lines { story, path, para, spin, .. } => {
                     let idx = self.entry(*story, path, para);
-                    for d in &draws {
+                    // A rotated text box's lines come as one turn: each piece is tagged as it is,
+                    // and drawn in that turn.
+                    let (pieces, turn) = match (spin, draws.as_slice()) {
+                        (Some(_), [Draw::Rotated { cx, cy, spin, items }]) => (items.as_slice(), Some((*cx, *cy, *spin))),
+                        _ => (draws.as_slice(), None),
+                    };
+                    for d in pieces {
+                        let shown = match turn {
+                            Some((cx, cy, spin)) => Cow::Owned(Draw::Rotated { cx, cy, spin, items: vec![d.clone()] }),
+                            None => Cow::Borrowed(d),
+                        };
                         match d {
-                            Draw::Glyphs { .. } | Draw::Turned { .. } => self.tagged(s, Role::Para(idx), None, |me, s| me.draw(s, d)),
-                            Draw::Image { alt, .. } => self.tagged(s, Role::Figure, Some(alt), |me, s| me.draw(s, d)),
+                            Draw::Glyphs { .. } | Draw::Turned { .. } => self.tagged(s, Role::Para(idx), None, |me, s| me.draw(s, &shown)),
+                            Draw::Image { alt, .. } => self.tagged(s, Role::Figure, Some(alt), |me, s| me.draw(s, &shown)),
                             // A rotated inline picture.
                             Draw::Rotated { items, .. } if items.iter().any(|i| matches!(i, Draw::Image { .. })) => {
                                 let alt = items.iter().find_map(|i| if let Draw::Image { alt, .. } = i { Some(alt.as_str()) } else { None });
-                                self.tagged(s, Role::Figure, alt, |me, s| me.draw(s, d))
+                                self.tagged(s, Role::Figure, alt, |me, s| me.draw(s, &shown))
                             }
                             // An inline chart or diagram: its text is part of the figure, not the paragraph.
-                            Draw::Figure { alt, kind, draws: inner } => self.tagged(s, Role::Figure, Some(graphic_alt(alt, *kind)), |me, s| {
-                                for d in inner {
-                                    me.draw(s, d);
-                                }
-                            }),
-                            _ => self.tagged(s, Role::Artifact(ArtifactType::Other), None, |me, s| me.draw(s, d)),
+                            Draw::Figure { alt, kind, .. } => self.tagged(s, Role::Figure, Some(graphic_alt(alt, *kind)), |me, s| me.draw(s, &shown)),
+                            _ => self.tagged(s, Role::Artifact(ArtifactType::Other), None, |me, s| me.draw(s, &shown)),
                         }
                     }
                 }

@@ -10,7 +10,7 @@ use wordcraft_geom::{Rect, Spin};
 
 use crate::math::MItem;
 use crate::para::{ClKind, LineEnd, ParaLayout};
-use crate::{Page, Placed};
+use crate::{BoxSpin, Page, Placed};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Stroke {
@@ -351,12 +351,12 @@ pub fn page_display(doc: &Document, page: &Page, opts: &DisplayOptions) -> Vec<D
         let clips = clipped_cells(items);
         let mut done: Vec<u32> = Vec::new();
         for it in items.iter() {
-            if let Placed::Lines { story, path, .. } = it
+            if let Placed::Lines { story, path, spin, .. } = it
                 && let Some(rect) = cell_clip(&clips, *story, &path.0)
             {
                 let mut inner = Vec::new();
-                item(doc, it, opts, a, &mut inner);
-                out.push(Draw::Clip { rect, items: inner });
+                text_lines(doc, it, opts, a, &mut inner);
+                box_turn(*spin, vec![Draw::Clip { rect, items: inner }], &mut out);
                 continue;
             }
             match it {
@@ -447,10 +447,19 @@ fn warped_text(
     alpha: f32,
     out: &mut Vec<Draw>,
 ) {
+    // Bent in the box's unturned frame, then turned with it.
+    let spin = lines.iter().find_map(|it| if let Placed::Lines { spin, .. } = it { *spin } else { None });
     let mut raw = Vec::new();
     for it in lines {
-        item(doc, it, opts, alpha, &mut raw);
+        text_lines(doc, it, opts, alpha, &mut raw);
     }
+    let mut bent = Vec::new();
+    bend(raw, rect, warp, &mut bent);
+    box_turn(spin, bent, out);
+}
+
+/// Text drawn as `raw` bent by `warp` over the frame `rect` inside its margins.
+fn bend(raw: Vec<Draw>, rect: Rect, warp: &wordcraft_doc::wordart::TextWarp, out: &mut Vec<Draw>) {
     // The letters: runs with effects as they are, plain runs from their glyphs.
     let mut arts: Vec<(BezPath, Box<wordcraft_doc::wordart::TextEffects>, Rgb, f32)> = Vec::new();
     let mut hidden = Vec::new();
@@ -498,7 +507,7 @@ fn change_bars(doc: &Document, page: &Page, m: &MarkupOptions, alpha: f32, out: 
     let bx = if right { page.body.right() + 9.0 } else { page.body.x - 9.0 };
     let color = m.changed_lines_color.unwrap_or(CHANGE_BAR);
     for it in &page.items {
-        let Placed::Lines { story, path, para: pl, l0, l1, y, turn, .. } = it else { continue };
+        let Placed::Lines { story, path, para: pl, l0, l1, x, y, turn, spin } = it else { continue };
         if turn.is_turned() {
             continue;
         }
@@ -517,17 +526,15 @@ fn change_bars(doc: &Document, page: &Page, m: &MarkupOptions, alpha: f32, out: 
                 || (mark_rev && line.end == LineEnd::Para);
             if changed {
                 let top = y + (line.top - first.top);
-                out.push(Draw::Line {
-                    x0: bx,
-                    y0: top,
-                    x1: bx,
-                    y1: top + line.height,
-                    width: 0.75,
-                    color,
-                    stroke: Stroke::Solid,
-                    alpha,
-                    text_bg: None,
-                });
+                // In a rotated text box: beside the height the turned line covers on the page.
+                let (top, bottom) = match spin {
+                    Some(b) => {
+                        let r = b.bounds(Rect::new(x + line.left, top, (line.right - line.left).max(0.0), line.height));
+                        (r.y, r.bottom())
+                    }
+                    None => (top, top + line.height),
+                };
+                out.push(Draw::Line { x0: bx, y0: top, x1: bx, y1: bottom, width: 0.75, color, stroke: Stroke::Solid, alpha, text_bg: None });
             }
         }
     }
@@ -596,21 +603,50 @@ fn item_in(doc: &Document, it: &Placed, opts: &DisplayOptions, alpha: f32, outer
             spun(*spin, *rect, vec![Draw::Clip { rect: *rect, items: inner }], out)
         }
         Placed::Cell { .. } | Placed::Object { .. } => {}
-        Placed::Lines { story, path, para, l0, l1, x, y, turn } if turn.is_turned() => {
+        Placed::Lines { spin, .. } => {
             let mut items = Vec::new();
-            lines(doc, *story, path, para, *l0, *l1, 0.0, 0.0, opts, alpha, &mut items);
-            // Link areas are axis-aligned page rectangles: turned text gets none.
-            for d in &mut items {
-                if let Draw::Glyphs { link, .. } = d {
-                    *link = None;
-                }
-            }
-            if *turn == TextDirection::Down {
-                items = upright_east_asian(items);
-            }
-            out.push(Draw::Turned { x: *x, y: *y, turn: *turn, items });
+            text_lines(doc, it, opts, alpha, &mut items);
+            box_turn(*spin, items, out);
         }
-        Placed::Lines { story, path, para, l0, l1, x, y, .. } => lines(doc, *story, path, para, *l0, *l1, *x, *y, opts, alpha, out),
+    }
+}
+
+/// Placed lines as they are laid out: in a rotated text box, in its unturned frame.
+fn text_lines(doc: &Document, it: &Placed, opts: &DisplayOptions, alpha: f32, out: &mut Vec<Draw>) {
+    let Placed::Lines { story, path, para, l0, l1, x, y, turn, .. } = it else { return };
+    if !turn.is_turned() {
+        lines(doc, *story, path, para, *l0, *l1, *x, *y, opts, alpha, out);
+        return;
+    }
+    let mut items = Vec::new();
+    lines(doc, *story, path, para, *l0, *l1, 0.0, 0.0, opts, alpha, &mut items);
+    unlink(&mut items);
+    if *turn == TextDirection::Down {
+        items = upright_east_asian(items);
+    }
+    out.push(Draw::Turned { x: *x, y: *y, turn: *turn, items });
+}
+
+/// `items` drawn in a rotated text box's turn (as they are when it has none).
+fn box_turn(spin: Option<BoxSpin>, mut items: Vec<Draw>, out: &mut Vec<Draw>) {
+    match spin {
+        Some(b) => {
+            unlink(&mut items);
+            out.push(Draw::Rotated { cx: b.centre.x, cy: b.centre.y, spin: b.spin, items });
+        }
+        None => out.extend(items),
+    }
+}
+
+/// Link areas are axis-aligned page rectangles: turned text gets none, nor does text clipped or
+/// turned inside it.
+pub(crate) fn unlink(items: &mut [Draw]) {
+    for d in items {
+        match d {
+            Draw::Glyphs { link, .. } => *link = None,
+            Draw::Clip { items, .. } | Draw::Turned { items, .. } | Draw::Rotated { items, .. } | Draw::Figure { draws: items, .. } => unlink(items),
+            _ => {}
+        }
     }
 }
 

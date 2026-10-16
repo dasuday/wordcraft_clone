@@ -801,6 +801,83 @@ fn turned_cell_text_exports_as_text() {
     }
 }
 
+/// Each glyph's character and the angle (degrees) it is drawn at on the page.
+fn glyph_angles(bytes: &[u8]) -> Vec<(char, f64)> {
+    use hayro_interpret::font::Glyph;
+    use hayro_interpret::{
+        BlendMode, ClipPath, Context, Device, GlyphDrawMode, Image, InterpreterCache, InterpreterSettings, Paint, PathDrawMode, SoftMask,
+        interpret_page,
+    };
+    use hayro_syntax::Pdf;
+    struct Ex(Vec<(char, f64)>);
+    impl Device<'_> for Ex {
+        fn set_soft_mask(&mut self, _: Option<SoftMask<'_>>) {}
+        fn set_blend_mode(&mut self, _: BlendMode) {}
+        fn draw_path(&mut self, _: &kurbo::BezPath, _: kurbo::Affine, _: &Paint<'_>, _: &PathDrawMode) {}
+        fn push_clip_path(&mut self, _: &ClipPath) {}
+        fn push_transparency_group(&mut self, _: f32, _: Option<SoftMask<'_>>, _: BlendMode) {}
+        fn draw_glyph(&mut self, g: &Glyph<'_>, t: kurbo::Affine, _: kurbo::Affine, _: &Paint<'_>, mode: &GlyphDrawMode) {
+            if matches!(mode, GlyphDrawMode::Stroke(_)) {
+                return;
+            }
+            if let Some(hayro_cmap::BfString::Char(c)) = g.as_unicode() {
+                let [a, b, ..] = t.as_coeffs();
+                self.0.push((c, b.atan2(a).to_degrees()));
+            }
+        }
+        fn draw_image(&mut self, _: Image<'_, '_>, _: kurbo::Affine) {}
+        fn pop_clip_path(&mut self) {}
+        fn pop_transparency_group(&mut self) {}
+    }
+    let pdf = Pdf::new(bytes.to_vec()).expect("parse");
+    let cache = InterpreterCache::new();
+    let mut ex = Ex(Vec::new());
+    for page in pdf.pages().iter() {
+        let mut ctx = Context::new(kurbo::Affine::IDENTITY, kurbo::Rect::new(0.0, 0.0, 1.0, 1.0), &cache, pdf.xref(), InterpreterSettings::default());
+        interpret_page(page, &mut ctx, &mut ex);
+    }
+    ex.0
+}
+
+/// #2458: a rotated text box's text is drawn turned with it, and stays real, tagged text.
+#[test]
+fn rotated_text_box_text_turns_and_stays_text() {
+    use wordcraft_doc::para::{Anchor, Float, ShapeKind, Wrap};
+    let export_at = |rot: f32, tagged: bool| {
+        let mut d = Document::from_text("Body");
+        let id = d.add_part(wordcraft_doc::PartKind::TextBox, vec![para_block(Paragraph::with_text("Zigzag words", CharProps::default()))]);
+        let float = Float { wrap: Wrap::InFrontOfText, h_rel: Anchor::Page, v_rel: Anchor::Page, x: 200.0, y: 300.0, rot, ..Default::default() };
+        let shape = InlineObject::Shape {
+            kind: ShapeKind::TextBox,
+            w: 160.0,
+            h: 60.0,
+            fill: None,
+            stroke: Some(wordcraft_doc::props::Rgb::BLACK),
+            stroke_width: 1.0,
+            float,
+            story: Some(id),
+            effects: Default::default(),
+            freeform: None,
+            extra: Default::default(),
+        };
+        d.insert_object(&wordcraft_doc::Pos::body(0, 4), shape, &CharProps::default()).unwrap();
+        export(&d, &PdfOptions { tagged, compress: false, ..Default::default() }).unwrap()
+    };
+    let bytes = export_at(30.0, true);
+    let text = squash(&extract_text(&bytes).concat());
+    assert!(text.contains("Zigzag words") && text.contains("Body"), "{text:?}");
+    let angles = glyph_angles(&bytes);
+    let at = |c: char| angles.iter().find(|(g, _)| *g == c).map(|(_, a)| a.abs()).unwrap();
+    assert!((at('Z') - 30.0).abs() < 0.5, "the box's letters turn with it: {angles:?}");
+    assert!(at('B') < 0.01 || (at('B') - 180.0).abs() < 0.01, "the body's don't: {angles:?}");
+    // The box's text is its paragraph's, not an artifact: two paragraphs in the structure.
+    let raw = String::from_utf8_lossy(&bytes).into_owned();
+    assert_eq!(raw.matches("/S/P").count() + raw.matches("/S /P").count(), 2, "both paragraphs tagged");
+    // Unturned, it draws level.
+    let level = glyph_angles(&export_at(0.0, false));
+    assert!(level.iter().all(|(_, a)| a.abs() < 0.01 || (a.abs() - 180.0).abs() < 0.01), "{level:?}");
+}
+
 #[test]
 fn inline_chart_is_a_figure_with_its_text_inside_it() {
     use wordcraft_doc::graphic::{Graphic, GraphicItem, GraphicKind, TextAlign};

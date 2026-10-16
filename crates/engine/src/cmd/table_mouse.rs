@@ -14,7 +14,7 @@ use wordcraft_doc::para::Anchor;
 use wordcraft_doc::props::TableFloat;
 use wordcraft_doc::{Document, Path, Pos, StoryRef, Table};
 use wordcraft_geom::{Point, Rect};
-use wordcraft_layout::{DocLayout, Placed};
+use wordcraft_layout::{BoxSpin, DocLayout, Placed};
 
 use super::table_resize::{self, CellBox, Edge, REACH, ResizeTarget};
 use super::{sel_result, table};
@@ -232,8 +232,9 @@ pub fn moved_to(l: &DocLayout, page: usize, geom: &ResizeTarget, dx: f32, dy: f3
     (x, y)
 }
 
-/// Where the selected cells are drawn (page, rect), for shading them.
-pub fn cell_rects(l: &DocLayout, doc: &Document, range: &CellRange) -> Vec<(usize, Rect)> {
+/// Where the selected cells are drawn (page, rect, and the turn of a rotated text box they are
+/// in: the rect is then in its unturned frame), for shading them.
+pub fn cell_rects(l: &DocLayout, doc: &Document, range: &CellRange) -> Vec<(usize, Rect, Option<BoxSpin>)> {
     let Some(t) = doc.table(range.story, &range.table) else { return Vec::new() };
     let picked: std::collections::BTreeSet<(usize, usize)> = range.cells(t).into_iter().collect();
     let mut out = Vec::new();
@@ -241,12 +242,12 @@ pub fn cell_rects(l: &DocLayout, doc: &Document, range: &CellRange) -> Vec<(usiz
         for it in &pg.items {
             // A vertically merged cell's box spans its rows (#640); its continuation rows'
             // `covered` boxes would shade it twice.
-            if let Placed::Cell { rect, table, row, cell, story, covered: false, .. } = it
+            if let Placed::Cell { rect, table, row, cell, story, covered: false, spin, .. } = it
                 && *story == range.story
                 && *table == range.table
                 && picked.contains(&(*row, *cell))
             {
-                out.push((pi, *rect));
+                out.push((pi, *rect, *spin));
             }
         }
     }
@@ -256,9 +257,10 @@ pub fn cell_rects(l: &DocLayout, doc: &Document, range: &CellRange) -> Vec<(usiz
 /// What a stream selection from `a` to `b` shades, as in Word: its text, except that each row of
 /// a table it takes from start to end (running into or across the table, `table::extend_selection`
 /// takes whole rows) shades all its cells instead (an empty one too), on every page. A table
-/// both ends are in keeps its text (whole cells there are a `CellRange`).
-pub fn selection_rects(l: &DocLayout, doc: &Document, a: &Pos, b: &Pos, page_hint: usize) -> Vec<(usize, Rect)> {
-    let text = l.selection_rects(doc, a, b, page_hint);
+/// both ends are in keeps its text (whole cells there are a `CellRange`). Text in a rotated text
+/// box is shaded turned (see [`DocLayout::selection_areas`]).
+pub fn selection_areas(l: &DocLayout, doc: &Document, a: &Pos, b: &Pos, page_hint: usize) -> Vec<(usize, Rect, Option<BoxSpin>)> {
+    let text = l.selection_areas(doc, a, b, page_hint);
     let (a, b) = if a <= b { (a, b) } else { (b, a) };
     if a.story != b.story {
         return text;
@@ -268,23 +270,23 @@ pub fn selection_rects(l: &DocLayout, doc: &Document, a: &Pos, b: &Pos, page_hin
     for (pi, pg) in l.pages.iter().enumerate() {
         for it in &pg.items {
             // A vertically merged cell's box spans its rows (#640), as in `cell_rects`.
-            if let Placed::Cell { rect, table, row, story, covered: false, .. } = it
+            if let Placed::Cell { rect, table, row, story, covered: false, spin, .. } = it
                 && *story == a.story
                 && row_taken(doc, a, b, table, *row, &mut seen)
                 && !outer_row_taken(doc, a, b, table, &mut seen)
             {
-                cells.push((pi, *rect));
+                cells.push((pi, *rect, *spin));
             }
         }
     }
     if cells.is_empty() {
         return text;
     }
-    let mut out: Vec<(usize, Rect)> = text
+    let mut out: Vec<(usize, Rect, Option<BoxSpin>)> = text
         .into_iter()
-        .filter(|(pi, r)| {
+        .filter(|(pi, r, _)| {
             let mid = Point::new(r.x + r.w / 2.0, r.y + r.h / 2.0);
-            !cells.iter().any(|(cp, c)| cp == pi && c.contains(mid))
+            !cells.iter().any(|(cp, c, _)| cp == pi && c.contains(mid))
         })
         .collect();
     out.extend(cells);
@@ -985,7 +987,7 @@ mod tests {
         drag_to(&mut s, into);
         let (a, b) = s.sel.ordered();
         let l = s.layout();
-        let shaded = selection_rects(&l, &s.doc, &a, &b, 0);
+        let shaded: Vec<(usize, Rect)> = selection_areas(&l, &s.doc, &a, &b, 0).into_iter().map(|(pi, r, _)| (pi, r)).collect();
         for r in 0..3 {
             for c in 0..2 {
                 let cell = cell_rect(&mut s, r, c);
@@ -998,7 +1000,7 @@ mod tests {
         assert!(shaded.iter().any(|(_, x)| x.bottom() <= first.y), "and the text before the table");
         // Both ends in the table (here a whole row of it): its text.
         let (start, end) = table::row_ends(&s.doc, StoryRef::Body, &table_path(&s), 2).unwrap();
-        assert_eq!(selection_rects(&l, &s.doc, &start, &end, 0), l.selection_rects(&s.doc, &start, &end, 0));
+        assert_eq!(selection_areas(&l, &s.doc, &start, &end, 0), l.selection_areas(&s.doc, &start, &end, 0));
     }
 
     /// Clicks away from the areas, and hostile numbers: an error and no change, never a panic.

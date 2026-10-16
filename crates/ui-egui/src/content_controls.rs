@@ -2,7 +2,7 @@
 //! control in Design Mode), check boxes that tick on click, and the list or calendar of a
 //! drop-down, combo box or date picker. Everything ends in a `developer.*` command.
 
-use egui::{Align2, Rect, Stroke, Ui, pos2, vec2};
+use egui::{Align2, Pos2, Rect, Stroke, Ui, pos2, vec2};
 use serde_json::json;
 use wordcraft_doc::Pos;
 use wordcraft_doc::control::{ControlKind, ControlRange};
@@ -38,25 +38,39 @@ fn screen(pr: Rect, scale: f32, r: wordcraft_geom::Rect) -> Rect {
     Rect::from_min_size(pos2(pr.min.x + r.x * scale, pr.min.y + r.y * scale), vec2(r.w * scale, r.h * scale))
 }
 
-/// The control's content on screen, one rect per page it is on.
-fn frames(app: &WordApp, layout: &DocLayout, rects: &[Rect], scale: f32, r: &ControlRange) -> Vec<Rect> {
+/// The control's content on screen, one rect per page it is on; in a rotated text box, also
+/// the corners of its outline turned with the text (the rect then covers them).
+fn frames(app: &WordApp, layout: &DocLayout, rects: &[Rect], scale: f32, r: &ControlRange) -> Vec<(Rect, Option<[Pos2; 4]>)> {
     let a = r.content_start();
-    let mut out: Vec<(usize, Rect)> = Vec::new();
-    for (pi, sr) in layout.selection_rects(&app.session.doc, &a, &r.end, app.session.page_hint) {
+    // United per page in the lines' own frame.
+    let mut areas: Vec<(usize, wordcraft_geom::Rect, Option<wordcraft_layout::BoxSpin>)> = Vec::new();
+    for (pi, sr, spin) in layout.selection_areas(&app.session.doc, &a, &r.end, app.session.page_hint) {
+        match areas.iter_mut().find(|(p, _, s)| *p == pi && *s == spin) {
+            Some((_, u, _)) => *u = u.union(&sr),
+            None => areas.push((pi, sr, spin)),
+        }
+    }
+    let k = scale.max(0.01);
+    let mut out = Vec::new();
+    for (pi, r, spin) in areas {
         let Some(pr) = rects.get(pi) else { continue };
-        let s = screen(*pr, scale, sr);
-        match out.iter_mut().find(|(p, _)| *p == pi) {
-            Some((_, u)) => *u = u.union(s),
-            None => out.push((pi, s)),
+        let r = wordcraft_geom::Rect::new(r.x - 2.0 / k, r.y - 1.0 / k, r.w + 4.0 / k, r.h + 2.0 / k);
+        match spin {
+            Some(b) => {
+                let q = b.quad(r).map(|p| pos2(pr.min.x + p.x * scale, pr.min.y + p.y * scale));
+                out.push((Rect::from_points(&q), Some(q)));
+            }
+            None => out.push((screen(*pr, scale, r), None)),
         }
     }
     if out.is_empty()
         && let Some(c) = layout.caret_on(&a, app.session.page_hint)
         && let Some(pr) = rects.get(c.page)
     {
-        out.push((c.page, Rect::from_min_size(pos2(pr.min.x + c.x * scale, pr.min.y + c.top * scale), vec2(4.0, c.height * scale))));
+        let r = Rect::from_min_size(pos2(pr.min.x + c.x * scale, pr.min.y + c.top * scale), vec2(4.0, c.height * scale));
+        out.push((r.expand2(vec2(2.0, 1.0)), None));
     }
-    out.into_iter().map(|(_, r)| r.expand2(vec2(2.0, 1.0))).collect()
+    out
 }
 
 /// Draw the frames (inside the canvas viewport, after the selection).
@@ -73,17 +87,24 @@ pub fn paint(app: &mut WordApp, painter: &egui::Painter, t: &Tokens, layout: &Do
     // Check boxes are clickable wherever they are, framed or not.
     let all = if app.session.view.design_mode { shown.clone() } else { app.session.doc.control_ranges(story) };
     for r in all.iter().filter(|r| matches!(r.control.kind, ControlKind::CheckBox { .. })).take(MAX_FRAMED) {
-        if let Some(f) = frames(app, layout, rects, scale, r).first() {
+        if let Some((f, _)) = frames(app, layout, rects, scale, r).first() {
             app.controls.checks.push((*f, r.content_start()));
         }
     }
     shown.sort_by_key(|r| r.depth);
     for r in &shown {
         let is_current = current.as_ref().is_some_and(|c| c.start == r.start);
-        let fr = frames(app, layout, rects, scale, r);
+        let (fr, quads): (Vec<Rect>, Vec<Option<[Pos2; 4]>>) = frames(app, layout, rects, scale, r).into_iter().unzip();
         let stroke = Stroke::new(1.0, if is_current { t.accent } else { t.accent.gamma_multiply(0.55) });
-        for f in &fr {
-            painter.rect_stroke(*f, 1.0, stroke, egui::StrokeKind::Outside);
+        for (f, q) in fr.iter().zip(&quads) {
+            match q {
+                Some(q) => {
+                    painter.add(egui::Shape::closed_line(q.to_vec(), stroke));
+                }
+                None => {
+                    painter.rect_stroke(*f, 1.0, stroke, egui::StrokeKind::Outside);
+                }
+            }
         }
         // The title tab above the first line (its tag in Design Mode when it has no title).
         let title = if r.control.title.is_empty() && app.session.view.design_mode { r.control.tag.as_str() } else { r.control.title.as_str() };

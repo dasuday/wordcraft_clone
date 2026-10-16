@@ -130,7 +130,7 @@ pub fn build(doc: &Document, layout: &DocLayout, doc_id: Id, rects: &[Rect], pag
             if b.full() {
                 break;
             }
-            let Placed::Lines { story: StoryRef::Body, path, para, l0, l1, x, y, turn } = it else { continue };
+            let Placed::Lines { story: StoryRef::Body, path, para, l0, l1, x, y, turn, .. } = it else { continue };
             let place = LinePlace { x: *x, y: *y, turn: *turn, scale, origin: pr.min };
             b.paragraph(path, para, *l0..*l1, &place, &pictures);
         }

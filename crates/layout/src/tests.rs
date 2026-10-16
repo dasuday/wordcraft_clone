@@ -2474,7 +2474,17 @@ fn split_row_rejects_a_hostile_cut() {
     let Some(Placed::Lines { story, path, para, .. }) = l.pages[0].items.iter().find(|i| matches!(i, Placed::Lines { .. })).cloned() else {
         panic!("no line")
     };
-    let line = |y: f32| Placed::Lines { story, path: path.clone(), para: para.clone(), l0: 0, l1: 1, x: 0.0, y, turn: TextDirection::Horizontal };
+    let line = |y: f32| Placed::Lines {
+        story,
+        path: path.clone(),
+        para: para.clone(),
+        l0: 0,
+        l1: 1,
+        x: 0.0,
+        y,
+        turn: TextDirection::Horizontal,
+        spin: None,
+    };
     let row = |height: f32, bottom: f32| RowLayout {
         height,
         items: vec![line(0.0), line(150.0)],
@@ -4543,7 +4553,7 @@ fn a_split_row_moves_shading_below_the_cut_with_it() {
         let Some(Placed::Lines { story, path, para, .. }) = l.pages[0].items.iter().find(|i| matches!(i, Placed::Lines { .. })).cloned() else {
             panic!("no line")
         };
-        Placed::Lines { story, path, para, l0: 0, l1: 1, x: 0.0, y, turn: TextDirection::Horizontal }
+        Placed::Lines { story, path, para, l0: 0, l1: 1, x: 0.0, y, turn: TextDirection::Horizontal, spin: None }
     };
     let fill = |y: f32, h: f32| Placed::Fill { rect: wordcraft_geom::Rect::new(0.0, y, 100.0, h), color: wordcraft_doc::props::Rgb(200, 0, 0) };
     // The row's own shading (from its top) and a nested cell's shading starting below the cut.

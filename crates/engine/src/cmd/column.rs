@@ -61,8 +61,8 @@ fn select_column(s: &mut Session, v: &Value) -> CmdResult {
             return Err(CmdError::Params("`anchor` and `focus` must be in the same story".into()));
         }
         let l = s.layout();
-        let xa = l.caret_on(&a, s.page_hint).map(|c| c.x).ok_or_else(|| CmdError::Failed("`anchor` isn't laid out".into()))?;
-        let xb = l.caret_on(&b, s.page_hint).map(|c| c.x).ok_or_else(|| CmdError::Failed("`focus` isn't laid out".into()))?;
+        let xa = l.caret_in_frame(&a, s.page_hint).map(|(c, _)| c.x).ok_or_else(|| CmdError::Failed("`anchor` isn't laid out".into()))?;
+        let xb = l.caret_in_frame(&b, s.page_hint).map(|(c, _)| c.x).ok_or_else(|| CmdError::Failed("`focus` isn't laid out".into()))?;
         make(s, a, b, xa, xb);
         return result(s);
     }
@@ -73,6 +73,9 @@ fn select_column(s: &mut Session, v: &Value) -> CmdResult {
         let l = s.layout();
         let a = l.hit(fp, fx, fy, story).ok_or_else(|| CmdError::Params("no text at `from`".into()))?;
         let b = l.hit(tp, tx, ty, story).ok_or_else(|| CmdError::Params("no text at `to`".into()))?;
+        // The pointer's x in the frame of the lines it is over (a rotated text box's unturned one).
+        let frame_x = |pos: &Pos, x: f32, y: f32| l.caret_in_frame(pos, s.page_hint).and_then(|(_, b)| b).map_or(x, |b| b.unapply(x, y).0);
+        let (fx, tx) = (frame_x(&a, fx, fy), frame_x(&b, tx, ty));
         s.page_hint = tp;
         make(s, a, b, fx, tx);
         return result(s);
@@ -82,7 +85,7 @@ fn select_column(s: &mut Session, v: &Value) -> CmdResult {
     s.column_mode = on;
     if on {
         let f = s.sel.focus.clone();
-        let x = s.layout().caret_on(&f, s.page_hint).map(|c| c.x).unwrap_or(0.0);
+        let x = s.layout().caret_in_frame(&f, s.page_hint).map(|(c, _)| c.x).unwrap_or(0.0);
         make(s, f.clone(), f, x, x);
         s.status = "Column selection: the arrow keys extend the block, Esc ends it".into();
     } else {
@@ -91,7 +94,7 @@ fn select_column(s: &mut Session, v: &Value) -> CmdResult {
     result(s)
 }
 
-/// Make the block between corners `a` and `b` whose page x are `xa` and `xb`.
+/// Make the block between corners `a` and `b` whose x (in their lines' frame) are `xa` and `xb`.
 fn make(s: &mut Session, a: Pos, b: Pos, xa: f32, xb: f32) {
     let (xa, xb) = (if xa.is_finite() { xa } else { 0.0 }, if xb.is_finite() { xb } else { 0.0 });
     let (left, right) = (xa.min(xb), xa.max(xb));
@@ -108,7 +111,7 @@ fn extend_to(s: &mut Session, to: Pos) {
     let Some(block) = s.column.clone() else { return };
     let x = match s.goal_x {
         Some(gx) => gx,
-        None => s.layout().caret_on(&to, s.page_hint).map(|c| c.x).unwrap_or(block.focus_x),
+        None => s.layout().caret_in_frame(&to, s.page_hint).map(|(c, _)| c.x).unwrap_or(block.focus_x),
     };
     make(s, block.sel.anchor, to, block.anchor_x, x);
 }

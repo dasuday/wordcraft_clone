@@ -6,11 +6,12 @@ use wordcraft_doc::{Document, Path, Pos, StoryRef};
 use wordcraft_geom::{Point, Rect};
 
 use crate::para::{PARA_MARK_WIDTH, ParaLayout};
-use crate::{DocLayout, Page, Placed};
+use crate::{BoxSpin, DocLayout, Page, Placed};
 
 /// Caret geometry on a page: a bar from (`x`, `top`) to (`x + width`, `top + height`). It is
 /// upright (`width` 0) except in turned text (a table cell's text direction), where it lies
-/// across the page (`height` 0).
+/// across the page (`height` 0), and in a rotated text box, where it leans with the text
+/// (`width` may be negative; `height` never is).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Caret {
     pub page: usize,
@@ -18,6 +19,18 @@ pub struct Caret {
     pub top: f32,
     pub height: f32,
     pub width: f32,
+}
+
+impl Caret {
+    /// This caret, placed in a rotated text box's unturned frame, as drawn turned with the box.
+    fn turned(self, b: BoxSpin) -> Caret {
+        let (x0, y0) = b.apply(self.x, self.top);
+        let (x1, y1) = b.apply(self.x + self.width, self.top + self.height);
+        // Ends from top to bottom, or left to right when level; rounding noise is no lean.
+        let ((x0, y0), (x1, y1)) = if y1 < y0 - 0.01 || ((y1 - y0).abs() <= 0.01 && x1 < x0) { ((x1, y1), (x0, y0)) } else { ((x0, y0), (x1, y1)) };
+        let snap = |d: f32| if d.abs() <= 0.01 { 0.0 } else { d };
+        Caret { page: self.page, x: x0, top: y0, height: snap(y1 - y0), width: snap(x1 - x0) }
+    }
 }
 
 /// Result of [`DocLayout::visual_step`].
@@ -30,7 +43,8 @@ pub enum VisualStep {
     Edge { start: usize, stop: usize, last_line: bool, rtl: bool },
 }
 
-/// One placed line, resolved to page coordinates.
+/// One placed line, resolved to page coordinates (in a rotated text box, to its unturned frame:
+/// see `spin`).
 #[derive(Clone, Debug)]
 pub struct LineHit<'a> {
     pub story: StoryRef,
@@ -42,6 +56,23 @@ pub struct LineHit<'a> {
     pub bottom: f32,
     pub left: f32,
     pub right: f32,
+    pub spin: Option<BoxSpin>,
+}
+
+impl LineHit<'_> {
+    /// Page point (`x`, `y`) in the line's frame (unturned, in a rotated text box).
+    pub fn local(&self, x: f32, y: f32) -> (f32, f32) {
+        self.spin.map_or((x, y), |b| b.unapply(x, y))
+    }
+}
+
+/// Page point (`x`, `y`) in the frame `it` is placed in: a rotated text box's lines are placed
+/// unturned.
+fn local(it: &Placed, x: f32, y: f32) -> (f32, f32) {
+    match it {
+        Placed::Lines { spin: Some(b), .. } => b.unapply(x, y),
+        _ => (x, y),
+    }
 }
 
 /// A picture, shape or text box as laid out (see [`Placed::Object`]).
@@ -113,7 +144,15 @@ fn objects_in(items: &[Placed], index: usize) -> impl Iterator<Item = ObjectHit>
 /// The story of the text (not a text box's) near (x, y): body, footnotes, endnotes.
 fn text_at(p: &Page, index: usize, x: f32, y: f32) -> Option<StoryRef> {
     let boxes: Vec<StoryRef> = objects(p, index).filter_map(|o| o.text_box.map(StoryRef::Part)).collect();
-    p.items.iter().find_map(|it| match it {
+    p.items.iter().find_map(|it| {
+        let (x, y) = local(it, x, y);
+        text_near(it, &boxes, x, y)
+    })
+}
+
+/// The story of `it` when it is text (not a text box's in `boxes`) near frame point (x, y).
+fn text_near(it: &Placed, boxes: &[StoryRef], x: f32, y: f32) -> Option<StoryRef> {
+    match it {
         Placed::Lines { story, .. } if boxes.contains(story) || *story == crate::DECOR_STORY => None,
         Placed::Lines { story, .. } if it.turned_bounds().is_some() => {
             it.turned_bounds().filter(|r| r.expand(2.0).contains(Point::new(x, y))).map(|_| *story)
@@ -125,7 +164,7 @@ fn text_at(p: &Page, index: usize, x: f32, y: f32) -> Option<StoryRef> {
             (y >= *ly - 2.0 && y <= bottom + 2.0 && x >= *lx - 40.0 && x <= lx + last.right + 40.0).then_some(*story)
         }
         _ => None,
-    })
+    }
 }
 
 fn items_of(page: &Page, story: StoryRef) -> Box<dyn Iterator<Item = &Placed> + '_> {
@@ -146,10 +185,10 @@ fn hf_text_at(p: &Page, id: u32, x: f32, y: f32) -> bool {
         .iter()
         .chain(p.footer.iter())
         .filter_map(|it| match it {
-            Placed::Lines { story: s, para, l0, l1, x: lx, y: ly, .. } if *s == story => Some((para, l0, l1, lx, ly)),
+            Placed::Lines { story: s, para, l0, l1, x: lx, y: ly, .. } if *s == story => Some((para, l0, l1, lx, ly, local(it, x, y))),
             _ => None,
         })
-        .any(|(para, l0, l1, lx, ly)| {
+        .any(|(para, l0, l1, lx, ly, (x, y))| {
             let (Some(first), Some(last)) = (para.lines.get(*l0), para.lines.get(l1.checked_sub(1).unwrap_or(0))) else { return false };
             let bottom = ly + last.top + last.height - first.top;
             y >= *ly - 2.0 && y <= bottom + 2.0 && x >= *lx - 40.0 && x <= lx + last.right + 40.0
@@ -161,7 +200,7 @@ fn hf_text_at(p: &Page, id: u32, x: f32, y: f32) -> bool {
 pub fn page_lines(page: &Page, story: StoryRef) -> Vec<LineHit<'_>> {
     let mut v = Vec::new();
     for it in items_of(page, story) {
-        if let Placed::Lines { story: s, path, para, l0, l1, x, y, turn } = it {
+        if let Placed::Lines { story: s, path, para, l0, l1, x, y, turn, spin } = it {
             if *s != story || turn.is_turned() {
                 continue;
             }
@@ -169,7 +208,8 @@ pub fn page_lines(page: &Page, story: StoryRef) -> Vec<LineHit<'_>> {
             for li in *l0..*l1 {
                 let Some(l) = para.lines.get(li) else { continue };
                 let top = y + (l.top - first.top);
-                v.push(LineHit { story: *s, path, para, li, x: *x, top, bottom: top + l.height, left: x + l.left, right: x + l.right });
+                let (left, right, spin) = (x + l.left, x + l.right, *spin);
+                v.push(LineHit { story: *s, path, para, li, x: *x, top, bottom: top + l.height, left, right, spin });
             }
         }
     }
@@ -211,7 +251,8 @@ fn between(a: &Path, b: &Path, l: &Path) -> bool {
 /// (x, y), if there is turned text there.
 fn turned_hit(page: &Page, story: StoryRef, x: f32, y: f32) -> Option<Pos> {
     items_of(page, story).find_map(|it| {
-        let Placed::Lines { story: s, path, para, l0, l1, x: ox, y: oy, turn } = it else { return None };
+        let Placed::Lines { story: s, path, para, l0, l1, x: ox, y: oy, turn, .. } = it else { return None };
+        let (x, y) = local(it, x, y);
         if *s != story || !it.turned_bounds()?.expand(2.0).contains(Point::new(x, y)) {
             return None;
         }
@@ -228,13 +269,17 @@ fn turned_hit(page: &Page, story: StoryRef, x: f32, y: f32) -> Option<Pos> {
 
 /// The position in the turned text of `story` nearest to page point (x, y), wherever it is.
 fn nearest_turned(page: &Page, story: StoryRef, x: f32, y: f32) -> Option<Pos> {
-    let dist = |r: Rect| band_dist(x, r.x, r.w).hypot(band_dist(y, r.y, r.h));
+    let dist = |it: &Placed, r: Rect| {
+        let (x, y) = local(it, x, y);
+        band_dist(x, r.x, r.w).hypot(band_dist(y, r.y, r.h))
+    };
     let it = items_of(page, story)
         .filter(|it| matches!(it, Placed::Lines { story: s, .. } if *s == story))
-        .filter_map(|it| it.turned_bounds().map(|r| (it, dist(r))))
+        .filter_map(|it| it.turned_bounds().map(|r| (it, dist(it, r))))
         .min_by(|a, b| a.1.total_cmp(&b.1))?
         .0;
     let Placed::Lines { path, para, l0, l1, x: ox, y: oy, turn, .. } = it else { return None };
+    let (x, y) = local(it, x, y);
     let (u, v) = crate::unturn_point(*turn, *ox, *oy, x, y);
     let first = para.lines.get(*l0)?;
     let li = (*l0..*l1)
@@ -277,7 +322,8 @@ impl DocLayout {
             return nearest_turned(p, story, x, y);
         }
         let best = lines.iter().min_by(|a, b| score(a, x, y).total_cmp(&score(b, x, y)))?;
-        let off = best.para.off_at_x(best.li, x - best.x);
+        let (lx, _) = best.local(x, y);
+        let off = best.para.off_at_x(best.li, lx - best.x);
         Some(Pos { story: best.story, path: best.path.clone(), off })
     }
 
@@ -287,7 +333,7 @@ impl DocLayout {
     pub fn story_at(&self, page: usize, x: f32, y: f32) -> Option<StoryRef> {
         let p = self.pages.get(page)?;
         let text_box = |behind: bool| {
-            objects(p, page).find(|o| o.behind() == behind && o.text_box.is_some() && o.rect.contains(Point::new(x, y))).and_then(|o| o.text_box)
+            objects(p, page).find(|o| o.behind() == behind && o.text_box.is_some() && o.rect.contains(o.unspin(x, y))).and_then(|o| o.text_box)
         };
         text_box(false).map(StoryRef::Part).or_else(|| text_at(p, page, x, y)).or_else(|| text_box(true).map(StoryRef::Part))
     }
@@ -329,7 +375,7 @@ impl DocLayout {
         let p = self.pages.get(page)?;
         objects_in(&p.header, page)
             .chain(objects_in(&p.footer, page))
-            .find(|o| o.text_box.is_some() && o.rect.contains(Point::new(x, y)))
+            .find(|o| o.text_box.is_some() && o.rect.contains(o.unspin(x, y)))
             .and_then(|o| o.text_box)
     }
 
@@ -438,8 +484,15 @@ impl DocLayout {
     }
 
     pub fn caret_on(&self, pos: &Pos, page_hint: usize) -> Option<Caret> {
+        let (c, spin) = self.caret_in_frame(pos, page_hint)?;
+        Some(spin.map_or(c, |b| c.turned(b)))
+    }
+
+    /// Caret geometry for a position in the frame its lines are placed in (a rotated text box's
+    /// unturned frame), and the box's turn. Column selection and Up/Down work in this frame.
+    pub fn caret_in_frame(&self, pos: &Pos, page_hint: usize) -> Option<(Caret, Option<BoxSpin>)> {
         for (pi, it) in self.pieces(pos.story, &pos.path, page_hint) {
-            let Placed::Lines { para, l0, l1, x, y, turn, .. } = it else { continue };
+            let Placed::Lines { para, l0, l1, x, y, turn, spin, .. } = it else { continue };
             let li = para.line_of(pos.off);
             if li < *l0 || li >= *l1 {
                 continue;
@@ -454,14 +507,15 @@ impl DocLayout {
             let base = top + (l.baseline - l.top);
             let ctop = (base - asc).max(top);
             let r = crate::turn_rect(*turn, *x, *y, Rect::new(cx, ctop, 0.0, (base + desc - ctop).max(4.0)));
-            return Some(Caret { page: pi, x: r.x, top: r.y, height: r.h, width: r.w });
+            return Some((Caret { page: pi, x: r.x, top: r.y, height: r.h, width: r.w }, *spin));
         }
         None
     }
 
     /// The position one line up (`dir < 0`) or down from `pos`, keeping `goal_x` (page x).
+    /// In a rotated text box, up and down run along its turned lines and `goal_x` is in its frame.
     pub fn vertical(&self, pos: &Pos, goal_x: Option<f32>, dir: i32, page_hint: usize) -> Option<(Pos, f32)> {
-        let c = self.caret_on(pos, page_hint)?;
+        let (c, _) = self.caret_in_frame(pos, page_hint)?;
         let gx = goal_x.unwrap_or(c.x);
         let page = self.pages.get(c.page)?;
         let lines = page_lines(page, pos.story);
@@ -576,7 +630,8 @@ impl DocLayout {
     }
 
     /// Column (block) selection: the piece of every line from the line holding `a` to the line
-    /// holding `b` (document order) that lies between page x `left` and `right`. One `(start,
+    /// holding `b` (document order) that lies between x `left` and `right` of the lines' frame
+    /// (page x, but a rotated text box's unturned frame: see [`DocLayout::caret_in_frame`]). One `(start,
     /// end)` pair per line, both in the same paragraph; lines shorter than `left` give an empty
     /// pair. At most `max` lines.
     pub fn column_segments(&self, doc: &Document, a: &Pos, b: &Pos, left: f32, right: f32, page_hint: usize, max: usize) -> Vec<(Pos, Pos)> {
@@ -609,17 +664,24 @@ impl DocLayout {
         out
     }
 
-    /// Highlight rectangles for the selection `a..b`, per page.
+    /// Highlight rectangles for the selection `a..b`, per page. In a rotated text box, the page
+    /// area each turned highlight covers (see [`DocLayout::selection_areas`]).
     pub fn selection_rects(&self, doc: &Document, a: &Pos, b: &Pos, page_hint: usize) -> Vec<(usize, Rect)> {
+        self.selection_areas(doc, a, b, page_hint).into_iter().map(|(pi, r, spin)| (pi, spin.map_or(r, |s| s.bounds(r)))).collect()
+    }
+
+    /// Highlight rectangles for the selection `a..b`, per page, each with the turn it is drawn
+    /// in: in a rotated text box, the rectangle is in its unturned frame and turns with it.
+    pub fn selection_areas(&self, doc: &Document, a: &Pos, b: &Pos, page_hint: usize) -> Vec<(usize, Rect, Option<BoxSpin>)> {
         let (a, b) = if a <= b { (a, b) } else { (b, a) };
         let mut out = Vec::new();
         for path in doc.paths_between(a, b) {
             for (pi, it) in self.pieces(a.story, &path, page_hint) {
-                let Placed::Lines { para, l0, l1, x, y, turn, .. } = it else { continue };
+                let Placed::Lines { para, l0, l1, x, y, turn, spin, .. } = it else { continue };
                 let Some(first) = para.lines.get(*l0) else { continue };
                 // Rectangles in the lines' own frame, turned onto the page.
-                let (ox, oy, turn) = (*x, *y, *turn);
-                let mut put = |r: Rect| out.push((pi, crate::turn_rect(turn, ox, oy, r)));
+                let (ox, oy, turn, spin) = (*x, *y, *turn, *spin);
+                let mut put = |r: Rect| out.push((pi, crate::turn_rect(turn, ox, oy, r), spin));
                 for li in *l0..*l1 {
                     let Some(l) = para.lines.get(li) else { continue };
                     let from = if path == a.path { a.off.max(l.start) } else { l.start };
@@ -696,11 +758,13 @@ impl DocLayout {
     }
 
     /// Where the equation at `pos` (its U+FFFC) is drawn: page, x of its left edge and its
-    /// baseline (page coordinates), and its layout.
-    pub fn equation_geom(&self, pos: &Pos, page_hint: usize) -> Option<(usize, f32, f32, std::sync::Arc<crate::math::MathLayout>)> {
+    /// baseline (page coordinates; in a rotated text box, its unturned frame), its layout, and
+    /// the box's turn.
+    #[allow(clippy::type_complexity)]
+    pub fn equation_geom(&self, pos: &Pos, page_hint: usize) -> Option<(usize, f32, f32, std::sync::Arc<crate::math::MathLayout>, Option<BoxSpin>)> {
         for (pi, it) in self.pieces(pos.story, &pos.path, page_hint) {
-            // Equations in turned text aren't edited in place.
-            let Placed::Lines { para, l0, l1, x, y, turn: TextDirection::Horizontal, .. } = it else { continue };
+            // Equations in turned text (a cell's text direction) aren't edited in place.
+            let Placed::Lines { para, l0, l1, x, y, turn: TextDirection::Horizontal, spin, .. } = it else { continue };
             let li = para.line_of(pos.off);
             if li < *l0 || li >= *l1 {
                 continue;
@@ -716,7 +780,7 @@ impl DocLayout {
                 let ml = para.maths.iter().find(|(o, _)| *o == oi)?.1.clone();
                 let cx = l.cl_left(k)?;
                 let base = y + (l.baseline - first.top);
-                return Some((pi, x + cx, base, ml));
+                return Some((pi, x + cx, base, ml, *spin));
             }
         }
         None
@@ -728,6 +792,7 @@ impl DocLayout {
         for l in page_lines(p, story) {
             let Some(line) = l.para.lines.get(l.li) else { continue };
             let base = l.top + (line.baseline - line.top);
+            let (x, y) = l.local(x, y);
             for k in line.c0..line.c1 {
                 let Some(c) = l.para.clusters.get(k) else { continue };
                 let crate::para::ClKind::Object(oi) = c.kind else { continue };
@@ -754,8 +819,9 @@ impl DocLayout {
     pub fn cell_at(&self, page: usize, x: f32, y: f32) -> Option<(StoryRef, Path, usize, usize)> {
         let p = self.pages.get(page)?;
         p.items.iter().rev().find_map(|it| match it {
-            Placed::Cell { rect, table, row, cell, story, covered: false, .. } if rect.contains(wordcraft_geom::Point::new(x, y)) => {
-                Some((*story, table.clone(), *row, *cell))
+            Placed::Cell { rect, table, row, cell, story, covered: false, spin, .. } => {
+                let (x, y) = spin.map_or((x, y), |b| b.unapply(x, y));
+                rect.contains(wordcraft_geom::Point::new(x, y)).then(|| (*story, table.clone(), *row, *cell))
             }
             _ => None,
         })
@@ -763,6 +829,7 @@ impl DocLayout {
 }
 
 fn score(l: &LineHit, x: f32, y: f32) -> f32 {
+    let (x, y) = l.local(x, y);
     let dy = if y < l.top {
         l.top - y
     } else if y > l.bottom {
