@@ -2510,6 +2510,11 @@
 	Use your own LanguageTool server by entering its address, such as http://localhost:8081.	Saját LanguageTool-kiszolgáló használatához adja meg a címét, például http://localhost:8081.
 	Username:	Felhasználónév:
 	API key:	API-kulcs:
+	This system has no credential store, so the API key is saved in WordCraft's settings file.	Ezen a rendszeren nincs hitelesítőadat-tár, ezért az API-kulcs a WordCraft beállításfájljába kerül.
+	The system's credential store could not keep the API key ({error}), so it is saved in WordCraft's settings file.	A rendszer hitelesítőadat-tára nem tudta megőrizni az API-kulcsot ({error}), ezért az a WordCraft beállításfájljába kerül.
+	The API key is kept in the system's credential store.	Az API-kulcsot a rendszer hitelesítőadat-tára őrzi.
+	The system's credential store no longer has the API key. Enter it again to keep checking with LanguageTool.	A rendszer hitelesítőadat-tárában már nincs meg az API-kulcs. Adja meg újra, hogy továbbra is a LanguageTool ellenőrizzen.
+	The old API key is still in the system's credential store: it could not be removed ({error}).	A régi API-kulcs még a rendszer hitelesítőadat-tárában van: nem sikerült eltávolítani ({error}).
 	Detect automatically	Automatikus felismerés
 	Each paragraph's proofing language	Az egyes bekezdések nyelvi ellenőrzési nyelve
 	Language:	Nyelv:

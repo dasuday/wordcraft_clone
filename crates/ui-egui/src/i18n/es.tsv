@@ -1626,6 +1626,11 @@
 	Use your own LanguageTool server by entering its address, such as http://localhost:8081.	Use su propio servidor de LanguageTool escribiendo su dirección, por ejemplo http://localhost:8081.
 	Username:	Usuario:
 	API key:	Clave de API:
+	This system has no credential store, so the API key is saved in WordCraft's settings file.	Este sistema no tiene almacén de credenciales, así que la clave de API se guarda en el archivo de configuración de WordCraft.
+	The system's credential store could not keep the API key ({error}), so it is saved in WordCraft's settings file.	El almacén de credenciales del sistema no pudo guardar la clave de API ({error}), así que se guarda en el archivo de configuración de WordCraft.
+	The API key is kept in the system's credential store.	La clave de API se guarda en el almacén de credenciales del sistema.
+	The system's credential store no longer has the API key. Enter it again to keep checking with LanguageTool.	El almacén de credenciales del sistema ya no tiene la clave de API. Vuelva a escribirla para seguir revisando con LanguageTool.
+	The old API key is still in the system's credential store: it could not be removed ({error}).	La clave de API anterior sigue en el almacén de credenciales del sistema: no se pudo quitar ({error}).
 	Detect automatically	Detectar automáticamente
 	Each paragraph's proofing language	Idioma de revisión de cada párrafo
 	Language:	Idioma:

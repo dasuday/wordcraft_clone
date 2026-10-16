@@ -2510,6 +2510,11 @@ preview	Title	Ukázka
 	Correct TWo INitial CApitals	Opravovat DVě POčáteční VElká písmena
 	Correct accidental usage of cAPS LOCK key	Opravovat náhodné použití klávesy cAPS LOCK
 	API key:	Klíč API:
+	This system has no credential store, so the API key is saved in WordCraft's settings file.	Tento systém nemá úložiště přihlašovacích údajů, proto se klíč API ukládá do souboru nastavení WordCraftu.
+	The system's credential store could not keep the API key ({error}), so it is saved in WordCraft's settings file.	Systémové úložiště přihlašovacích údajů nemohlo klíč API uložit ({error}), proto se ukládá do souboru nastavení WordCraftu.
+	The API key is kept in the system's credential store.	Klíč API je uložen v systémovém úložišti přihlašovacích údajů.
+	The system's credential store no longer has the API key. Enter it again to keep checking with LanguageTool.	Systémové úložiště přihlašovacích údajů už klíč API nemá. Zadejte ho znovu, abyste mohli dál kontrolovat pomocí LanguageTool.
+	The old API key is still in the system's credential store: it could not be removed ({error}).	Starý klíč API je stále v systémovém úložišti přihlašovacích údajů: nepodařilo se ho odebrat ({error}).
 	Check spelling and grammar with LanguageTool	Kontrolovat pravopis a gramatiku pomocí LanguageTool
 	Detect automatically	Rozpoznat automaticky
 	Each paragraph's proofing language	Jazyk kontroly každého odstavce

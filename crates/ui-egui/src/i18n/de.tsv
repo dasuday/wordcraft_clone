@@ -2125,6 +2125,11 @@
 	Correct TWo INitial CApitals	ZWei GRoßbuchstaben am WOrtanfang korrigieren
 	Correct accidental usage of cAPS LOCK key	Unbeabsichtigtes Verwenden der fESTSTELLTASTE korrigieren
 	API key:	API-Schlüssel:
+	This system has no credential store, so the API key is saved in WordCraft's settings file.	Dieses System hat keinen Anmeldeinformationsspeicher, daher wird der API-Schlüssel in der Einstellungsdatei von WordCraft gespeichert.
+	The system's credential store could not keep the API key ({error}), so it is saved in WordCraft's settings file.	Der Anmeldeinformationsspeicher des Systems konnte den API-Schlüssel nicht aufnehmen ({error}), daher wird er in der Einstellungsdatei von WordCraft gespeichert.
+	The API key is kept in the system's credential store.	Der API-Schlüssel liegt im Anmeldeinformationsspeicher des Systems.
+	The system's credential store no longer has the API key. Enter it again to keep checking with LanguageTool.	Der Anmeldeinformationsspeicher des Systems enthält den API-Schlüssel nicht mehr. Geben Sie ihn erneut ein, um weiter mit LanguageTool zu prüfen.
+	The old API key is still in the system's credential store: it could not be removed ({error}).	Der alte API-Schlüssel liegt noch im Anmeldeinformationsspeicher des Systems: Er konnte nicht entfernt werden ({error}).
 	Check spelling and grammar with LanguageTool	Rechtschreibung und Grammatik mit LanguageTool prüfen
 	Detect automatically	Automatisch erkennen
 	Each paragraph's proofing language	Korrektursprache des jeweiligen Absatzes

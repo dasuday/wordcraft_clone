@@ -47,9 +47,10 @@ fn err(e: impl std::fmt::Display) -> Outcome {
 pub fn inspect(app: &mut WordApp, ctx: &egui::Context) -> Value {
     let r = ctx.content_rect();
     let caret = crate::canvas::caret_screen(app).map(|(p, h)| json!({"x": p.x, "y": p.y, "h": h}));
-    // Preferences without secrets: the LanguageTool API key stays in `ui.json` (#575).
+    // Preferences without secrets: the LanguageTool API key only shows as set (#575), also when
+    // the credential store keeps it out of `ui.json` (#764).
     let mut prefs = app.prefs();
-    if !prefs.language_tool.api_key.is_empty() {
+    if !app.ui.language_tool.api_key.is_empty() {
         prefs.language_tool.api_key = "<set>".into();
     }
     json!({

@@ -1598,6 +1598,11 @@
 	Use your own LanguageTool server by entering its address, such as http://localhost:8081.	输入自己的 LanguageTool 服务器地址即可使用，例如 http://localhost:8081。
 	Username:	用户名：
 	API key:	API 密钥：
+	This system has no credential store, so the API key is saved in WordCraft's settings file.	此系统没有凭据存储，因此 API 密钥保存在 WordCraft 的设置文件中。
+	The system's credential store could not keep the API key ({error}), so it is saved in WordCraft's settings file.	系统凭据存储无法保存 API 密钥（{error}），因此它保存在 WordCraft 的设置文件中。
+	The API key is kept in the system's credential store.	API 密钥保存在系统凭据存储中。
+	The system's credential store no longer has the API key. Enter it again to keep checking with LanguageTool.	系统凭据存储中已没有 API 密钥。请重新输入，以继续使用 LanguageTool 检查。
+	The old API key is still in the system's credential store: it could not be removed ({error}).	旧的 API 密钥仍在系统凭据存储中：无法删除 ({error})。
 	Detect automatically	自动检测
 	Each paragraph's proofing language	各段落的校对语言
 	Language:	语言：
