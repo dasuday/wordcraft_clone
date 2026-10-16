@@ -1558,6 +1558,72 @@ fn table_properties_apply_in_one_step() {
     assert!(s.run("table.properties", &json!({"valign": "middle"})).is_err());
 }
 
+/// Table Properties' Measure in Percent, automatic columns, Cell Options and Text wrapping with
+/// Positioning (#2428): each is one more setting of `table.properties`; bad values are refused.
+#[test]
+fn table_properties_set_percentages_cell_options_and_wrapping() {
+    use wordcraft_doc::para::{Anchor, FloatAlign};
+    let mut s = s();
+    run(&mut s, "insert.table", json!({"rows": 2, "cols": 2}));
+    let table = |s: &Session| s.doc.body.iter().find_map(|b| b.as_table()).unwrap().clone();
+    let total: f32 = table(&s).grid.iter().sum();
+    run(&mut s, "table.properties", json!({"columnWidthPct": 25.0, "cellMargins": [1.0, 2.0, 3.0, 4.0], "cellWrap": false}));
+    let t = table(&s);
+    assert!((t.grid[0] - total / 4.0).abs() < 0.01, "a quarter of the table");
+    for r in 0..2 {
+        assert_eq!((t.rows[r].cells[0].props.width, t.rows[r].cells[0].props.width_pct), (None, Some(25.0)), "row {r}");
+    }
+    assert_eq!((t.rows[0].cells[0].props.margins, t.rows[0].cells[0].props.no_wrap), (Some([1.0, 2.0, 3.0, 4.0]), true));
+    run(&mut s, "table.properties", json!({"columnWidth": null, "cellMargins": null, "cellWidthPct": 30.0}));
+    let t = table(&s);
+    assert_eq!((t.rows[0].cells[0].props.width_pct, t.rows[1].cells[0].props.width_pct), (Some(30.0), None), "automatic, then the cell's own");
+    assert_eq!(t.rows[0].cells[0].props.margins, None);
+    // Around floats the table where it is, on its alignment's side, 0.25 cm from the text.
+    run(&mut s, "table.properties", json!({"wrap": "around"}));
+    let f = table(&s).props.float.unwrap();
+    assert_eq!((f.h_align, f.h_rel, f.v_align, f.v_rel, f.overlap), (Some(FloatAlign::Start), Anchor::Column, None, Anchor::Paragraph, false));
+    assert_eq!(f.dist, [crate::cmd::table::WRAP_GAP, 0.0, crate::cmd::table::WRAP_GAP, 0.0]);
+    run(
+        &mut s,
+        "table.properties",
+        json!({"position": {"x": 36.0, "hRel": "page", "vAlign": "bottom", "vRel": "margin", "dist": [1, 2, 3, 4], "overlap": true}}),
+    );
+    let f = table(&s).props.float.unwrap();
+    assert_eq!(
+        (f.h_align, f.x, f.h_rel, f.v_align, f.v_rel, f.dist, f.overlap),
+        (None, 36.0, Anchor::Page, Some(FloatAlign::End), Anchor::Margin, [1.0, 2.0, 3.0, 4.0], true)
+    );
+    run(&mut s, "table.properties", json!({"wrap": "none"}));
+    assert!(table(&s).props.float.is_none());
+    for bad in [
+        json!({"cellMargins": [1, 2]}),
+        json!({"cellMargins": [1, "a", 2, 3]}),
+        json!({"wrap": "square"}),
+        json!({"position": {"hRel": "paragraph"}}),
+        json!({"position": {"vAlign": "left"}}),
+        json!({"position": {"dist": 3}}),
+    ] {
+        assert!(s.run("table.properties", &bad).is_err(), "{bad}");
+    }
+}
+
+/// While the caret is in a table, Word shows its move handle past the top-left corner and its
+/// resize handle past the bottom-right one (#2428); the app paints the ones this gives.
+#[test]
+fn the_caret_table_has_its_handles() {
+    let mut s = s();
+    run(&mut s, "insert.table", json!({"rows": 2, "cols": 2}));
+    let (tp, _, _) = s.sel.focus.path.cell().unwrap();
+    let l = s.layout();
+    let (m, z) = crate::cmd::table_mouse::caret_handles(&l, &s.doc, s.sel.focus.story, &tp, 0);
+    let (m, z) = (m.expect("the move handle"), z.expect("the resize handle"));
+    let (_, x, y) = crate::cmd::table_mouse::corner(&l, s.sel.focus.story, &tp).unwrap();
+    assert!(m.right() <= x && m.bottom() <= y, "past the top-left corner");
+    assert!(z.x > m.right() && z.y > m.bottom(), "past the bottom-right one");
+    let (m, z) = crate::cmd::table_mouse::caret_handles(&l, &s.doc, s.sel.focus.story, &tp, 1);
+    assert!(m.is_none() && z.is_none(), "not on a page without the table");
+}
+
 /// Table Layout › Text Direction (#226) cycles the selected cells' text through horizontal,
 /// top-to-bottom and bottom-to-top, and the layout turns the text.
 #[test]

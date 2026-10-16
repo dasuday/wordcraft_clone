@@ -565,6 +565,139 @@ pub struct TableForm {
     /// Alt Text: the table's title and description.
     pub alt_title: String,
     pub alt_text: String,
+    /// Measure in: Percent. The preferred width is then a percentage, the table's of the text
+    /// column, a column's or cell's of the table.
+    pub width_pct: bool,
+    pub column_width_on: bool,
+    pub column_pct: bool,
+    pub cell_pct: bool,
+    /// What the percentages are of, points: the text column and the table.
+    pub text_width: f32,
+    pub table_width: f32,
+    /// Cell Options: the cell's own margins (top, left, bottom, right) instead of the table's.
+    pub cell_margins_own: bool,
+    pub cell_margins: [f32; 4],
+    pub cell_wrap: bool,
+    /// Text wrapping: Around (the table floats), placed as Positioning says.
+    pub around: bool,
+    pub position: TablePosition,
+    /// The table's top on its first page, where Positioning puts it when it stops moving with
+    /// the text.
+    pub table_top: f32,
+    /// The window over the tabs (0 none, 1 Cell Options, 2 Positioning) and what its Cancel
+    /// puts back.
+    #[serde(skip)]
+    pub sub: u8,
+    #[serde(skip)]
+    pub sub_was: Option<Box<TableForm>>,
+    /// Previous/Next Row or Column, clicked: the dialog applies the changes and moves on.
+    #[serde(skip)]
+    pub step: Option<TableStep>,
+}
+
+/// Table Properties' Previous/Next Row and Column buttons.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum TableStep {
+    PrevRow,
+    NextRow,
+    PrevColumn,
+    NextColumn,
+}
+
+/// Table Properties › Positioning: where a floating table sits, lengths in the interface unit.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TablePosition {
+    /// `left`, `center`, `right`, `inside`, `outside`, or empty for the offset `x`.
+    pub h: String,
+    pub x: f32,
+    /// `margin`, `page` or `column`.
+    pub h_rel: String,
+    /// `top`, `center`, `bottom`, `inside`, `outside`, or empty for the offset `y`.
+    pub v: String,
+    pub y: f32,
+    /// `margin`, `page` or `paragraph` (Move with text).
+    pub v_rel: String,
+    /// From the surrounding text: left, top, right, bottom.
+    pub dist: [f32; 4],
+    pub overlap: bool,
+}
+
+impl TablePosition {
+    /// The table's position, or where Around puts it (as Word: by its alignment, moving with
+    /// the text, 0.25 cm from the text beside it).
+    fn read(t: &wordcraft_doc::Table, k: f32) -> TablePosition {
+        use wordcraft_doc::para::{Anchor, FloatAlign};
+        use wordcraft_doc::props::Align;
+        let fin = |v: f32| if v.is_finite() { v / k } else { 0.0 };
+        let Some(f) = t.props.float else {
+            let gap = wordcraft_engine::cmd::table::WRAP_GAP / k;
+            let h = match t.props.align {
+                Some(Align::Center) => "center",
+                Some(Align::Right) => "right",
+                _ => "left",
+            };
+            return TablePosition {
+                h: h.into(),
+                x: 0.0,
+                h_rel: "column".into(),
+                v: String::new(),
+                y: 0.0,
+                v_rel: "paragraph".into(),
+                dist: [gap, 0.0, gap, 0.0],
+                overlap: false,
+            };
+        };
+        let align = |a: Option<FloatAlign>, start: &str, end: &str| {
+            match a {
+                Some(FloatAlign::Start) => start,
+                Some(FloatAlign::Center) => "center",
+                Some(FloatAlign::End) => end,
+                Some(FloatAlign::Inside) => "inside",
+                Some(FloatAlign::Outside) => "outside",
+                None => "",
+            }
+            .to_string()
+        };
+        let rel = |a: Anchor, own: &str| {
+            match a {
+                Anchor::Margin => "margin",
+                Anchor::Page => "page",
+                _ => own,
+            }
+            .to_string()
+        };
+        TablePosition {
+            h: align(f.h_align, "left", "right"),
+            x: fin(f.x),
+            h_rel: rel(f.h_rel, "column"),
+            v: align(f.v_align, "top", "bottom"),
+            y: fin(f.y),
+            v_rel: rel(f.v_rel, "paragraph"),
+            dist: f.dist_from_text().map(|d| d / k),
+            overlap: f.overlap,
+        }
+    }
+
+    /// `table.properties`' `position` parameter.
+    fn json(&self, k: f32) -> Value {
+        let mut v = serde_json::Map::new();
+        if self.h.is_empty() {
+            v.insert("x".into(), json!(self.x * k));
+        } else {
+            v.insert("hAlign".into(), json!(self.h));
+        }
+        if self.v.is_empty() {
+            v.insert("y".into(), json!(self.y * k));
+        } else {
+            v.insert("vAlign".into(), json!(self.v));
+        }
+        v.insert("hRel".into(), json!(self.h_rel));
+        v.insert("vRel".into(), json!(self.v_rel));
+        v.insert("dist".into(), json!(self.dist.map(|d| d * k)));
+        v.insert("overlap".into(), json!(self.overlap));
+        Value::Object(v)
+    }
 }
 
 impl TableForm {
@@ -580,13 +713,37 @@ impl TableForm {
         let tw = wordcraft_engine::cmd::page::sect(s).text_width();
         let width = t.props.width_pct.filter(|p| *p > 0.0).map(|p| tw * p.min(100.0) / 100.0).or(t.props.width.filter(|w| *w > 0.0));
         let fin = |v: f32| if v.is_finite() { v } else { 0.0 };
+        // Measure in: Percent shows the table's percentage itself.
+        let pct = t.props.width_pct.filter(|p| p.is_finite() && *p > 0.0).map(|p| p.min(100.0));
+        let g = t.grid_col(r, c);
+        let table_width: f32 = t.grid.iter().filter(|w| w.is_finite() && **w > 0.0).sum();
+        let table_width = if table_width > 0.0 { table_width } else { tw };
+        let cell_pct = cell.width_pct.filter(|p| p.is_finite() && *p > 0.0).map(|p| p.min(100.0));
+        let column_width_on = (0..t.rows.len())
+            .filter_map(|i| t.cell_at_grid(i, g).and_then(|ci| t.rows.get(i)?.cells.get(ci)))
+            .any(|x| x.props.width.is_some() || x.props.width_pct.is_some());
         Some(TableForm {
             tab: 0,
             row: r.saturating_add(1),
-            column: t.grid_col(r, c).saturating_add(1),
+            column: g.saturating_add(1),
             header_allowed: t.rows.iter().take(r).all(|x| x.props.header),
             width_on: width.is_some(),
-            width: fin(width.unwrap_or(tw)) / k,
+            width: pct.unwrap_or_else(|| fin(width.unwrap_or(tw)) / k),
+            width_pct: pct.is_some(),
+            column_width_on,
+            column_pct: cell_pct.is_some(),
+            cell_pct: cell_pct.is_some(),
+            text_width: tw,
+            table_width,
+            cell_margins_own: cell.margins.is_some(),
+            cell_margins: wordcraft_layout::cell_margins(&s.doc, t, r, c).map(|m| fin(m) / k),
+            cell_wrap: !cell.no_wrap,
+            around: t.props.float.is_some(),
+            position: TablePosition::read(t, k),
+            table_top: 0.0,
+            sub: 0,
+            sub_was: None,
+            step: None,
             align: match t.props.align {
                 Some(Align::Center) => "center",
                 Some(Align::Right) => "right",
@@ -600,9 +757,9 @@ impl TableForm {
             row_exact: row.height_rule == HeightRule::Exact,
             allow_break: !row.cant_split,
             header_row: row.header,
-            column_width: fin(t.grid.get(t.grid_col(r, c)).copied().unwrap_or(72.0)) / k,
-            cell_width_on: cell.width.is_some(),
-            cell_width: fin(cell.width.unwrap_or(72.0)) / k,
+            column_width: cell_pct.unwrap_or_else(|| fin(t.grid.get(g).copied().unwrap_or(72.0)) / k),
+            cell_width_on: cell.width.is_some() || cell_pct.is_some(),
+            cell_width: cell_pct.unwrap_or_else(|| fin(cell.width.unwrap_or(72.0)) / k),
             valign: match cell.valign {
                 Some(VAlign::Center) => "center",
                 Some(VAlign::Bottom) => "bottom",
@@ -635,6 +792,12 @@ impl TableForm {
         out
     }
 
+    /// Open Cell Options (1) or Positioning (2) over the tabs; its Cancel puts this back.
+    fn open_sub(&mut self, which: u8) {
+        self.sub_was = Some(Box::new(self.clone()));
+        self.sub = which;
+    }
+
     /// Run [`TableForm::commands`] as one undo step.
     pub fn apply(&self, basis: &TableForm, app: &mut WordApp) {
         for (i, (id, params)) in self.commands(basis).into_iter().enumerate() {
@@ -650,9 +813,17 @@ impl TableForm {
         let k = crate::options::unit().pt_per_unit();
         let moved = |a: f32, b: f32| (a - b).abs() > 1e-4;
         let mut v = serde_json::Map::new();
-        if self.width_on != basis.width_on || (self.width_on && moved(self.width, basis.width)) {
-            v.insert("width".into(), if self.width_on { json!(self.width * k) } else { Value::Null });
-        }
+        // A preferred width: off (automatic), a percentage, or a length.
+        let size = |v: &mut serde_json::Map<String, Value>, (on, pct, w): (bool, bool, f32), was: (bool, bool, f32), (len, share): (&str, &str)| {
+            if on != was.0 || (on && (pct != was.1 || moved(w, was.2))) {
+                match (on, pct) {
+                    (false, _) => v.insert(len.into(), Value::Null),
+                    (true, true) => v.insert(share.into(), json!(w)),
+                    (true, false) => v.insert(len.into(), json!(w * k)),
+                };
+            }
+        };
+        size(&mut v, (self.width_on, self.width_pct, self.width), (basis.width_on, basis.width_pct, basis.width), ("width", "widthPct"));
         if self.align != basis.align {
             v.insert("align".into(), json!(self.align));
         }
@@ -674,14 +845,34 @@ impl TableForm {
         if self.header_row != basis.header_row {
             v.insert("headerRow".into(), json!(self.header_row));
         }
-        if moved(self.column_width, basis.column_width) {
-            v.insert("columnWidth".into(), json!(self.column_width * k));
-        }
-        if self.cell_width_on != basis.cell_width_on || (self.cell_width_on && moved(self.cell_width, basis.cell_width)) {
-            v.insert("cellWidth".into(), if self.cell_width_on { json!(self.cell_width * k) } else { Value::Null });
-        }
+        size(
+            &mut v,
+            (self.column_width_on, self.column_pct, self.column_width),
+            (basis.column_width_on, basis.column_pct, basis.column_width),
+            ("columnWidth", "columnWidthPct"),
+        );
+        size(
+            &mut v,
+            (self.cell_width_on, self.cell_pct, self.cell_width),
+            (basis.cell_width_on, basis.cell_pct, basis.cell_width),
+            ("cellWidth", "cellWidthPct"),
+        );
         if self.valign != basis.valign {
             v.insert("valign".into(), json!(self.valign));
+        }
+        if self.cell_margins_own != basis.cell_margins_own
+            || (self.cell_margins_own && self.cell_margins.iter().zip(&basis.cell_margins).any(|(a, b)| moved(*a, *b)))
+        {
+            v.insert("cellMargins".into(), if self.cell_margins_own { json!(self.cell_margins.map(|m| m * k)) } else { Value::Null });
+        }
+        if self.cell_wrap != basis.cell_wrap {
+            v.insert("cellWrap".into(), json!(self.cell_wrap));
+        }
+        if self.around != basis.around {
+            v.insert("wrap".into(), json!(if self.around { "around" } else { "none" }));
+        }
+        if self.around && self.position != basis.position {
+            v.insert("position".into(), self.position.json(k));
         }
         Value::Object(v)
     }
@@ -1079,7 +1270,7 @@ impl Dialog {
             "commands" => Dialog::Commands { query: String::new(), swallow: true },
             "icons" => Dialog::Icons { query: String::new(), category: String::new(), selected: String::new() },
             "tableProperties" => {
-                let form = Box::new(TableForm::read(app)?);
+                let form = Box::new(read_table_form(app)?);
                 Dialog::TableProperties { basis: form.clone(), form }
             }
             "enclose" => {
@@ -1949,12 +2140,19 @@ fn body(app: &mut WordApp, ui: &mut Ui, d: &mut Dialog) -> bool {
             ok || cancel
         }
         Dialog::TableProperties { form, basis } => {
-            // Every tab as tall as the tallest (Row), so OK and Cancel stay put, as in Word.
-            ui.vertical(|ui| {
-                ui.set_min_height(185.0);
-                table_properties(ui, form);
+            // Cell Options or Positioning over it takes the keys and clicks until it closes.
+            let open = form.sub == 0;
+            ui.add_enabled_ui(open, |ui| {
+                // Every tab as tall as the tallest (Table), so OK and Cancel stay put, as in Word.
+                ui.vertical(|ui| {
+                    ui.set_min_height(285.0);
+                    table_properties(ui, form);
+                });
             });
-            let (ok, cancel) = buttons(ui, tl!("OK"));
+            let (ok, cancel) = ui.add_enabled_ui(open, |ui| buttons(ui, tl!("OK"))).inner;
+            let (ok, cancel) = (ok && open, cancel && open);
+            table_sub_window(ui.ctx(), form);
+            step_table_form(app, form, basis);
             if ok {
                 form.apply(basis, app);
             }
@@ -3003,6 +3201,288 @@ fn recipient_filter(ui: &mut Ui, fields: &[String], filter: &mut RecipientFilter
     });
 }
 
+/// A preferred width and Word's "Measure in" list: the interface unit, or Percent of `base`
+/// points. Switching the list converts the number.
+fn measured(ui: &mut Ui, id: &str, on: bool, (pct, v): (&mut bool, &mut f32), base: f32) {
+    let unit = crate::options::unit();
+    let k = unit.pt_per_unit();
+    let name = crate::options::UNITS.iter().find(|(u, _)| *u == unit).map_or("Inches", |(_, n)| *n);
+    ui.add_enabled_ui(on, |ui| {
+        ui.horizontal(|ui| {
+            if *pct {
+                ui.add(egui::DragValue::new(v).speed(0.1).range(1.0..=100.0).suffix("%").max_decimals(1));
+            } else {
+                ui.add(egui::DragValue::new(v).speed(0.01).range(0.1..=22.0).measure(unit).max_decimals(2));
+            }
+            ui.label(tl!("Measure in:"));
+            let was = *pct;
+            egui::ComboBox::from_id_salt(id).width(100.0).selected_text(tl!(if *pct { "Percent" } else { name })).show_ui(ui, |ui| {
+                ui.selectable_value(pct, true, tl!("Percent"));
+                ui.selectable_value(pct, false, tl!(name));
+            });
+            if *pct != was && base > 0.0 && v.is_finite() {
+                *v = if *pct { (*v * k / base * 100.0).clamp(1.0, 100.0) } else { *v / 100.0 * base / k };
+            }
+        });
+    });
+}
+
+/// One of Word's picture choices (alignment, wrapping): a drawing over its label, framed in the
+/// accent colour when chosen. Whether it was clicked.
+fn tile(ui: &mut Ui, on: bool, label: &str, draw: impl FnOnce(&egui::Painter, egui::Rect, egui::Color32)) -> bool {
+    let t = Tokens::get(ui.ctx());
+    let layout = egui::Layout::top_down(egui::Align::Center);
+    ui.allocate_ui_with_layout(vec2(72.0, 66.0), layout, |ui| {
+        let (r, resp) = ui.allocate_exact_size(vec2(44.0, 38.0), Sense::click());
+        let enabled = ui.is_enabled();
+        resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::RadioButton, enabled, on, label));
+        let p = ui.painter();
+        p.rect_filled(r, 2.0, egui::Color32::WHITE);
+        let (w, frame) = if on { (2.0, t.accent) } else { (1.0, t.text_dim) };
+        p.rect_stroke(r, 2.0, egui::Stroke::new(w, frame), egui::StrokeKind::Inside);
+        draw(p, r.shrink(7.0), egui::Color32::from_gray(if enabled { 70 } else { 170 }));
+        ui.label(label);
+        resp.clicked()
+    })
+    .inner
+}
+
+/// Lines of text across `x0..x1` from `y` down to `bottom`.
+fn text_lines(p: &egui::Painter, (x0, x1): (f32, f32), y: f32, bottom: f32, c: egui::Color32) {
+    let mut y = y;
+    while y <= bottom && x1 > x0 {
+        p.line_segment([egui::pos2(x0, y), egui::pos2(x1, y)], egui::Stroke::new(1.0, c));
+        y += 4.0;
+    }
+}
+
+/// Table Properties' alignment and wrapping pictures: a small table where `align` puts it,
+/// text under it, and beside it when the text wraps `around` it.
+fn table_picture(p: &egui::Painter, r: egui::Rect, c: egui::Color32, align: &str, around: bool) {
+    let (w, h) = (r.width() * 0.45, r.height() * 0.5);
+    let x = match align {
+        "center" => r.center().x - w / 2.0,
+        "right" => r.right() - w,
+        _ => r.left(),
+    };
+    let t = egui::Rect::from_min_size(egui::pos2(x, r.top()), vec2(w, h));
+    let stroke = egui::Stroke::new(1.0, c);
+    p.rect_stroke(t, 0.0, stroke, egui::StrokeKind::Inside);
+    p.line_segment([egui::pos2(t.center().x, t.top()), egui::pos2(t.center().x, t.bottom())], stroke);
+    p.line_segment([egui::pos2(t.left(), t.center().y), egui::pos2(t.right(), t.center().y)], stroke);
+    if around {
+        text_lines(p, (r.left(), t.left() - 3.0), t.top() + 1.0, t.bottom(), c);
+        text_lines(p, (t.right() + 3.0, r.right()), t.top() + 1.0, t.bottom(), c);
+    }
+    text_lines(p, (r.left(), r.right()), t.bottom() + 4.0, r.bottom(), c);
+}
+
+/// Table Properties' cell alignment pictures: lines of text at the cell's top, middle or bottom.
+fn valign_picture(p: &egui::Painter, r: egui::Rect, c: egui::Color32, valign: &str) {
+    p.rect_stroke(r.expand(3.0), 0.0, egui::Stroke::new(1.0, c), egui::StrokeKind::Inside);
+    let y = match valign {
+        "center" => r.center().y - 4.0,
+        "bottom" => r.bottom() - 8.0,
+        _ => r.top(),
+    };
+    text_lines(p, (r.left(), r.right()), y, y + 8.0, c);
+}
+
+/// Cell Options: the cell's margins (or the table's) and whether its text wraps.
+fn cell_options(ui: &mut Ui, f: &mut TableForm) {
+    let unit = crate::options::unit();
+    ui.label(egui::RichText::new(tl!("Cell margins")).font(semibold(12.5)));
+    let mut same = !f.cell_margins_own;
+    ui.checkbox(&mut same, tl!("Same as the whole table"));
+    f.cell_margins_own = !same;
+    ui.add_enabled_ui(f.cell_margins_own, |ui| {
+        egui::Grid::new("tp_cell_margins").num_columns(4).spacing(vec2(10.0, 6.0)).show(ui, |ui| {
+            for (i, l) in [(0, "Top:"), (1, "Left:"), (2, "Bottom:"), (3, "Right:")] {
+                ui.label(tl!(l));
+                if let Some(m) = f.cell_margins.get_mut(i) {
+                    ui.add(egui::DragValue::new(m).speed(0.01).range(0.0..=22.0).measure(unit).max_decimals(2));
+                }
+                if i % 2 == 1 {
+                    ui.end_row();
+                }
+            }
+        });
+    });
+    ui.add_space(4.0);
+    ui.label(egui::RichText::new(tl!("Options")).font(semibold(12.5)));
+    ui.checkbox(&mut f.cell_wrap, tl!("Wrap text"));
+}
+
+/// Table Positioning: where a table that text wraps around sits. `top` is where it is on its
+/// page, which it keeps when it stops moving with the text.
+fn table_positioning(ui: &mut Ui, pos: &mut TablePosition, top: f32) {
+    let unit = crate::options::unit();
+    let heading = |ui: &mut Ui, s: &str| {
+        ui.add_space(4.0);
+        ui.label(egui::RichText::new(tl!(s)).font(semibold(12.5)));
+    };
+    // A position is an alignment or, picked last in the list, an offset typed beside it.
+    let place = |ui: &mut Ui, id: &str, (at, offset): (&mut String, &mut f32), names: [(&str, &str); 5]| {
+        let length = format!("{:.2}{}", offset, unit.suffix()).replace('.', &crate::options::decimal().to_string());
+        let shown = names.iter().find(|(v, _)| *v == at.as_str()).map_or(length.clone(), |(_, l)| tl!(l).to_string());
+        ui.horizontal(|ui| {
+            egui::ComboBox::from_id_salt(id).width(110.0).selected_text(shown).show_ui(ui, |ui| {
+                for (v, l) in names {
+                    ui.selectable_value(at, v.to_string(), tl!(l));
+                }
+                ui.selectable_value(at, String::new(), length);
+            });
+            if at.is_empty() {
+                ui.add(egui::DragValue::new(offset).speed(0.01).range(-22.0..=22.0).measure(unit).max_decimals(2));
+            }
+        });
+    };
+    let relative = |ui: &mut Ui, id: &str, rel: &mut String, names: [(&str, &str); 3]| {
+        let shown = names.iter().find(|(v, _)| *v == rel.as_str()).map_or("", |(_, l)| *l);
+        egui::ComboBox::from_id_salt(id).width(110.0).selected_text(tl!(shown)).show_ui(ui, |ui| {
+            for (v, l) in names {
+                ui.selectable_value(rel, v.to_string(), tl!(l));
+            }
+        });
+    };
+    for (vertical, title) in [(false, "Horizontal"), (true, "Vertical")] {
+        heading(ui, title);
+        egui::Grid::new(("tp_pos", vertical)).num_columns(2).spacing(vec2(10.0, 4.0)).show(ui, |ui| {
+            ui.label(tl!("Position:"));
+            ui.label(tl!("Relative to:"));
+            ui.end_row();
+            if vertical {
+                let names = [("top", "Top"), ("bottom", "Bottom"), ("center", "Center"), ("inside", "Inside"), ("outside", "Outside")];
+                place(ui, "tp_pos_v", (&mut pos.v, &mut pos.y), names);
+                relative(ui, "tp_rel_v", &mut pos.v_rel, [("margin", "Margin"), ("page", "Page"), ("paragraph", "Paragraph")]);
+            } else {
+                let names = [("left", "Left"), ("right", "Right"), ("center", "Center"), ("inside", "Inside"), ("outside", "Outside")];
+                place(ui, "tp_pos_h", (&mut pos.h, &mut pos.x), names);
+                relative(ui, "tp_rel_h", &mut pos.h_rel, [("margin", "Margin"), ("page", "Page"), ("column", "Column")]);
+            }
+            ui.end_row();
+        });
+    }
+    heading(ui, "Distance from surrounding text");
+    egui::Grid::new("tp_dist").num_columns(4).spacing(vec2(10.0, 6.0)).show(ui, |ui| {
+        // Top and Bottom first, as Word lists them; `dist` is left, top, right, bottom.
+        for (i, l) in [(1, "Top:"), (0, "Left:"), (3, "Bottom:"), (2, "Right:")] {
+            ui.label(tl!(l));
+            if let Some(d) = pos.dist.get_mut(i) {
+                ui.add(egui::DragValue::new(d).speed(0.01).range(0.0..=22.0).measure(unit).max_decimals(2));
+            }
+            if i == 0 || i == 2 {
+                ui.end_row();
+            }
+        }
+    });
+    heading(ui, "Options");
+    // Moving with the text is placing it from the paragraph; off, it stays where it is on the page.
+    let mut with_text = pos.v_rel == "paragraph";
+    if ui.checkbox(&mut with_text, tl!("Move with text")).changed() {
+        pos.v = String::new();
+        (pos.v_rel, pos.y) = if with_text { (String::from("paragraph"), 0.0) } else { (String::from("page"), top) };
+    }
+    ui.checkbox(&mut pos.overlap, tl!("Allow overlap"));
+}
+
+/// Cell Options or Table Positioning over Table Properties, with their own OK and Cancel
+/// (Cancel puts back what they changed).
+fn table_sub_window(ctx: &egui::Context, f: &mut TableForm) {
+    let title = match f.sub {
+        1 => "Cell Options",
+        2 => "Table Positioning",
+        _ => return,
+    };
+    let id = egui::Id::new(("dialog", title));
+    let mut done = None;
+    egui::Window::new(tl!(title))
+        .id(id)
+        .collapsible(false)
+        .resizable(false)
+        .order(egui::Order::Foreground)
+        .pivot(egui::Align2::CENTER_CENTER)
+        .default_pos(ctx.content_rect().center())
+        .show(ctx, |ui| {
+            if f.sub == 1 {
+                cell_options(ui, f);
+            } else {
+                let top = f.table_top;
+                table_positioning(ui, &mut f.position, top);
+            }
+            let (ok, cancel) = buttons(ui, tl!("OK"));
+            if ok || cancel {
+                done = Some(ok);
+            }
+        });
+    match done {
+        Some(true) => f.sub_was = None,
+        Some(false) => {
+            if let Some(was) = f.sub_was.take() {
+                f.cell_margins_own = was.cell_margins_own;
+                f.cell_margins = was.cell_margins;
+                f.cell_wrap = was.cell_wrap;
+                f.position = was.position;
+            }
+        }
+        None => return,
+    }
+    f.sub = 0;
+}
+
+/// Table Properties' Previous/Next Row or Column from row `r`, grid column `g` (the dialog's):
+/// the caret moves to that row or column, round from the last to the first, as in Word.
+fn table_step(app: &mut WordApp, step: TableStep, (r, g): (usize, usize)) {
+    let s = &app.session;
+    let story = s.sel.focus.story;
+    let Some((tp, _, _)) = s.sel.focus.path.cell() else { return };
+    let Some(t) = s.doc.table(story, &tp) else { return };
+    let (rows, cols) = (t.rows.len().max(1), t.cols().max(1));
+    let (r, g) = (r.min(rows - 1), g.min(cols - 1));
+    let span = t.cell_at_grid(r, g).and_then(|c| t.rows.get(r)?.cells.get(c)).map_or(1, wordcraft_doc::Cell::span);
+    let (r2, g2) = match step {
+        TableStep::PrevRow => (r.checked_sub(1).unwrap_or(rows - 1), g),
+        TableStep::NextRow => ((r + 1) % rows, g),
+        TableStep::PrevColumn => (r, g.checked_sub(1).unwrap_or(cols - 1)),
+        TableStep::NextColumn => (r, (g + span) % cols),
+    };
+    let Some(c2) = t.cell_at_grid(r2, g2).or_else(|| t.rows.get(r2).and_then(|row| row.cells.len().checked_sub(1))) else { return };
+    let mut path = tp.0.clone();
+    path.extend([r2 as u32, c2 as u32, 0]);
+    let pos = wordcraft_doc::Pos::new(story, wordcraft_doc::Path(path), 0);
+    let _ = app.run("caret.set", json!({"pos": pos}));
+}
+
+/// Previous/Next Row or Column, clicked: what changed applies at once (one undo step, kept if
+/// the dialog is then cancelled, as in Word) and the dialog shows the next row or column, which
+/// is selected whole.
+fn step_table_form(app: &mut WordApp, form: &mut TableForm, basis: &mut TableForm) {
+    let Some(step) = form.step.take() else { return };
+    form.apply(basis, app);
+    table_step(app, step, (form.row.saturating_sub(1), form.column.saturating_sub(1)));
+    if let Some(mut f) = read_table_form(app) {
+        f.tab = form.tab;
+        *basis = f.clone();
+        *form = f;
+    }
+    let row = matches!(step, TableStep::PrevRow | TableStep::NextRow);
+    let _ = app.run(if row { "table.selectRow" } else { "table.selectColumn" }, json!({}));
+}
+
+/// [`TableForm::read`], with where the table is on its page (which needs the layout).
+fn read_table_form(app: &mut WordApp) -> Option<TableForm> {
+    let mut f = TableForm::read(app)?;
+    let (tp, _, _) = app.session.sel.focus.path.cell()?;
+    let story = app.session.sel.focus.story;
+    let l = app.session.layout();
+    if let Some((_, _, y)) = wordcraft_engine::cmd::table_mouse::corner(&l, story, &tp)
+        && y.is_finite()
+    {
+        f.table_top = y / crate::options::unit().pt_per_unit();
+    }
+    Some(f)
+}
+
 /// The Table Properties dialog's tabs: Table, Row, Column, Cell and Alt Text, as in Word.
 fn table_properties(ui: &mut Ui, f: &mut TableForm) {
     ui.horizontal(|ui| {
@@ -3023,26 +3503,42 @@ fn table_properties(ui: &mut Ui, f: &mut TableForm) {
     };
     // "Row 3:", "Column 2:" over the Row and Column tabs.
     let numbered = |s: &str, k: usize| crate::i18n::fmt(tl!(s), &[("n", &k.to_string())]);
+    // Previous and next row or column: the dialog applies what changed and moves on.
+    let steps = |ui: &mut Ui, f: &mut TableForm, [(back, b), (on, n)]: [(TableStep, &str); 2]| {
+        ui.add_space(6.0);
+        ui.horizontal(|ui| {
+            if ui.button(tl!(b)).clicked() {
+                f.step = Some(back);
+            }
+            if ui.button(tl!(n)).clicked() {
+                f.step = Some(on);
+            }
+        });
+    };
     match f.tab {
         0 => {
             heading(ui, "Size");
             egui::Grid::new("tp_table").num_columns(2).spacing(vec2(10.0, 6.0)).show(ui, |ui| {
                 ui.checkbox(&mut f.width_on, tl!("Preferred width:"));
-                ui.add_enabled(f.width_on, len(&mut f.width, 0.1, unit));
+                measured(ui, "tp_table_unit", f.width_on, (&mut f.width_pct, &mut f.width), f.text_width);
                 ui.end_row();
             });
             heading(ui, "Alignment");
-            egui::Grid::new("tp_align").num_columns(2).spacing(vec2(10.0, 6.0)).show(ui, |ui| {
-                ui.label(tl!("Alignment:"));
-                ui.horizontal(|ui| {
-                    for (v, l) in [("left", "Left"), ("center", "Center"), ("right", "Right")] {
-                        ui.radio_value(&mut f.align, v.to_string(), tl!(l));
+            let around = f.around;
+            ui.horizontal(|ui| {
+                for (v, l) in [("left", "Left"), ("center", "Center"), ("right", "Right")] {
+                    if tile(ui, f.align == v, tl!(l), |p, r, c| table_picture(p, r, c, v, around)) {
+                        f.align = v.into();
                     }
+                }
+                ui.vertical(|ui| {
+                    // A table that text wraps around is placed by Positioning (Word greys this).
+                    ui.label(tl!("Indent from left:"));
+                    let indent = egui::DragValue::new(&mut f.indent).speed(0.01).range(-11.0..=22.0).measure(unit).max_decimals(2);
+                    ui.add_enabled(f.align == "left" && !around, indent);
                 });
-                ui.end_row();
-                ui.label(tl!("Indent from left:"));
-                ui.add_enabled(f.align == "left", egui::DragValue::new(&mut f.indent).speed(0.01).range(-11.0..=22.0).measure(unit).max_decimals(2));
-                ui.end_row();
+            });
+            egui::Grid::new("tp_align").num_columns(2).spacing(vec2(10.0, 6.0)).show(ui, |ui| {
                 ui.label(tl!("Table direction:"));
                 ui.horizontal(|ui| {
                     ui.radio_value(&mut f.rtl, false, tl!("Left-to-right"));
@@ -3050,6 +3546,20 @@ fn table_properties(ui: &mut Ui, f: &mut TableForm) {
                 });
                 ui.end_row();
             });
+            heading(ui, "Text wrapping");
+            let mut positioning = false;
+            ui.horizontal(|ui| {
+                for (on, l) in [(false, "None"), (true, "Around")] {
+                    if tile(ui, f.around == on, tl!(l), |p, r, c| table_picture(p, r, c, "left", on)) {
+                        f.around = on;
+                    }
+                }
+                ui.add_space(12.0);
+                positioning = ui.add_enabled(f.around, egui::Button::new(tl!("Positioning…"))).clicked();
+            });
+            if positioning {
+                f.open_sub(2);
+            }
         }
         1 => {
             ui.label(numbered("Row {n}:", f.row));
@@ -3075,15 +3585,17 @@ fn table_properties(ui: &mut Ui, f: &mut TableForm) {
             // Header rows run down from the table's top: a row below a non-header row can't
             // repeat (Word greys the box there); one that already does can still be cleared.
             ui.add_enabled(f.header_allowed || f.header_row, egui::Checkbox::new(&mut f.header_row, tl!("Repeat as header row on each page")));
+            steps(ui, f, [(TableStep::PrevRow, "Previous Row"), (TableStep::NextRow, "Next Row")]);
         }
         2 => {
             ui.label(numbered("Column {n}:", f.column));
             heading(ui, "Size");
             egui::Grid::new("tp_col").num_columns(2).spacing(vec2(10.0, 6.0)).show(ui, |ui| {
-                ui.label(tl!("Preferred width:"));
-                ui.add(len(&mut f.column_width, 0.1, unit));
+                ui.checkbox(&mut f.column_width_on, tl!("Preferred width:"));
+                measured(ui, "tp_col_unit", f.column_width_on, (&mut f.column_pct, &mut f.column_width), f.table_width);
                 ui.end_row();
             });
+            steps(ui, f, [(TableStep::PrevColumn, "Previous Column"), (TableStep::NextColumn, "Next Column")]);
         }
         4 => {
             egui::Grid::new("tp_alt").num_columns(2).spacing(vec2(10.0, 6.0)).show(ui, |ui| {
@@ -3103,12 +3615,18 @@ fn table_properties(ui: &mut Ui, f: &mut TableForm) {
     heading(ui, "Size");
     egui::Grid::new("tp_cell").num_columns(2).spacing(vec2(10.0, 6.0)).show(ui, |ui| {
         ui.checkbox(&mut f.cell_width_on, tl!("Preferred width:"));
-        ui.add_enabled(f.cell_width_on, len(&mut f.cell_width, 0.1, unit));
+        measured(ui, "tp_cell_unit", f.cell_width_on, (&mut f.cell_pct, &mut f.cell_width), f.table_width);
         ui.end_row();
         ui.label(tl!("Vertical alignment:"));
         ui.horizontal(|ui| {
             for (v, l) in [("top", "Top"), ("center", "Center"), ("bottom", "Bottom")] {
-                ui.radio_value(&mut f.valign, v.to_string(), tl!(l));
+                if tile(ui, f.valign == v, tl!(l), |p, r, c| valign_picture(p, r, c, v)) {
+                    f.valign = v.into();
+                }
+            }
+            ui.add_space(12.0);
+            if ui.button(tl!("Options…")).clicked() {
+                f.open_sub(1);
             }
         });
         ui.end_row();
@@ -3756,6 +4274,115 @@ mod tests {
     use wordcraft_doc::Pos;
     use wordcraft_doc::props::Align;
     use wordcraft_engine::Session;
+
+    fn caret_table(app: &WordApp) -> wordcraft_doc::Table {
+        let (tp, _, _) = app.session.sel.focus.path.cell().unwrap();
+        app.session.doc.table(app.session.sel.focus.story, &tp).unwrap().clone()
+    }
+
+    /// Table Properties' Previous/Next Row and Column (#2428), as in Word: what changed applies
+    /// at once to the row it was made in, the dialog moves on (round from the last row or column
+    /// to the first) with the whole row or column selected, and one undo takes the change back.
+    #[test]
+    fn table_properties_steps_through_rows_and_columns() {
+        let mut a = app_with("");
+        a.run("insert.table", json!({"rows": 3, "cols": 3})).unwrap();
+        for c in ["caret.down", "caret.down", "caret.right"] {
+            a.run(c, json!({})).unwrap();
+        }
+        let mut f = read_table_form(&mut a).unwrap();
+        let mut basis = f.clone();
+        assert_eq!((f.row, f.column), (3, 2));
+        f.tab = 1;
+        f.row_height_on = true;
+        f.row_height = 1.0;
+        f.step = Some(TableStep::PrevRow);
+        let undo = a.session.undo_labels().len();
+        step_table_form(&mut a, &mut f, &mut basis);
+        assert_eq!((f.tab, f.row, f.column, f.step), (1, 2, 2, None), "on the row above, same tab");
+        assert_eq!(f, basis, "the dialog shows the new row as it is");
+        let t = caret_table(&a);
+        assert_eq!(t.rows[2].props.height, Some(1.0 * crate::options::unit().pt_per_unit()), "applied to row 3");
+        assert_eq!(t.rows[1].props.height, None);
+        let range = a.session.cell_range().expect("a row is selected");
+        assert_eq!((range.rows, range.cols), ((1, 1), (0, 2)));
+        assert_eq!(a.session.undo_labels().len(), undo + 1, "one undo step");
+        // Round from the first row to the last, and from the last column to the first.
+        f.step = Some(TableStep::PrevRow);
+        step_table_form(&mut a, &mut f, &mut basis);
+        f.step = Some(TableStep::PrevRow);
+        step_table_form(&mut a, &mut f, &mut basis);
+        assert_eq!(f.row, 3);
+        f.step = Some(TableStep::NextColumn);
+        step_table_form(&mut a, &mut f, &mut basis);
+        assert_eq!(f.column, 3);
+        f.step = Some(TableStep::NextColumn);
+        step_table_form(&mut a, &mut f, &mut basis);
+        assert_eq!(f.column, 1);
+        let range = a.session.cell_range().expect("a column is selected");
+        assert_eq!((range.rows, range.cols), ((0, 2), (0, 0)));
+        assert_eq!(a.session.undo_labels().len(), undo + 1, "moving on without changes adds no step");
+        a.run("edit.undo", json!({})).unwrap();
+        assert_eq!(caret_table(&a).rows[2].props.height, None);
+    }
+
+    /// Table Properties' Measure in (Percent), automatic column width, Cell Options and
+    /// Text wrapping › Around with Positioning (#2428): OK sends just those settings.
+    #[test]
+    fn table_properties_measures_in_percent_and_wraps_text() {
+        use wordcraft_doc::para::{Anchor, FloatAlign};
+        let mut a = app_with("");
+        a.run("insert.table", json!({"rows": 2, "cols": 2})).unwrap();
+        let basis = read_table_form(&mut a).unwrap();
+        assert!(basis.column_width_on && basis.cell_width_on && !basis.cell_margins_own && basis.cell_wrap && !basis.around);
+        assert_eq!((basis.position.h.as_str(), basis.position.v_rel.as_str(), basis.position.overlap), ("left", "paragraph", false));
+        let mut f = basis.clone();
+        f.width_on = true;
+        f.width_pct = true;
+        f.width = 50.0;
+        f.column_width_on = false;
+        f.cell_pct = true;
+        f.cell_width = 40.0;
+        f.cell_margins_own = true;
+        f.cell_wrap = false;
+        f.around = true;
+        let changes = f.changes(&basis);
+        assert_eq!(changes["widthPct"], json!(50.0));
+        assert_eq!((changes["columnWidth"].clone(), changes["cellWidthPct"].clone()), (Value::Null, json!(40.0)));
+        assert_eq!((changes["cellWrap"].clone(), changes["wrap"].clone()), (json!(false), json!("around")));
+        assert!(changes["cellMargins"].is_array());
+        assert!(changes.get("position").is_none(), "Word's place for Around needs no position");
+        f.apply(&basis, &mut a);
+        let t = caret_table(&a);
+        assert_eq!(t.props.width_pct, Some(50.0));
+        let cell = &t.rows[0].cells[0].props;
+        assert_eq!((cell.width, cell.width_pct, cell.no_wrap, cell.margins.is_some()), (None, Some(40.0), true, true));
+        assert_eq!(t.rows[1].cells[0].props.width, None, "the column is automatic");
+        let fl = t.props.float.expect("text wraps around it");
+        assert_eq!((fl.h_align, fl.h_rel, fl.v_rel, fl.overlap), (Some(FloatAlign::Start), Anchor::Column, Anchor::Paragraph, false));
+        // Positioning: centred on the margin, 1" from the top of the page, overlapping.
+        let basis = read_table_form(&mut a).unwrap();
+        assert!(basis.around && basis.cell_pct && basis.width_pct && basis.cell_margins_own);
+        let mut f = basis.clone();
+        f.position.h = "center".into();
+        f.position.h_rel = "margin".into();
+        f.position.v = String::new();
+        f.position.y = 72.0 / crate::options::unit().pt_per_unit();
+        f.position.v_rel = "page".into();
+        f.position.overlap = true;
+        f.cell_margins_own = false;
+        f.apply(&basis, &mut a);
+        let t = caret_table(&a);
+        let fl = t.props.float.unwrap();
+        assert_eq!((fl.h_align, fl.h_rel, fl.v_align, fl.v_rel, fl.overlap), (Some(FloatAlign::Center), Anchor::Margin, None, Anchor::Page, true));
+        assert!((fl.y - 72.0).abs() < 0.01);
+        assert_eq!(t.rows[0].cells[0].props.margins, None, "the table's margins again");
+        let mut f = read_table_form(&mut a).unwrap();
+        let basis = f.clone();
+        f.around = false;
+        f.apply(&basis, &mut a);
+        assert!(caret_table(&a).props.float.is_none(), "None: in line with the text again");
+    }
 
     /// Go To's page box (#712): a number, +n / -n from the current page (a typographic minus
     /// too), empty for the next page; anything else is refused.

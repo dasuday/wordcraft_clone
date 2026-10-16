@@ -2814,38 +2814,6 @@ mod tests {
         assert!(a.selected_picture_media().is_some());
     }
 
-    /// Table Layout › Properties (#44) opens the dialog from the ribbon; OK sends only what
-    /// changed, as one `table.properties` step. Scripts with settings never see the dialog.
-    #[test]
-    fn table_properties_button_opens_the_dialog() {
-        let mut a = app();
-        a.run("insert.table", json!({"rows": 2, "cols": 2})).unwrap();
-        a.run("table.properties", json!({})).unwrap();
-        let Some(dialogs::Dialog::TableProperties { form, basis }) = a.dialog.clone() else { panic!("no dialog: {:?}", a.dialog) };
-        assert_eq!(form.changes(&basis), json!({}), "untouched, nothing changes");
-        let mut f = (*form).clone();
-        f.align = "center".into();
-        f.row_height_on = true;
-        f.row_height = 0.5;
-        f.row_exact = true;
-        f.header_row = true;
-        let changes = f.changes(&basis);
-        assert_eq!(changes, json!({"align": "center", "rowHeight": 36.0, "rowHeightRule": "exact", "headerRow": true}));
-        a.dialog = None;
-        a.run("table.properties", changes).unwrap();
-        assert!(a.dialog.is_none(), "settings apply without the dialog");
-        let (tp, _, _) = a.session.sel.focus.path.cell().unwrap();
-        let t = a.session.doc.table(a.session.sel.focus.story, &tp).unwrap();
-        assert_eq!(t.props.align, Some(wordcraft_doc::props::Align::Center));
-        assert_eq!((t.rows[0].props.height, t.rows[0].props.header), (Some(36.0), true));
-        assert_eq!(dialogs::TableForm::read(&a).unwrap().changes(&f), json!({}), "the dialog reopens with the new values");
-        // Table direction (#362) is one more setting of the same step.
-        let mut g = dialogs::TableForm::read(&a).unwrap();
-        let basis = g.clone();
-        g.rtl = true;
-        assert_eq!(g.changes(&basis), json!({"rtl": true}));
-    }
-
     /// Table Properties has Word's Table, Row, Column, Cell and Alt Text tabs (#2428): the Row
     /// and Column tabs name the caret's row and column, a row may repeat as a header only under
     /// header rows, and OK sets the properties and the alt text as one undo step.
@@ -2883,6 +2851,38 @@ mod tests {
         let back = dialogs::TableForm::read(&a).unwrap();
         assert_eq!((back.alt_title.as_str(), back.valign.as_str()), ("", "top"), "one undo takes both back");
         assert!(dialogs::TableForm::read(&a).unwrap().commands(&back).is_empty(), "untouched, OK runs nothing");
+    }
+
+    /// Table Layout › Properties (#44) opens the dialog from the ribbon; OK sends only what
+    /// changed, as one `table.properties` step. Scripts with settings never see the dialog.
+    #[test]
+    fn table_properties_button_opens_the_dialog() {
+        let mut a = app();
+        a.run("insert.table", json!({"rows": 2, "cols": 2})).unwrap();
+        a.run("table.properties", json!({})).unwrap();
+        let Some(dialogs::Dialog::TableProperties { form, basis }) = a.dialog.clone() else { panic!("no dialog: {:?}", a.dialog) };
+        assert_eq!(form.changes(&basis), json!({}), "untouched, nothing changes");
+        let mut f = (*form).clone();
+        f.align = "center".into();
+        f.row_height_on = true;
+        f.row_height = 0.5;
+        f.row_exact = true;
+        f.header_row = true;
+        let changes = f.changes(&basis);
+        assert_eq!(changes, json!({"align": "center", "rowHeight": 36.0, "rowHeightRule": "exact", "headerRow": true}));
+        a.dialog = None;
+        a.run("table.properties", changes).unwrap();
+        assert!(a.dialog.is_none(), "settings apply without the dialog");
+        let (tp, _, _) = a.session.sel.focus.path.cell().unwrap();
+        let t = a.session.doc.table(a.session.sel.focus.story, &tp).unwrap();
+        assert_eq!(t.props.align, Some(wordcraft_doc::props::Align::Center));
+        assert_eq!((t.rows[0].props.height, t.rows[0].props.header), (Some(36.0), true));
+        assert_eq!(dialogs::TableForm::read(&a).unwrap().changes(&f), json!({}), "the dialog reopens with the new values");
+        // Table direction (#362) is one more setting of the same step.
+        let mut g = dialogs::TableForm::read(&a).unwrap();
+        let basis = g.clone();
+        g.rtl = true;
+        assert_eq!(g.changes(&basis), json!({"rtl": true}));
     }
 
     /// Home › Font › Enclose Characters (#297): the button opens the dialog on the selected
