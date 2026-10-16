@@ -2624,3 +2624,6 @@ preview	Title	Ukázka
 # Reading Mode column widths (#1040)
 	Narrow	Úzká
 	Medium	Střední
+# Drag and drop text (#2449)
+	Drag and Drop	Přetažení a puštění
+	Allow text to be dragged and dropped	Povolit přetahování textu myší

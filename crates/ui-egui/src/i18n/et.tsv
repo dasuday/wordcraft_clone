@@ -2267,3 +2267,6 @@
 # Reading Mode column widths (#1040)
 	Narrow	Kitsas
 	Medium	Keskmine
+# Drag and drop text (#2449)
+	Drag and Drop	Lohistamine
+	Allow text to be dragged and dropped	Luba teksti lohistada

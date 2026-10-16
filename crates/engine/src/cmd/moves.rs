@@ -53,16 +53,23 @@ fn in_use(s: &Session, rev: u32) -> bool {
 /// done) when it isn't such a cut.
 pub fn cut_tracked(s: &mut Session) -> Result<bool, CmdError> {
     let (a, b) = s.sel.ordered();
-    if !s.doc.settings.track_changes || a == b || a.story != b.story || !move_sized(&s.clipboard_text) {
+    let text = s.clipboard_text.clone();
+    take_tracked(s, &a, &b, &text)
+}
+
+/// [`cut_tracked`] for any taking of `a..b` whose text is `text`: a drag-and-drop move takes the
+/// text without the clipboard.
+pub fn take_tracked(s: &mut Session, a: &Pos, b: &Pos, text: &str) -> Result<bool, CmdError> {
+    if !s.doc.settings.track_changes || a == b || a.story != b.story || !move_sized(text) {
         return Ok(false);
     }
     s.doc.revisions.push(Revision::new(RevisionKind::Delete, s.author.clone(), now_iso()));
     let rid = (s.doc.revisions.len() - 1) as u32;
-    let at = track_delete_as(s, &a, &b, rid)?;
+    let at = track_delete_as(s, a, b, rid)?;
     s.sel = Selection::caret(at);
     // Only the author's own insertions were cut: they are gone, not moved.
     if in_use(s, rid) {
-        s.pending_move = Some(PendingMove { rev: rid, text: s.clipboard_text.clone(), author: s.author.clone() });
+        s.pending_move = Some(PendingMove { rev: rid, text: text.to_string(), author: s.author.clone() });
     }
     Ok(true)
 }

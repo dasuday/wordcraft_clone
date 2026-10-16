@@ -498,6 +498,7 @@ Editing|Selection|Select Sentence|select.sentence
 Editing|Selection|Select Paragraph|select.paragraph
 Editing|Selection|Extend Selection (F8)|select.extend
 Editing|Selection|Column Selection|select.column
+Editing|Mouse|Drag and Drop Text|edit.moveText
 Editing|Fields|Show Field Codes|view.fieldCodes
 Editing|Fields|Toggle Field Codes|fields.toggleCode
 Editing|Fields|Edit Field Code|fields.setCode

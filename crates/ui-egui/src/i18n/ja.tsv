@@ -2233,3 +2233,6 @@
 # Reading Mode column widths (#1040)
 	Narrow	狭い
 	Medium	中
+# Drag and drop text (#2449)
+	Drag and Drop	ドラッグ アンド ドロップ
+	Allow text to be dragged and dropped	テキストのドラッグ アンド ドロップを許可する

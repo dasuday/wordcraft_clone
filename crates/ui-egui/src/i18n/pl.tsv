@@ -2622,3 +2622,6 @@ preview	Title	Tytuł
 # Reading Mode column widths (#1040)
 	Narrow	Wąska
 	Medium	Średnia
+# Drag and drop text (#2449)
+	Drag and Drop	Przeciągnij i upuść
+	Allow text to be dragged and dropped	Zezwalaj na przeciąganie i upuszczanie tekstu

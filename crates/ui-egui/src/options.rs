@@ -452,6 +452,7 @@ fn advanced(app: &mut WordApp, ui: &mut Ui) {
     flag(app, ui, "Typing replaces selected text", "typingReplacesSelection", pr.typing_replaces_selection);
     flag(app, ui, "Use the Insert key to switch overtype on and off", "insertKeyOvertype", pr.insert_key_overtype);
     flag(app, ui, "Overtype (typing replaces the characters after the caret)", "overtype", pr.overtype);
+    flag(app, ui, "Allow text to be dragged and dropped", "dragAndDrop", pr.drag_and_drop);
     let mut guides = app.ui.alignment_guides;
     if ui
         .checkbox(&mut guides, tl!("Show alignment guides when moving pictures and shapes"))
@@ -947,6 +948,11 @@ mod tests {
         h.get_by_label("Typing replaces selected text").click();
         h.run_steps(2);
         assert!(!h.state().session.prefs.typing_replaces_selection);
+        // #2449: dragging selected text is on by default; the box turns it off.
+        assert!(h.state().session.prefs.drag_and_drop);
+        h.get_by_label("Allow text to be dragged and dropped").click();
+        h.run_steps(2);
+        assert!(!h.state().session.prefs.drag_and_drop);
         assert!(h.query_by_label("Measurement units:").is_some());
     }
 

@@ -2647,3 +2647,6 @@ preview	Title	Titel
 	Bottom Right Cell	Nedre högra cellen
 	Inside Horizontal Border	Inre vågrät kantlinje
 	Inside Vertical Border	Inre lodrät kantlinje
+# Drag and drop text (#2449)
+	Drag and Drop	Dra och släpp
+	Allow text to be dragged and dropped	Tillåt att text dras och släpps

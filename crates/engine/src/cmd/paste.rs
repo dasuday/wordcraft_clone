@@ -244,8 +244,9 @@ pub fn merge_formatting(s: &Session, frag: &mut Fragment) {
     }
 }
 
-/// Replace the selection with `frag`, marking it as an insertion under Track Changes.
-pub fn insert(s: &mut Session, mut frag: Fragment) -> Result<(), CmdError> {
+/// Replace the selection with `frag`, marking it as an insertion under Track Changes. Returns
+/// where the inserted content starts; the caret is left after it.
+pub fn insert(s: &mut Session, mut frag: Fragment) -> Result<wordcraft_doc::Pos, CmdError> {
     super::controls::prepare_edit(s)?;
     let at = delete_selection(s)?;
     let track = s.doc.settings.track_changes;
@@ -285,7 +286,7 @@ pub fn insert(s: &mut Session, mut frag: Fragment) -> Result<(), CmdError> {
         }
     }
     s.sel = Selection::caret(end);
-    Ok(())
+    Ok(at)
 }
 
 /// Every paragraph in a block, tables included (bounded depth).

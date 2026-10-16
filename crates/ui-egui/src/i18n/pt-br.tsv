@@ -2245,3 +2245,6 @@
 # Reading Mode column widths (#1040)
 	Narrow	Estreita
 	Medium	Média
+# Drag and drop text (#2449)
+	Drag and Drop	Arrastar e soltar
+	Allow text to be dragged and dropped	Permitir arrastar e soltar texto

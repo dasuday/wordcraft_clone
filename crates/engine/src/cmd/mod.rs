@@ -9,6 +9,7 @@ pub mod column;
 pub mod connectors;
 pub mod controls;
 pub mod design;
+pub mod drag_drop;
 pub mod draw;
 pub mod edit;
 pub mod equation;
@@ -63,6 +64,7 @@ pub fn registry() -> Registry {
     v.extend(column::specs());
     v.extend(edit::specs());
     v.extend(paste::specs());
+    v.extend(drag_drop::specs());
     v.extend(format::specs());
     v.extend(font::specs());
     v.extend(phonetic::specs());

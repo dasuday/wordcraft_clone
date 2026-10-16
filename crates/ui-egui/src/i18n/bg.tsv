@@ -2621,3 +2621,6 @@
 # Reading Mode column widths (#1040)
 	Narrow	Тясна
 	Medium	Средна
+# Drag and drop text (#2449)
+	Drag and Drop	Плъзгане и пускане
+	Allow text to be dragged and dropped	Разрешаване на плъзгане и пускане на текст

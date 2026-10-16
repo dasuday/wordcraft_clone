@@ -2629,3 +2629,6 @@ preview	Title	Örnek
 # Reading Mode column widths (#1040)
 	Narrow	Dar
 	Medium	Orta
+# Drag and drop text (#2449)
+	Drag and Drop	Sürükle ve Bırak
+	Allow text to be dragged and dropped	Metnin sürüklenip bırakılmasına izin ver

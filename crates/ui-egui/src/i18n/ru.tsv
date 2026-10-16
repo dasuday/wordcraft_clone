@@ -2630,3 +2630,6 @@ preview	Title	Пример
 # Reading Mode column widths (#1040)
 	Narrow	Узкая
 	Medium	Средняя
+# Drag and drop text (#2449)
+	Drag and Drop	Перетаскивание
+	Allow text to be dragged and dropped	Разрешить перетаскивание текста

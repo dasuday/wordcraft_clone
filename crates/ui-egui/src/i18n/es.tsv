@@ -2599,3 +2599,6 @@ preview	Title	Título
 # Reading Mode column widths (#1040)
 	Narrow	Estrecha
 	Medium	Media
+# Drag and drop text (#2449)
+	Drag and Drop	Arrastrar y soltar
+	Allow text to be dragged and dropped	Permitir arrastrar y soltar texto

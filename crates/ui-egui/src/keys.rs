@@ -344,6 +344,10 @@ pub fn canvas_events(app: &mut WordApp, ctx: &egui::Context) {
                 let _ = app.run(id, json!({}));
             }
             egui::Event::Key { key, pressed: true, modifiers, .. } => {
+                // Escape while dragging selected text leaves it where it was (#2449).
+                if key == Key::Escape && app.canvas.cancel_text_drop() {
+                    continue;
+                }
                 if key == Key::Escape && app.session.painter.is_some() {
                     app.session.painter = None;
                     continue;

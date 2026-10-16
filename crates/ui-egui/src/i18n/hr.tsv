@@ -2632,3 +2632,6 @@ preview	Title	Naslov
 	Bottom Right Cell	Donja desna ćelija
 	Inside Horizontal Border	Unutarnji vodoravni obrub
 	Inside Vertical Border	Unutarnji okomiti obrub
+# Drag and drop text (#2449)
+	Drag and Drop	Povlačenje i ispuštanje
+	Allow text to be dragged and dropped	Dopusti povlačenje i ispuštanje teksta

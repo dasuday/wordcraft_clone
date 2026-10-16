@@ -1997,8 +1997,12 @@ impl WordApp {
         // the ribbon so they sit on top of it.
         crate::keytips::logic(self, &ctx);
         // Focus (View › Immersive, the status bar) keeps only the title bar and the page; Escape
-        // brings the rest back, as in Word.
-        if self.session.view.focus_mode && self.dialog.is_none() && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
+        // brings the rest back, as in Word. During a text drag Escape cancels the drag instead.
+        if self.session.view.focus_mode
+            && self.dialog.is_none()
+            && self.canvas.text_drop.is_none()
+            && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape))
+        {
             let _ = self.run("view.focus", json!({"value": false}));
         }
         if self.ui.backstage {

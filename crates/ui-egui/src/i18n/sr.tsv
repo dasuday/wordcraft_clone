@@ -2247,3 +2247,6 @@
 # Reading Mode column widths (#1040)
 	Narrow	Уска
 	Medium	Средња
+# Drag and drop text (#2449)
+	Drag and Drop	Превлачење и отпуштање
+	Allow text to be dragged and dropped	Дозволи превлачење и отпуштање текста

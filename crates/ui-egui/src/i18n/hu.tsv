@@ -2628,3 +2628,6 @@
 # Reading Mode column widths (#1040)
 	Narrow	Keskeny
 	Medium	Közepes
+# Drag and drop text (#2449)
+	Drag and Drop	Húzás és ejtés
+	Allow text to be dragged and dropped	Szöveg húzásának és ejtésének engedélyezése

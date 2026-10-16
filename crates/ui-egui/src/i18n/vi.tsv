@@ -2672,3 +2672,6 @@ template	Letter	Thư
 # Reading Mode column widths (#1040)
 	Narrow	Hẹp
 	Medium	Trung bình
+# Drag and drop text (#2449)
+	Drag and Drop	Kéo và thả
+	Allow text to be dragged and dropped	Cho phép kéo và thả văn bản
