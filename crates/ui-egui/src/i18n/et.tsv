@@ -199,6 +199,7 @@
 	Delete Table	Kustuta tabel
 	Design	Kujundus
 	Diagonal	Diagonaal
+	Diagram	Diagramm
 	Diamond	Romb
 	Dictate	Dikteeri
 	Different First Page	Erinev esileht
@@ -857,6 +858,7 @@
 	Undo {n} Actions	Võta tagasi {n} toimingut
 	Unformatted Text	Vormindamata tekst
 	Up	Üles
+	Update Diagram	Värskenda diagrammi
 	Update Field	Uuenda välja
 	Update Index	Uuenda registrit
 	Update Style to Match Selection	Uuenda stiil valiku järgi
@@ -1258,6 +1260,7 @@
 	Darkroom	Pimik
 	Gallery	Galerii
 	Sketchbook	Visandivihik
+	Edit Diagram	Muuda diagrammi
 	Change Picture…	Muuda pilti…
 	Font…	Font…
 	Paragraph…	Lõik…
