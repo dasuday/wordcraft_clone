@@ -765,4 +765,56 @@ mod tests {
             assert_eq!(images, 1, "{theme:?}: the entry draws its rendered name");
         }
     }
+    #[test]
+    fn font_dialog_preview_keeps_document_size_and_script_baselines() {
+        let bounds = |img: &egui::ColorImage| {
+            let mut points =
+                img.pixels.iter().enumerate().filter(|(_, p)| p.r().max(p.g()).max(p.b()) < 128).map(|(i, _)| (i % img.size[0], i / img.size[0]));
+            let (x, y) = points.next().expect("visible text");
+            points.fold((x, y, x, y), |(l, t, r, b), (x, y)| (l.min(x), t.min(y), r.max(x), b.max(y)))
+        };
+        let base = Document::new();
+        for size in [12.0, 28.0, 48.0] {
+            let props = CharProps { font: Some("Inter".into()), size: Some(size), ..Default::default() };
+            let preview = font_image(&base, &props, None, &json!({"props":{}}), "office", 400.0, 96.0, 2.0).unwrap();
+            let mut doc = Document::new();
+            doc.body = vec![para_block(Paragraph::with_text("office", props.clone()))];
+            doc.last_section.margin_left = 0.0;
+            doc.last_section.margin_top = 0.0;
+            let layout = wordcraft_layout::layout(&doc, &mut wordcraft_layout::LayoutCache::new(), &Default::default());
+            let scale = crate::canvas::PX_PER_PT;
+            let rendered = wordcraft_render::render_area(
+                &doc,
+                &layout.pages[0],
+                0.0,
+                0.0,
+                400.0 / scale,
+                96.0 / scale,
+                2.0 * scale,
+                &crate::canvas::screen_render_options(),
+            );
+            let document = egui::ColorImage::from_rgba_unmultiplied([rendered.width as usize, rendered.height as usize], &rendered.to_straight());
+            let (l, t, r, b) = bounds(&preview);
+            let (dl, dt, dr, db) = bounds(&document);
+            assert!((r - l).abs_diff(dr - dl) <= 1 && (b - t).abs_diff(db - dt) <= 1, "{size}pt preview must match document glyph size");
+            if size == 28.0 {
+                for (script, above) in [("superscript", true), ("subscript", false)] {
+                    let image = font_image(&base, &props, None, &json!({"props":{"vertAlign":script}}), "office", 400.0, 96.0, 2.0).unwrap();
+                    let (_, st, _, sb) = bounds(&image);
+                    assert!(sb - st < b - t, "{script} uses smaller glyphs");
+                    assert_eq!(st + sb < t + b, above, "{script} shifts from the normal baseline");
+                }
+            }
+        }
+        let props = CharProps { font: Some("Inter".into()), size: Some(12.0), ..Default::default() };
+        let before = base.clone();
+        let short = font_image(&base, &props, None, &json!({"props":{}}), "office", 120.0, 96.0, 2.0).unwrap();
+        let selected = font_image(&base, &props, None, &json!({"props":{"font":"Source Sans 3"}}), "office", 120.0, 96.0, 2.0).unwrap();
+        assert_ne!(short.pixels, selected.pixels, "the pending family changes the rendered glyphs");
+        let long = font_image(&base, &props, None, &json!({"props":{}}), &"office ".repeat(30), 120.0, 96.0, 2.0).unwrap();
+        let (_, t, _, b) = bounds(&short);
+        let (_, lt, _, lb) = bounds(&long);
+        assert!((b - t).abs_diff(lb - lt) <= 1, "long samples clip without shrinking");
+        assert_eq!(base, before, "previewing pending formatting never edits the source document");
+    }
 }

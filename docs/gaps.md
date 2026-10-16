@@ -1,6 +1,6 @@
 # Where WordCraft falls short of Word
 
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-15 · **Change:** minor (Font preview point-size accuracy); previous: trivial (the Font list no longer keeps every previewed font in memory, #848; previously trivial: table column and row markers on the rulers, #700; previously trivial: table borders and the resize handle drag on the page, #217; previously trivial: formatting revisions landed, #41; previously trivial: Draw Table and Eraser landed, #303; previously minor: beta distance restated: ~15 points, ~150–230 h; previously: first version; every known shortfall from the 2026-10-10 re-measure, ranked) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4
+> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-15 · **Change:** minor (Font dialog regression coverage); previous: trivial (the Font list no longer keeps every previewed font in memory, #848; previously trivial: table column and row markers on the rulers, #700; previously trivial: table borders and the resize handle drag on the page, #217; previously trivial: formatting revisions landed, #41; previously trivial: Draw Table and Eraser landed, #303; previously minor: beta distance restated: ~15 points, ~150–230 h; previously: first version; every known shortfall from the 2026-10-10 re-measure, ranked) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4
 
 > **Printing update:** 2026-10-12 · direct desktop printing through craft-print; details below.
 
@@ -11,7 +11,7 @@ first (`gh pr list`), and update this file and the parity doc when a gap closes.
 
 Native save reliability: synthetic cases on macOS reproduced loss through the predictable temporary-file name. Saves now use owned, exclusively created siblings, synchronize before replacement and clean up on failure; originals survive pre-replacement errors. This narrows save-path reliability under gap #3; the listed field failures and broader stability work remain open. See [save-path guarantees](file-format-parity.md#native-save-path-guarantees).
 
-Font dialog depth: Set As Default and Text Effects now use pending drafts alongside the Font/Advanced tabs and document-rendered preview. The new controls are translated in all 18 non-English catalogs, and explicit decoration removals persist through DOCX saves. Dedicated regression tests and fresh live Word comparison remain open; overall gap estimates are unchanged.
+Font dialog depth: Set As Default and Text Effects now use pending drafts alongside the Font/Advanced tabs and document-rendered preview. The new controls are translated in all 18 non-English catalogs, and explicit decoration removals persist through DOCX saves. Twelve focused regression tests now cover the principal dialog, preview and persistence risks. Fresh live Word comparison remains open; overall gap estimates are unchanged.
 
 ## Ranked
 
@@ -75,6 +75,7 @@ The same gaps grouped the way the parity documents are, for agents working in on
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-15 | minor | Added twelve focused Font dialog regressions for cancellation, exclusivity, defaults/undo, raster preview size and scripts, DOCX theme/OpenType fields, opacity and inherited effect removal. `cargo xtask ci` passes all six gates; fresh live Word qualification remains pending. |
 | 2026-10-15 | minor | Font preview uses the canvas 100% point conversion (96/72 screen units per document point). Text keeps the selected size; long or oversized samples clip at the tile bounds instead of shrinking. |
 | 2026-10-15 | trivial | Font/size scrollbars retain normal hover/fade behavior with fixed list widths. Removed the Set As Default explanatory note. |
 | 2026-10-15 | minor | Font and size lists keep fixed scroll-area widths with reserved scrollbar gutters; long font names remain single-row with tooltips. Hidden uses its preview marker without an explanatory message. |

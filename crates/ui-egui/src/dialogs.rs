@@ -4117,6 +4117,30 @@ mod tests {
         assert_eq!((c.small_caps, c.caps, c.size), (Some(false), Some(true), Some(14.0)));
     }
 
+    #[test]
+    fn font_dialog_size_change_preserves_mixed_advanced_formatting() {
+        use wordcraft_doc::Pos;
+        let mut app = app_with("Mixed text");
+        for (from, to, kern, ligatures) in [(0, 5, 14, "standard"), (5, 10, 0, "all")] {
+            app.run("select.range", json!({"anchor":Pos::body(0,from),"focus":Pos::body(0,to)})).unwrap();
+            app.run("format.set", json!({"props":{"kern":kern,"ligatures":ligatures}})).unwrap();
+        }
+        app.run("select.all", json!({})).unwrap();
+        let state = wordcraft_engine::cmd::format::state(&app.session);
+        assert!(state["kern"].is_null() && state["ligatures"].is_null());
+        let mut d = Dialog::open("font", &mut app).unwrap();
+        let Dialog::Font { size, .. } = &mut d else { panic!() };
+        *size = "18".into();
+        assert!(apply_font(&mut app, &d));
+        let p = app.session.doc.para_at(&Pos::body(0, 0)).unwrap();
+        for (off, kern, ligatures) in [(0, 14.0, wordcraft_doc::props::Ligatures::Standard), (5, 0.0, wordcraft_doc::props::Ligatures::All)] {
+            let props = p.props_of_char(off);
+            assert_eq!(props.size, Some(18.0));
+            assert_eq!(props.kern, Some(kern));
+            assert_eq!(props.ligatures, Some(ligatures));
+        }
+    }
+
     /// A dialog was pinned by its anchor, so dragging its title bar did nothing (#732).
     #[test]
     fn dragging_a_dialog_title_bar_moves_it() {
@@ -4154,5 +4178,130 @@ mod tests {
         let after = h.ctx.memory(|m| m.area_rect(id)).expect("dialog is still open");
         assert!((after.min.x - (before.min.x - 200.0)).abs() <= 1.0, "moved left: {before:?} -> {after:?}");
         assert!((after.min.y - (before.min.y + 120.0)).abs() <= 1.0, "moved down: {before:?} -> {after:?}");
+    }
+    fn font_harness() -> egui_kittest::Harness<'static, WordApp> {
+        let mut app = app_with("Font draft");
+        app.ui.language = "en".into();
+        app.run("select.all", json!({})).unwrap();
+        app.dialog = Dialog::open("font", &mut app);
+        egui_kittest::Harness::builder().with_size(vec2(1440.0, 900.0)).build_ui_state(
+            |ui, app: &mut WordApp| {
+                let ctx = ui.ctx().clone();
+                app.logic(&ctx);
+                app.ui(ui);
+            },
+            app,
+        )
+    }
+
+    #[test]
+    fn font_dialog_nested_cancel_preserves_the_parent_and_outer_cancel_discards_all_drafts() {
+        use egui_kittest::kittest::Queryable;
+        let mut h = font_harness();
+        h.run_steps(4);
+        let before = h.state().session.doc.clone();
+        let prefs = h.state().session.prefs.clone();
+        if let Some(Dialog::Font { size, .. }) = &mut h.state_mut().dialog {
+            *size = "18".into();
+        }
+        h.get_by_label("Text Effects…").click();
+        h.run_steps(4);
+        h.get_by_label("Text Fill").click();
+        h.run_steps(4);
+        h.key_press(egui::Key::Escape);
+        h.run_steps(4);
+        assert!(matches!(&h.state().dialog, Some(Dialog::Font { child: Some(FontChild::Effects { .. }), .. })));
+        h.key_press(egui::Key::Escape);
+        h.run_steps(4);
+        assert!(matches!(&h.state().dialog,Some(Dialog::Font { child:None,size,effects,.. }) if size=="18" && effects.is_empty()));
+        h.get_by_label("Text Effects…").click();
+        h.run_steps(4);
+        h.get_by_label("Clear Text Effects").click();
+        h.run_steps(4);
+        h.get_by_role_and_label(egui::accesskit::Role::Button, "OK").click();
+        h.run_steps(4);
+        assert!(matches!(&h.state().dialog,Some(Dialog::Font { effects,.. }) if effects.get("clear")==Some(&json!(true))));
+        h.get_by_label("Set As Default").click();
+        h.run_steps(4);
+        assert!(h.query_by_label("Changes are saved when you click OK in the Font dialog.").is_none());
+        h.get_by_label("All new blank documents").click();
+        h.run_steps(4);
+        h.get_by_role_and_label(egui::accesskit::Role::Button, "OK").click();
+        h.run_steps(4);
+        assert!(matches!(&h.state().dialog,Some(Dialog::Font { default_scope:Some(scope),.. }) if scope=="future"));
+        assert_eq!(h.state().session.doc, before);
+        assert_eq!(h.state().session.prefs, prefs);
+        h.get_by_label("Cancel").click();
+        h.run_steps(4);
+        assert!(h.state().dialog.is_none());
+        assert_eq!(h.state().session.doc, before);
+        assert_eq!(h.state().session.prefs, prefs);
+    }
+
+    #[test]
+    fn font_dialog_ui_enforces_exclusive_effects_and_keeps_values_across_tabs() {
+        use egui_kittest::kittest::Queryable;
+        let mut h = font_harness();
+        h.run_steps(4);
+        for name in ["Strikethrough", "Double strikethrough", "Superscript", "Subscript", "Hidden"] {
+            h.get_by_role_and_label(egui::accesskit::Role::CheckBox, name).click();
+            h.run_steps(4);
+        }
+        assert!(matches!(&h.state().dialog, Some(Dialog::Font { strike: false, double_strike: true, sup: false, sub: true, hidden: true, .. })));
+        assert!(h.query_by_label("Hidden text is shown with a dotted underline.").is_none());
+        h.get_by_label("Advanced").click();
+        h.run_steps(4);
+        h.get_by_role_and_label(egui::accesskit::Role::Button, "Font").click();
+        h.run_steps(4);
+        assert!(matches!(&h.state().dialog, Some(Dialog::Font { double_strike: true, sub: true, hidden: true, .. })));
+        h.get_by_role_and_label(egui::accesskit::Role::Button, "OK").click();
+        h.run_steps(4);
+        let state = wordcraft_engine::cmd::format::state(&h.state().session);
+        assert_eq!((state["strike"].clone(), state["doubleStrike"].clone()), (json!(false), json!(true)));
+        assert_eq!((state["superscript"].clone(), state["subscript"].clone()), (json!(false), json!(true)));
+        assert_eq!(state["hidden"], true);
+    }
+
+    #[test]
+    fn font_dialog_defaults_and_both_tabs_commit_once_and_restore_after_restart() {
+        use wordcraft_doc::props::{Ligatures, NumberForm, NumberSpacing};
+        let mut app = app_with("Defaults");
+        app.run("select.all", json!({})).unwrap();
+        let before = app.session.doc.clone();
+        let mut d = Dialog::open("font", &mut app).unwrap();
+        let Dialog::Font { font, size, sup, underline, underline_color, advanced, effects, default_scope, .. } = &mut d else { panic!() };
+        *font = "+Body".into();
+        *size = "18".into();
+        *sup = true;
+        *underline = wordcraft_doc::props::Underline::DoubleWave;
+        *underline_color = "2468AC".into();
+        advanced.scale = 125.0;
+        advanced.position = 2.5;
+        advanced.ligatures = Some(Ligatures::All);
+        advanced.number_form = NumberForm::OldStyle;
+        advanced.number_spacing = NumberSpacing::Tabular;
+        advanced.stylistic_sets = (1 << 19) | 1;
+        advanced.contextual_alternates = true;
+        effects.insert("fill".into(), json!("C03050"));
+        *default_scope = Some("future".into());
+        assert!(apply_font(&mut app, &d));
+        let state = wordcraft_engine::cmd::format::state(&app.session);
+        assert_eq!(state["fontTheme"], "body");
+        assert_eq!(state["size"], 18.0);
+        assert_eq!(state["ligatures"], "all");
+        assert_eq!(state["stylisticSets"], (1 << 19) | 1);
+        assert_eq!(state["scale"], 125.0);
+        assert_eq!(state["numberForm"], "oldStyle");
+        assert_eq!(state["textEffects"]["fill"]["color"], json!([192, 48, 80]));
+        let saved = serde_json::to_vec(&app.prefs()).unwrap();
+        app.run("edit.undo", json!({})).unwrap();
+        assert_eq!(app.session.doc, before);
+        let mut restart = WordApp::new(Session::new(wordcraft_doc::Document::new()), crate::Services::default());
+        restart.apply_prefs(serde_json::from_slice(&saved).unwrap());
+        let state = wordcraft_engine::cmd::format::state(&restart.session);
+        assert_eq!(state["size"], 18.0);
+        assert_eq!(state["superscript"], true);
+        assert_eq!(state["ligatures"], "all");
+        assert_eq!(state["textEffects"]["fill"]["color"], json!([192, 48, 80]));
     }
 }

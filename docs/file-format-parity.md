@@ -1,6 +1,6 @@
 # File-format parity with Microsoft Word
 
-> **Last reviewed:** 2026-10-11 · **Last updated:** 2026-10-15 · **Change:** minor (Font dialog completion and effects round trips); previous: trivial (symbol-font text exported as Unicode, #776; previously trivial: text-box margins, Resize shape to fit text and freeforms in groups, #743; previously trivial: formatted paste from the system clipboard's HTML and RTF, #687; previously trivial: independent complex-script formatting inheritance and round-trip regression tests; previously trivial: import/export fixes for TXT, RTF, ODT, HTML and LaTeX, #433–#440; previously major: first version; every format Word reads or writes, measured from the readers and writers on origin/main) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4, plus Word for Windows' extra formats
+> **Last reviewed:** 2026-10-11 · **Last updated:** 2026-10-15 · **Change:** minor (Font dialog persistence regressions); previous: trivial (symbol-font text exported as Unicode, #776; previously trivial: text-box margins, Resize shape to fit text and freeforms in groups, #743; previously trivial: formatted paste from the system clipboard's HTML and RTF, #687; previously trivial: independent complex-script formatting inheritance and round-trip regression tests; previously trivial: import/export fixes for TXT, RTF, ODT, HTML and LaTeX, #433–#440; previously major: first version; every format Word reads or writes, measured from the readers and writers on origin/main) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4, plus Word for Windows' extra formats
 
 Every format Word opens or saves, what WordCraft does with it, and how it's tested. Fidelity is the
 share of a typical real-world file's content and formatting that survives (read: shows correctly;
@@ -12,7 +12,7 @@ gives ~64%; we discount it to ~60% because DOCX fidelity has never been checked 
 files. DOCX dominates the weight: a Word user sends and receives .docx; everything else is
 occasional.
 
-The Font dialog preserves Latin theme-font links and DOCX ligatures, number forms/spacing, stylistic sets and contextual alternates. One-off save/reopen checks cover these fields and explicit zero-radius/transparent decoration overrides, so No Shadow/Glow/Reflection remains off when a style supplies an effect. The reader and writer now convert model transparency to and from `w14:alpha` opacity, following [MS-DOCX CT_SRgbColor](https://learn.microsoft.com/en-us/openspecs/office_standards/ms-docx/10a451b3-6054-4e0a-b1b2-b68fe9316533). All 47 existing round-trip tests pass; dedicated new regression tests and fresh cross-application qualification remain deferred.
+The Font dialog preserves Latin theme-font links and DOCX ligatures, number forms/spacing, stylistic sets and contextual alternates. One-off save/reopen checks cover these fields and explicit zero-radius/transparent decoration overrides, so No Shadow/Glow/Reflection remains off when a style supplies an effect. The reader and writer now convert model transparency to and from `w14:alpha` opacity, following [MS-DOCX CT_SRgbColor](https://learn.microsoft.com/en-us/openspecs/office_standards/ms-docx/10a451b3-6054-4e0a-b1b2-b68fe9316533). Permanent regressions now cover theme/OpenType round trips, independent opacity expectations on import/export and inherited decoration removal after save/reopen. Fresh cross-application qualification remains pending.
 
 ## Formats
 
@@ -165,6 +165,7 @@ raise readiness estimates. No Word-derived files are fixtures.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-15 | minor | Added twelve focused Font dialog regressions for cancellation, exclusivity, defaults/undo, raster preview size and scripts, DOCX theme/OpenType fields, opacity and inherited effect removal. `cargo xtask ci` passes all six gates; fresh live Word qualification remains pending. |
 | 2026-10-15 | minor | Font dialog completion: 677 translation entries across all 18 non-English catalogs; explicit invisible decoration overrides survive style inheritance and DOCX round trips; w14 alpha now uses opacity as specified. Focused tests, headless interaction/visual checks, assets, layers, Clippy and WASM pass. New regression tests, full CI and a fresh live Word comparison remain deferred. |
 | 2026-10-15 | minor | Font dialog preview uses document shaping and raster rendering with a fixed baseline for superscript/subscript, a bounded sample, one cached raster, and the same pending-property patch as OK. Dot-dash, dot-dot-dash and double-wave underlines are distinct on screen and in PDF. New regression tests and full Word qualification remain deferred. |
 | 2026-10-15 | minor | Font dialog phase 1: Font/Advanced tabs, font/style/size lists, theme Body/Headings links, underline style/colour, exclusive effects, character spacing and OpenType controls. Document-font preview, defaults, Text Effects and new translations remain pending. |

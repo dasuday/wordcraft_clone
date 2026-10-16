@@ -1,6 +1,6 @@
 # UI parity with Microsoft Word
 
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-15 · **Change:** minor (Font preview point-size accuracy); previous: trivial (selection bar in the left margin, #856; previously trivial: table column and row markers on the rulers, #700; previously trivial: table borders and the resize handle drag on the page, #217; previously major: first version; ribbon, dialogs, shortcuts and on-canvas interaction measured from `crates/ui-egui` and the command registry) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4
+> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-15 · **Change:** minor (Font dialog regression coverage); previous: trivial (selection bar in the left margin, #856; previously trivial: table column and row markers on the rulers, #700; previously trivial: table borders and the resize handle drag on the page, #217; previously major: first version; ribbon, dialogs, shortcuts and on-canvas interaction measured from `crates/ui-egui` and the command registry) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4
 
 How WordCraft looks and feels next to Word: ribbon, dialogs, panes, keyboard, mouse and touch.
 
@@ -10,7 +10,7 @@ Set As Default stages this-document or future blank-document settings. Text Effe
 
 Definition of done for this implementation: controls and preview share the command path; unchanged properties remain inherited; paired effects are exclusive; cancellation leaves document and preferences unchanged; defaults survive preference reload; new fields and explicit decoration removals survive DOCX save/reopen; new labels exist in every supported catalog. Headless captures were checked against the supplied Word references, with additional French, German, Russian, Chinese and dark-theme captures.
 
-Verification: 116 existing focused tests pass (57 localization, 47 DOCX round-trip, 3 WordArt, 2 Font dialog, 6 preview and 1 hostile-parameter guard; one additional localization test remains ignored). One-off assertions cover nested Cancel/close/Escape, staged settings, one-step undo, preference round trips and inherited decoration removal. Clippy, WASM, asset attribution, layering and formatting checks pass; WASM still reports the two pre-existing warnings. No new regression tests, full CI or fresh live Word/native-speaker qualification is claimed. Overall parity estimates are unchanged.
+Verification: twelve focused regression tests cover nested Cancel/Escape and staged defaults/effects, exclusive strike/script controls across tabs, one-step undo and preference reload, preview/document glyph-size agreement at 12/28/48 pt, superscript/subscript placement, clipping without shrinking, theme/OpenType DOCX persistence, opacity and inherited effect removal. `cargo xtask ci` passes all six gates (formatting, Clippy, workspace tests, assets, layers and WASM): 1,921 tests pass and two existing tests remain ignored. Fresh live Word/native-speaker qualification remains pending; overall parity estimates are unchanged.
 
 **Dimension: ~65% (estimated), 61–94 h to full** (the sum of the rows below; dialog depth is counted here, not under features).
 
@@ -52,6 +52,7 @@ Verification: 116 existing focused tests pass (57 localization, 47 DOCX round-tr
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-15 | minor | Added twelve focused Font dialog regressions for cancellation, exclusivity, defaults/undo, raster preview size and scripts, DOCX theme/OpenType fields, opacity and inherited effect removal. `cargo xtask ci` passes all six gates; fresh live Word qualification remains pending. |
 | 2026-10-15 | minor | Font preview uses the canvas 100% point conversion (96/72 screen units per document point). Text keeps the selected size; long or oversized samples clip at the tile bounds instead of shrinking. |
 | 2026-10-15 | trivial | Font/size scrollbars retain normal hover/fade behavior with fixed list widths. Removed the Set As Default explanatory note. |
 | 2026-10-15 | minor | Font and size lists keep fixed scroll-area widths with reserved scrollbar gutters; long font names remain single-row with tooltips. Hidden uses its preview marker without an explanatory message. |

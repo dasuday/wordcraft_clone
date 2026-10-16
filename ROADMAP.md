@@ -2,7 +2,7 @@
 
 **Stage: alpha** · next: beta, ~15 points (60% → 75% ready for real work) and ~150–230 h away
 
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-15 · **Change:** minor (Font preview point-size accuracy); previous: trivial (progress log: symbol fonts, #776; previously trivial: the save prompt answers from the keyboard, #861; previously trivial: table column and row markers on the rulers, #700; previously trivial: table borders and the resize handle drag on the page, #217; previously trivial: formatting revisions landed, #41; previously trivial: Draw tab ink, #307, and Draw Table and Eraser, #303, landed: catalog 402/434; previously minor: readiness table with hours per audience; full number back to the additive weighted sum, 60%; mainstream and essentials numbers added; alpha gate checked; previously major: full re-measure against Word for Mac 16.113.4; restructured to the craftrules progress-docs standard) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4
+> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-15 · **Change:** minor (Font dialog regression coverage); previous: trivial (progress log: symbol fonts, #776; previously trivial: the save prompt answers from the keyboard, #861; previously trivial: table column and row markers on the rulers, #700; previously trivial: table borders and the resize handle drag on the page, #217; previously trivial: formatting revisions landed, #41; previously trivial: Draw tab ink, #307, and Draw Table and Eraser, #303, landed: catalog 402/434; previously minor: readiness table with hours per audience; full number back to the additive weighted sum, 60%; mainstream and essentials numbers added; alpha gate checked; previously major: full re-measure against Word for Mac 16.113.4; restructured to the craftrules progress-docs standard) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4
 
 > **Printing update:** 2026-10-12 · direct desktop printing through craft-print; details below.
 
@@ -135,6 +135,7 @@ Ranked, to beta (detail and remaining milestones in [docs/roadmap.md](docs/roadm
 
 | Date | What landed |
 |---|---|
+| 2026-10-15 | Added twelve focused Font dialog regression tests covering UI drafts, exclusive effects, defaults, preview point sizes/scripts and DOCX persistence. `cargo xtask ci` passes all six gates (formatting, Clippy, workspace tests, assets, layers and WASM): 1,921 tests pass and two existing tests remain ignored. |
 | 2026-10-15 | Font preview now matches document point sizes at 100% zoom. Overflow clips instead of reducing the chosen size. |
 | 2026-10-15 | Restored Font/size scrollbar hover/fade behavior while preserving edge alignment; removed the Set As Default explanatory note. |
 | 2026-10-15 | Font dialog polish: scrollbars stay at the font/size list edges, long font names do not wrap, and Hidden adds no explanatory message. |
@@ -280,6 +281,7 @@ Ranked, to beta (detail and remaining milestones in [docs/roadmap.md](docs/roadm
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-15 | minor | Added twelve focused Font dialog regressions for cancellation, exclusivity, defaults/undo, raster preview size and scripts, DOCX theme/OpenType fields, opacity and inherited effect removal. `cargo xtask ci` passes all six gates; fresh live Word qualification remains pending. |
 | 2026-10-15 | minor | Font preview uses the canvas 100% point conversion (96/72 screen units per document point). Text keeps the selected size; long or oversized samples clip at the tile bounds instead of shrinking. |
 | 2026-10-15 | trivial | Font/size scrollbars retain normal hover/fade behavior with fixed list widths. Removed the Set As Default explanatory note. |
 | 2026-10-15 | minor | Font and size lists keep fixed scroll-area widths with reserved scrollbar gutters; long font names remain single-row with tooltips. Hidden uses its preview marker without an explanatory message. |

@@ -113,3 +113,21 @@ fn color(e: &El, theme: &[Rgb]) -> Option<(Rgb, f32)> {
     }
     Some((rgb, transparency))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn imported_alpha_is_opacity_not_transparency() {
+        for (alpha, transparency) in [(0, 100.0), (25000, 75.0), (100000, 0.0)] {
+            let xml = format!(
+                r#"<w14:shadow xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml"><w14:srgbClr w14:val="204060"><w14:alpha w14:val="{alpha}"/></w14:srgbClr></w14:shadow>"#
+            );
+            let e = crate::xml::parse(xml.as_bytes()).unwrap();
+            let mut fx = TextEffects::default();
+            assert!(read(&e, &[], &mut fx));
+            assert_eq!(fx.shadow.unwrap().transparency, transparency);
+        }
+    }
+}
