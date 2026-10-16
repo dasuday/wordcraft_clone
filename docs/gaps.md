@@ -1,6 +1,6 @@
 # Where WordCraft falls short of Word
 
-> **Last reviewed:** 2026-10-16 · **Last updated:** 2026-10-16 · **Change:** minor (desktop Writing Assistant: saved model connection in Writing Assistant options; see [writing-assistant.md](writing-assistant.md)) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4
+> **Last reviewed:** 2026-10-16 · **Last updated:** 2026-10-16 · **Change:** minor (desktop Writing Assistant: multiple model profiles, default and session override; see [writing-assistant.md](writing-assistant.md)) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4
 
 > **Printing update:** 2026-10-12 · direct desktop printing through craft-print; details below.
 
@@ -87,6 +87,7 @@ The same gaps grouped the way the parity documents are, for agents working in on
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-16 | minor | Multiple saved model profiles, a default and a collapsed session override; existing connection migrated. |
 | 2026-10-16 | minor | Assistant connection moved to Writing Assistant options; endpoint, model and plain-text key persist across restarts. |
 | 2026-10-16 | minor | Live streaming assistant previews and guarded completion added; readiness estimates unchanged. |
 | 2026-10-16 | minor | Desktop Writing Assistant added; browser generation, streaming and saved credentials remain. Readiness estimates unchanged. |

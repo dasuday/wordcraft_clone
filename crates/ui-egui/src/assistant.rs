@@ -27,8 +27,137 @@ impl Drop for Connection {
     }
 }
 
+const MAX_PROFILES: usize = 32;
+
+#[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
+pub struct Profile {
+    id: u64,
+    name: String,
+    connection: Connection,
+}
+
+impl Profile {
+    fn label(&self) -> String {
+        let name = if self.name.trim().is_empty() { format!("{} {}", tl!("Model connection"), self.id) } else { self.name.clone() };
+        if self.connection.model.is_empty() { name } else { format!("{name} — {}", self.connection.model) }
+    }
+}
+
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct Profiles {
+    #[serde(deserialize_with = "read_profiles")]
+    entries: Vec<Profile>,
+    default_id: u64,
+    next_id: u64,
+}
+
+fn read_profiles<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<Vec<Profile>, D::Error> {
+    use serde::Deserialize;
+    let values = Vec::<Value>::deserialize(deserializer)?;
+    Ok(values.iter().take(MAX_PROFILES).map(crate::options::lenient).collect())
+}
+
+impl Default for Profiles {
+    fn default() -> Self {
+        Self { entries: vec![Profile { id: 1, ..Default::default() }], default_id: 1, next_id: 2 }
+    }
+}
+
+impl Profiles {
+    pub(crate) fn sanitize(&mut self) {
+        self.entries.truncate(MAX_PROFILES);
+        let mut ids = std::collections::HashSet::new();
+        self.entries.retain(|p| p.id != 0 && ids.insert(p.id));
+        if !self.entries.iter().any(|p| p.id == self.default_id) {
+            self.default_id = self.entries.first().map_or(0, |p| p.id);
+        }
+    }
+
+    pub(crate) fn redact(&mut self) {
+        for p in &mut self.entries {
+            p.connection.key.zeroize();
+        }
+    }
+
+    fn selected(&self, override_id: Option<u64>) -> Result<&Connection, String> {
+        let id = override_id.unwrap_or(self.default_id);
+        self.entries
+            .iter()
+            .find(|p| p.id == id)
+            .map(|p| &p.connection)
+            .ok_or_else(|| "Choose a saved model connection in Writing Assistant options".into())
+    }
+
+    fn add(&mut self) -> Result<u64, String> {
+        if self.entries.len() >= MAX_PROFILES {
+            return Err("At most 32 model connections can be saved".into());
+        }
+        let max = self.entries.iter().map(|p| p.id).max().unwrap_or(0);
+        let id = self.next_id.max(max.checked_add(1).ok_or("Model connection identifiers exhausted")?);
+        self.next_id = id.checked_add(1).ok_or("Model connection identifiers exhausted")?;
+        self.entries.push(Profile { id, ..Default::default() });
+        if self.default_id == 0 {
+            self.default_id = id;
+        }
+        Ok(id)
+    }
+
+    fn remove(&mut self, id: u64) {
+        self.entries.retain(|p| p.id != id);
+        self.sanitize();
+    }
+}
+
+/// Upgrade the original single connection without losing its key or model.
+pub(crate) fn migrate_preferences(value: &mut Value) {
+    let Some(object) = value.as_object_mut() else { return };
+    let legacy = object.remove("assistantConnection");
+    if !object.contains_key("assistantProfiles")
+        && let Some(legacy) = legacy
+    {
+        let connection: Connection = crate::options::lenient(&legacy);
+        let profiles = Profiles { entries: vec![Profile { id: 1, connection, ..Default::default() }], ..Default::default() };
+        if let Ok(saved) = serde_json::to_value(profiles) {
+            object.insert("assistantProfiles".into(), saved);
+        }
+    }
+}
+
 /// Called only by File > Options > Writing Assistant; the assistant window contains writing controls.
-pub(crate) fn settings(connection: &mut Connection, ui: &mut egui::Ui) {
+pub(crate) fn settings(profiles: &mut Profiles, state: &mut State, ui: &mut egui::Ui) {
+    if !profiles.entries.iter().any(|p| p.id == state.edit_profile) {
+        state.edit_profile = profiles.default_id;
+    }
+    let label = profiles.entries.iter().find(|p| p.id == state.edit_profile).map(Profile::label).unwrap_or_else(|| tl!("Model connection").into());
+    egui::ComboBox::from_id_salt("assistant_profile_editor").selected_text(label).show_ui(ui, |ui| {
+        for p in &profiles.entries {
+            ui.selectable_value(&mut state.edit_profile, p.id, p.label());
+        }
+    });
+    ui.horizontal(|ui| {
+        if ui.add_enabled(profiles.entries.len() < MAX_PROFILES, egui::Button::new(tl!("Add"))).clicked() {
+            match profiles.add() {
+                Ok(id) => state.edit_profile = id,
+                Err(e) => state.error = e,
+            }
+        }
+        if ui.add_enabled(!profiles.entries.is_empty(), egui::Button::new(tl!("Remove"))).clicked() {
+            profiles.remove(state.edit_profile);
+            if state.override_profile == Some(state.edit_profile) {
+                state.override_profile = None;
+            }
+            state.edit_profile = profiles.default_id;
+        }
+    });
+    let Some(profile) = profiles.entries.iter_mut().find(|p| p.id == state.edit_profile) else { return };
+    if ui.radio(profiles.default_id == profile.id, tl!("Default")).clicked() {
+        profiles.default_id = profile.id;
+    }
+    ui.label(tl!("Name"));
+    ui.add(egui::TextEdit::singleline(&mut profile.name).char_limit(128).desired_width(320.0));
+    let connection = &mut profile.connection;
     ui.label(tl!("OpenAI-compatible chat completions URL"));
     ui.add(
         egui::TextEdit::singleline(&mut connection.endpoint)
@@ -51,6 +180,8 @@ enum Update {
 
 pub struct State {
     pub open: bool,
+    edit_profile: u64,
+    override_profile: Option<u64>,
     mode: String,
     prompt: String,
     request: Option<Value>,
@@ -64,6 +195,8 @@ impl Default for State {
     fn default() -> Self {
         Self {
             open: false,
+            edit_profile: 0,
+            override_profile: None,
             mode: "draft".into(),
             prompt: String::new(),
             request: None,
@@ -87,7 +220,7 @@ pub fn command(app: &mut WordApp, id: &str, v: &Value) -> Result<Value, String> 
                 .session
                 .run("assistant.prepare", &json!({"mode":app.assistant.mode, "prompt":app.assistant.prompt}))
                 .map_err(|e| e.to_string())?;
-            let rx = start(&app.ui.assistant_connection, &request)?;
+            let rx = start(app.ui.assistant_profiles.selected(app.assistant.override_profile)?, &request)?;
             app.assistant.request = Some(request);
             app.assistant.pending = Some(rx);
             app.assistant.cancelled = false;
@@ -334,6 +467,27 @@ pub fn show(app: &mut WordApp, ctx: &egui::Context) {
         if ui.button(tl!("Model connection")).clicked() {
             action = Some(("file.options", json!({"pane":"assistant"})));
         }
+        let model_label = state
+            .override_profile
+            .and_then(|id| app.ui.assistant_profiles.entries.iter().find(|p| p.id == id))
+            .map(Profile::label)
+            .unwrap_or_else(|| tl!("Default").into());
+        egui::CollapsingHeader::new(format!("{} — {model_label}", tl!("Model"))).id_salt("assistant_model_choice").default_open(false).show(
+            ui,
+            |ui| {
+                ui.add_enabled_ui(state.pending.is_none(), |ui| {
+                    let profiles = &app.ui.assistant_profiles;
+                    let default_name = profiles.entries.iter().find(|p| p.id == profiles.default_id).map(Profile::label).unwrap_or_default();
+                    ui.radio_value(&mut state.override_profile, None, format!("{} — {default_name}", tl!("Default")));
+                    egui::ScrollArea::vertical().max_height(160.0).show(ui, |ui| {
+                        for profile in &profiles.entries {
+                            ui.radio_value(&mut state.override_profile, Some(profile.id), profile.label())
+                                .on_hover_text(&profile.connection.endpoint);
+                        }
+                    });
+                });
+            },
+        );
         ui.horizontal(|ui| {
             for (mode, label) in [("draft", tl!("Draft")), ("rewrite", tl!("Rewrite")), ("summarize", tl!("Summarize"))] {
                 ui.selectable_value(&mut state.mode, mode.into(), label);
@@ -396,9 +550,105 @@ mod tests {
     use super::*;
 
     #[test]
+    fn profiles_keep_defaults_across_restarts_and_overrides_are_temporary() {
+        let mut app = WordApp::new(wordcraft_engine::Session::new(wordcraft_engine::doc::Document::new()), crate::Services::default());
+        app.ui.assistant_profiles.entries[0].connection.model = "first".into();
+        let id = app.ui.assistant_profiles.add().unwrap();
+        app.ui.assistant_profiles.entries[1].connection.model = "second".into();
+        app.ui.assistant_profiles.entries[1].connection.key = "second-secret".into();
+        app.ui.assistant_profiles.default_id = id;
+        app.assistant.override_profile = Some(1);
+        assert_eq!(app.ui.assistant_profiles.selected(app.assistant.override_profile).unwrap().model, "first");
+        assert_eq!(app.ui.assistant_profiles.selected(None).unwrap().model, "second");
+        let saved = serde_json::to_vec(&app.prefs()).unwrap();
+        let mut restored = WordApp::new(wordcraft_engine::Session::new(wordcraft_engine::doc::Document::new()), crate::Services::default());
+        restored.apply_prefs(crate::UiState::from_json(&saved).unwrap());
+        assert!(restored.assistant.override_profile.is_none());
+        assert_eq!(restored.ui.assistant_profiles.selected(None).unwrap().model, "second");
+        assert!(!crate::control::inspect(&mut restored, &egui::Context::default()).to_string().contains("second-secret"));
+        restored.ui.assistant_profiles.remove(id);
+        assert_eq!(restored.ui.assistant_profiles.default_id, 1);
+        assert!(restored.ui.assistant_profiles.selected(Some(id)).is_err());
+        assert!(restored.ui.assistant_profiles.add().unwrap() > id);
+        restored.ui.assistant_profiles.remove(1);
+        let last = restored.ui.assistant_profiles.default_id;
+        restored.ui.assistant_profiles.remove(last);
+        assert!(restored.ui.assistant_profiles.selected(None).is_err());
+        let new = restored.ui.assistant_profiles.add().unwrap();
+        assert_eq!(restored.ui.assistant_profiles.default_id, new);
+    }
+
+    #[test]
+    fn profile_loading_is_bounded_and_preserves_valid_settings() {
+        let raw = json!({"assistantProfiles":{"entries":[
+            {"id":1,"name":"One","connection":{"model":"first","key":"key1"}},
+            {"id":2,"name":"Two","connection":{"model":false,"key":"key2"}},
+            {"id":1,"name":"Duplicate"}
+        ],"defaultId":999},"author":"Writer"});
+        let mut ui = crate::UiState::from_json(&serde_json::to_vec(&raw).unwrap()).unwrap();
+        ui.assistant_profiles.sanitize();
+        assert_eq!(ui.assistant_profiles.entries.len(), 2);
+        assert_eq!(ui.assistant_profiles.default_id, 1);
+        assert_eq!(ui.assistant_profiles.entries[1].connection.key, "key2");
+        assert!(ui.assistant_profiles.entries[1].connection.model.is_empty());
+        assert_eq!(ui.author, "Writer");
+        while ui.assistant_profiles.entries.len() < MAX_PROFILES {
+            ui.assistant_profiles.add().unwrap();
+        }
+        assert!(ui.assistant_profiles.add().is_err());
+        ui.assistant_profiles.remove(1);
+        ui.assistant_profiles.next_id = u64::MAX;
+        assert!(ui.assistant_profiles.add().is_err());
+        // A new-format empty list wins over any stale legacy connection.
+        let empty = crate::UiState::from_json(br#"{"assistantProfiles":{"entries":[]},"assistantConnection":{"key":"old"}}"#).unwrap();
+        assert!(empty.assistant_profiles.entries.is_empty());
+    }
+
+    #[test]
+    fn model_override_is_collapsed_and_does_not_change_default() {
+        use egui_kittest::kittest::Queryable;
+        let mut app = WordApp::new(wordcraft_engine::Session::new(wordcraft_engine::doc::Document::new()), crate::Services::default());
+        app.ui.assistant_profiles.entries[0].name = "Primary".into();
+        let second = app.ui.assistant_profiles.add().unwrap();
+        app.ui.assistant_profiles.entries[1].name = "Alternative".into();
+        app.assistant.open = true;
+        let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(1000.0, 800.0)).build_ui_state(
+            |ui, app: &mut WordApp| {
+                let ctx = ui.ctx().clone();
+                app.logic(&ctx);
+                app.ui(ui);
+            },
+            app,
+        );
+        h.run_steps(4);
+        assert!(h.query_by_label("Alternative").is_none());
+        h.get_by_label("Model — Default").click();
+        h.run_steps(4);
+        h.get_by_label("Alternative").click();
+        h.run_steps(4);
+        assert_eq!(h.state().assistant.override_profile, Some(second));
+        assert_eq!(h.state().ui.assistant_profiles.default_id, 1);
+        h.get_by_label("Default — Primary").click();
+        h.run_steps(4);
+        assert!(h.state().assistant.override_profile.is_none());
+        h.get_by_label("Model connection").click();
+        h.run_steps(4);
+        h.get_by_label("Add").click();
+        h.run_steps(4);
+        assert_eq!(h.state().ui.assistant_profiles.entries.len(), 3);
+        let added = h.state().assistant.edit_profile;
+        h.get_by_label("Default").click();
+        h.run_steps(4);
+        assert_eq!(h.state().ui.assistant_profiles.default_id, added);
+        h.get_by_label("Remove").click();
+        h.run_steps(4);
+        assert_eq!(h.state().ui.assistant_profiles.default_id, 1);
+    }
+
+    #[test]
     fn connection_preferences_survive_restart_without_saving_writing_content() {
         let mut app = WordApp::new(wordcraft_engine::Session::new(wordcraft_engine::doc::Document::new()), crate::Services::default());
-        app.ui.assistant_connection = Connection {
+        app.ui.assistant_profiles.entries[0].connection = Connection {
             endpoint: "https://models.example.com/v1/chat/completions".into(),
             model: "my-model".into(),
             key: "test-persisted-key".into(),
@@ -407,35 +657,35 @@ mod tests {
         app.assistant.result = "private draft".into();
         let saved = serde_json::to_vec(&app.prefs()).unwrap();
         let json: Value = serde_json::from_slice(&saved).unwrap();
-        assert_eq!(json["assistantConnection"]["key"], "test-persisted-key");
+        assert_eq!(json["assistantProfiles"]["entries"][0]["connection"]["key"], "test-persisted-key");
         assert!(!String::from_utf8_lossy(&saved).contains("private"));
         let mut restored = WordApp::new(wordcraft_engine::Session::new(wordcraft_engine::doc::Document::new()), crate::Services::default());
         restored.apply_prefs(crate::UiState::from_json(&saved).unwrap());
-        assert_eq!(restored.ui.assistant_connection.endpoint, app.ui.assistant_connection.endpoint);
-        assert_eq!(restored.ui.assistant_connection.model, "my-model");
-        assert_eq!(restored.ui.assistant_connection.key, "test-persisted-key");
+        assert_eq!(restored.ui.assistant_profiles.entries[0].connection.endpoint, app.ui.assistant_profiles.entries[0].connection.endpoint);
+        assert_eq!(restored.ui.assistant_profiles.entries[0].connection.model, "my-model");
+        assert_eq!(restored.ui.assistant_profiles.entries[0].connection.key, "test-persisted-key");
         assert!(!format!("{:?}", restored.prefs()).contains("test-persisted-key"));
         let inspection = crate::control::inspect(&mut restored, &egui::Context::default());
         assert!(!inspection.to_string().contains("test-persisted-key"));
-        assert_eq!(restored.ui.assistant_connection.key, "test-persisted-key");
+        assert_eq!(restored.ui.assistant_profiles.entries[0].connection.key, "test-persisted-key");
         // Clearing a key is saved too; an old key must not come back on restart.
-        restored.ui.assistant_connection.key.clear();
+        restored.ui.assistant_profiles.entries[0].connection.key.clear();
         let cleared = serde_json::to_vec(&restored.prefs()).unwrap();
-        assert!(crate::UiState::from_json(&cleared).unwrap().assistant_connection.key.is_empty());
+        assert!(crate::UiState::from_json(&cleared).unwrap().assistant_profiles.entries[0].connection.key.is_empty());
     }
 
     #[test]
     fn old_and_malformed_preferences_keep_valid_fields() {
         let old = crate::UiState::from_json(br#"{"author":"Writer"}"#).unwrap();
-        assert!(old.assistant_connection.endpoint.is_empty());
+        assert!(old.assistant_profiles.entries[0].connection.endpoint.is_empty());
         assert_eq!(old.author, "Writer");
         let saved = crate::UiState::from_json(
             br#"{"assistantConnection":{"endpoint":"https://example.com/v1/chat/completions","model":42,"key":"saved-key"},"author":"Writer"}"#,
         )
         .unwrap();
-        assert_eq!(saved.assistant_connection.endpoint, "https://example.com/v1/chat/completions");
-        assert!(saved.assistant_connection.model.is_empty());
-        assert_eq!(saved.assistant_connection.key, "saved-key");
+        assert_eq!(saved.assistant_profiles.entries[0].connection.endpoint, "https://example.com/v1/chat/completions");
+        assert!(saved.assistant_profiles.entries[0].connection.model.is_empty());
+        assert_eq!(saved.assistant_profiles.entries[0].connection.key, "saved-key");
         assert_eq!(saved.author, "Writer");
     }
 
@@ -635,12 +885,23 @@ mod tests {
             .unwrap();
         });
         let mut app = WordApp::new(wordcraft_engine::Session::new(wordcraft_engine::doc::Document::new()), crate::Services::default());
-        app.ui.assistant_connection.endpoint = format!("http://{address}/v1/chat/completions");
-        app.ui.assistant_connection.model = "test-model".into();
-        app.ui.assistant_connection.key = "test-key".into();
+        app.ui.assistant_profiles.entries[0].connection.endpoint = format!("http://{address}/v1/chat/completions");
+        app.ui.assistant_profiles.entries[0].connection.model = "test-model".into();
+        app.ui.assistant_profiles.entries[0].connection.key = "test-key".into();
+        let connection = app.ui.assistant_profiles.entries[0].connection.clone();
+        let second = app.ui.assistant_profiles.add().unwrap();
+        app.ui.assistant_profiles.entries[1].connection = connection;
+        app.ui.assistant_profiles.entries[0].connection.endpoint = "http://127.0.0.1:1/v1/chat/completions".into();
+        app.ui.assistant_profiles.entries[0].connection.key = "wrong-key".into();
+        if streaming {
+            app.ui.assistant_profiles.default_id = second;
+        }
         let saved = serde_json::to_vec(&app.prefs()).unwrap();
         let mut app = WordApp::new(wordcraft_engine::Session::new(wordcraft_engine::doc::Document::new()), crate::Services::default());
         app.apply_prefs(crate::UiState::from_json(&saved).unwrap());
+        if !streaming {
+            app.assistant.override_profile = Some(second);
+        }
         app.assistant.prompt = "A greeting".into();
         command(&mut app, "ui.assistant.generate", &json!({})).unwrap();
         let rx = app.assistant.pending.take().unwrap();

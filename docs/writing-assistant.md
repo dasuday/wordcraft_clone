@@ -1,6 +1,6 @@
 # Writing Assistant
 
-> **Last reviewed:** 2026-10-16 · **Last updated:** 2026-10-16 · **Change:** minor (model connection in dedicated options pane)
+> **Last reviewed:** 2026-10-16 · **Last updated:** 2026-10-16 · **Change:** minor (saved model profiles, default and session override)
 
 ## Use
 
@@ -8,16 +8,24 @@ Open **Home › Assistant › Writing Assistant**, or search for **Writing Assis
 command search. Place the caret for a draft, or select the text to rewrite or summarize.
 
 1. Go to **File › Options › Writing Assistant**, or click **Model connection** in the
-   assistant to open Writing Assistant options. Enter the full chat completions endpoint and a model name
-   supported by that server. Supply an API key if required. All three values use WordCraft's
+   assistant to open Writing Assistant options. Use **Add** to save another connection. Give each
+   profile a name, full chat completions endpoint, model name and optional API key. Select a profile
+   in the list to edit it; select **Default** to make it the default. **Remove** deletes that profile.
+   Up to 32 profiles can be saved, including multiple models at the same endpoint. All values use WordCraft's
    normal preferences: saved in local `ui.json` on normal exit and restored on the next launch.
    The key is visible in Options and saved in plain text, as requested. It is omitted from
    diagnostic inspection and debug output and never stored in documents. Clear the key field
    to remove it from the next saved preferences. Runs with `WORDCRAFT_NO_PREFS` do not retain settings.
+   Existing single-connection settings automatically become the first default profile.
 2. Choose **Draft**, **Rewrite**, or **Summarize** and enter instructions. Draft requires
    instructions; Rewrite and Summarize require selected text. For example: “Make this more
    concise while keeping the technical details” or “Summarize in three sentences.”
-3. Click **Generate**. Only the instructions and selected plain text go to the configured
+3. The assistant starts with **Model — Default** collapsed. Expand it to choose a saved model
+   for this app session, or choose **Default** to follow the default set in Options. This override
+   does not change the saved default and resets on restart. Selection is disabled during generation;
+   an in-flight request keeps its original endpoint, model and key. Removing the default selects
+   the first remaining profile; removing the session override returns it to Default.
+   Click **Generate**. Only the instructions and selected plain text go to the chosen
    endpoint. The preview fills as text arrives and follows new text while you stay at the bottom.
    No surrounding text, files, images, history, or tool access is supplied.
 4. Once generation finishes successfully, review and optionally edit the preview. **Insert after selection** preserves the source and
@@ -127,6 +135,13 @@ diagnostic redaction; both HTTP mock tests generate using restored preferences. 
 and its assistant shortcut were rendered and visually checked. Formatting, Clippy, assets,
 layers and WASM checks pass; full CI still encounters the existing PDF right-to-left tests.
 
+Profile follow-up: 567 UI tests passed (two ignored), and all 15 assistant tests pass after the
+final UI adjustments. Coverage includes default/override routing to an HTTP mock, migration,
+multiple keys, malformed settings, profile limits, deletion and collapsed UI controls. Both the
+profile editor and expanded selector were rendered with synthetic profiles and visually checked.
+Formatting, workspace Clippy, assets, layers and all 16 WASM checks pass. Full CI stops at the
+existing renderer colour-emoji tests on this machine.
+
 Network generation uses native TLS and the platform certificate store. Linux/BSD builds require
 the native TLS backend's system OpenSSL build/runtime dependencies; cross-platform packaging
 and a live connection to your particular hosted model have not been verified here.
@@ -135,6 +150,7 @@ and a live connection to your particular hosted model have not been verified her
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-16 | minor | Multiple saved server/model profiles, default selection, collapsed session override and single-connection migration |
 | 2026-10-16 | minor | Connection settings moved to Writing Assistant options and retained through the normal preferences lifecycle; plain-text key storage |
 | 2026-10-16 | minor | Live streaming previews, completion guards and incremental transport tests |
 | 2026-10-16 | minor | Initial implementation and scoped comparison with PR #178 |

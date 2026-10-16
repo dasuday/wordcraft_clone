@@ -149,7 +149,7 @@ pub fn page(app: &mut WordApp, ui: &mut Ui) {
                 "agents" => agents(ui),
                 "assistant" => {
                     section(ui, "Writing Assistant");
-                    crate::assistant::settings(&mut app.ui.assistant_connection, ui);
+                    crate::assistant::settings(&mut app.ui.assistant_profiles, &mut app.assistant, ui);
                 }
                 _ => general(app, ui),
             }

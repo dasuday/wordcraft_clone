@@ -267,7 +267,7 @@ pub struct UiState {
     /// Editing preferences; the session owns them while running (see [`WordApp::prefs`]).
     pub editing: wordcraft_engine::Prefs,
     /// File > Options > Writing Assistant: external writing model, saved with other local preferences.
-    pub assistant_connection: assistant::Connection,
+    pub assistant_profiles: assistant::Profiles,
     /// Read Aloud speed (1 = normal) and whether it skips citations and bibliographies.
     pub read_aloud_rate: f32,
     pub read_aloud_skip_citations: bool,
@@ -359,7 +359,7 @@ impl Default for UiState {
             window: None,
             language: i18n::AUTO.into(),
             editing: wordcraft_engine::Prefs::default(),
-            assistant_connection: assistant::Connection::default(),
+            assistant_profiles: assistant::Profiles::default(),
             read_aloud_rate: 1.0,
             read_aloud_skip_citations: true,
             keytips_enabled: true,
@@ -395,6 +395,7 @@ impl UiState {
         if !v.is_object() {
             return None;
         }
+        assistant::migrate_preferences(&mut v);
         migrate_units(&mut v);
         Some(options::lenient(&v))
     }
@@ -695,6 +696,7 @@ impl WordApp {
     /// Restore preferences saved by [`WordApp::prefs`].
     pub fn apply_prefs(&mut self, ui: UiState) {
         self.ui = ui;
+        self.ui.assistant_profiles.sanitize();
         self.ui.backstage = false;
         // Word opens on Home every launch, so the tab `ui.json` holds is not restored. Going File
         // and back to the editor within the run still returns to the tab that was showing.

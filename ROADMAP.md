@@ -2,7 +2,7 @@
 
 **Stage: alpha** · next: beta, ~15 points (60% → 75% ready for real work) and ~150–230 h away
 
-> **Last reviewed:** 2026-10-16 · **Last updated:** 2026-10-16 · **Change:** minor (desktop Writing Assistant: saved model connection in Writing Assistant options; see [writing-assistant.md](docs/writing-assistant.md)) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4
+> **Last reviewed:** 2026-10-16 · **Last updated:** 2026-10-16 · **Change:** minor (desktop Writing Assistant: multiple model profiles, default and session override; see [writing-assistant.md](docs/writing-assistant.md)) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4
 > **Printing update:** 2026-10-12 · direct desktop printing through craft-print; details below.
 
 WordCraft aims for complete parity with Microsoft Word, then goes further on speed, openness and
@@ -134,6 +134,7 @@ Ranked, to beta (detail and remaining milestones in [docs/roadmap.md](docs/roadm
 ## Progress log
 
 | Date | What landed |
+| 2026-10-16 | Writing Assistant supports saved server/model profiles, default selection and a collapsed model override. |
 | 2026-10-16 | Writing Assistant connection settings now live in Writing Assistant options and persist with other preferences. |
 | 2026-10-16 | Writing Assistant now displays incoming text incrementally, with acceptance disabled until completion. |
 | 2026-10-16 | Desktop Writing Assistant: configurable model connection, draft/rewrite/summarize, editable previews, guarded acceptance and Undo. PR #178 reviewed for overlap; external-agent chat stays separate. |
@@ -405,6 +406,7 @@ Ranked, to beta (detail and remaining milestones in [docs/roadmap.md](docs/roadm
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-16 | minor | Multiple saved model profiles, a default and a collapsed session override; existing connection migrated. |
 | 2026-10-16 | minor | Assistant connection moved to Writing Assistant options; endpoint, model and plain-text key persist across restarts. |
 | 2026-10-16 | minor | Live streaming assistant previews and guarded completion added; readiness estimates unchanged. |
 | 2026-10-16 | minor | Desktop Writing Assistant added; browser generation, streaming and saved credentials remain. Readiness estimates unchanged. |

@@ -45,10 +45,9 @@ fn err(e: impl std::fmt::Display) -> Outcome {
 }
 
 pub fn inspect(app: &mut WordApp, ctx: &egui::Context) -> Value {
-    use zeroize::Zeroize;
     let mut prefs = app.prefs();
     // Persist credentials locally, but never publish them in control/MCP inspection output.
-    prefs.assistant_connection.key.zeroize();
+    prefs.assistant_profiles.redact();
     let r = ctx.content_rect();
     let caret = crate::canvas::caret_screen(app).map(|(p, h)| json!({"x": p.x, "y": p.y, "h": h}));
     json!({
