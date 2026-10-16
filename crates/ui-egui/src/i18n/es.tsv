@@ -2679,3 +2679,29 @@ preview	Title	Título
 	Turn All Off	Desactivar todos
 	Install Missing Add-ins	Instalar complementos que faltan
 	Add-in Requirements	Requisitos del complemento
+	Chat	Chat
+	Chat copied to the clipboard	Chat copiado al portapapeles
+	Chat, {count} unread	Chat, sin leer: {count}
+	Chat options	Opciones del chat
+	Clear chat…	Borrar chat…
+	Clear Chat	Borrar chat
+	edited	editado
+	Editing your message	Editando tu mensaje
+	just now	ahora mismo
+	Kept in the file; Office drops it when it saves	Se guarda en el archivo; Office lo elimina al guardar
+	Message deleted	Mensaje eliminado
+	{name} is typing…	{name} está escribiendo…
+	{names} are typing…	{names} están escribiendo…
+	{n} h ago	hace {n} h
+	{n} min ago	hace {n} min
+	No messages yet. Messages are kept in the document.	Aún no hay mensajes. Los mensajes se guardan en el documento.
+	Remove the whole chat from the document for everyone?	¿Quitar todo el chat del documento para todos?
+	Replying to {name}	Respondiendo a {name}
+	Send	Enviar
+	Write a message	Escribe un mensaje
+	Chat Messages	Mensajes del chat
+	Send Chat Message	Enviar mensaje de chat
+	Edit Chat Message	Editar mensaje de chat
+	Delete Chat Message	Eliminar mensaje de chat
+	Export Chat	Exportar chat
+	Typing in Chat	Escribiendo en el chat

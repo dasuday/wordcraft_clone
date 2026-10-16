@@ -2708,3 +2708,29 @@
 	Turn All Off	Összes kikapcsolása
 	Install Missing Add-ins	Hiányzó bővítmények telepítése
 	Add-in Requirements	Bővítmény követelményei
+	Chat	Csevegés
+	Chat copied to the clipboard	Csevegés a vágólapra másolva
+	Chat, {count} unread	Csevegés, olvasatlan: {count}
+	Chat options	Csevegés beállításai
+	Clear chat…	Csevegés törlése…
+	Clear Chat	Csevegés törlése
+	edited	szerkesztve
+	Editing your message	Üzenet szerkesztése
+	just now	épp most
+	Kept in the file; Office drops it when it saves	A fájlban marad; az Office mentéskor eltávolítja
+	Message deleted	Üzenet törölve
+	{name} is typing…	{name} ír…
+	{names} are typing…	Írnak: {names}…
+	{n} h ago	{n} órája
+	{n} min ago	{n} perce
+	No messages yet. Messages are kept in the document.	Még nincs üzenet. Az üzenetek a dokumentumban maradnak.
+	Remove the whole chat from the document for everyone?	Eltávolítja a teljes csevegést a dokumentumból mindenki számára?
+	Replying to {name}	Válasz neki: {name}
+	Send	Küldés
+	Write a message	Írjon üzenetet
+	Chat Messages	Csevegés üzenetei
+	Send Chat Message	Csevegőüzenet küldése
+	Edit Chat Message	Csevegőüzenet szerkesztése
+	Delete Chat Message	Csevegőüzenet törlése
+	Export Chat	Csevegés exportálása
+	Typing in Chat	Gépelés a csevegésben

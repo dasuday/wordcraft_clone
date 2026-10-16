@@ -2347,3 +2347,29 @@
 	Turn All Off	Lülita kõik välja
 	Install Missing Add-ins	Installi puuduvad lisandmoodulid
 	Add-in Requirements	Lisandmooduli nõuded
+	Chat	Vestlus
+	Chat copied to the clipboard	Vestlus kopeeriti lõikelauale
+	Chat, {count} unread	Vestlus, lugemata: {count}
+	Chat options	Vestluse valikud
+	Clear chat…	Tühjenda vestlus…
+	Clear Chat	Tühjenda vestlus
+	edited	muudetud
+	Editing your message	Sõnumi muutmine
+	just now	just praegu
+	Kept in the file; Office drops it when it saves	Hoitakse failis; Office eemaldab selle salvestamisel
+	Message deleted	Sõnum kustutatud
+	{name} is typing…	{name} kirjutab…
+	{names} are typing…	Kirjutavad: {names}…
+	{n} h ago	{n} h tagasi
+	{n} min ago	{n} min tagasi
+	No messages yet. Messages are kept in the document.	Sõnumeid veel pole. Sõnumid jäävad dokumenti.
+	Remove the whole chat from the document for everyone?	Kas eemaldada kogu vestlus dokumendist kõigi jaoks?
+	Replying to {name}	Vastus: {name}
+	Send	Saada
+	Write a message	Kirjuta sõnum
+	Chat Messages	Vestluse sõnumid
+	Send Chat Message	Saada vestlussõnum
+	Edit Chat Message	Muuda vestlussõnumit
+	Delete Chat Message	Kustuta vestlussõnum
+	Export Chat	Ekspordi vestlus
+	Typing in Chat	Vestlusse kirjutamine

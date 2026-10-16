@@ -2710,3 +2710,29 @@ preview	Title	Пример
 	Turn All Off	Отключить все
 	Install Missing Add-ins	Установить недостающие надстройки
 	Add-in Requirements	Требования надстройки
+	Chat	Чат
+	Chat copied to the clipboard	Чат скопирован в буфер обмена
+	Chat, {count} unread	Чат, непрочитанных: {count}
+	Chat options	Параметры чата
+	Clear chat…	Очистить чат…
+	Clear Chat	Очистить чат
+	edited	изменено
+	Editing your message	Редактирование сообщения
+	just now	только что
+	Kept in the file; Office drops it when it saves	Хранится в файле; Office удаляет его при сохранении
+	Message deleted	Сообщение удалено
+	{name} is typing…	{name} печатает…
+	{names} are typing…	Печатают: {names}…
+	{n} h ago	{n} ч назад
+	{n} min ago	{n} мин назад
+	No messages yet. Messages are kept in the document.	Сообщений пока нет. Сообщения хранятся в документе.
+	Remove the whole chat from the document for everyone?	Удалить весь чат из документа для всех?
+	Replying to {name}	Ответ для: {name}
+	Send	Отправить
+	Write a message	Напишите сообщение
+	Chat Messages	Сообщения чата
+	Send Chat Message	Отправить сообщение в чат
+	Edit Chat Message	Изменить сообщение чата
+	Delete Chat Message	Удалить сообщение чата
+	Export Chat	Экспортировать чат
+	Typing in Chat	Набор текста в чате

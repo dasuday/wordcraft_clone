@@ -2327,3 +2327,29 @@
 	Turn All Off	Искључи све
 	Install Missing Add-ins	Инсталирај недостајуће додатке
 	Add-in Requirements	Захтеви додатка
+	Chat	Ћаскање
+	Chat copied to the clipboard	Ћаскање је копирано у оставу
+	Chat, {count} unread	Ћаскање, непрочитано: {count}
+	Chat options	Опције ћаскања
+	Clear chat…	Обриши ћаскање…
+	Clear Chat	Обриши ћаскање
+	edited	измењено
+	Editing your message	Измена поруке
+	just now	управо
+	Kept in the file; Office drops it when it saves	Чува се у датотеци; Office га уклања при чувању
+	Message deleted	Порука је обрисана
+	{name} is typing…	{name} куца…
+	{names} are typing…	Куцају: {names}…
+	{n} h ago	пре {n} ч
+	{n} min ago	пре {n} мин
+	No messages yet. Messages are kept in the document.	Још нема порука. Поруке остају у документу.
+	Remove the whole chat from the document for everyone?	Уклонити цело ћаскање из документа за све?
+	Replying to {name}	Одговор за: {name}
+	Send	Пошаљи
+	Write a message	Напишите поруку
+	Chat Messages	Поруке ћаскања
+	Send Chat Message	Пошаљи поруку у ћаскању
+	Edit Chat Message	Измени поруку ћаскања
+	Delete Chat Message	Обриши поруку ћаскања
+	Export Chat	Извези ћаскање
+	Typing in Chat	Куцање у ћаскању

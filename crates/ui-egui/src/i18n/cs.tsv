@@ -2704,3 +2704,29 @@ preview	Title	Ukázka
 	Turn All Off	Vypnout všechny
 	Install Missing Add-ins	Nainstalovat chybějící doplňky
 	Add-in Requirements	Požadavky doplňku
+	Chat	Chat
+	Chat copied to the clipboard	Chat zkopírován do schránky
+	Chat, {count} unread	Chat, nepřečteno: {count}
+	Chat options	Možnosti chatu
+	Clear chat…	Vymazat chat…
+	Clear Chat	Vymazat chat
+	edited	upraveno
+	Editing your message	Úprava zprávy
+	just now	právě teď
+	Kept in the file; Office drops it when it saves	Uloženo v souboru; Office ho při uložení odstraní
+	Message deleted	Zpráva odstraněna
+	{name} is typing…	{name} píše…
+	{names} are typing…	Píší: {names}…
+	{n} h ago	před {n} h
+	{n} min ago	před {n} min
+	No messages yet. Messages are kept in the document.	Zatím žádné zprávy. Zprávy zůstávají v dokumentu.
+	Remove the whole chat from the document for everyone?	Odstranit celý chat z dokumentu pro všechny?
+	Replying to {name}	Odpověď pro: {name}
+	Send	Odeslat
+	Write a message	Napište zprávu
+	Chat Messages	Zprávy chatu
+	Send Chat Message	Odeslat zprávu chatu
+	Edit Chat Message	Upravit zprávu chatu
+	Delete Chat Message	Odstranit zprávu chatu
+	Export Chat	Exportovat chat
+	Typing in Chat	Psaní v chatu

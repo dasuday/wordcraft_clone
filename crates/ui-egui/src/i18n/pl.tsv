@@ -2702,3 +2702,29 @@ preview	Title	Tytuł
 	Turn All Off	Wyłącz wszystkie
 	Install Missing Add-ins	Zainstaluj brakujące dodatki
 	Add-in Requirements	Wymagania dodatku
+	Chat	Czat
+	Chat copied to the clipboard	Skopiowano czat do schowka
+	Chat, {count} unread	Czat, nieprzeczytane: {count}
+	Chat options	Opcje czatu
+	Clear chat…	Wyczyść czat…
+	Clear Chat	Wyczyść czat
+	edited	edytowano
+	Editing your message	Edycja wiadomości
+	just now	przed chwilą
+	Kept in the file; Office drops it when it saves	Zapisany w pliku; Office usuwa go przy zapisie
+	Message deleted	Wiadomość usunięta
+	{name} is typing…	{name} pisze…
+	{names} are typing…	Piszą: {names}…
+	{n} h ago	{n} godz. temu
+	{n} min ago	{n} min temu
+	No messages yet. Messages are kept in the document.	Brak wiadomości. Wiadomości zostają w dokumencie.
+	Remove the whole chat from the document for everyone?	Usunąć cały czat z dokumentu dla wszystkich?
+	Replying to {name}	Odpowiedź dla: {name}
+	Send	Wyślij
+	Write a message	Napisz wiadomość
+	Chat Messages	Wiadomości czatu
+	Send Chat Message	Wyślij wiadomość czatu
+	Edit Chat Message	Edytuj wiadomość czatu
+	Delete Chat Message	Usuń wiadomość czatu
+	Export Chat	Eksportuj czat
+	Typing in Chat	Pisanie na czacie

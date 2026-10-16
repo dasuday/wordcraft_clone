@@ -2313,3 +2313,29 @@
 	Turn All Off	すべて無効にする
 	Install Missing Add-ins	不足しているアドインをインストール
 	Add-in Requirements	アドインの要件
+	Chat	チャット
+	Chat copied to the clipboard	チャットをクリップボードにコピーしました
+	Chat, {count} unread	チャット、未読 {count} 件
+	Chat options	チャットのオプション
+	Clear chat…	チャットを消去…
+	Clear Chat	チャットを消去
+	edited	編集済み
+	Editing your message	メッセージを編集中
+	just now	たった今
+	Kept in the file; Office drops it when it saves	ファイルに保存されます。Office で保存すると削除されます
+	Message deleted	メッセージは削除されました
+	{name} is typing…	{name} さんが入力中…
+	{names} are typing…	{names} さんが入力中…
+	{n} h ago	{n} 時間前
+	{n} min ago	{n} 分前
+	No messages yet. Messages are kept in the document.	まだメッセージはありません。メッセージは文書に保存されます。
+	Remove the whole chat from the document for everyone?	全員のために、文書からチャット全体を削除しますか?
+	Replying to {name}	{name} さんへの返信
+	Send	送信
+	Write a message	メッセージを入力
+	Chat Messages	チャットのメッセージ
+	Send Chat Message	チャットにメッセージを送信
+	Edit Chat Message	チャットのメッセージを編集
+	Delete Chat Message	チャットのメッセージを削除
+	Export Chat	チャットをエクスポート
+	Typing in Chat	チャットで入力中

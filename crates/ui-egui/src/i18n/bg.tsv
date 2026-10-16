@@ -2700,3 +2700,29 @@
 	Turn All Off	Изключване на всички
 	Install Missing Add-ins	Инсталиране на липсващите добавки
 	Add-in Requirements	Изисквания на добавката
+	Chat	Чат
+	Chat copied to the clipboard	Чатът е копиран в клипборда
+	Chat, {count} unread	Чат, непрочетени: {count}
+	Chat options	Опции на чата
+	Clear chat…	Изчистване на чата…
+	Clear Chat	Изчистване на чата
+	edited	редактирано
+	Editing your message	Редактиране на съобщението
+	just now	току-що
+	Kept in the file; Office drops it when it saves	Пази се във файла; Office го премахва при записване
+	Message deleted	Съобщението е изтрито
+	{name} is typing…	{name} пише…
+	{names} are typing…	Пишат: {names}…
+	{n} h ago	преди {n} ч
+	{n} min ago	преди {n} мин
+	No messages yet. Messages are kept in the document.	Още няма съобщения. Съобщенията остават в документа.
+	Remove the whole chat from the document for everyone?	Да се премахне ли целият чат от документа за всички?
+	Replying to {name}	Отговор до {name}
+	Send	Изпращане
+	Write a message	Напишете съобщение
+	Chat Messages	Съобщения в чата
+	Send Chat Message	Изпращане на съобщение в чата
+	Edit Chat Message	Редактиране на съобщение в чата
+	Delete Chat Message	Изтриване на съобщение в чата
+	Export Chat	Експортиране на чата
+	Typing in Chat	Писане в чата

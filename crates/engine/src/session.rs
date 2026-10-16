@@ -137,6 +137,9 @@ pub struct ViewState {
     /// The Alt Text pane (Picture/Shape Format › Alt Text): the selected object's or table's alt text.
     #[serde(default)]
     pub alt_text_pane: bool,
+    /// The chat panel (document chat, `view.chat`).
+    #[serde(default)]
+    pub chat_pane: bool,
     pub multi_page: bool,
     /// One Page or Page Width was chosen last: keep one page per row when a typed or wheel zoom replaces the fit mode.
     #[serde(default)]
@@ -226,6 +229,7 @@ impl Default for ViewState {
             smart_art_pane: false,
             accessibility_pane: false,
             alt_text_pane: false,
+            chat_pane: false,
             multi_page: false,
             single_column: false,
             fit: String::new(),
@@ -921,7 +925,10 @@ impl Session {
                 }
             }
             Err(_) => {
+                // The chat isn't rolled back (its changes may have been shared already).
+                let chat = self.doc.chat.clone();
                 self.doc = doc;
+                self.doc.chat = chat;
                 self.sel = sel;
                 self.history = history;
                 self.redo = redo;
@@ -1008,6 +1015,8 @@ impl Session {
             pending: std::mem::replace(&mut self.pending, u.pending),
             column: std::mem::replace(&mut self.column, u.column),
         };
+        // The chat isn't part of undo: it stays as it is now.
+        self.doc.chat = cur.doc.chat.clone();
         self.redo.push(Arc::new(cur));
         self.touch();
         true
@@ -1027,6 +1036,7 @@ impl Session {
             pending: std::mem::replace(&mut self.pending, u.pending),
             column: std::mem::replace(&mut self.column, u.column),
         };
+        self.doc.chat = cur.doc.chat.clone();
         self.history.push(Arc::new(cur));
         self.touch();
         true
@@ -1208,7 +1218,9 @@ impl Session {
             self.history.splice(0..0, head.into_iter().take(back));
         }
         self.undo_evicted = evicted;
+        let chat = self.doc.chat.clone();
         self.doc = doc;
+        self.doc.chat = chat;
         self.sel = sel;
         self.also_selected.clear();
         self.history.truncate(history_len);
@@ -1394,7 +1406,9 @@ impl Session {
             }
             Err(e) => {
                 if let Some((d, s, h, r, t, ev, c)) = before_doc {
+                    let chat = self.doc.chat.clone();
                     self.doc = d;
+                    self.doc.chat = chat;
                     self.sel = s;
                     self.history = h;
                     self.redo = r;

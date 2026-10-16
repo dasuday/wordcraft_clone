@@ -2325,3 +2325,29 @@
 	Turn All Off	全部停用
 	Install Missing Add-ins	安装缺少的加载项
 	Add-in Requirements	加载项要求
+	Chat	聊天
+	Chat copied to the clipboard	已将聊天复制到剪贴板
+	Chat, {count} unread	聊天，{count} 条未读
+	Chat options	聊天选项
+	Clear chat…	清除聊天…
+	Clear Chat	清除聊天
+	edited	已编辑
+	Editing your message	正在编辑你的消息
+	just now	刚刚
+	Kept in the file; Office drops it when it saves	保存在文件中；Office 保存时会将其删除
+	Message deleted	消息已删除
+	{name} is typing…	{name} 正在输入…
+	{names} are typing…	{names} 正在输入…
+	{n} h ago	{n} 小时前
+	{n} min ago	{n} 分钟前
+	No messages yet. Messages are kept in the document.	还没有消息。消息会保存在文档中。
+	Remove the whole chat from the document for everyone?	要为所有人从文档中删除整个聊天吗？
+	Replying to {name}	回复 {name}
+	Send	发送
+	Write a message	输入消息
+	Chat Messages	聊天消息
+	Send Chat Message	发送聊天消息
+	Edit Chat Message	编辑聊天消息
+	Delete Chat Message	删除聊天消息
+	Export Chat	导出聊天
+	Typing in Chat	正在聊天中输入

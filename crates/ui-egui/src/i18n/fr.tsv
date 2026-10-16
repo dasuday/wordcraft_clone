@@ -2320,3 +2320,29 @@
 	Turn All Off	Tout désactiver
 	Install Missing Add-ins	Installer les compléments manquants
 	Add-in Requirements	Prérequis du complément
+	Chat	Discussion
+	Chat copied to the clipboard	Discussion copiée dans le presse-papiers
+	Chat, {count} unread	Discussion, non lus : {count}
+	Chat options	Options de la discussion
+	Clear chat…	Effacer la discussion…
+	Clear Chat	Effacer la discussion
+	edited	modifié
+	Editing your message	Modification de votre message
+	just now	à l'instant
+	Kept in the file; Office drops it when it saves	Enregistrée dans le fichier ; Office la supprime à l'enregistrement
+	Message deleted	Message supprimé
+	{name} is typing…	{name} écrit…
+	{names} are typing…	{names} écrivent…
+	{n} h ago	il y a {n} h
+	{n} min ago	il y a {n} min
+	No messages yet. Messages are kept in the document.	Aucun message pour l'instant. Les messages restent dans le document.
+	Remove the whole chat from the document for everyone?	Supprimer toute la discussion du document pour tout le monde ?
+	Replying to {name}	Réponse à {name}
+	Send	Envoyer
+	Write a message	Écrire un message
+	Chat Messages	Messages de la discussion
+	Send Chat Message	Envoyer un message
+	Edit Chat Message	Modifier un message
+	Delete Chat Message	Supprimer un message
+	Export Chat	Exporter la discussion
+	Typing in Chat	Saisie dans la discussion

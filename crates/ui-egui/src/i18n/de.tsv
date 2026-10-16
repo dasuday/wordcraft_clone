@@ -2312,3 +2312,29 @@
 	Turn All Off	Alle deaktivieren
 	Install Missing Add-ins	Fehlende Add-Ins installieren
 	Add-in Requirements	Add-In-Anforderungen
+	Chat	Chat
+	Chat copied to the clipboard	Chat in die Zwischenablage kopiert
+	Chat, {count} unread	Chat, ungelesen: {count}
+	Chat options	Chatoptionen
+	Clear chat…	Chat leeren…
+	Clear Chat	Chat leeren
+	edited	bearbeitet
+	Editing your message	Nachricht bearbeiten
+	just now	gerade eben
+	Kept in the file; Office drops it when it saves	In der Datei gespeichert; Office entfernt ihn beim Speichern
+	Message deleted	Nachricht gelöscht
+	{name} is typing…	{name} schreibt…
+	{names} are typing…	{names} schreiben…
+	{n} h ago	vor {n} Std.
+	{n} min ago	vor {n} Min.
+	No messages yet. Messages are kept in the document.	Noch keine Nachrichten. Nachrichten bleiben im Dokument.
+	Remove the whole chat from the document for everyone?	Den gesamten Chat für alle aus dem Dokument entfernen?
+	Replying to {name}	Antwort an {name}
+	Send	Senden
+	Write a message	Nachricht schreiben
+	Chat Messages	Chatnachrichten
+	Send Chat Message	Chatnachricht senden
+	Edit Chat Message	Chatnachricht bearbeiten
+	Delete Chat Message	Chatnachricht löschen
+	Export Chat	Chat exportieren
+	Typing in Chat	Tippen im Chat

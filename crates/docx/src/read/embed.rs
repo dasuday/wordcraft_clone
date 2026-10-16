@@ -24,6 +24,8 @@ use crate::xml::{El, MAX_DEPTH, NAMESPACES, esc};
 /// Types the main document refers to by id (headers, pictures, objects…) are listed too.
 pub const HANDLED_RELS: &[&str] = &[
     "officeDocument",
+    // The document chat, read into the model (`wordcraft_doc::chat`).
+    wordcraft_doc::chat::RELATIONSHIP,
     "core-properties",
     "extended-properties",
     "custom-properties",

@@ -2325,3 +2325,29 @@
 	Turn All Off	Вимкнути всі
 	Install Missing Add-ins	Інсталювати відсутні надбудови
 	Add-in Requirements	Вимоги надбудови
+	Chat	Чат
+	Chat copied to the clipboard	Чат скопійовано до буфера обміну
+	Chat, {count} unread	Чат, непрочитаних: {count}
+	Chat options	Параметри чату
+	Clear chat…	Очистити чат…
+	Clear Chat	Очистити чат
+	edited	змінено
+	Editing your message	Редагування повідомлення
+	just now	щойно
+	Kept in the file; Office drops it when it saves	Зберігається у файлі; Office видаляє його під час збереження
+	Message deleted	Повідомлення видалено
+	{name} is typing…	{name} друкує…
+	{names} are typing…	Друкують: {names}…
+	{n} h ago	{n} год тому
+	{n} min ago	{n} хв тому
+	No messages yet. Messages are kept in the document.	Повідомлень ще немає. Повідомлення зберігаються в документі.
+	Remove the whole chat from the document for everyone?	Видалити весь чат із документа для всіх?
+	Replying to {name}	Відповідь для: {name}
+	Send	Надіслати
+	Write a message	Напишіть повідомлення
+	Chat Messages	Повідомлення чату
+	Send Chat Message	Надіслати повідомлення в чат
+	Edit Chat Message	Змінити повідомлення чату
+	Delete Chat Message	Видалити повідомлення чату
+	Export Chat	Експортувати чат
+	Typing in Chat	Набір тексту в чаті

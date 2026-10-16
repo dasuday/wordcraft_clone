@@ -12,6 +12,7 @@
 
 pub mod bidi;
 pub mod chart;
+pub mod chat;
 mod cjk_numbers;
 pub mod cluster;
 pub mod collate;
@@ -657,6 +658,10 @@ pub struct Document {
     /// or a richer customisation kept unchanged as a package part.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ribbon: Option<Ribbon>,
+    /// The document chat (craft-collab `docs/chat.md`): saved in the file, shared in a live
+    /// session, never part of undo. Shared, so undo snapshots don't copy it.
+    #[serde(skip_serializing_if = "chat::arc_is_empty")]
+    pub chat: Arc<chat::Chat>,
     /// Where new story and comment ids come from: in a live session, a block of ids no other
     /// person's copy uses (see [`IdSpace`]). Not part of the document.
     #[serde(skip)]
@@ -743,6 +748,7 @@ impl Document {
             media: BTreeMap::new(),
             passthrough: BTreeMap::new(),
             ribbon: None,
+            chat: Arc::default(),
             id_space: IdSpace::default(),
         }
     }
