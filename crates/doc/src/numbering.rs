@@ -5,9 +5,9 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
+use crate::DocError;
 use crate::props::{Align, CharProps};
 use crate::section::NumFormat;
-use crate::{DocError, free_id};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
@@ -107,6 +107,9 @@ pub struct Num {
 pub struct Numbering {
     pub abstracts: Vec<AbstractNum>,
     pub nums: Vec<Num>,
+    /// Where new list ids come from (see [`crate::IdSpace`]). Not part of the document.
+    #[serde(skip)]
+    pub id_space: crate::IdSpace,
 }
 
 /// Built-in list kinds for the Bullets / Numbering / Multilevel galleries.
@@ -241,18 +244,21 @@ impl Numbering {
         self.try_add_levels(None, levels_for(kind))
     }
     /// A new list definition (`name`, `levels`) and a `num` for it; returns the `num` id. Both ids
-    /// are [`free_id`]s, so the largest ids a file can hold don't make them collide with its lists;
+    /// are [`crate::free_id`]s (in a live session, in this copy's block), so the largest ids a file can hold don't make them collide with its lists;
     /// an error, adding nothing, when they are all taken.
     pub fn try_add_levels(&mut self, name: Option<String>, levels: Vec<Level>) -> crate::Result<u32> {
-        let aid = free_id(self.abstracts.iter().map(|a| a.id).max(), self.abstracts.iter().map(|a| a.id), 0);
+        let aid = self.id_space.next(self.abstracts.iter().map(|a| a.id), 0);
         let (Some(aid), Some(nid)) = (aid, self.free_num_id()) else { return Err(DocError::Invalid("no free list id".into())) };
+        self.id_space.take(aid);
+        self.id_space.take(nid);
         self.abstracts.push(AbstractNum { id: aid, name, levels, ..Default::default() });
         self.nums.push(Num { id: nid, abstract_id: aid, ..Default::default() });
         Ok(nid)
     }
     /// A `num` id no list has (`num` 0 means "no list"), `None` when they are all taken.
+    /// In a live session, one in this copy's block ([`crate::IdSpace`]); the caller takes it.
     fn free_num_id(&self) -> Option<u32> {
-        free_id(self.nums.iter().map(|n| n.id).max(), self.nums.iter().map(|n| n.id), 1)
+        self.id_space.next(self.nums.iter().map(|n| n.id), 1)
     }
     /// A new `num` that restarts numbering of an existing list (`None`: no such list, or list ids
     /// are all taken).
@@ -261,6 +267,7 @@ impl Numbering {
         let a = source.abstract_id;
         let level_overrides = source.level_overrides.clone();
         let nid = self.free_num_id()?;
+        self.id_space.take(nid);
         // Every level starts again at its own effective start, so a level this list defines itself keeps its start.
         let levels = self.abstracts.iter().find(|x| x.id == a).map_or(0, |x| x.levels.len());
         let start_overrides = (0..levels).filter_map(|i| self.level(num, i as u8).map(|l| (i as u8, l.start))).collect();

@@ -53,6 +53,13 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
             .frame(egui::Frame::NONE.fill(t.panel).inner_margin(10).stroke(Stroke::new(1.0, t.border)))
             .show(ui, |ui| inspector(app, ui));
     }
+    if app.session.view.chat_pane {
+        egui::Panel::right("chat_pane")
+            .default_size(300.0)
+            .resizable(true)
+            .frame(egui::Frame::NONE.fill(t.panel).inner_margin(10).stroke(Stroke::new(1.0, t.border)))
+            .show(ui, |ui| crate::chat_ui::pane(app, ui));
+    }
     if app.session.view.accessibility_pane {
         egui::Panel::right("accessibility_pane")
             .default_size(280.0)

@@ -98,7 +98,11 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
                         }
                         "save" => {
                             let r = app.run("file.save", json!({}));
-                            if r.is_ok_and(|v| v.get("saved").and_then(serde_json::Value::as_bool) == Some(true) || v.get("downloaded").is_some()) {
+                            if r.is_ok_and(|v| {
+                                v.get("saved").and_then(serde_json::Value::as_bool) == Some(true)
+                                    || v.get("downloaded").is_some()
+                                    || v.get("host").is_some()
+                            }) {
                                 app.ui.backstage = false;
                                 app.canvas.want_focus = true;
                             } else {
@@ -451,7 +455,15 @@ fn info_page(app: &mut WordApp, ui: &mut Ui) {
             ui.label(format!("{}: {}", tl!(l), info.get(k).map(|v| v.to_string()).unwrap_or_default()));
         }
         let path = info.get("path").and_then(|v| v.as_str()).unwrap_or(tl!("Not saved yet"));
-        ui.label(crate::i18n::fmt(tl!("Location: {path}"), &[("path", path)]));
+        // An add-in's words for where the document came from (Nextcloud…), the file underneath.
+        match info.get("location").and_then(|v| v.as_str()) {
+            Some(label) => {
+                ui.label(crate::i18n::fmt(tl!("Location: {path}"), &[("path", label)])).on_hover_text(path);
+            }
+            None => {
+                ui.label(crate::i18n::fmt(tl!("Location: {path}"), &[("path", path)]));
+            }
+        }
     });
 }
 

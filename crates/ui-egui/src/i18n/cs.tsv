@@ -2521,6 +2521,59 @@ preview	Title	Ukázka
 	Add whether it is above or below	Doplnit, zda je výše, nebo níže
 	Search	Hledat
 	Title Bar	Záhlaví okna
+	Add-ins	Doplňky
+	Get Add-ins	Získat doplňky
+	Get\nAdd-ins	Získat\ndoplňky
+	Load Add-in	Načíst doplněk
+	Load Add-in…	Načíst doplněk…
+	Install Add-in from GitHub	Nainstalovat doplněk z GitHubu
+	Unload Add-in	Uvolnit doplněk
+	Turn Add-in On or Off	Zapnout nebo vypnout doplněk
+	Add-in Documentation	Dokumentace doplňku
+	Run Add-in Command	Spustit příkaz doplňku
+	Add-in manifest	Manifest doplňku
+	Install from GitHub:	Nainstalovat z GitHubu:
+	Install	Nainstalovat
+	Installing…	Instalace…
+	Installed {name}	Nainstalováno: {name}
+	An add-in is a program that runs with your permissions. Install it only if you trust its author.	Doplněk je program, který běží s vašimi oprávněními. Instalujte ho, jen pokud důvěřujete jeho autorovi.
+	Install and run {repo}?	Nainstalovat a spustit {repo}?
+	Documentation	Dokumentace
+	Activate	Aktivovat
+	Deactivate	Deaktivovat
+	Unload	Uvolnit
+	Until the next start	Do příštího spuštění
+	Active	Aktivní
+	Inactive	Neaktivní
+	No add-ins are loaded.	Nejsou načteny žádné doplňky.
+	owner/repository	vlastník/úložiště
+	Pick the add-in's plugin.json	Vyberte soubor plugin.json doplňku
+	Add-ins need the desktop app.	Doplňky vyžadují desktopovou aplikaci.
+	There's no add-ins folder to install into.	Není k dispozici složka doplňků, do které by se dalo instalovat.
+	Code	Kód
+	Disable all macros	Zakázat všechna makra
+	Disable macros with notification (enable them per document)	Zakázat makra s oznámením (povolovat je pro každý dokument zvlášť)
+	Edit	Upravit
+	Enable Content	Povolit obsah
+	Enable all macros (not recommended: a macro is a program)	Povolit všechna makra (nedoporučuje se: makro je program)
+	Insert Module	Vložit modul
+	Macro Security	Zabezpečení maker
+	Macro name:	Název makra:
+	Macros are disabled for this document. Enable Content in the message bar, or change Macro Security.	Makra jsou v tomto dokumentu zakázaná. Klikněte na panelu zpráv na „Povolit obsah“, nebo změňte „Zabezpečení maker“.
+	Macros have been disabled.	Makra byla zakázána.
+	Modules	Moduly
+	No code yet: Insert Module.	Zatím žádný kód: „Vložit modul“.
+	Office Add-in	Doplněk Office
+	Office add-ins need the WordCraft desktop app on macOS or Windows.	Doplňky Office vyžadují desktopovou aplikaci WordCraft v systému macOS nebo Windows.
+	Remove Module	Odebrat modul
+	Run	Spustit
+	Run Macro	Spustit makro
+	SECURITY WARNING	UPOZORNĚNÍ ZABEZPEČENÍ
+	Save Module	Uložit modul
+	Saves the module into the document (save the document as .docm to keep it)	Uloží modul do dokumentu (aby se zachoval, uložte dokument jako .docm)
+	Stop Recording	Zastavit záznam
+	This document has no macros yet: type a name and Create.	Tento dokument zatím nemá žádná makra: zadejte název a klikněte na „Vytvořit“.
+	Visual Basic	Visual Basic
 	Copy to	Kopírovat do
 
 # Document naming and account controls.
@@ -2606,6 +2659,124 @@ preview	Title	Ukázka
 # Backstage › Recover (#586)
 	Recover	Obnovit
 
+# Developer › Ribbon Buttons: the document's buttons that run macros (Gaps #22)
+	Ribbon Buttons	Tlačítka na pásu karet
+	Add Ribbon Button	Přidat tlačítko na pás karet
+	Edit Ribbon Button	Upravit tlačítko na pásu karet
+	Remove Ribbon Button	Odebrat tlačítko z pásu karet
+	Press Ribbon Button	Stisknout tlačítko na pásu karet
+	Runs the macro {macro}	Spustí makro {macro}
+	Buttons that run this document's macros. They are saved with the document, and Word shows them too.	Tlačítka, která spouštějí makra tohoto dokumentu. Ukládají se s dokumentem a zobrazí je i Word.
+	No buttons yet.	Zatím žádná tlačítka.
+	runs {macro}	spouští {macro}
+	This document's ribbon came from another program with more than buttons: its buttons run, but WordCraft doesn't change it.	Pás karet tohoto dokumentu pochází z jiného programu a obsahuje víc než tlačítka: jeho tlačítka fungují, ale WordCraft ho nemění.
+	New button	Nové tlačítko
+	Macro:	Makro:
+	or type a name: Module1.Go	nebo zadejte název: Module1.Go
+	the macro's name	název makra
+	Tab:	Karta:
+	or a new tab's name	nebo název nové karty
+	Group:	Skupina:
+	Picture:	Obrázek:
+	Small button (three to a column)	Malé tlačítko (tři ve sloupci)
+	Add to Ribbon…	Přidat na pás karet…
+	A ribbon button that runs this macro, saved with the document	Tlačítko na pásu karet, které spouští toto makro, uložené s dokumentem
+	Filter	Filtr
+	Nothing to show.	Není co zobrazit.
+	{label} must be a number.	{label} musí být číslo.
+	The add-in {name} reported an error: {error}	Doplněk {name} ohlásil chybu: {error}
+	The add-in {name} didn't finish its command.	Doplněk {name} nedokončil svůj příkaz.
+	Start Live Session	Zahájit živou relaci
+	Join Live Session	Připojit se k živé relaci
+	Leave Live Session	Opustit živou relaci
+	Live Session	Živá relace
+	Live session	Živá relace
+	Live Session Name and Colour	Jméno a barva v živé relaci
+	Title bar	Záhlaví okna
+	Joining…	Připojování…
+	Live	Živě
+	Connecting…	Navazování spojení…
+	Offline	Offline
+	Session ended	Relace skončila
+	Share this document in a live session	Sdílet tento dokument v živé relaci
+	{name} (you)	{name} (vy)
+	{name}'s caret isn't in a shared paragraph	Kurzor uživatele {name} není ve sdíleném odstavci
+	Encrypted end to end	Koncově šifrováno
+	Encrypt end to end	Šifrovat koncově
+	People here	Přítomní
+	Go to their caret	Přejít na kurzor
+	Copy Invitation	Kopírovat pozvánku
+	Invitation copied	Pozvánka zkopírována
+	{count} others	Další: {count}
+	Start a live session	Zahájit živou relaci
+	Join a live session	Připojit se k živé relaci
+	Connection:	Připojení:
+	Your name:	Vaše jméno:
+	Your colour:	Vaše barva:
+	Invitation:	Pozvánka:
+	Paste the invitation link	Vložte odkaz z pozvánky
+	Joining replaces this document, which has unsaved changes.	Připojení nahradí tento dokument, který obsahuje neuložené změny.
+	Discard my unsaved changes	Zahodit moje neuložené změny
+	Join	Připojit
+	Start	Zahájit
+	Choose a connection	Vyberte připojení
+	This add-in has no {command} command	Tento doplněk nemá příkaz {command}
+	The add-in didn't start a live session	Doplněk nezahájil živou relaci
+	Live sessions need a co-editing add-in (a transport). Add one in File › Options › Add-ins.	Živé relace potřebují doplněk pro společné úpravy (přenos). Přidejte ho v nabídce Soubor › Možnosti › Doplňky.
+	{why}. Install {name} anyway?	{why}. Přesto nainstalovat {name}?
+	{name} (release {tag})	{name} (vydání {tag})
+	The add-ins that need the installed version are blocked until it suits them again.	Doplňky, které potřebují nainstalovanou verzi, zůstanou zablokované, dokud jim opět nebude vyhovovat.
+	Install Anyway	Přesto nainstalovat
+	{addin}; version {version} is installed	{addin}; nainstalována je verze {version}
+	{name} can use {addin}. Install it too?	{name} může využít: {addin}. Nainstalovat také?
+	{name} needs {addin}. Install it too?	{name} potřebuje: {addin}. Nainstalovat také?
+	the newest release in range	nejnovější vydání v rozsahu
+	Add-ins are programs that run with your permissions. Install them only if you trust their authors.	Doplňky jsou programy, které běží s vašimi oprávněními. Instalujte je, jen pokud důvěřujete jejich autorům.
+	Install Selected	Nainstalovat vybrané
+	Not Now	Teď ne
+	Blocked	Zablokováno
+	Install Missing	Nainstalovat chybějící
+	{who} needs {name}. Turn both off?	{who} potřebuje: {name}. Vypnout oba?
+	{who} need {name}. Turn them all off?	{who} potřebují: {name}. Vypnout všechny?
+	Turn Both Off	Vypnout oba
+	Turn All Off	Vypnout všechny
+	Install Missing Add-ins	Nainstalovat chybějící doplňky
+	Add-in Requirements	Požadavky doplňku
+	Chat	Chat
+	Chat copied to the clipboard	Chat zkopírován do schránky
+	Chat, {count} unread	Chat, nepřečteno: {count}
+	Chat options	Možnosti chatu
+	Clear chat…	Vymazat chat…
+	Clear Chat	Vymazat chat
+	edited	upraveno
+	Editing your message	Úprava zprávy
+	just now	právě teď
+	Kept in the file; Office drops it when it saves	Uloženo v souboru; Office ho při uložení odstraní
+	Message deleted	Zpráva odstraněna
+	{name} is typing…	{name} píše…
+	{names} are typing…	Píší: {names}…
+	{n} h ago	před {n} h
+	{n} min ago	před {n} min
+	No messages yet. Messages are kept in the document.	Zatím žádné zprávy. Zprávy zůstávají v dokumentu.
+	Remove the whole chat from the document for everyone?	Odstranit celý chat z dokumentu pro všechny?
+	Replying to {name}	Odpověď pro: {name}
+	Send	Odeslat
+	Write a message	Napište zprávu
+	Chat Messages	Zprávy chatu
+	Send Chat Message	Odeslat zprávu chatu
+	Edit Chat Message	Upravit zprávu chatu
+	Delete Chat Message	Odstranit zprávu chatu
+	Export Chat	Exportovat chat
+	Typing in Chat	Psaní v chatu
+	Close the document and go back to Nextcloud	Zavřít dokument a vrátit se do Nextcloudu
+	craft-live refused the connection: {reason}	craft-live odmítl připojení: {reason}
+	Saved to Nextcloud	Uloženo do Nextcloudu
+	Couldn't save to Nextcloud: {error}	Uložení do Nextcloudu se nezdařilo: {error}
+	The editing session expired. Close the document and open it again from Nextcloud.	Relace úprav vypršela. Zavřete dokument a otevřete ho znovu z Nextcloudu.
+	Couldn't open the document from Nextcloud: {error}	Dokument z Nextcloudu nelze otevřít: {error}
+	This document is view only	Tento dokument je jen pro čtení
+	Saving to Nextcloud…	Ukládání do Nextcloudu…
+	Not connected: Nextcloud saves the document once the connection is back	Bez připojení: Nextcloud dokument uloží, jakmile se připojení obnoví
 # Page Setup › Mirror margins (#1239)
 	Mirror margins	Zrcadlové okraje
 

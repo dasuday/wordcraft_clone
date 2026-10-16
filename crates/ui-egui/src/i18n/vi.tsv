@@ -2619,20 +2619,188 @@
 	Show its number relative to this field	Hiện số của nó tương đối với trường này
 	Show its number with all higher levels	Hiện số của nó kèm mọi cấp cao hơn
 	Take the last match on the page	Lấy kết quả khớp cuối cùng trên trang
+	Add-ins	Phần bổ trợ
+	Get Add-ins	Tải phần bổ trợ
+	Get\nAdd-ins	Tải\nphần bổ trợ
+	Load Add-in	Nạp phần bổ trợ
+	Load Add-in…	Nạp phần bổ trợ…
+	Install Add-in from GitHub	Cài phần bổ trợ từ GitHub
+	Unload Add-in	Gỡ nạp phần bổ trợ
+	Turn Add-in On or Off	Bật hoặc tắt phần bổ trợ
+	Add-in Documentation	Tài liệu phần bổ trợ
+	Run Add-in Command	Chạy lệnh của phần bổ trợ
+	Add-in manifest	Tệp mô tả phần bổ trợ
+	Install from GitHub:	Cài từ GitHub:
+	Install	Cài đặt
+	Installing…	Đang cài đặt…
+	Installed {name}	Đã cài {name}
+	An add-in is a program that runs with your permissions. Install it only if you trust its author.	Phần bổ trợ là một chương trình chạy với quyền của bạn. Chỉ cài nếu bạn tin tưởng tác giả của nó.
+	Install and run {repo}?	Cài đặt và chạy {repo}?
+	Documentation	Tài liệu
+	Activate	Kích hoạt
+	Deactivate	Tắt kích hoạt
+	Unload	Gỡ nạp
+	Until the next start	Đến lần khởi động sau
+	Active	Đang hoạt động
+	Inactive	Không hoạt động
+	No add-ins are loaded.	Chưa nạp phần bổ trợ nào.
+	owner/repository	chủ sở hữu/kho mã
+	Pick the add-in's plugin.json	Chọn tệp plugin.json của phần bổ trợ
+	Add-ins need the desktop app.	Phần bổ trợ cần ứng dụng máy tính.
+	There's no add-ins folder to install into.	Không có thư mục phần bổ trợ để cài vào.
+	Code	Mã
+	Disable all macros	Tắt mọi macro
+	Disable macros with notification (enable them per document)	Tắt macro kèm thông báo (bật riêng cho từng tài liệu)
+	Edit	Sửa
+	Enable Content	Bật nội dung
+	Enable all macros (not recommended: a macro is a program)	Bật mọi macro (không khuyến nghị: macro là một chương trình)
+	Insert Module	Chèn mô-đun
+	Macro Security	Bảo mật macro
+	Macro name:	Tên macro:
+	Macros are disabled for this document. Enable Content in the message bar, or change Macro Security.	Macro đã bị tắt cho tài liệu này. Hãy chọn Bật nội dung trên thanh thông báo, hoặc đổi Bảo mật macro.
+	Macros have been disabled.	Macro đã bị tắt.
+	Modules	Mô-đun
+	No code yet: Insert Module.	Chưa có mã: hãy Chèn mô-đun.
+	Office Add-in	Phần bổ trợ Office
+	Office add-ins need the WordCraft desktop app on macOS or Windows.	Phần bổ trợ Office cần ứng dụng WordCraft cho máy tính trên macOS hoặc Windows.
+	Remove Module	Xóa mô-đun
+	Run	Chạy
+	Run Macro	Chạy macro
+	SECURITY WARNING	CẢNH BÁO BẢO MẬT
+	Save Module	Lưu mô-đun
+	Saves the module into the document (save the document as .docm to keep it)	Lưu mô-đun vào tài liệu (lưu tài liệu dạng .docm để giữ lại)
+	Stop Recording	Dừng ghi
+	This document has no macros yet: type a name and Create.	Tài liệu này chưa có macro: nhập tên rồi chọn Tạo.
+	Visual Basic	Visual Basic
 
+# Developer › Ribbon Buttons: the document's buttons that run macros (Gaps #22)
+	Ribbon Buttons	Nút trên ribbon
+	Add Ribbon Button	Thêm nút vào ribbon
+	Edit Ribbon Button	Sửa nút trên ribbon
+	Remove Ribbon Button	Gỡ nút khỏi ribbon
+	Press Ribbon Button	Bấm nút trên ribbon
+	Runs the macro {macro}	Chạy macro {macro}
+	Buttons that run this document's macros. They are saved with the document, and Word shows them too.	Các nút chạy macro của tài liệu này. Chúng được lưu cùng tài liệu và Word cũng hiển thị chúng.
+	No buttons yet.	Chưa có nút nào.
+	runs {macro}	chạy {macro}
+	This document's ribbon came from another program with more than buttons: its buttons run, but WordCraft doesn't change it.	Ribbon của tài liệu này đến từ một chương trình khác và chứa nhiều thứ hơn ngoài các nút: các nút vẫn chạy, nhưng WordCraft không thay đổi nó.
+	New button	Nút mới
+	Macro:	Macro:
+	or type a name: Module1.Go	hoặc nhập tên: Module1.Go
+	the macro's name	tên của macro
+	Tab:	Thẻ:
+	or a new tab's name	hoặc tên của một thẻ mới
+	Group:	Nhóm:
+	Picture:	Ảnh:
+	Small button (three to a column)	Nút nhỏ (ba nút mỗi cột)
+	Add to Ribbon…	Thêm vào ribbon…
+	A ribbon button that runs this macro, saved with the document	Một nút trên ribbon chạy macro này, được lưu cùng tài liệu
+	Filter	Lọc
+	Nothing to show.	Không có gì để hiển thị.
+	{label} must be a number.	{label} phải là một số.
+	The add-in {name} reported an error: {error}	Phần bổ trợ {name} đã báo lỗi: {error}
+	The add-in {name} didn't finish its command.	Phần bổ trợ {name} chưa hoàn tất lệnh của nó.
+	Start Live Session	Bắt đầu phiên trực tiếp
+	Join Live Session	Tham gia phiên trực tiếp
+	Leave Live Session	Rời phiên trực tiếp
+	Live Session	Phiên trực tiếp
+	Live session	Phiên trực tiếp
+	Live Session Name and Colour	Tên và màu trong phiên trực tiếp
+	Title bar	Thanh tiêu đề
+	Joining…	Đang tham gia…
+	Live	Trực tiếp
+	Connecting…	Đang kết nối…
+	Offline	Ngoại tuyến
+	Session ended	Phiên đã kết thúc
+	Share this document in a live session	Chia sẻ tài liệu này trong một phiên trực tiếp
+	{name} (you)	{name} (bạn)
+	{name}'s caret isn't in a shared paragraph	Con trỏ của {name} không nằm trong đoạn văn được chia sẻ
+	Encrypted end to end	Được mã hóa đầu cuối
+	Encrypt end to end	Mã hóa đầu cuối
+	People here	Những người đang ở đây
+	Go to their caret	Đi tới con trỏ của họ
+	Copy Invitation	Sao chép lời mời
+	Invitation copied	Đã sao chép lời mời
+	{count} others	{count} người khác
+	Start a live session	Bắt đầu một phiên trực tiếp
+	Join a live session	Tham gia một phiên trực tiếp
+	Connection:	Kết nối:
+	Your name:	Tên của bạn:
+	Your colour:	Màu của bạn:
+	Invitation:	Lời mời:
+	Paste the invitation link	Dán liên kết lời mời
+	Joining replaces this document, which has unsaved changes.	Tham gia sẽ thay thế tài liệu này, tài liệu có thay đổi chưa lưu.
+	Discard my unsaved changes	Bỏ các thay đổi chưa lưu của tôi
+	Join	Tham gia
+	Start	Bắt đầu
+	Choose a connection	Hãy chọn một kết nối
+	This add-in has no {command} command	Phần bổ trợ này không có lệnh {command}
+	The add-in didn't start a live session	Phần bổ trợ chưa bắt đầu phiên trực tiếp
+	Live sessions need a co-editing add-in (a transport). Add one in File › Options › Add-ins.	Phiên trực tiếp cần một phần bổ trợ đồng chỉnh sửa (phương thức truyền). Hãy thêm trong Tệp › Tùy chọn › Phần bổ trợ.
+	{why}. Install {name} anyway?	{why}. Vẫn cài {name}?
+	{name} (release {tag})	{name} (bản phát hành {tag})
+	The add-ins that need the installed version are blocked until it suits them again.	Các phần bổ trợ cần phiên bản đã cài sẽ bị chặn cho đến khi phiên bản đó phù hợp trở lại.
+	Install Anyway	Vẫn cài
+	{addin}; version {version} is installed	{addin}; đã cài phiên bản {version}
+	{name} can use {addin}. Install it too?	{name} có thể dùng {addin}. Cài luôn phần này?
+	{name} needs {addin}. Install it too?	{name} cần {addin}. Cài luôn phần này?
+	the newest release in range	bản phát hành mới nhất trong phạm vi
+	Add-ins are programs that run with your permissions. Install them only if you trust their authors.	Phần bổ trợ là các chương trình chạy với quyền của bạn. Chỉ cài nếu bạn tin tưởng tác giả của chúng.
+	Install Selected	Cài các mục đã chọn
+	Not Now	Để sau
+	Blocked	Bị chặn
+	Install Missing	Cài phần còn thiếu
+	{who} needs {name}. Turn both off?	{who} cần {name}. Tắt cả hai?
+	{who} need {name}. Turn them all off?	{who} cần {name}. Tắt tất cả?
+	Turn Both Off	Tắt cả hai
+	Turn All Off	Tắt tất cả
+	Install Missing Add-ins	Cài phần bổ trợ còn thiếu
+	Add-in Requirements	Yêu cầu của phần bổ trợ
+	Chat	Trò chuyện
+	Chat copied to the clipboard	Đã sao chép cuộc trò chuyện vào bảng tạm
+	Chat, {count} unread	Trò chuyện, chưa đọc: {count}
+	Chat options	Tùy chọn trò chuyện
+	Clear chat…	Xóa cuộc trò chuyện…
+	Clear Chat	Xóa cuộc trò chuyện
+	edited	đã sửa
+	Editing your message	Đang sửa tin nhắn của bạn
+	just now	vừa xong
+	Kept in the file; Office drops it when it saves	Được giữ trong tệp; Office sẽ bỏ nó khi lưu
+	Message deleted	Tin nhắn đã bị xóa
+	{name} is typing…	{name} đang nhập…
+	{names} are typing…	{names} đang nhập…
+	{n} h ago	{n} giờ trước
+	{n} min ago	{n} phút trước
+	No messages yet. Messages are kept in the document.	Chưa có tin nhắn. Tin nhắn được giữ trong tài liệu.
+	Remove the whole chat from the document for everyone?	Xóa toàn bộ cuộc trò chuyện khỏi tài liệu cho mọi người?
+	Replying to {name}	Đang trả lời {name}
+	Send	Gửi
+	Write a message	Viết tin nhắn
+	Chat Messages	Tin nhắn trò chuyện
+	Send Chat Message	Gửi tin nhắn trò chuyện
+	Edit Chat Message	Sửa tin nhắn trò chuyện
+	Delete Chat Message	Xóa tin nhắn trò chuyện
+	Export Chat	Xuất cuộc trò chuyện
+	Typing in Chat	Đang nhập trong trò chuyện
+	Close the document and go back to Nextcloud	Đóng tài liệu và quay lại Nextcloud
+	craft-live refused the connection: {reason}	craft-live đã từ chối kết nối: {reason}
+	Saved to Nextcloud	Đã lưu vào Nextcloud
+	Couldn't save to Nextcloud: {error}	Không thể lưu vào Nextcloud: {error}
+	The editing session expired. Close the document and open it again from Nextcloud.	Phiên chỉnh sửa đã hết hạn. Hãy đóng tài liệu và mở lại từ Nextcloud.
+	Couldn't open the document from Nextcloud: {error}	Không thể mở tài liệu từ Nextcloud: {error}
+	This document is view only	Tài liệu này chỉ để xem
+	Saving to Nextcloud…	Đang lưu vào Nextcloud…
+	Not connected: Nextcloud saves the document once the connection is back	Không có kết nối: Nextcloud sẽ lưu tài liệu khi kết nối trở lại
 # Bookmark dialog (#1277)
 	Delete Bookmark	Xóa dấu trang
 	Hidden bookmarks	Dấu trang ẩn
 	Sort by:	Sắp xếp theo:
-
 # Page Setup › Mirror margins (#1239)
 	Mirror margins	Lề đối xứng
-
 # Insert Hyperlink › Place in This Document (#1370)
 	Existing File or Web Page	Tệp hoặc trang web hiện có
 	Link to:	Liên kết tới:
 	Place in This Document	Vị trí trong tài liệu này
-
 # Missing dictionary on the status bar (#1441)
 	No spelling dictionary for {language} is installed, so it isn't checked. WordCraft looks for the Hunspell dictionary {name} in the WORDCRAFT_DICTIONARIES folder and in the usual system locations.	Chưa cài từ điển chính tả cho {language}, nên ngôn ngữ này không được kiểm tra. WordCraft tìm từ điển Hunspell {name} trong thư mục WORDCRAFT_DICTIONARIES và ở các vị trí thông thường của hệ thống.
 	{language} (no dictionary)	{language} (không có từ điển)

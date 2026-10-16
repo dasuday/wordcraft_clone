@@ -2137,6 +2137,59 @@
 	Start-up	起動
 	Show the Start screen when WordCraft starts	WordCraft の起動時にスタート画面を表示する
 	On: WordCraft opens on File › Home, with a blank document, the templates and your recent documents. Off: it opens a blank document.	オン: WordCraft は [ファイル] › [ホーム] で開き、白紙の文書、テンプレート、最近使った文書を表示します。オフ: 白紙の文書を開きます。
+	Add-ins	アドイン
+	Get Add-ins	アドインを入手
+	Get\nAdd-ins	アドインを\n入手
+	Load Add-in	アドインの読み込み
+	Load Add-in…	アドインを読み込む…
+	Install Add-in from GitHub	GitHub からアドインをインストール
+	Unload Add-in	アドインのアンロード
+	Turn Add-in On or Off	アドインのオン/オフ
+	Add-in Documentation	アドインのドキュメント
+	Run Add-in Command	アドインのコマンドを実行
+	Add-in manifest	アドイン マニフェスト
+	Install from GitHub:	GitHub からインストール:
+	Install	インストール
+	Installing…	インストールしています…
+	Installed {name}	{name} をインストールしました
+	An add-in is a program that runs with your permissions. Install it only if you trust its author.	アドインは、あなたの権限で動作するプログラムです。作成者を信頼できる場合にのみインストールしてください。
+	Install and run {repo}?	{repo} をインストールして実行しますか?
+	Documentation	ドキュメント
+	Activate	有効にする
+	Deactivate	無効にする
+	Unload	アンロード
+	Until the next start	次回の起動まで
+	Active	有効
+	Inactive	無効
+	No add-ins are loaded.	読み込まれたアドインはありません。
+	owner/repository	所有者/リポジトリ
+	Pick the add-in's plugin.json	アドインの plugin.json を選択します
+	Add-ins need the desktop app.	アドインにはデスクトップ アプリが必要です。
+	There's no add-ins folder to install into.	インストール先のアドイン フォルダーがありません。
+	Code	コード
+	Disable all macros	すべてのマクロを無効にする
+	Disable macros with notification (enable them per document)	マクロを無効にして通知する (文書ごとに有効にできます)
+	Edit	編集
+	Enable Content	コンテンツを有効にする
+	Enable all macros (not recommended: a macro is a program)	すべてのマクロを有効にする (推奨しません: マクロはプログラムです)
+	Insert Module	モジュールの挿入
+	Macro Security	マクロのセキュリティ
+	Macro name:	マクロ名:
+	Macros are disabled for this document. Enable Content in the message bar, or change Macro Security.	この文書のマクロは無効になっています。メッセージ バーの「コンテンツを有効にする」をクリックするか、「マクロのセキュリティ」を変更してください。
+	Macros have been disabled.	マクロは無効になりました。
+	Modules	モジュール
+	No code yet: Insert Module.	コードはまだありません:「モジュールの挿入」をクリックしてください。
+	Office Add-in	Office アドイン
+	Office add-ins need the WordCraft desktop app on macOS or Windows.	Office アドインには、macOS または Windows 版の WordCraft デスクトップ アプリが必要です。
+	Remove Module	モジュールの削除
+	Run	実行
+	Run Macro	マクロの実行
+	SECURITY WARNING	セキュリティの警告
+	Save Module	モジュールの保存
+	Saves the module into the document (save the document as .docm to keep it)	モジュールを文書に保存します (残すには文書を .docm 形式で保存してください)
+	Stop Recording	記録の終了
+	This document has no macros yet: type a name and Create.	この文書にはまだマクロがありません: 名前を入力して「作成」をクリックしてください。
+	Visual Basic	Visual Basic
 	Copy to	コピー先
 
 # Document naming and account controls.
@@ -2215,6 +2268,124 @@
 # Backstage › Recover (#586)
 	Recover	回復
 
+# Developer › Ribbon Buttons: the document's buttons that run macros (Gaps #22)
+	Ribbon Buttons	リボンのボタン
+	Add Ribbon Button	リボン ボタンの追加
+	Edit Ribbon Button	リボン ボタンの編集
+	Remove Ribbon Button	リボン ボタンの削除
+	Press Ribbon Button	リボン ボタンを押す
+	Runs the macro {macro}	マクロ {macro} を実行します
+	Buttons that run this document's macros. They are saved with the document, and Word shows them too.	この文書のマクロを実行するボタンです。文書と一緒に保存され、Word にも表示されます。
+	No buttons yet.	ボタンはまだありません。
+	runs {macro}	{macro} を実行
+	This document's ribbon came from another program with more than buttons: its buttons run, but WordCraft doesn't change it.	この文書のリボンは別のプログラムで作られ、ボタン以外の要素も含んでいます: ボタンは動作しますが、WordCraft はリボンを変更しません。
+	New button	新しいボタン
+	Macro:	マクロ:
+	or type a name: Module1.Go	または名前を入力: Module1.Go
+	the macro's name	マクロの名前
+	Tab:	タブ:
+	or a new tab's name	または新しいタブの名前
+	Group:	グループ:
+	Picture:	画像:
+	Small button (three to a column)	小さいボタン (1 列に 3 つ)
+	Add to Ribbon…	リボンに追加…
+	A ribbon button that runs this macro, saved with the document	このマクロを実行するリボン ボタン (文書と一緒に保存されます)
+	Filter	フィルター
+	Nothing to show.	表示する項目はありません。
+	{label} must be a number.	{label} には数値を入力してください。
+	The add-in {name} reported an error: {error}	アドイン {name} がエラーを報告しました: {error}
+	The add-in {name} didn't finish its command.	アドイン {name} のコマンドが完了しませんでした。
+	Start Live Session	ライブ セッションを開始
+	Join Live Session	ライブ セッションに参加
+	Leave Live Session	ライブ セッションから退出
+	Live Session	ライブ セッション
+	Live session	ライブ セッション
+	Live Session Name and Colour	ライブ セッションでの名前と色
+	Title bar	タイトル バー
+	Joining…	参加しています…
+	Live	ライブ
+	Connecting…	接続しています…
+	Offline	オフライン
+	Session ended	セッションは終了しました
+	Share this document in a live session	この文書をライブ セッションで共有
+	{name} (you)	{name} (自分)
+	{name}'s caret isn't in a shared paragraph	{name} のカーソルは共有された段落にありません
+	Encrypted end to end	エンドツーエンドで暗号化済み
+	Encrypt end to end	エンドツーエンドで暗号化する
+	People here	参加者
+	Go to their caret	カーソル位置へ移動
+	Copy Invitation	招待をコピー
+	Invitation copied	招待をコピーしました
+	{count} others	ほか {count} 人
+	Start a live session	ライブ セッションを開始する
+	Join a live session	ライブ セッションに参加する
+	Connection:	接続:
+	Your name:	名前:
+	Your colour:	色:
+	Invitation:	招待:
+	Paste the invitation link	招待リンクを貼り付けてください
+	Joining replaces this document, which has unsaved changes.	参加するとこの文書が置き換えられます。この文書には保存されていない変更があります。
+	Discard my unsaved changes	保存していない変更を破棄する
+	Join	参加
+	Start	開始
+	Choose a connection	接続を選択してください
+	This add-in has no {command} command	このアドインには {command} コマンドがありません
+	The add-in didn't start a live session	アドインはライブ セッションを開始しませんでした
+	Live sessions need a co-editing add-in (a transport). Add one in File › Options › Add-ins.	ライブ セッションには共同編集アドイン (トランスポート) が必要です。ファイル › オプション › アドイン で追加してください。
+	{why}. Install {name} anyway?	{why}。それでも {name} をインストールしますか?
+	{name} (release {tag})	{name}（リリース {tag}）
+	The add-ins that need the installed version are blocked until it suits them again.	インストール済みのバージョンを必要とするアドインは、再び条件を満たすまでブロックされます。
+	Install Anyway	それでもインストール
+	{addin}; version {version} is installed	{addin}。バージョン {version} がインストールされています
+	{name} can use {addin}. Install it too?	{name} は {addin} を使用できます。これもインストールしますか?
+	{name} needs {addin}. Install it too?	{name} には {addin} が必要です。これもインストールしますか?
+	the newest release in range	範囲内の最新リリース
+	Add-ins are programs that run with your permissions. Install them only if you trust their authors.	アドインは、あなたの権限で動作するプログラムです。作成者を信頼できる場合にのみインストールしてください。
+	Install Selected	選択したものをインストール
+	Not Now	後で
+	Blocked	ブロック中
+	Install Missing	不足分をインストール
+	{who} needs {name}. Turn both off?	{who} には {name} が必要です。両方を無効にしますか?
+	{who} need {name}. Turn them all off?	{who} には {name} が必要です。すべて無効にしますか?
+	Turn Both Off	両方を無効にする
+	Turn All Off	すべて無効にする
+	Install Missing Add-ins	不足しているアドインをインストール
+	Add-in Requirements	アドインの要件
+	Chat	チャット
+	Chat copied to the clipboard	チャットをクリップボードにコピーしました
+	Chat, {count} unread	チャット、未読 {count} 件
+	Chat options	チャットのオプション
+	Clear chat…	チャットを消去…
+	Clear Chat	チャットを消去
+	edited	編集済み
+	Editing your message	メッセージを編集中
+	just now	たった今
+	Kept in the file; Office drops it when it saves	ファイルに保存されます。Office で保存すると削除されます
+	Message deleted	メッセージは削除されました
+	{name} is typing…	{name} さんが入力中…
+	{names} are typing…	{names} さんが入力中…
+	{n} h ago	{n} 時間前
+	{n} min ago	{n} 分前
+	No messages yet. Messages are kept in the document.	まだメッセージはありません。メッセージは文書に保存されます。
+	Remove the whole chat from the document for everyone?	全員のために、文書からチャット全体を削除しますか?
+	Replying to {name}	{name} さんへの返信
+	Send	送信
+	Write a message	メッセージを入力
+	Chat Messages	チャットのメッセージ
+	Send Chat Message	チャットにメッセージを送信
+	Edit Chat Message	チャットのメッセージを編集
+	Delete Chat Message	チャットのメッセージを削除
+	Export Chat	チャットをエクスポート
+	Typing in Chat	チャットで入力中
+	Close the document and go back to Nextcloud	ドキュメントを閉じて Nextcloud に戻る
+	craft-live refused the connection: {reason}	craft-live が接続を拒否しました: {reason}
+	Saved to Nextcloud	Nextcloud に保存しました
+	Couldn't save to Nextcloud: {error}	Nextcloud に保存できませんでした: {error}
+	The editing session expired. Close the document and open it again from Nextcloud.	編集セッションの有効期限が切れました。ドキュメントを閉じて、Nextcloud からもう一度開いてください。
+	Couldn't open the document from Nextcloud: {error}	Nextcloud からドキュメントを開けませんでした: {error}
+	This document is view only	このドキュメントは閲覧のみです
+	Saving to Nextcloud…	Nextcloud に保存しています…
+	Not connected: Nextcloud saves the document once the connection is back	接続されていません: 接続が戻ると Nextcloud がドキュメントを保存します
 # Page Setup › Mirror margins (#1239)
 	Mirror margins	見開きページ
 

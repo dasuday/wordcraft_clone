@@ -2171,6 +2171,59 @@
 	Start-up	Käivitamine
 	Show the Start screen when WordCraft starts	Näita WordCrafti käivitamisel avakuva
 	On: WordCraft opens on File › Home, with a blank document, the templates and your recent documents. Off: it opens a blank document.	Sees: WordCraft avaneb vaates Fail › Avaleht, kus on tühi dokument, mallid ja hiljutised dokumendid. Väljas: avaneb tühi dokument.
+	Add-ins	Lisandmoodulid
+	Get Add-ins	Hangi lisandmooduleid
+	Get\nAdd-ins	Hangi\nlisandmooduleid
+	Load Add-in	Laadi lisandmoodul
+	Load Add-in…	Laadi lisandmoodul…
+	Install Add-in from GitHub	Installi lisandmoodul GitHubist
+	Unload Add-in	Eemalda lisandmoodul mälust
+	Turn Add-in On or Off	Lülita lisandmoodul sisse või välja
+	Add-in Documentation	Lisandmooduli dokumentatsioon
+	Run Add-in Command	Käivita lisandmooduli käsk
+	Add-in manifest	Lisandmooduli manifest
+	Install from GitHub:	Installi GitHubist:
+	Install	Installi
+	Installing…	Installimine…
+	Installed {name}	Installitud: {name}
+	An add-in is a program that runs with your permissions. Install it only if you trust its author.	Lisandmoodul on programm, mis töötab teie õigustega. Installige see ainult siis, kui usaldate selle autorit.
+	Install and run {repo}?	Kas installida ja käivitada {repo}?
+	Documentation	Dokumentatsioon
+	Activate	Aktiveeri
+	Deactivate	Desaktiveeri
+	Unload	Eemalda
+	Until the next start	Kuni järgmise käivitamiseni
+	Active	Aktiivne
+	Inactive	Mitteaktiivne
+	No add-ins are loaded.	Ühtki lisandmoodulit pole laaditud.
+	owner/repository	omanik/hoidla
+	Pick the add-in's plugin.json	Valige lisandmooduli plugin.json
+	Add-ins need the desktop app.	Lisandmoodulid vajavad töölauarakendust.
+	There's no add-ins folder to install into.	Pole lisandmoodulite kausta, kuhu installida.
+	Code	Kood
+	Disable all macros	Keela kõik makrod
+	Disable macros with notification (enable them per document)	Keela makrod teavitusega (luba need dokumendipõhiselt)
+	Edit	Redigeeri
+	Enable Content	Luba sisu
+	Enable all macros (not recommended: a macro is a program)	Luba kõik makrod (pole soovitatav: makro on programm)
+	Insert Module	Lisa moodul
+	Macro Security	Makrode turve
+	Macro name:	Makro nimi:
+	Macros are disabled for this document. Enable Content in the message bar, or change Macro Security.	Selle dokumendi makrod on keelatud. Klõpsake teaberibal „Luba sisu“ või muutke sätet „Makrode turve“.
+	Macros have been disabled.	Makrod on keelatud.
+	Modules	Moodulid
+	No code yet: Insert Module.	Koodi veel pole: „Lisa moodul“.
+	Office Add-in	Office’i lisandmoodul
+	Office add-ins need the WordCraft desktop app on macOS or Windows.	Office’i lisandmoodulid vajavad WordCrafti töölauarakendust macOS-is või Windowsis.
+	Remove Module	Eemalda moodul
+	Run	Käivita
+	Run Macro	Käivita makro
+	SECURITY WARNING	TURBEHOIATUS
+	Save Module	Salvesta moodul
+	Saves the module into the document (save the document as .docm to keep it)	Salvestab mooduli dokumenti (selle säilitamiseks salvestage dokument .docm-vormingus)
+	Stop Recording	Lõpeta salvestamine
+	This document has no macros yet: type a name and Create.	Selles dokumendis pole veel makrosid: tippige nimi ja klõpsake „Loo“.
+	Visual Basic	Visual Basic
 	Copy to	Kopeeri asukohta
 
 # Document naming and account controls.
@@ -2249,6 +2302,124 @@
 # Backstage › Recover (#586)
 	Recover	Taasta
 
+# Developer › Ribbon Buttons: the document's buttons that run macros (Gaps #22)
+	Ribbon Buttons	Lindi nupud
+	Add Ribbon Button	Lisa nupp lindile
+	Edit Ribbon Button	Muuda lindi nuppu
+	Remove Ribbon Button	Eemalda nupp lindilt
+	Press Ribbon Button	Vajuta lindi nuppu
+	Runs the macro {macro}	Käivitab makro {macro}
+	Buttons that run this document's macros. They are saved with the document, and Word shows them too.	Nupud, mis käivitavad selle dokumendi makrosid. Need salvestatakse koos dokumendiga ja ka Word näitab neid.
+	No buttons yet.	Nuppe veel pole.
+	runs {macro}	käivitab {macro}
+	This document's ribbon came from another program with more than buttons: its buttons run, but WordCraft doesn't change it.	Selle dokumendi lint pärineb teisest programmist ja sisaldab rohkem kui nuppe: selle nupud töötavad, kuid WordCraft seda ei muuda.
+	New button	Uus nupp
+	Macro:	Makro:
+	or type a name: Module1.Go	või tippige nimi: Module1.Go
+	the macro's name	makro nimi
+	Tab:	Vahekaart:
+	or a new tab's name	või uue vahekaardi nimi
+	Group:	Rühm:
+	Picture:	Pilt:
+	Small button (three to a column)	Väike nupp (kolm veerus)
+	Add to Ribbon…	Lisa lindile…
+	A ribbon button that runs this macro, saved with the document	Lindi nupp, mis käivitab selle makro ja salvestatakse koos dokumendiga
+	Filter	Filter
+	Nothing to show.	Pole midagi näidata.
+	{label} must be a number.	{label} peab olema arv.
+	The add-in {name} reported an error: {error}	Lisandmoodul {name} teatas veast: {error}
+	The add-in {name} didn't finish its command.	Lisandmoodul {name} ei lõpetanud oma käsku.
+	Start Live Session	Alusta reaalajas seanssi
+	Join Live Session	Liitu reaalajas seansiga
+	Leave Live Session	Lahku reaalajas seansist
+	Live Session	Reaalajas seanss
+	Live session	Reaalajas seanss
+	Live Session Name and Colour	Nimi ja värv reaalajas seanssides
+	Title bar	Tiitliriba
+	Joining…	Liitumine…
+	Live	Reaalajas
+	Connecting…	Ühendamine…
+	Offline	Võrguühenduseta
+	Session ended	Seanss lõppes
+	Share this document in a live session	Jaga seda dokumenti reaalajas seansis
+	{name} (you)	{name} (teie)
+	{name}'s caret isn't in a shared paragraph	Kasutaja {name} kursor ei ole jagatud lõigus
+	Encrypted end to end	Otspunktkrüpteeritud
+	Encrypt end to end	Krüpteeri otspunktist otspunkti
+	People here	Kohal olijad
+	Go to their caret	Mine tema kursori juurde
+	Copy Invitation	Kopeeri kutse
+	Invitation copied	Kutse kopeeriti
+	{count} others	Teisi: {count}
+	Start a live session	Alusta reaalajas seanssi
+	Join a live session	Liitu reaalajas seansiga
+	Connection:	Ühendus:
+	Your name:	Teie nimi:
+	Your colour:	Teie värv:
+	Invitation:	Kutse:
+	Paste the invitation link	Kleepige kutse link
+	Joining replaces this document, which has unsaved changes.	Liitumine asendab selle dokumendi, milles on salvestamata muudatusi.
+	Discard my unsaved changes	Loobu minu salvestamata muudatustest
+	Join	Liitu
+	Start	Alusta
+	Choose a connection	Valige ühendus
+	This add-in has no {command} command	Sellel lisandmoodulil pole käsku {command}
+	The add-in didn't start a live session	Lisandmoodul ei alustanud reaalajas seanssi
+	Live sessions need a co-editing add-in (a transport). Add one in File › Options › Add-ins.	Reaalajas seansid vajavad kaastöötamise lisandmoodulit (transporti). Lisage see menüüs Fail › Valikud › Lisandmoodulid.
+	{why}. Install {name} anyway?	{why}. Kas installida {name} siiski?
+	{name} (release {tag})	{name} (väljalase {tag})
+	The add-ins that need the installed version are blocked until it suits them again.	Lisandmoodulid, mis vajavad installitud versiooni, jäävad blokeerituks, kuni see neile jälle sobib.
+	Install Anyway	Installi siiski
+	{addin}; version {version} is installed	{addin}; installitud on versioon {version}
+	{name} can use {addin}. Install it too?	{name} saab kasutada: {addin}. Kas installida ka see?
+	{name} needs {addin}. Install it too?	{name} vajab: {addin}. Kas installida ka see?
+	the newest release in range	uusim väljalase vahemikus
+	Add-ins are programs that run with your permissions. Install them only if you trust their authors.	Lisandmoodulid on programmid, mis töötavad teie õigustega. Installige need ainult siis, kui usaldate nende autoreid.
+	Install Selected	Installi valitud
+	Not Now	Mitte praegu
+	Blocked	Blokeeritud
+	Install Missing	Installi puuduvad
+	{who} needs {name}. Turn both off?	{who} vajab: {name}. Kas lülitada mõlemad välja?
+	{who} need {name}. Turn them all off?	{who} vajavad: {name}. Kas lülitada kõik välja?
+	Turn Both Off	Lülita mõlemad välja
+	Turn All Off	Lülita kõik välja
+	Install Missing Add-ins	Installi puuduvad lisandmoodulid
+	Add-in Requirements	Lisandmooduli nõuded
+	Chat	Vestlus
+	Chat copied to the clipboard	Vestlus kopeeriti lõikelauale
+	Chat, {count} unread	Vestlus, lugemata: {count}
+	Chat options	Vestluse valikud
+	Clear chat…	Tühjenda vestlus…
+	Clear Chat	Tühjenda vestlus
+	edited	muudetud
+	Editing your message	Sõnumi muutmine
+	just now	just praegu
+	Kept in the file; Office drops it when it saves	Hoitakse failis; Office eemaldab selle salvestamisel
+	Message deleted	Sõnum kustutatud
+	{name} is typing…	{name} kirjutab…
+	{names} are typing…	Kirjutavad: {names}…
+	{n} h ago	{n} h tagasi
+	{n} min ago	{n} min tagasi
+	No messages yet. Messages are kept in the document.	Sõnumeid veel pole. Sõnumid jäävad dokumenti.
+	Remove the whole chat from the document for everyone?	Kas eemaldada kogu vestlus dokumendist kõigi jaoks?
+	Replying to {name}	Vastus: {name}
+	Send	Saada
+	Write a message	Kirjuta sõnum
+	Chat Messages	Vestluse sõnumid
+	Send Chat Message	Saada vestlussõnum
+	Edit Chat Message	Muuda vestlussõnumit
+	Delete Chat Message	Kustuta vestlussõnum
+	Export Chat	Ekspordi vestlus
+	Typing in Chat	Vestlusse kirjutamine
+	Close the document and go back to Nextcloud	Sulge dokument ja naase Nextcloudi
+	craft-live refused the connection: {reason}	craft-live keeldus ühendusest: {reason}
+	Saved to Nextcloud	Salvestatud Nextcloudi
+	Couldn't save to Nextcloud: {error}	Nextcloudi salvestamine ebaõnnestus: {error}
+	The editing session expired. Close the document and open it again from Nextcloud.	Redigeerimisseanss aegus. Sulge dokument ja ava see Nextcloudist uuesti.
+	Couldn't open the document from Nextcloud: {error}	Dokumenti ei saanud Nextcloudist avada: {error}
+	This document is view only	Seda dokumenti saab ainult vaadata
+	Saving to Nextcloud…	Salvestamine Nextcloudi…
+	Not connected: Nextcloud saves the document once the connection is back	Ühendus puudub: Nextcloud salvestab dokumendi, kui ühendus taastub
 # Page Setup › Mirror margins (#1239)
 	Mirror margins	Peegelveerised
 

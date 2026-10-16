@@ -2503,6 +2503,59 @@ preview	Title	Título
 	Start-up	Inicio de la aplicación
 	Show the Start screen when WordCraft starts	Mostrar la pantalla de inicio al abrir WordCraft
 	On: WordCraft opens on File › Home, with a blank document, the templates and your recent documents. Off: it opens a blank document.	Activado: WordCraft se abre en Archivo › Inicio, con un documento en blanco, las plantillas y tus documentos recientes. Desactivado: abre un documento en blanco.
+	Add-ins	Complementos
+	Get Add-ins	Obtener complementos
+	Get\nAdd-ins	Obtener\ncomplementos
+	Load Add-in	Cargar complemento
+	Load Add-in…	Cargar complemento…
+	Install Add-in from GitHub	Instalar complemento desde GitHub
+	Unload Add-in	Descargar complemento
+	Turn Add-in On or Off	Activar o desactivar complemento
+	Add-in Documentation	Documentación del complemento
+	Run Add-in Command	Ejecutar comando del complemento
+	Add-in manifest	Manifiesto del complemento
+	Install from GitHub:	Instalar desde GitHub:
+	Install	Instalar
+	Installing…	Instalando…
+	Installed {name}	{name} instalado
+	An add-in is a program that runs with your permissions. Install it only if you trust its author.	Un complemento es un programa que se ejecuta con sus permisos. Instálelo solo si confía en su autor.
+	Install and run {repo}?	¿Instalar y ejecutar {repo}?
+	Documentation	Documentación
+	Activate	Activar
+	Deactivate	Desactivar
+	Unload	Descargar
+	Until the next start	Hasta el próximo inicio
+	Active	Activo
+	Inactive	Inactivo
+	No add-ins are loaded.	No hay complementos cargados.
+	owner/repository	propietario/repositorio
+	Pick the add-in's plugin.json	Elija el plugin.json del complemento
+	Add-ins need the desktop app.	Los complementos necesitan la aplicación de escritorio.
+	There's no add-ins folder to install into.	No hay una carpeta de complementos donde instalar.
+	Code	Código
+	Disable all macros	Deshabilitar todas las macros
+	Disable macros with notification (enable them per document)	Deshabilitar las macros con notificación (habilitarlas documento por documento)
+	Edit	Editar
+	Enable Content	Habilitar contenido
+	Enable all macros (not recommended: a macro is a program)	Habilitar todas las macros (no recomendado: una macro es un programa)
+	Insert Module	Insertar módulo
+	Macro Security	Seguridad de macros
+	Macro name:	Nombre de la macro:
+	Macros are disabled for this document. Enable Content in the message bar, or change Macro Security.	Las macros están deshabilitadas en este documento. Haga clic en «Habilitar contenido» en la barra de mensajes o cambie la «Seguridad de macros».
+	Macros have been disabled.	Se han deshabilitado las macros.
+	Modules	Módulos
+	No code yet: Insert Module.	Aún no hay código: «Insertar módulo».
+	Office Add-in	Complemento de Office
+	Office add-ins need the WordCraft desktop app on macOS or Windows.	Los complementos de Office necesitan la aplicación de escritorio de WordCraft en macOS o Windows.
+	Remove Module	Quitar módulo
+	Run	Ejecutar
+	Run Macro	Ejecutar macro
+	SECURITY WARNING	ADVERTENCIA DE SEGURIDAD
+	Save Module	Guardar módulo
+	Saves the module into the document (save the document as .docm to keep it)	Guarda el módulo en el documento (guarde el documento como .docm para conservarlo)
+	Stop Recording	Detener grabación
+	This document has no macros yet: type a name and Create.	Este documento aún no tiene macros: escriba un nombre y haga clic en «Crear».
+	Visual Basic	Visual Basic
 	Copy to	Copiar en
 
 # Document naming and account controls.
@@ -2581,6 +2634,124 @@ preview	Title	Título
 # Backstage › Recover (#586)
 	Recover	Recuperar
 
+# Developer › Ribbon Buttons: the document's buttons that run macros (Gaps #22)
+	Ribbon Buttons	Botones de la cinta de opciones
+	Add Ribbon Button	Agregar botón a la cinta de opciones
+	Edit Ribbon Button	Editar botón de la cinta de opciones
+	Remove Ribbon Button	Quitar botón de la cinta de opciones
+	Press Ribbon Button	Pulsar botón de la cinta de opciones
+	Runs the macro {macro}	Ejecuta la macro {macro}
+	Buttons that run this document's macros. They are saved with the document, and Word shows them too.	Botones que ejecutan las macros de este documento. Se guardan con el documento y Word también los muestra.
+	No buttons yet.	Todavía no hay botones.
+	runs {macro}	ejecuta {macro}
+	This document's ribbon came from another program with more than buttons: its buttons run, but WordCraft doesn't change it.	La cinta de opciones de este documento viene de otro programa y contiene algo más que botones: sus botones funcionan, pero WordCraft no la modifica.
+	New button	Botón nuevo
+	Macro:	Macro:
+	or type a name: Module1.Go	o escriba un nombre: Module1.Go
+	the macro's name	el nombre de la macro
+	Tab:	Pestaña:
+	or a new tab's name	o el nombre de una pestaña nueva
+	Group:	Grupo:
+	Picture:	Imagen:
+	Small button (three to a column)	Botón pequeño (tres por columna)
+	Add to Ribbon…	Agregar a la cinta de opciones…
+	A ribbon button that runs this macro, saved with the document	Un botón de la cinta de opciones que ejecuta esta macro, guardado con el documento
+	Filter	Filtro
+	Nothing to show.	No hay nada que mostrar.
+	{label} must be a number.	{label} debe ser un número.
+	The add-in {name} reported an error: {error}	El complemento {name} informó de un error: {error}
+	The add-in {name} didn't finish its command.	El complemento {name} no terminó su comando.
+	Start Live Session	Iniciar sesión en directo
+	Join Live Session	Unirse a una sesión en directo
+	Leave Live Session	Salir de la sesión en directo
+	Live Session	Sesión en directo
+	Live session	Sesión en directo
+	Live Session Name and Colour	Nombre y color en sesiones en directo
+	Title bar	Barra de título
+	Joining…	Uniéndose…
+	Live	En directo
+	Connecting…	Conectando…
+	Offline	Sin conexión
+	Session ended	Sesión finalizada
+	Share this document in a live session	Compartir este documento en una sesión en directo
+	{name} (you)	{name} (usted)
+	{name}'s caret isn't in a shared paragraph	El cursor de {name} no está en un párrafo compartido
+	Encrypted end to end	Cifrado de extremo a extremo
+	Encrypt end to end	Cifrar de extremo a extremo
+	People here	Personas aquí
+	Go to their caret	Ir a su cursor
+	Copy Invitation	Copiar invitación
+	Invitation copied	Invitación copiada
+	{count} others	Otros: {count}
+	Start a live session	Iniciar una sesión en directo
+	Join a live session	Unirse a una sesión en directo
+	Connection:	Conexión:
+	Your name:	Su nombre:
+	Your colour:	Su color:
+	Invitation:	Invitación:
+	Paste the invitation link	Pegue el enlace de invitación
+	Joining replaces this document, which has unsaved changes.	Al unirse se reemplaza este documento, que tiene cambios sin guardar.
+	Discard my unsaved changes	Descartar mis cambios sin guardar
+	Join	Unirse
+	Start	Iniciar
+	Choose a connection	Elija una conexión
+	This add-in has no {command} command	Este complemento no tiene el comando {command}
+	The add-in didn't start a live session	El complemento no inició una sesión en directo
+	Live sessions need a co-editing add-in (a transport). Add one in File › Options › Add-ins.	Las sesiones en directo necesitan un complemento de coedición (un transporte). Añada uno en Archivo › Opciones › Complementos.
+	{why}. Install {name} anyway?	{why}. ¿Instalar {name} de todos modos?
+	{name} (release {tag})	{name} (versión {tag})
+	The add-ins that need the installed version are blocked until it suits them again.	Los complementos que necesitan la versión instalada quedan bloqueados hasta que vuelva a servirles.
+	Install Anyway	Instalar de todos modos
+	{addin}; version {version} is installed	{addin}; está instalada la versión {version}
+	{name} can use {addin}. Install it too?	{name} puede usar {addin}. ¿Instalarlo también?
+	{name} needs {addin}. Install it too?	{name} necesita {addin}. ¿Instalarlo también?
+	the newest release in range	la versión más reciente dentro del rango
+	Add-ins are programs that run with your permissions. Install them only if you trust their authors.	Los complementos son programas que se ejecutan con sus permisos. Instálelos solo si confía en sus autores.
+	Install Selected	Instalar seleccionados
+	Not Now	Ahora no
+	Blocked	Bloqueado
+	Install Missing	Instalar los que faltan
+	{who} needs {name}. Turn both off?	{who} necesita {name}. ¿Desactivar ambos?
+	{who} need {name}. Turn them all off?	{who} necesitan {name}. ¿Desactivarlos todos?
+	Turn Both Off	Desactivar ambos
+	Turn All Off	Desactivar todos
+	Install Missing Add-ins	Instalar complementos que faltan
+	Add-in Requirements	Requisitos del complemento
+	Chat	Chat
+	Chat copied to the clipboard	Chat copiado al portapapeles
+	Chat, {count} unread	Chat, sin leer: {count}
+	Chat options	Opciones del chat
+	Clear chat…	Borrar chat…
+	Clear Chat	Borrar chat
+	edited	editado
+	Editing your message	Editando tu mensaje
+	just now	ahora mismo
+	Kept in the file; Office drops it when it saves	Se guarda en el archivo; Office lo elimina al guardar
+	Message deleted	Mensaje eliminado
+	{name} is typing…	{name} está escribiendo…
+	{names} are typing…	{names} están escribiendo…
+	{n} h ago	hace {n} h
+	{n} min ago	hace {n} min
+	No messages yet. Messages are kept in the document.	Aún no hay mensajes. Los mensajes se guardan en el documento.
+	Remove the whole chat from the document for everyone?	¿Quitar todo el chat del documento para todos?
+	Replying to {name}	Respondiendo a {name}
+	Send	Enviar
+	Write a message	Escribe un mensaje
+	Chat Messages	Mensajes del chat
+	Send Chat Message	Enviar mensaje de chat
+	Edit Chat Message	Editar mensaje de chat
+	Delete Chat Message	Eliminar mensaje de chat
+	Export Chat	Exportar chat
+	Typing in Chat	Escribiendo en el chat
+	Close the document and go back to Nextcloud	Cerrar el documento y volver a Nextcloud
+	craft-live refused the connection: {reason}	craft-live rechazó la conexión: {reason}
+	Saved to Nextcloud	Guardado en Nextcloud
+	Couldn't save to Nextcloud: {error}	No se pudo guardar en Nextcloud: {error}
+	The editing session expired. Close the document and open it again from Nextcloud.	La sesión de edición caducó. Cierra el documento y vuelve a abrirlo desde Nextcloud.
+	Couldn't open the document from Nextcloud: {error}	No se pudo abrir el documento desde Nextcloud: {error}
+	This document is view only	Este documento es solo de lectura
+	Saving to Nextcloud…	Guardando en Nextcloud…
+	Not connected: Nextcloud saves the document once the connection is back	Sin conexión: Nextcloud guardará el documento cuando vuelva la conexión
 # Page Setup › Mirror margins (#1239)
 	Mirror margins	Márgenes simétricos
 

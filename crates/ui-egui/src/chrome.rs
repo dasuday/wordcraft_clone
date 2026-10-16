@@ -283,6 +283,11 @@ pub fn title_bar(app: &mut WordApp, ui: &mut Ui) {
                 quick_access(ui, app);
                 qat_end = ui.min_rect().max.x;
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    // Share (live sessions, protocol 2), and the people in the session.
+                    if app.has_document() {
+                        crate::collab_ui::title_bar(app, ui, control_h);
+                        ui.add_space(10.0);
+                    }
                     // Account / community.
                     let (r, resp) = ui.allocate_exact_size(vec2(control_h, control_h), Sense::click());
                     ui.painter().circle_filled(r.center(), control_h / 2.0 - 1.0, t.accent);
@@ -375,7 +380,12 @@ pub fn title_bar(app: &mut WordApp, ui: &mut Ui) {
             let w = text_width(ui.painter(), &shown, &font, track, t.text);
             if available > 24.0 {
                 let rect = Rect::from_center_size(pos2(cx, full.center().y), vec2(w + 8.0, control_h));
-                let response = ui.interact(rect, ui.id().with("document_name"), Sense::click()).on_hover_text(tl!("Rename Document"));
+                // Where an add-in opened the document from comes first (protocol 1.2's `label`).
+                let tip = match &app.session.location_label {
+                    Some(label) => format!("{label}\n{}", tl!("Rename Document")),
+                    None => tl!("Rename Document").to_string(),
+                };
+                let response = ui.interact(rect, ui.id().with("document_name"), Sense::click()).on_hover_text(tip);
                 response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, &title));
                 if response.clicked() {
                     let _ = app.run("file.rename", json!({}));
@@ -468,6 +478,8 @@ pub fn status_bar(app: &mut WordApp, ui: &mut Ui) {
                 if app.session.prefs.overtype && st(ui, tl!("Overtype")).on_hover_text(tl!("Click to switch back to inserting")).clicked() {
                     let _ = app.run("text.overtype", json!({"value": false}));
                 }
+                // A live session: its state, and the room's message.
+                crate::collab_ui::status(app, ui);
                 if let Some((msg, at)) = &app.status_msg
                     && crate::now_ms() - at < 6000.0
                 {

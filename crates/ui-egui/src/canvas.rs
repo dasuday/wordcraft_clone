@@ -1294,6 +1294,11 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
         // document-first line may be scrolled offscreen; using it would pin the toolbar to an
         // old screen position unrelated to the visible selection.
         app.canvas.mini_anchor = crate::mini_toolbar::visible_anchor(screen_rects, visible_clip);
+        // Others in a live session: their selections, carets and recent edits.
+        if app.session.active_room().is_some() {
+            let scale = |pi: usize, pr: Rect| layout.pages.get(pi).map_or(geo.scale, |page| page_screen_scale(pr, page, geo.scale));
+            crate::collab_ui::paint_remote(app, &painter, &layout, &rects, &scale);
+        }
         // Content controls: the frame of the one the caret is in (all of them in Design Mode).
         crate::content_controls::paint(app, &painter, &t, &layout, &rects, geo.scale);
         // Read Aloud: the sentence being spoken.
@@ -2934,6 +2939,9 @@ fn context_menu(app: &mut WordApp, ui: &mut Ui) {
         }
         item(ui, app, "Table Properties…", "table.properties", json!({}));
     }
+    // Add-ins' items, last.
+    let in_table = app.session.sel.focus.path.cell().is_some();
+    crate::plugin_ui::context_menu_items(app, ui, in_table, picture || object);
 }
 
 /// What of a table the selection is: Word's context menu offers different table items for each.

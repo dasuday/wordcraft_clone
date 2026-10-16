@@ -2147,6 +2147,59 @@
 	Start-up	Pokretanje
 	Show the Start screen when WordCraft starts	Prikaži početni ekran pri pokretanju programa WordCraft
 	On: WordCraft opens on File › Home, with a blank document, the templates and your recent documents. Off: it opens a blank document.	Uključeno: WordCraft se otvara na Fajl › Početak, sa praznim dokumentom, šablonima i nedavnim dokumentima. Isključeno: otvara prazan dokument.
+	Add-ins	Dodaci
+	Get Add-ins	Preuzmi dodatke
+	Get\nAdd-ins	Preuzmi\ndodatke
+	Load Add-in	Učitaj dodatak
+	Load Add-in…	Učitaj dodatak…
+	Install Add-in from GitHub	Instaliraj dodatak sa GitHub-a
+	Unload Add-in	Ukloni dodatak iz memorije
+	Turn Add-in On or Off	Uključi ili isključi dodatak
+	Add-in Documentation	Dokumentacija dodatka
+	Run Add-in Command	Pokreni komandu dodatka
+	Add-in manifest	Manifest dodatka
+	Install from GitHub:	Instaliraj sa GitHub-a:
+	Install	Instaliraj
+	Installing…	Instaliranje…
+	Installed {name}	Instalirano: {name}
+	An add-in is a program that runs with your permissions. Install it only if you trust its author.	Dodatak je program koji radi sa vašim dozvolama. Instalirajte ga samo ako verujete njegovom autoru.
+	Install and run {repo}?	Instalirati i pokrenuti {repo}?
+	Documentation	Dokumentacija
+	Activate	Aktiviraj
+	Deactivate	Deaktiviraj
+	Unload	Ukloni
+	Until the next start	Do sledećeg pokretanja
+	Active	Aktivan
+	Inactive	Neaktivan
+	No add-ins are loaded.	Nema učitanih dodataka.
+	owner/repository	vlasnik/spremište
+	Pick the add-in's plugin.json	Izaberite plugin.json datoteku dodatka
+	Add-ins need the desktop app.	Dodacima je potrebna aplikacija za računar.
+	There's no add-ins folder to install into.	Nema fascikle dodataka u koju bi se instaliralo.
+	Code	Kôd
+	Disable all macros	Onemogući sve makroe
+	Disable macros with notification (enable them per document)	Onemogući makroe uz obaveštenje (omogućavaju se za svaki dokument posebno)
+	Edit	Uredi
+	Enable Content	Omogući sadržaj
+	Enable all macros (not recommended: a macro is a program)	Omogući sve makroe (ne preporučuje se: makro je program)
+	Insert Module	Ubaci modul
+	Macro Security	Bezbednost makroa
+	Macro name:	Naziv makroa:
+	Macros are disabled for this document. Enable Content in the message bar, or change Macro Security.	Makroi su onemogućeni za ovaj dokument. Kliknite na „Omogući sadržaj” na traci sa porukama ili promenite „Bezbednost makroa”.
+	Macros have been disabled.	Makroi su onemogućeni.
+	Modules	Moduli
+	No code yet: Insert Module.	Još nema kôda: „Ubaci modul”.
+	Office Add-in	Office dodatak
+	Office add-ins need the WordCraft desktop app on macOS or Windows.	Office dodacima je potrebna aplikacija WordCraft za računar na macOS-u ili Windows-u.
+	Remove Module	Ukloni modul
+	Run	Pokreni
+	Run Macro	Pokreni makro
+	SECURITY WARNING	BEZBEDNOSNO UPOZORENJE
+	Save Module	Sačuvaj modul
+	Saves the module into the document (save the document as .docm to keep it)	Čuva modul u dokumentu (sačuvajte dokument kao .docm da biste ga zadržali)
+	Stop Recording	Zaustavi snimanje
+	This document has no macros yet: type a name and Create.	Ovaj dokument još nema makroe: unesite naziv i kliknite na „Napravi”.
+	Visual Basic	Visual Basic
 	Copy to	Kopiraj u
 
 # Document naming and account controls.
@@ -2225,6 +2278,124 @@
 # Backstage › Recover (#586)
 	Recover	Oporavi
 
+# Developer › Ribbon Buttons: the document's buttons that run macros (Gaps #22)
+	Ribbon Buttons	Dugmad na traci
+	Add Ribbon Button	Dodaj dugme na traku
+	Edit Ribbon Button	Uredi dugme na traci
+	Remove Ribbon Button	Ukloni dugme sa trake
+	Press Ribbon Button	Pritisni dugme na traci
+	Runs the macro {macro}	Pokreće makro {macro}
+	Buttons that run this document's macros. They are saved with the document, and Word shows them too.	Dugmad koja pokreću makroe ovog dokumenta. Čuvaju se sa dokumentom, a prikazuje ih i Word.
+	No buttons yet.	Još nema dugmadi.
+	runs {macro}	pokreće {macro}
+	This document's ribbon came from another program with more than buttons: its buttons run, but WordCraft doesn't change it.	Traka ovog dokumenta potiče iz drugog programa i sadrži više od dugmadi: njena dugmad rade, ali je WordCraft ne menja.
+	New button	Novo dugme
+	Macro:	Makro:
+	or type a name: Module1.Go	ili unesite naziv: Module1.Go
+	the macro's name	naziv makroa
+	Tab:	Kartica:
+	or a new tab's name	ili naziv nove kartice
+	Group:	Grupa:
+	Picture:	Slika:
+	Small button (three to a column)	Malo dugme (tri u koloni)
+	Add to Ribbon…	Dodaj na traku…
+	A ribbon button that runs this macro, saved with the document	Dugme na traci koje pokreće ovaj makro, sačuvano sa dokumentom
+	Filter	Filter
+	Nothing to show.	Nema ničega za prikaz.
+	{label} must be a number.	{label} mora biti broj.
+	The add-in {name} reported an error: {error}	Dodatak {name} je prijavio grešku: {error}
+	The add-in {name} didn't finish its command.	Dodatak {name} nije završio svoju komandu.
+	Start Live Session	Započni sesiju uživo
+	Join Live Session	Pridruži se sesiji uživo
+	Leave Live Session	Napusti sesiju uživo
+	Live Session	Sesija uživo
+	Live session	Sesija uživo
+	Live Session Name and Colour	Ime i boja u sesiji uživo
+	Title bar	Naslovna traka
+	Joining…	Pridruživanje…
+	Live	Uživo
+	Connecting…	Povezivanje…
+	Offline	Van mreže
+	Session ended	Sesija je završena
+	Share this document in a live session	Deli ovaj dokument u sesiji uživo
+	{name} (you)	{name} (vi)
+	{name}'s caret isn't in a shared paragraph	Kursor korisnika {name} nije u deljenom pasusu
+	Encrypted end to end	Šifrovano s kraja na kraj
+	Encrypt end to end	Šifruj s kraja na kraj
+	People here	Prisutni
+	Go to their caret	Idi na kursor
+	Copy Invitation	Kopiraj pozivnicu
+	Invitation copied	Pozivnica je kopirana
+	{count} others	Drugih: {count}
+	Start a live session	Započni sesiju uživo
+	Join a live session	Pridruži se sesiji uživo
+	Connection:	Veza:
+	Your name:	Vaše ime:
+	Your colour:	Vaša boja:
+	Invitation:	Pozivnica:
+	Paste the invitation link	Nalepite vezu iz pozivnice
+	Joining replaces this document, which has unsaved changes.	Pridruživanje zamenjuje ovaj dokument, koji ima nesačuvane izmene.
+	Discard my unsaved changes	Odbaci moje nesačuvane izmene
+	Join	Pridruži se
+	Start	Započni
+	Choose a connection	Izaberite vezu
+	This add-in has no {command} command	Ovaj dodatak nema komandu {command}
+	The add-in didn't start a live session	Dodatak nije započeo sesiju uživo
+	Live sessions need a co-editing add-in (a transport). Add one in File › Options › Add-ins.	Sesije uživo zahtevaju dodatak za zajedničko uređivanje (transport). Dodajte ga u Fajl › Opcije › Dodaci.
+	{why}. Install {name} anyway?	{why}. Ipak instalirati {name}?
+	{name} (release {tag})	{name} (izdanje {tag})
+	The add-ins that need the installed version are blocked until it suits them again.	Dodaci kojima je potrebna instalirana verzija ostaju blokirani dok im ponovo ne odgovara.
+	Install Anyway	Ipak instaliraj
+	{addin}; version {version} is installed	{addin}; instalirana je verzija {version}
+	{name} can use {addin}. Install it too?	{name} može da koristi {addin}. Instalirati i njega?
+	{name} needs {addin}. Install it too?	{name} zahteva {addin}. Instalirati i njega?
+	the newest release in range	najnovije izdanje u opsegu
+	Add-ins are programs that run with your permissions. Install them only if you trust their authors.	Dodaci su programi koji rade sa vašim dozvolama. Instalirajte ih samo ako verujete njihovim autorima.
+	Install Selected	Instaliraj izabrane
+	Not Now	Ne sada
+	Blocked	Blokiran
+	Install Missing	Instaliraj nedostajuće
+	{who} needs {name}. Turn both off?	{who} zahteva {name}. Isključiti oba?
+	{who} need {name}. Turn them all off?	{who} zahtevaju {name}. Isključiti sve?
+	Turn Both Off	Isključi oba
+	Turn All Off	Isključi sve
+	Install Missing Add-ins	Instaliraj nedostajuće dodatke
+	Add-in Requirements	Zahtevi dodatka
+	Chat	Ćaskanje
+	Chat copied to the clipboard	Ćaskanje je kopirano u ostavu
+	Chat, {count} unread	Ćaskanje, nepročitano: {count}
+	Chat options	Opcije ćaskanja
+	Clear chat…	Obriši ćaskanje…
+	Clear Chat	Obriši ćaskanje
+	edited	izmenjeno
+	Editing your message	Izmena poruke
+	just now	upravo
+	Kept in the file; Office drops it when it saves	Čuva se u datoteci; Office ga uklanja pri čuvanju
+	Message deleted	Poruka je obrisana
+	{name} is typing…	{name} kuca…
+	{names} are typing…	Kucaju: {names}…
+	{n} h ago	pre {n} č
+	{n} min ago	pre {n} min
+	No messages yet. Messages are kept in the document.	Još nema poruka. Poruke ostaju u dokumentu.
+	Remove the whole chat from the document for everyone?	Ukloniti celo ćaskanje iz dokumenta za sve?
+	Replying to {name}	Odgovor za: {name}
+	Send	Pošalji
+	Write a message	Napišite poruku
+	Chat Messages	Poruke ćaskanja
+	Send Chat Message	Pošalji poruku u ćaskanju
+	Edit Chat Message	Izmeni poruku ćaskanja
+	Delete Chat Message	Obriši poruku ćaskanja
+	Export Chat	Izvezi ćaskanje
+	Typing in Chat	Kucanje u ćaskanju
+	Close the document and go back to Nextcloud	Zatvori dokument i vrati se u Nextcloud
+	craft-live refused the connection: {reason}	craft-live je odbio vezu: {reason}
+	Saved to Nextcloud	Sačuvano u Nextcloud
+	Couldn't save to Nextcloud: {error}	Čuvanje u Nextcloud nije uspelo: {error}
+	The editing session expired. Close the document and open it again from Nextcloud.	Sesija uređivanja je istekla. Zatvorite dokument i ponovo ga otvorite iz Nextcloud-a.
+	Couldn't open the document from Nextcloud: {error}	Dokument iz Nextcloud-a nije moguće otvoriti: {error}
+	This document is view only	Ovaj dokument je samo za pregled
+	Saving to Nextcloud…	Čuvanje u Nextcloud…
+	Not connected: Nextcloud saves the document once the connection is back	Nema veze: Nextcloud će sačuvati dokument kada se veza vrati
 # Page Setup › Mirror margins (#1239)
 	Mirror margins	Preslikane margine
 

@@ -2647,3 +2647,173 @@ preview	Title	Titel
 	Bottom Right Cell	Nedre högra cellen
 	Inside Horizontal Border	Inre vågrät kantlinje
 	Inside Vertical Border	Inre lodrät kantlinje
+	Add-ins	Tillägg
+	Get Add-ins	Skaffa tillägg
+	Get\nAdd-ins	Skaffa\ntillägg
+	Load Add-in	Läs in tillägg
+	Load Add-in…	Läs in tillägg…
+	Install Add-in from GitHub	Installera tillägg från GitHub
+	Unload Add-in	Ta bort inläst tillägg
+	Turn Add-in On or Off	Slå på eller av tillägg
+	Add-in Documentation	Tilläggets dokumentation
+	Run Add-in Command	Kör tilläggskommando
+	Add-in manifest	Tilläggsmanifest
+	Install from GitHub:	Installera från GitHub:
+	Install	Installera
+	Installing…	Installerar…
+	Installed {name}	{name} installerades
+	An add-in is a program that runs with your permissions. Install it only if you trust its author.	Ett tillägg är ett program som körs med dina behörigheter. Installera det bara om du litar på upphovspersonen.
+	Install and run {repo}?	Installera och köra {repo}?
+	Documentation	Dokumentation
+	Activate	Aktivera
+	Deactivate	Inaktivera
+	Unload	Ta bort
+	Until the next start	Till nästa start
+	Active	Aktiv
+	Inactive	Inaktiv
+	No add-ins are loaded.	Inga tillägg är inlästa.
+	owner/repository	ägare/repository
+	Pick the add-in's plugin.json	Välj tilläggets plugin.json
+	Add-ins need the desktop app.	Tillägg kräver skrivbordsappen.
+	There's no add-ins folder to install into.	Det finns ingen tilläggsmapp att installera i.
+	Code	Kod
+	Disable all macros	Inaktivera alla makron
+	Disable macros with notification (enable them per document)	Inaktivera makron med meddelande (aktivera dem per dokument)
+	Edit	Redigera
+	Enable Content	Aktivera innehåll
+	Enable all macros (not recommended: a macro is a program)	Aktivera alla makron (rekommenderas inte: ett makro är ett program)
+	Insert Module	Infoga modul
+	Macro Security	Makrosäkerhet
+	Macro name:	Makronamn:
+	Macros are disabled for this document. Enable Content in the message bar, or change Macro Security.	Makron är inaktiverade för det här dokumentet. Välj Aktivera innehåll i meddelandefältet eller ändra makrosäkerheten.
+	Macros have been disabled.	Makron har inaktiverats.
+	Modules	Moduler
+	No code yet: Insert Module.	Ingen kod än: infoga en modul.
+	Office Add-in	Office-tillägg
+	Office add-ins need the WordCraft desktop app on macOS or Windows.	Office-tillägg kräver WordCrafts skrivbordsapp på macOS eller Windows.
+	Remove Module	Ta bort modul
+	Run	Kör
+	Run Macro	Kör makro
+	SECURITY WARNING	SÄKERHETSVARNING
+	Save Module	Spara modul
+	Saves the module into the document (save the document as .docm to keep it)	Sparar modulen i dokumentet (spara dokumentet som .docm för att behålla den)
+	Stop Recording	Stoppa inspelning
+	This document has no macros yet: type a name and Create.	Det här dokumentet har inga makron än: skriv ett namn och välj Skapa.
+	Visual Basic	Visual Basic
+	Ribbon Buttons	Verktygspanelknappar
+	Add Ribbon Button	Lägg till verktygspanelknapp
+	Edit Ribbon Button	Redigera verktygspanelknapp
+	Remove Ribbon Button	Ta bort verktygspanelknapp
+	Press Ribbon Button	Tryck på verktygspanelknapp
+	Runs the macro {macro}	Kör makrot {macro}
+	Buttons that run this document's macros. They are saved with the document, and Word shows them too.	Knappar som kör det här dokumentets makron. De sparas med dokumentet, och Word visar dem också.
+	No buttons yet.	Inga knappar än.
+	runs {macro}	kör {macro}
+	This document's ribbon came from another program with more than buttons: its buttons run, but WordCraft doesn't change it.	Det här dokumentets verktygspanel kommer från ett annat program och innehåller mer än knappar: knapparna fungerar, men WordCraft ändrar den inte.
+	New button	Ny knapp
+	Macro:	Makro:
+	or type a name: Module1.Go	eller skriv ett namn: Module1.Go
+	the macro's name	makrots namn
+	Tab:	Flik:
+	or a new tab's name	eller namnet på en ny flik
+	Group:	Grupp:
+	Picture:	Bild:
+	Small button (three to a column)	Liten knapp (tre per kolumn)
+	Add to Ribbon…	Lägg till i verktygspanelen…
+	A ribbon button that runs this macro, saved with the document	En verktygspanelknapp som kör det här makrot, sparad med dokumentet
+	Filter	Filter
+	Nothing to show.	Inget att visa.
+	{label} must be a number.	{label} måste vara ett tal.
+	The add-in {name} reported an error: {error}	Tillägget {name} rapporterade ett fel: {error}
+	The add-in {name} didn't finish its command.	Tillägget {name} slutförde inte sitt kommando.
+	Start Live Session	Starta livesession
+	Join Live Session	Gå med i livesession
+	Leave Live Session	Lämna livesession
+	Live Session	Livesession
+	Live session	Livesession
+	Live Session Name and Colour	Namn och färg i livesession
+	Title bar	Namnlist
+	Joining…	Ansluter…
+	Live	Live
+	Connecting…	Ansluter…
+	Offline	Offline
+	Session ended	Sessionen har avslutats
+	Share this document in a live session	Dela det här dokumentet i en livesession
+	{name} (you)	{name} (du)
+	{name}'s caret isn't in a shared paragraph	{name}s markör är inte i ett delat stycke
+	Encrypted end to end	Krypterad från ände till ände
+	Encrypt end to end	Kryptera från ände till ände
+	People here	Personer här
+	Go to their caret	Gå till personens markör
+	Copy Invitation	Kopiera inbjudan
+	Invitation copied	Inbjudan kopierad
+	{count} others	{count} till
+	Start a live session	Starta en livesession
+	Join a live session	Gå med i en livesession
+	Connection:	Anslutning:
+	Your name:	Ditt namn:
+	Your colour:	Din färg:
+	Invitation:	Inbjudan:
+	Paste the invitation link	Klistra in inbjudningslänken
+	Joining replaces this document, which has unsaved changes.	Om du går med ersätts det här dokumentet, som har osparade ändringar.
+	Discard my unsaved changes	Ignorera mina osparade ändringar
+	Join	Gå med
+	Start	Starta
+	Choose a connection	Välj en anslutning
+	This add-in has no {command} command	Det här tillägget har inget kommando {command}
+	The add-in didn't start a live session	Tillägget startade ingen livesession
+	Live sessions need a co-editing add-in (a transport). Add one in File › Options › Add-ins.	Livesessioner kräver ett tillägg för samredigering (en transport). Lägg till ett under Arkiv › Alternativ › Tillägg.
+	{why}. Install {name} anyway?	{why}. Installera {name} ändå?
+	{name} (release {tag})	{name} (version {tag})
+	The add-ins that need the installed version are blocked until it suits them again.	Tilläggen som behöver den installerade versionen blockeras tills den passar dem igen.
+	Install Anyway	Installera ändå
+	{addin}; version {version} is installed	{addin}; version {version} är installerad
+	{name} can use {addin}. Install it too?	{name} kan använda {addin}. Installera det också?
+	{name} needs {addin}. Install it too?	{name} behöver {addin}. Installera det också?
+	the newest release in range	den senaste versionen inom intervallet
+	Add-ins are programs that run with your permissions. Install them only if you trust their authors.	Tillägg är program som körs med dina behörigheter. Installera dem bara om du litar på upphovspersonerna.
+	Install Selected	Installera markerade
+	Not Now	Inte nu
+	Blocked	Blockerad
+	Install Missing	Installera det som saknas
+	{who} needs {name}. Turn both off?	{who} behöver {name}. Stänga av båda?
+	{who} need {name}. Turn them all off?	{who} behöver {name}. Stänga av alla?
+	Turn Both Off	Stäng av båda
+	Turn All Off	Stäng av alla
+	Install Missing Add-ins	Installera tillägg som saknas
+	Add-in Requirements	Tilläggets krav
+	Chat	Chatt
+	Chat copied to the clipboard	Chatten kopierades till urklipp
+	Chat, {count} unread	Chatt, {count} olästa
+	Chat options	Chattalternativ
+	Clear chat…	Rensa chatten…
+	Clear Chat	Rensa chatten
+	edited	redigerad
+	Editing your message	Du redigerar ditt meddelande
+	just now	nyss
+	Kept in the file; Office drops it when it saves	Sparas i filen; Office tar bort den när den sparar
+	Message deleted	Meddelandet har tagits bort
+	{name} is typing…	{name} skriver…
+	{names} are typing…	{names} skriver…
+	{n} h ago	för {n} h sedan
+	{n} min ago	för {n} min sedan
+	No messages yet. Messages are kept in the document.	Inga meddelanden än. Meddelanden sparas i dokumentet.
+	Remove the whole chat from the document for everyone?	Ta bort hela chatten från dokumentet för alla?
+	Replying to {name}	Svarar {name}
+	Send	Skicka
+	Write a message	Skriv ett meddelande
+	Chat Messages	Chattmeddelanden
+	Send Chat Message	Skicka chattmeddelande
+	Edit Chat Message	Redigera chattmeddelande
+	Delete Chat Message	Ta bort chattmeddelande
+	Export Chat	Exportera chatten
+	Typing in Chat	Skriver i chatten
+	Close the document and go back to Nextcloud	Stäng dokumentet och gå tillbaka till Nextcloud
+	craft-live refused the connection: {reason}	craft-live nekade anslutningen: {reason}
+	Saved to Nextcloud	Sparat i Nextcloud
+	Couldn't save to Nextcloud: {error}	Det gick inte att spara i Nextcloud: {error}
+	The editing session expired. Close the document and open it again from Nextcloud.	Redigeringssessionen har gått ut. Stäng dokumentet och öppna det igen från Nextcloud.
+	Couldn't open the document from Nextcloud: {error}	Det gick inte att öppna dokumentet från Nextcloud: {error}
+	This document is view only	Det här dokumentet är skrivskyddat
+	Saving to Nextcloud…	Sparar i Nextcloud…
+	Not connected: Nextcloud saves the document once the connection is back	Inte ansluten: Nextcloud sparar dokumentet när anslutningen är tillbaka

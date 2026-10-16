@@ -2632,3 +2632,173 @@ preview	Title	Naslov
 	Bottom Right Cell	Donja desna ćelija
 	Inside Horizontal Border	Unutarnji vodoravni obrub
 	Inside Vertical Border	Unutarnji okomiti obrub
+	Add-ins	Dodaci
+	Get Add-ins	Nabavi dodatke
+	Get\nAdd-ins	Nabavi\ndodatke
+	Load Add-in	Učitaj dodatak
+	Load Add-in…	Učitaj dodatak…
+	Install Add-in from GitHub	Instaliraj dodatak s GitHuba
+	Unload Add-in	Ukloni dodatak iz memorije
+	Turn Add-in On or Off	Uključi ili isključi dodatak
+	Add-in Documentation	Dokumentacija dodatka
+	Run Add-in Command	Pokreni naredbu dodatka
+	Add-in manifest	Manifest dodatka
+	Install from GitHub:	Instaliraj s GitHuba:
+	Install	Instaliraj
+	Installing…	Instaliranje…
+	Installed {name}	Instalirano: {name}
+	An add-in is a program that runs with your permissions. Install it only if you trust its author.	Dodatak je program koji radi s vašim ovlastima. Instalirajte ga samo ako vjerujete njegovu autoru.
+	Install and run {repo}?	Instalirati i pokrenuti {repo}?
+	Documentation	Dokumentacija
+	Activate	Aktiviraj
+	Deactivate	Deaktiviraj
+	Unload	Ukloni iz memorije
+	Until the next start	Do sljedećeg pokretanja
+	Active	Aktivan
+	Inactive	Neaktivan
+	No add-ins are loaded.	Nijedan dodatak nije učitan.
+	owner/repository	vlasnik/repozitorij
+	Pick the add-in's plugin.json	Odaberite plugin.json dodatka
+	Add-ins need the desktop app.	Dodaci zahtijevaju aplikaciju za računalo.
+	There's no add-ins folder to install into.	Nema mape za dodatke u koju bi se instaliralo.
+	Code	Kôd
+	Disable all macros	Onemogući sve makronaredbe
+	Disable macros with notification (enable them per document)	Onemogući makronaredbe uz obavijest (omogućite ih za svaki dokument)
+	Edit	Uredi
+	Enable Content	Omogući sadržaj
+	Enable all macros (not recommended: a macro is a program)	Omogući sve makronaredbe (ne preporučuje se: makronaredba je program)
+	Insert Module	Umetni modul
+	Macro Security	Sigurnost makronaredbi
+	Macro name:	Naziv makronaredbe:
+	Macros are disabled for this document. Enable Content in the message bar, or change Macro Security.	Makronaredbe su onemogućene za ovaj dokument. Odaberite Omogući sadržaj na traci poruka ili promijenite sigurnost makronaredbi.
+	Macros have been disabled.	Makronaredbe su onemogućene.
+	Modules	Moduli
+	No code yet: Insert Module.	Još nema koda: umetnite modul.
+	Office Add-in	Office dodatak
+	Office add-ins need the WordCraft desktop app on macOS or Windows.	Office dodaci zahtijevaju WordCraft aplikaciju za računalo na macOS-u ili Windowsima.
+	Remove Module	Ukloni modul
+	Run	Pokreni
+	Run Macro	Pokreni makronaredbu
+	SECURITY WARNING	SIGURNOSNO UPOZORENJE
+	Save Module	Spremi modul
+	Saves the module into the document (save the document as .docm to keep it)	Sprema modul u dokument (spremite dokument kao .docm da biste ga zadržali)
+	Stop Recording	Zaustavi snimanje
+	This document has no macros yet: type a name and Create.	Ovaj dokument još nema makronaredbi: upišite naziv i odaberite Izradi.
+	Visual Basic	Visual Basic
+	Ribbon Buttons	Gumbi na vrpci
+	Add Ribbon Button	Dodaj gumb na vrpcu
+	Edit Ribbon Button	Uredi gumb na vrpci
+	Remove Ribbon Button	Ukloni gumb s vrpce
+	Press Ribbon Button	Pritisni gumb na vrpci
+	Runs the macro {macro}	Pokreće makronaredbu {macro}
+	Buttons that run this document's macros. They are saved with the document, and Word shows them too.	Gumbi koji pokreću makronaredbe ovog dokumenta. Spremaju se s dokumentom, a prikazuje ih i Word.
+	No buttons yet.	Još nema gumba.
+	runs {macro}	pokreće {macro}
+	This document's ribbon came from another program with more than buttons: its buttons run, but WordCraft doesn't change it.	Vrpca ovog dokumenta potječe iz drugog programa i sadrži više od gumba: njezini gumbi rade, ali WordCraft je ne mijenja.
+	New button	Novi gumb
+	Macro:	Makronaredba:
+	or type a name: Module1.Go	ili upišite naziv: Module1.Go
+	the macro's name	naziv makronaredbe
+	Tab:	Kartica:
+	or a new tab's name	ili naziv nove kartice
+	Group:	Grupa:
+	Picture:	Slika:
+	Small button (three to a column)	Mali gumb (tri u stupcu)
+	Add to Ribbon…	Dodaj na vrpcu…
+	A ribbon button that runs this macro, saved with the document	Gumb na vrpci koji pokreće ovu makronaredbu, spremljen s dokumentom
+	Filter	Filtar
+	Nothing to show.	Nema ništa za prikaz.
+	{label} must be a number.	{label} mora biti broj.
+	The add-in {name} reported an error: {error}	Dodatak {name} prijavio je pogrešku: {error}
+	The add-in {name} didn't finish its command.	Dodatak {name} nije dovršio svoju naredbu.
+	Start Live Session	Pokreni zajedničko uređivanje
+	Join Live Session	Pridruži se zajedničkom uređivanju
+	Leave Live Session	Napusti zajedničko uređivanje
+	Live Session	Zajedničko uređivanje
+	Live session	Zajedničko uređivanje
+	Live Session Name and Colour	Ime i boja u zajedničkom uređivanju
+	Title bar	Naslovna traka
+	Joining…	Pridruživanje…
+	Live	Uživo
+	Connecting…	Povezivanje…
+	Offline	Izvan mreže
+	Session ended	Sesija je završila
+	Share this document in a live session	Podijeli ovaj dokument u zajedničkom uređivanju
+	{name} (you)	{name} (vi)
+	{name}'s caret isn't in a shared paragraph	Pokazivač korisnika {name} nije u zajedničkom odlomku
+	Encrypted end to end	Šifrirano s kraja na kraj
+	Encrypt end to end	Šifriraj s kraja na kraj
+	People here	Prisutni
+	Go to their caret	Idi na njihov pokazivač
+	Copy Invitation	Kopiraj pozivnicu
+	Invitation copied	Pozivnica je kopirana
+	{count} others	još {count}
+	Start a live session	Pokreni zajedničko uređivanje
+	Join a live session	Pridruži se zajedničkom uređivanju
+	Connection:	Veza:
+	Your name:	Vaše ime:
+	Your colour:	Vaša boja:
+	Invitation:	Pozivnica:
+	Paste the invitation link	Zalijepite poveznicu pozivnice
+	Joining replaces this document, which has unsaved changes.	Pridruživanje zamjenjuje ovaj dokument, koji ima nespremljene promjene.
+	Discard my unsaved changes	Odbaci moje nespremljene promjene
+	Join	Pridruži se
+	Start	Pokreni
+	Choose a connection	Odaberite vezu
+	This add-in has no {command} command	Ovaj dodatak nema naredbu {command}
+	The add-in didn't start a live session	Dodatak nije pokrenuo zajedničko uređivanje
+	Live sessions need a co-editing add-in (a transport). Add one in File › Options › Add-ins.	Zajedničko uređivanje zahtijeva dodatak za suuređivanje (prijenos). Dodajte ga u Datoteka › Mogućnosti › Dodaci.
+	{why}. Install {name} anyway?	{why}. Ipak instalirati {name}?
+	{name} (release {tag})	{name} (izdanje {tag})
+	The add-ins that need the installed version are blocked until it suits them again.	Dodaci kojima treba instalirana inačica blokirani su dok im ponovno ne odgovara.
+	Install Anyway	Ipak instaliraj
+	{addin}; version {version} is installed	{addin}; instalirana je inačica {version}
+	{name} can use {addin}. Install it too?	{name} može koristiti {addin}. Instalirati i njega?
+	{name} needs {addin}. Install it too?	{name} treba {addin}. Instalirati i njega?
+	the newest release in range	najnovije izdanje u rasponu
+	Add-ins are programs that run with your permissions. Install them only if you trust their authors.	Dodaci su programi koji rade s vašim ovlastima. Instalirajte ih samo ako vjerujete njihovim autorima.
+	Install Selected	Instaliraj odabrano
+	Not Now	Ne sada
+	Blocked	Blokirano
+	Install Missing	Instaliraj što nedostaje
+	{who} needs {name}. Turn both off?	{who} treba {name}. Isključiti oba?
+	{who} need {name}. Turn them all off?	{who} trebaju {name}. Isključiti sve?
+	Turn Both Off	Isključi oba
+	Turn All Off	Isključi sve
+	Install Missing Add-ins	Instaliraj dodatke koji nedostaju
+	Add-in Requirements	Zahtjevi dodatka
+	Chat	Razgovor
+	Chat copied to the clipboard	Razgovor je kopiran u međuspremnik
+	Chat, {count} unread	Razgovor, nepročitano: {count}
+	Chat options	Mogućnosti razgovora
+	Clear chat…	Očisti razgovor…
+	Clear Chat	Očisti razgovor
+	edited	uređeno
+	Editing your message	Uređujete svoju poruku
+	just now	upravo sada
+	Kept in the file; Office drops it when it saves	Čuva se u datoteci; Office ga odbacuje pri spremanju
+	Message deleted	Poruka je izbrisana
+	{name} is typing…	{name} piše…
+	{names} are typing…	{names} pišu…
+	{n} h ago	prije {n} h
+	{n} min ago	prije {n} min
+	No messages yet. Messages are kept in the document.	Još nema poruka. Poruke se čuvaju u dokumentu.
+	Remove the whole chat from the document for everyone?	Ukloniti cijeli razgovor iz dokumenta za sve?
+	Replying to {name}	Odgovor korisniku {name}
+	Send	Pošalji
+	Write a message	Napišite poruku
+	Chat Messages	Poruke razgovora
+	Send Chat Message	Pošalji poruku u razgovoru
+	Edit Chat Message	Uredi poruku u razgovoru
+	Delete Chat Message	Izbriši poruku u razgovoru
+	Export Chat	Izvezi razgovor
+	Typing in Chat	Pisanje u razgovoru
+	Close the document and go back to Nextcloud	Zatvori dokument i vrati se u Nextcloud
+	craft-live refused the connection: {reason}	craft-live je odbio vezu: {reason}
+	Saved to Nextcloud	Spremljeno u Nextcloud
+	Couldn't save to Nextcloud: {error}	Spremanje u Nextcloud nije uspjelo: {error}
+	The editing session expired. Close the document and open it again from Nextcloud.	Sesija uređivanja je istekla. Zatvorite dokument i ponovno ga otvorite iz Nextclouda.
+	Couldn't open the document from Nextcloud: {error}	Otvaranje dokumenta iz Nextclouda nije uspjelo: {error}
+	This document is view only	Ovaj dokument je samo za pregled
+	Saving to Nextcloud…	Spremanje u Nextcloud…
+	Not connected: Nextcloud saves the document once the connection is back	Nije povezano: Nextcloud sprema dokument kad se veza vrati

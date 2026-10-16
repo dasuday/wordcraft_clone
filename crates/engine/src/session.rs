@@ -5,6 +5,13 @@ use std::sync::{Arc, OnceLock};
 /// The system locale (BCP 47 tag) the shell found at startup, for Numeral › System.
 static SYSTEM_LOCALE: OnceLock<String> = OnceLock::new();
 
+/// The next document id ([`Session::document_id`]): one counter for the process, so ids never
+/// repeat across windows or documents while the app runs.
+fn next_document_id() -> u64 {
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+    NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+}
+
 /// Tell the engine the system locale (the shell calls this once at startup; layout never reads
 /// the environment). Headless sessions without it show Western digits for Numeral › System.
 pub fn set_system_locale(tag: &str) {
@@ -137,6 +144,9 @@ pub struct ViewState {
     /// The Alt Text pane (Picture/Shape Format › Alt Text): the selected object's or table's alt text.
     #[serde(default)]
     pub alt_text_pane: bool,
+    /// The chat panel (document chat, `view.chat`).
+    #[serde(default)]
+    pub chat_pane: bool,
     pub multi_page: bool,
     /// One Page or Page Width was chosen last: keep one page per row when a typed or wheel zoom replaces the fit mode.
     #[serde(default)]
@@ -226,6 +236,7 @@ impl Default for ViewState {
             smart_art_pane: false,
             accessibility_pane: false,
             alt_text_pane: false,
+            chat_pane: false,
             multi_page: false,
             single_column: false,
             fit: String::new(),
@@ -386,7 +397,8 @@ pub struct Session {
     join_next: bool,
     rev: u64,
     /// Which document this is: changes when [`Session::set_document`] replaces it (open, new,
-    /// mail merge, recover), never on an edit.
+    /// mail merge, recover), never on an edit. Unique in the process (every window draws from
+    /// [`next_document_id`]), so add-ins can tell documents apart by it (plugin protocol 2.2).
     document_id: u64,
     cache: LayoutCache,
     /// (revision, width, read height, view, read line spacing, layout, proofing, outline,
@@ -410,6 +422,8 @@ pub struct Session {
     pub last_command: Option<(String, Value)>,
     /// Macro being recorded: (name, steps).
     pub recording: Option<(String, Vec<(String, Value)>)>,
+    /// The user let this document's macros run (Enable Content), until another document opens.
+    pub macros_enabled: bool,
     pub macros: std::collections::BTreeMap<String, Vec<(String, Value)>>,
     /// Saved versions: (label, date, document).
     pub versions: Vec<(String, String, Document)>,
@@ -422,6 +436,9 @@ pub struct Session {
     pub merge: crate::cmd::mailings::MergeState,
     /// Requests from commands to the UI (open a dialog, scroll…), drained by the front end.
     pub ui_requests: Vec<Value>,
+    /// Where the document came from, in words, when an add-in opened it (`file.open`'s `label`,
+    /// protocol 1.2: "Nextcloud · Documents/Budget.docx"); shown as its location.
+    pub location_label: Option<String>,
     /// Read Aloud player (Review › Speech).
     pub read_aloud: crate::speech::ReadAloud,
     /// Preferences the front end saves between runs.
@@ -458,6 +475,11 @@ pub struct Session {
     pub column: Option<ColumnBlock>,
     /// Column selection mode (Ctrl+Shift+F8): caret movement extends the block.
     pub column_mode: bool,
+    /// Live sessions (plugin protocol 2).
+    pub collab: crate::collab::Collab,
+    /// Commands running inside commands (a plugin command's steps): a live session shares the
+    /// outermost one's effect as one change.
+    depth: u32,
     /// A selection widened to whole table cells or rows, and where it really runs (see
     /// [`Session::sel_ends`]).
     pub(crate) widened: Option<Widened>,
@@ -525,6 +547,15 @@ pub struct Prefs {
     /// in Word). A damaged saved value reads as the defaults.
     #[serde(deserialize_with = "crate::cmd::tools::lenient_autocorrect")]
     pub autocorrect: crate::cmd::tools::AutoCorrectPrefs,
+    /// Add-ins the user turned off (File › Options › Add-ins): listed, but not run.
+    pub disabled_plugins: Vec<String>,
+    /// Which documents' macros may run: `disable`, `prompt` (once enabled for the document) or
+    /// `enable` (Developer › Macro Security).
+    pub macro_security: String,
+    /// Live sessions: this person's stable id (made on first use) and colour (`#RRGGBB`); their
+    /// name is the author name.
+    pub collab_user_id: String,
+    pub collab_color: String,
 }
 
 impl Default for Prefs {
@@ -546,6 +577,10 @@ impl Default for Prefs {
             ignore_internet: true,
             detect_language: true,
             autocorrect: Default::default(),
+            disabled_plugins: Vec::new(),
+            macro_security: "prompt".into(),
+            collab_user_id: String::new(),
+            collab_color: String::new(),
         }
     }
 }
@@ -619,12 +654,13 @@ impl Session {
             typing_open: false,
             join_next: false,
             rev: 1,
-            document_id: 1,
+            document_id: next_document_id(),
             cache: LayoutCache::new(),
             layout: None,
             originals: Default::default(),
             last_command: None,
             recording: None,
+            macros_enabled: false,
             macros: Default::default(),
             versions: Vec::new(),
             building_blocks: Default::default(),
@@ -632,6 +668,7 @@ impl Session {
             bib_style,
             merge: Default::default(),
             ui_requests: Vec::new(),
+            location_label: None,
             math: None,
             math_latex: false,
             math_normal_text: false,
@@ -647,6 +684,8 @@ impl Session {
             recovery: None,
             column: None,
             column_mode: false,
+            collab: Default::default(),
+            depth: 0,
             widened: None,
             edit_marks: Vec::new(),
             go_back_step: 0,
@@ -717,6 +756,12 @@ impl Session {
     /// Which document is open (see `document_id`): lets a caller tell an edit from a replacement.
     pub fn document_id(&self) -> u64 {
         self.document_id
+    }
+    /// The document's id as add-ins see it (plugin protocol 2.2: `id` in `context.document` and
+    /// the document events): opaque, the same while the document is open (saved, renamed or
+    /// not), never reused for another document while the app runs (`doc-3`).
+    pub fn plugin_document_id(&self) -> String {
+        format!("doc-{}", self.document_id)
     }
     pub fn touch(&mut self) {
         self.rev = self.rev.wrapping_add(1);
@@ -870,6 +915,46 @@ impl Session {
         }
         self.typing_open = false;
     }
+    /// Runs `f` (which runs commands of its own) as one undo step named `label`: the steps the
+    /// commands inside make are folded into one, recorded only if the document changed. If `f`
+    /// fails, the document, the selection and the undo history go back to how they were.
+    pub fn one_step<T, E>(&mut self, label: &str, f: impl FnOnce(&mut Session) -> Result<T, E>) -> Result<T, E> {
+        let before = (self.doc.clone(), self.sel.clone(), self.history.clone(), self.redo.clone(), self.typing_open, self.undo_evicted);
+        let (rev, dirty) = (self.rev, self.dirty);
+        self.typing_open = false;
+        let r = f(self);
+        let (doc, sel, history, redo, typing, evicted) = before;
+        match &r {
+            Ok(_) => {
+                let changed = self.rev != rev;
+                self.history = history;
+                self.undo_evicted = evicted;
+                self.typing_open = false;
+                if changed {
+                    self.redo.clear();
+                    self.push_undo(label, doc, sel);
+                } else {
+                    self.redo = redo;
+                    self.typing_open = typing;
+                }
+            }
+            Err(_) => {
+                // The chat isn't rolled back (its changes may have been shared already).
+                let chat = self.doc.chat.clone();
+                self.doc = doc;
+                self.doc.chat = chat;
+                self.sel = sel;
+                self.history = history;
+                self.redo = redo;
+                self.typing_open = typing;
+                self.undo_evicted = evicted;
+                // Caches follow the document back; it's as saved as it was.
+                self.rev = self.rev.wrapping_add(1);
+                self.dirty = dirty;
+            }
+        }
+        r
+    }
     /// Make the next mutating command part of the previous undo step instead of a new one, so a
     /// drag that runs a command every frame is a single Undo. Call it on every frame of the drag
     /// except the first; it is consumed by the next `run`.
@@ -895,9 +980,15 @@ impl Session {
         self.typing_open = false;
     }
     pub fn can_undo(&self) -> bool {
+        if let Some(can) = crate::collab::room_undo(self, false) {
+            return can;
+        }
         !self.history.is_empty()
     }
     pub fn can_redo(&self) -> bool {
+        if let Some(can) = crate::collab::room_undo(self, true) {
+            return can;
+        }
         !self.redo.is_empty()
     }
     pub fn undo_label(&self) -> Option<&str> {
@@ -938,6 +1029,8 @@ impl Session {
             pending: std::mem::replace(&mut self.pending, u.pending),
             column: std::mem::replace(&mut self.column, u.column),
         };
+        // The chat isn't part of undo: it stays as it is now.
+        self.doc.chat = cur.doc.chat.clone();
         self.redo.push(Arc::new(cur));
         self.touch();
         true
@@ -957,6 +1050,7 @@ impl Session {
             pending: std::mem::replace(&mut self.pending, u.pending),
             column: std::mem::replace(&mut self.column, u.column),
         };
+        self.doc.chat = cur.doc.chat.clone();
         self.history.push(Arc::new(cur));
         self.touch();
         true
@@ -995,12 +1089,14 @@ impl Session {
 
     /// Replace the document (open/new).
     pub fn set_document(&mut self, doc: Document) {
-        self.document_id = self.document_id.wrapping_add(1);
+        self.document_id = next_document_id();
         self.bib_style = doc_bib_style(&doc);
         self.doc = doc;
         self.doc.ensure_nonempty();
         self.password = None;
+        self.macros_enabled = false;
         self.file_name = None;
+        self.location_label = None;
         self.sel = Selection::caret(self.doc.start_of(StoryRef::Body));
         self.pending = None;
         self.also_selected.clear();
@@ -1078,6 +1174,8 @@ impl Session {
             bib_style: _,
             merge: _,
             ui_requests: _,
+            // Like the file path: where the document is, not part of it.
+            location_label: _,
             document_id: _,
             read_aloud: _,
             prefs: _,
@@ -1103,6 +1201,11 @@ impl Session {
             // Go Back's places, like the caret history: not part of the document.
             edit_marks: _,
             go_back_step: _,
+            // A live session is where the document is shared, not part of it.
+            collab: _,
+            depth: _,
+            // The user's Enable Content: a decision about the document, not an edit to it.
+            macros_enabled: _,
         } = self;
         let head = if history.len() + SNAPSHOT_HEAD > MAX_UNDO { history.iter().take(SNAPSHOT_HEAD).cloned().collect() } else { Vec::new() };
         EditSnapshot {
@@ -1129,7 +1232,9 @@ impl Session {
             self.history.splice(0..0, head.into_iter().take(back));
         }
         self.undo_evicted = evicted;
+        let chat = self.doc.chat.clone();
         self.doc = doc;
+        self.doc.chat = chat;
         self.sel = sel;
         self.also_selected.clear();
         self.history.truncate(history_len);
@@ -1164,7 +1269,35 @@ impl Session {
     /// Run a command by id with JSON params (the single entry point for the UI, CLI, MCP and
     /// control channel). Mutating commands are undoable; a failed command leaves the document as
     /// it was; a panic inside a command becomes an error.
+    ///
+    /// In a live session the outermost command's change is shared as one update, and Undo and
+    /// Redo are the person's own; while the session's document is read-only (joining, a viewer)
+    /// commands that change it are refused.
     pub fn run(&mut self, id: &str, params: &Value) -> Result<Value, CmdError> {
+        if self.collab.room.is_some() {
+            if self.depth == 0
+                && let Some(r) = crate::collab::intercept(self, id, params)
+            {
+                return r;
+            }
+            if self.registry.get(id).is_some_and(|spec| spec.mutates)
+                && let Some(why) = crate::collab::read_only(self)
+            {
+                return Err(CmdError::Disabled(format!("{id}: {why}")));
+            }
+        }
+        // Typing that goes on (and the later frames of a drag) is one undo step, in a room too.
+        let joins = self.join_next || (self.typing_open && matches!(id, "text.insert" | "equation.type"));
+        self.depth += 1;
+        let r = self.run_command(id, params);
+        self.depth = self.depth.saturating_sub(1);
+        if self.depth == 0 && self.collab.room.is_some() {
+            crate::collab::after_command(self, joins && r.is_ok());
+        }
+        r
+    }
+
+    fn run_command(&mut self, id: &str, params: &Value) -> Result<Value, CmdError> {
         let join = std::mem::take(&mut self.join_next);
         let reg = self.registry.clone();
         let Some(spec) = reg.get(id) else { return Err(CmdError::Unknown(id.to_string())) };
@@ -1287,7 +1420,9 @@ impl Session {
             }
             Err(e) => {
                 if let Some((d, s, h, r, t, ev, c)) = before_doc {
+                    let chat = self.doc.chat.clone();
                     self.doc = d;
+                    self.doc.chat = chat;
                     self.sel = s;
                     self.history = h;
                     self.redo = r;

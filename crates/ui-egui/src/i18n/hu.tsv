@@ -2524,6 +2524,59 @@
 	Insert Caption…	Felirat beszúrása…
 	Table Properties…	Táblázat tulajdonságai…
 	Search	Keresés
+	Add-ins	Bővítmények
+	Get Add-ins	Bővítmények beszerzése
+	Get\nAdd-ins	Bővítmények\nbeszerzése
+	Load Add-in	Bővítmény betöltése
+	Load Add-in…	Bővítmény betöltése…
+	Install Add-in from GitHub	Bővítmény telepítése a GitHubról
+	Unload Add-in	Bővítmény eltávolítása a memóriából
+	Turn Add-in On or Off	Bővítmény be- vagy kikapcsolása
+	Add-in Documentation	Bővítmény dokumentációja
+	Run Add-in Command	Bővítményparancs futtatása
+	Add-in manifest	Bővítményjegyzék
+	Install from GitHub:	Telepítés a GitHubról:
+	Install	Telepítés
+	Installing…	Telepítés…
+	Installed {name}	Telepítve: {name}
+	An add-in is a program that runs with your permissions. Install it only if you trust its author.	A bővítmény egy program, amely az Ön jogosultságaival fut. Csak akkor telepítse, ha megbízik a szerzőjében.
+	Install and run {repo}?	Telepíti és futtatja ezt: {repo}?
+	Documentation	Dokumentáció
+	Activate	Aktiválás
+	Deactivate	Inaktiválás
+	Unload	Eltávolítás
+	Until the next start	A következő indításig
+	Active	Aktív
+	Inactive	Inaktív
+	No add-ins are loaded.	Nincs betöltött bővítmény.
+	owner/repository	tulajdonos/tárház
+	Pick the add-in's plugin.json	Válassza ki a bővítmény plugin.json fájlját
+	Add-ins need the desktop app.	A bővítményekhez az asztali alkalmazás kell.
+	There's no add-ins folder to install into.	Nincs bővítménymappa, ahová telepíteni lehetne.
+	Code	Kód
+	Disable all macros	Minden makró letiltása
+	Disable macros with notification (enable them per document)	Makrók letiltása értesítéssel (dokumentumonként engedélyezhetők)
+	Edit	Szerkesztés
+	Enable Content	Tartalom engedélyezése
+	Enable all macros (not recommended: a macro is a program)	Minden makró engedélyezése (nem ajánlott: a makró egy program)
+	Insert Module	Modul beszúrása
+	Macro Security	Makróbiztonság
+	Macro name:	Makró neve:
+	Macros are disabled for this document. Enable Content in the message bar, or change Macro Security.	A makrók le vannak tiltva ebben a dokumentumban. Kattintson az üzenetsáv „Tartalom engedélyezése” gombjára, vagy módosítsa a „Makróbiztonság” beállítást.
+	Macros have been disabled.	A makrók le lettek tiltva.
+	Modules	Modulok
+	No code yet: Insert Module.	Még nincs kód: „Modul beszúrása”.
+	Office Add-in	Office-bővítmény
+	Office add-ins need the WordCraft desktop app on macOS or Windows.	Az Office-bővítményekhez a WordCraft asztali alkalmazása kell macOS vagy Windows rendszeren.
+	Remove Module	Modul eltávolítása
+	Run	Futtatás
+	Run Macro	Makró futtatása
+	SECURITY WARNING	BIZTONSÁGI FIGYELMEZTETÉS
+	Save Module	Modul mentése
+	Saves the module into the document (save the document as .docm to keep it)	A modult a dokumentumba menti (a megtartásához mentse a dokumentumot .docm formátumban)
+	Stop Recording	Rögzítés leállítása
+	This document has no macros yet: type a name and Create.	Ebben a dokumentumban még nincs makró: írjon be egy nevet, és kattintson a „Létrehozás” gombra.
+	Visual Basic	Visual Basic
 	Copy to	Másolás ide
 
 # Document naming and account controls.
@@ -2610,6 +2663,124 @@
 # Backstage › Recover (#586)
 	Recover	Helyreállítás
 
+# Developer › Ribbon Buttons: the document's buttons that run macros (Gaps #22)
+	Ribbon Buttons	Menüszalaggombok
+	Add Ribbon Button	Gomb hozzáadása a menüszalaghoz
+	Edit Ribbon Button	Menüszalaggomb szerkesztése
+	Remove Ribbon Button	Menüszalaggomb eltávolítása
+	Press Ribbon Button	Menüszalaggomb megnyomása
+	Runs the macro {macro}	Futtatja a(z) {macro} makrót
+	Buttons that run this document's macros. They are saved with the document, and Word shows them too.	Gombok, amelyek a dokumentum makróit futtatják. A dokumentummal együtt mentődnek, és a Word is megjeleníti őket.
+	No buttons yet.	Még nincsenek gombok.
+	runs {macro}	futtatja: {macro}
+	This document's ribbon came from another program with more than buttons: its buttons run, but WordCraft doesn't change it.	A dokumentum menüszalagja egy másik programból származik, és nem csak gombokat tartalmaz: a gombjai működnek, de a WordCraft nem módosítja.
+	New button	Új gomb
+	Macro:	Makró:
+	or type a name: Module1.Go	vagy írjon be egy nevet: Module1.Go
+	the macro's name	a makró neve
+	Tab:	Lap:
+	or a new tab's name	vagy egy új lap neve
+	Group:	Csoport:
+	Picture:	Kép:
+	Small button (three to a column)	Kis gomb (oszloponként három)
+	Add to Ribbon…	Hozzáadás a menüszalaghoz…
+	A ribbon button that runs this macro, saved with the document	Menüszalaggomb, amely ezt a makrót futtatja, és a dokumentummal együtt mentődik
+	Filter	Szűrő
+	Nothing to show.	Nincs mit megjeleníteni.
+	{label} must be a number.	{label}: számot kell megadni.
+	The add-in {name} reported an error: {error}	A(z) {name} bővítmény hibát jelzett: {error}
+	The add-in {name} didn't finish its command.	A(z) {name} bővítmény nem fejezte be a parancsát.
+	Start Live Session	Élő munkamenet indítása
+	Join Live Session	Csatlakozás élő munkamenethez
+	Leave Live Session	Kilépés az élő munkamenetből
+	Live Session	Élő munkamenet
+	Live session	Élő munkamenet
+	Live Session Name and Colour	Név és szín élő munkamenetben
+	Title bar	Címsor
+	Joining…	Csatlakozás…
+	Live	Élő
+	Connecting…	Kapcsolódás…
+	Offline	Offline
+	Session ended	A munkamenet véget ért
+	Share this document in a live session	A dokumentum megosztása élő munkamenetben
+	{name} (you)	{name} (Ön)
+	{name}'s caret isn't in a shared paragraph	{name} kurzora nincs megosztott bekezdésben
+	Encrypted end to end	Végpontok között titkosítva
+	Encrypt end to end	Végpontok közötti titkosítás
+	People here	Jelen lévők
+	Go to their caret	Ugrás a kurzorához
+	Copy Invitation	Meghívó másolása
+	Invitation copied	Meghívó másolva
+	{count} others	További: {count}
+	Start a live session	Élő munkamenet indítása
+	Join a live session	Csatlakozás élő munkamenethez
+	Connection:	Kapcsolat:
+	Your name:	Az Ön neve:
+	Your colour:	Az Ön színe:
+	Invitation:	Meghívó:
+	Paste the invitation link	Illessze be a meghívó hivatkozását
+	Joining replaces this document, which has unsaved changes.	A csatlakozás lecseréli ezt a dokumentumot, amelyben nem mentett módosítások vannak.
+	Discard my unsaved changes	A nem mentett módosításaim elvetése
+	Join	Csatlakozás
+	Start	Indítás
+	Choose a connection	Válasszon kapcsolatot
+	This add-in has no {command} command	Ennek a bővítménynek nincs {command} parancsa
+	The add-in didn't start a live session	A bővítmény nem indított élő munkamenetet
+	Live sessions need a co-editing add-in (a transport). Add one in File › Options › Add-ins.	Az élő munkamenetekhez közös szerkesztést biztosító bővítmény (átvitel) kell. Adjon hozzá egyet itt: Fájl › Beállítások › Bővítmények.
+	{why}. Install {name} anyway?	{why}. Mégis telepíti ezt: {name}?
+	{name} (release {tag})	{name} ({tag} kiadás)
+	The add-ins that need the installed version are blocked until it suits them again.	A telepített verziót igénylő bővítmények zárolva maradnak, amíg az ismét meg nem felel nekik.
+	Install Anyway	Telepítés mégis
+	{addin}; version {version} is installed	{addin}; a(z) {version} verzió van telepítve
+	{name} can use {addin}. Install it too?	{name} használhatja ezt: {addin}. Ezt is telepíti?
+	{name} needs {addin}. Install it too?	{name} igényli ezt: {addin}. Ezt is telepíti?
+	the newest release in range	a tartomány legújabb kiadása
+	Add-ins are programs that run with your permissions. Install them only if you trust their authors.	A bővítmények az Ön jogosultságaival futó programok. Csak akkor telepítse őket, ha megbízik a szerzőikben.
+	Install Selected	Kijelöltek telepítése
+	Not Now	Most nem
+	Blocked	Zárolva
+	Install Missing	Hiányzók telepítése
+	{who} needs {name}. Turn both off?	{who} igényli ezt: {name}. Mindkettőt kikapcsolja?
+	{who} need {name}. Turn them all off?	{who} igénylik ezt: {name}. Mindet kikapcsolja?
+	Turn Both Off	Mindkettő kikapcsolása
+	Turn All Off	Összes kikapcsolása
+	Install Missing Add-ins	Hiányzó bővítmények telepítése
+	Add-in Requirements	Bővítmény követelményei
+	Chat	Csevegés
+	Chat copied to the clipboard	Csevegés a vágólapra másolva
+	Chat, {count} unread	Csevegés, olvasatlan: {count}
+	Chat options	Csevegés beállításai
+	Clear chat…	Csevegés törlése…
+	Clear Chat	Csevegés törlése
+	edited	szerkesztve
+	Editing your message	Üzenet szerkesztése
+	just now	épp most
+	Kept in the file; Office drops it when it saves	A fájlban marad; az Office mentéskor eltávolítja
+	Message deleted	Üzenet törölve
+	{name} is typing…	{name} ír…
+	{names} are typing…	Írnak: {names}…
+	{n} h ago	{n} órája
+	{n} min ago	{n} perce
+	No messages yet. Messages are kept in the document.	Még nincs üzenet. Az üzenetek a dokumentumban maradnak.
+	Remove the whole chat from the document for everyone?	Eltávolítja a teljes csevegést a dokumentumból mindenki számára?
+	Replying to {name}	Válasz neki: {name}
+	Send	Küldés
+	Write a message	Írjon üzenetet
+	Chat Messages	Csevegés üzenetei
+	Send Chat Message	Csevegőüzenet küldése
+	Edit Chat Message	Csevegőüzenet szerkesztése
+	Delete Chat Message	Csevegőüzenet törlése
+	Export Chat	Csevegés exportálása
+	Typing in Chat	Gépelés a csevegésben
+	Close the document and go back to Nextcloud	A dokumentum bezárása és visszatérés a Nextcloudba
+	craft-live refused the connection: {reason}	A craft-live elutasította a kapcsolatot: {reason}
+	Saved to Nextcloud	Mentve a Nextcloudba
+	Couldn't save to Nextcloud: {error}	Nem sikerült menteni a Nextcloudba: {error}
+	The editing session expired. Close the document and open it again from Nextcloud.	A szerkesztési munkamenet lejárt. Zárja be a dokumentumot, és nyissa meg újra a Nextcloudból.
+	Couldn't open the document from Nextcloud: {error}	A dokumentumot nem sikerült megnyitni a Nextcloudból: {error}
+	This document is view only	Ez a dokumentum csak megtekinthető
+	Saving to Nextcloud…	Mentés a Nextcloudba…
+	Not connected: Nextcloud saves the document once the connection is back	Nincs kapcsolat: a Nextcloud menti a dokumentumot, amint helyreáll a kapcsolat
 # Page Setup › Mirror margins (#1239)
 	Mirror margins	Tükrözött margók
 

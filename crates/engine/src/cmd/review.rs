@@ -160,10 +160,10 @@ fn reply(s: &mut Session, v: &Value) -> CmdResult {
     Ok(json!({"id": id}))
 }
 
-/// An id no comment has: one past the largest, or the lowest free one once a file used `u32::MAX`.
-fn comment_id(s: &Session) -> Result<u32, CmdError> {
-    let ids = &s.doc.comments;
-    wordcraft_doc::free_id(ids.keys().next_back().copied(), ids.keys().copied(), 0).ok_or_else(|| CmdError::Failed("no free comment id".into()))
+/// An id no comment has ([`wordcraft_doc::Document::next_comment_id`]: in a live session, one in this
+/// copy's block): one past the largest, or the lowest free one once a file used `u32::MAX`.
+fn comment_id(s: &mut Session) -> Result<u32, CmdError> {
+    s.doc.next_comment_id().map_err(|_| CmdError::Failed("no free comment id".into()))
 }
 
 /// Replace a comment's (or reply's) text; each line becomes a paragraph.

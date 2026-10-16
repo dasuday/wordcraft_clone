@@ -17,6 +17,8 @@ wordcraft-fonts = { workspace = true }
 wordcraft-layout = { workspace = true }
 wordcraft-render = { workspace = true }
 wordcraft-engine = { workspace = true }
+wordcraft-plugin = { workspace = true }
+wordcraft-docx = { workspace = true }
 wordcraft-zotero = { workspace = true }
 egui = { workspace = true }
 serde = { workspace = true }
@@ -45,3 +47,8 @@ zip = { workspace = true }
 [build-dependencies]
 serde_json = { workspace = true }
 toml = "1"
+
+# Runs without libtest: the test binary doubles as the add-in process whose dialogs it drives.
+[[test]]
+name = "plugin_dialogs"
+harness = false

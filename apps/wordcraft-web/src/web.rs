@@ -7,12 +7,13 @@ use std::rc::Rc;
 use wasm_bindgen::JsCast as _;
 use wordcraft_engine::Session;
 use wordcraft_ui_egui::async_saves::{AsyncSaves, SaveOutcome};
-use wordcraft_ui_egui::{Inbox, Services, WordApp};
+use wordcraft_ui_egui::{HostRequest, Inbox, Services, WordApp};
 
 const DOC_EXTS: &[&str] = &["docx", "docm", "dotx", "dotm", "doc", "dot", "odt", "rtf", "txt", "md", "html", "htm", "tex", "json", "xml"];
 const IMAGE_EXTS: &[&str] = &["png", "jpg", "jpeg", "gif", "webp", "bmp", "wmf", "emf"];
 const RECIPIENT_EXTS: &[&str] = wordcraft_engine::cmd::mailings::RECIPIENT_EXTENSIONS;
 mod font_store;
+mod live_io;
 const CANVAS_ID: &str = "wordcraft_canvas";
 const LOADING_ID: &str = "wordcraft_loading";
 
@@ -27,9 +28,15 @@ pub fn start() {
             log::error!("missing <canvas id=\"{CANVAS_ID}\">");
             return;
         };
+        // craft-live mode (a `#craft-live=1&…` fragment): tell the shell at once that this build
+        // speaks the embed contract, and listen for it.
+        let live = live_mode();
         let dirty = Rc::new(Cell::new(false));
         let saves = AsyncSaves::default();
-        if let Err(e) = guard_unload(dirty.clone(), saves.clone()) {
+        // Inside craft-live the room keeps every edit: no leave-page prompt.
+        if live.is_none()
+            && let Err(e) = guard_unload(dirty.clone(), saves.clone())
+        {
             log::error!("no unsaved-changes guard: {e}");
         }
         let mut options = eframe::WebOptions::default();
@@ -65,11 +72,24 @@ pub fn start() {
                     // Pasted pictures wait apart from dropped files: the app inserts one only when the page is the edit target (#1349).
                     app.services.pasted = Some(pasted);
                     app.autosave = false;
+                    let live = live.map(|(events, config)| {
+                        events.set_context(cc.egui_ctx.clone());
+                        let ev = events.clone();
+                        // Save and Close belong to Nextcloud's file.
+                        app.services.host = Some(Box::new(move |r| {
+                            ev.push(match r {
+                                HostRequest::Save => crate::live::Event::Save,
+                                HostRequest::Close => crate::live::Event::Close,
+                            })
+                        }));
+                        LiveShell { io: live_io::LiveIo::new(events), live: None, config, started: false }
+                    });
                     // No document to show: start on File › Home, as the desktop app does (#766).
-                    if !sample {
+                    // A live document arrives from the room instead.
+                    if !sample && live.is_none() {
                         app.start_screen();
                     }
-                    Ok(Box::new(WebShell { app, inbox, messages }))
+                    Ok(Box::new(WebShell { app, inbox, messages, live }))
                 }),
             )
             .await;
@@ -86,16 +106,83 @@ fn query() -> String {
     web_sys::window().and_then(|w| w.location().search().ok()).unwrap_or_default()
 }
 
+/// craft-live mode: the fragment's configuration (or why it can't be used: the shell's
+/// `craft-live:config` may still bring one), with `craft-live:hello` sent and the shell listened
+/// to. `None`: an ordinary page.
+fn live_mode() -> Option<(live_io::Events, Result<crate::live::Config, String>)> {
+    let hash = web_sys::window().and_then(|w| w.location().hash().ok()).unwrap_or_default();
+    let config = crate::live::Config::from_fragment(&hash)?;
+    let events = live_io::Events::default();
+    if let Err(e) = live_io::listen_to_shell(events.clone()) {
+        log::error!("craft-live: can't hear the shell: {e}");
+    }
+    live_io::post_to_shell(&crate::live::Live::hello());
+    Some((events, config))
+}
+
+/// craft-live mode's state in the shell.
+struct LiveShell {
+    io: live_io::LiveIo,
+    live: Option<crate::live::Live>,
+    /// The fragment's configuration, until the session starts.
+    config: Result<crate::live::Config, String>,
+    /// Said once that the configuration is awaited.
+    started: bool,
+}
+
+impl LiveShell {
+    /// Feeds what happened to the session and carries out what it asks.
+    fn step(&mut self, app: &mut WordApp, events: Vec<crate::live::Event>) {
+        let now = js_sys::Date::now().max(0.0) as u64;
+        if self.live.is_none() {
+            // Without a usable fragment, the shell's `craft-live:config` brings the configuration.
+            for e in &events {
+                if let crate::live::Event::Shell(m) = e
+                    && m.get("type").and_then(serde_json::Value::as_str) == Some("craft-live:config")
+                    && self.config.is_err()
+                {
+                    self.config = crate::live::Config::from_json(m.get("config").unwrap_or(&serde_json::Value::Null));
+                }
+            }
+            match &self.config {
+                Ok(c) => self.live = Some(crate::live::Live::new(c.clone())),
+                Err(e) => {
+                    if !self.started {
+                        self.started = true;
+                        log::warn!("{e}; waiting for craft-live:config");
+                    }
+                    return;
+                }
+            }
+        }
+        let Some(live) = self.live.as_mut() else { return };
+        if live.phase == crate::live::Phase::Idle {
+            live.start(&mut app.session, now);
+        }
+        live.handle_all(&mut app.session, events, now);
+        live.tick(&mut app.session, now);
+        let actions = live.take_actions();
+        self.io.run(actions, app);
+    }
+}
+
 /// Wraps the app to read dropped files asynchronously (browsers can't read them synchronously)
-/// and feed them through the inbox.
+/// and feed them through the inbox, and to run craft-live mode.
 struct WebShell {
     app: WordApp,
     inbox: Inbox,
     messages: Rc<RefCell<Vec<String>>>,
+    live: Option<LiveShell>,
 }
 
 impl eframe::App for WebShell {
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        if let Some(l) = self.live.as_mut() {
+            let events = l.io.events.take();
+            l.step(&mut self.app, events);
+            // Reconnection timers: look again soon.
+            ctx.request_repaint_after(std::time::Duration::from_millis(250));
+        }
         let dropped = ctx.input_mut(|i| std::mem::take(&mut i.raw.dropped_files));
         for f in dropped {
             let inbox = self.inbox.clone();
@@ -116,6 +203,9 @@ impl eframe::App for WebShell {
             self.app.status(msg);
         }
         self.app.logic(ctx);
+        if let Some(l) = self.live.as_mut() {
+            l.step(&mut self.app, Vec::new());
+        }
     }
 
     fn raw_input_hook(&mut self, _ctx: &egui::Context, raw: &mut egui::RawInput) {
@@ -124,6 +214,10 @@ impl eframe::App for WebShell {
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         self.app.ui(ui);
+        // Edits made in this pass go to the room now (one update per command).
+        if let Some(l) = self.live.as_mut() {
+            l.step(&mut self.app, Vec::new());
+        }
     }
 }
 

@@ -2512,6 +2512,59 @@ preview	Title	Esempio
 	Add whether it is above or below	Aggiungi se si trova più in alto o più in basso
 	Search	Cerca
 	Title Bar	Barra del titolo
+	Add-ins	Componenti aggiuntivi
+	Get Add-ins	Ottieni componenti aggiuntivi
+	Get\nAdd-ins	Ottieni\ncomponenti
+	Load Add-in	Carica componente aggiuntivo
+	Load Add-in…	Carica componente aggiuntivo…
+	Install Add-in from GitHub	Installa componente aggiuntivo da GitHub
+	Unload Add-in	Scarica componente aggiuntivo
+	Turn Add-in On or Off	Attiva o disattiva componente aggiuntivo
+	Add-in Documentation	Documentazione del componente aggiuntivo
+	Run Add-in Command	Esegui comando del componente aggiuntivo
+	Add-in manifest	Manifesto del componente aggiuntivo
+	Install from GitHub:	Installa da GitHub:
+	Install	Installa
+	Installing…	Installazione…
+	Installed {name}	{name} installato
+	An add-in is a program that runs with your permissions. Install it only if you trust its author.	Un componente aggiuntivo è un programma che viene eseguito con le tue autorizzazioni. Installalo solo se ti fidi del suo autore.
+	Install and run {repo}?	Installare ed eseguire {repo}?
+	Documentation	Documentazione
+	Activate	Attiva
+	Deactivate	Disattiva
+	Unload	Scarica
+	Until the next start	Fino al prossimo avvio
+	Active	Attivo
+	Inactive	Inattivo
+	No add-ins are loaded.	Nessun componente aggiuntivo caricato.
+	owner/repository	proprietario/repository
+	Pick the add-in's plugin.json	Scegli il file plugin.json del componente aggiuntivo
+	Add-ins need the desktop app.	I componenti aggiuntivi richiedono l’app desktop.
+	There's no add-ins folder to install into.	Non c’è una cartella dei componenti aggiuntivi in cui installare.
+	Code	Codice
+	Disable all macros	Disattiva tutte le macro
+	Disable macros with notification (enable them per document)	Disattiva le macro con notifica (attivale documento per documento)
+	Edit	Modifica
+	Enable Content	Attiva contenuto
+	Enable all macros (not recommended: a macro is a program)	Attiva tutte le macro (sconsigliato: una macro è un programma)
+	Insert Module	Inserisci modulo
+	Macro Security	Sicurezza macro
+	Macro name:	Nome macro:
+	Macros are disabled for this document. Enable Content in the message bar, or change Macro Security.	Le macro sono disattivate per questo documento. Fai clic su «Attiva contenuto» nella barra dei messaggi, oppure cambia «Sicurezza macro».
+	Macros have been disabled.	Le macro sono state disattivate.
+	Modules	Moduli
+	No code yet: Insert Module.	Ancora nessun codice: «Inserisci modulo».
+	Office Add-in	Componente aggiuntivo di Office
+	Office add-ins need the WordCraft desktop app on macOS or Windows.	I componenti aggiuntivi di Office richiedono l’app desktop di WordCraft su macOS o Windows.
+	Remove Module	Rimuovi modulo
+	Run	Esegui
+	Run Macro	Esegui macro
+	SECURITY WARNING	AVVISO DI SICUREZZA
+	Save Module	Salva modulo
+	Saves the module into the document (save the document as .docm to keep it)	Salva il modulo nel documento (salva il documento come .docm per conservarlo)
+	Stop Recording	Interrompi registrazione
+	This document has no macros yet: type a name and Create.	Questo documento non ha ancora macro: digita un nome e fai clic su «Crea».
+	Visual Basic	Visual Basic
 	Copy to	Copia in
 
 # Document naming and account controls.
@@ -2597,6 +2650,124 @@ preview	Title	Esempio
 # Backstage › Recover (#586)
 	Recover	Ripristina
 
+# Developer › Ribbon Buttons: the document's buttons that run macros (Gaps #22)
+	Ribbon Buttons	Pulsanti della barra multifunzione
+	Add Ribbon Button	Aggiungi pulsante alla barra multifunzione
+	Edit Ribbon Button	Modifica pulsante della barra multifunzione
+	Remove Ribbon Button	Rimuovi pulsante dalla barra multifunzione
+	Press Ribbon Button	Premi pulsante della barra multifunzione
+	Runs the macro {macro}	Esegue la macro {macro}
+	Buttons that run this document's macros. They are saved with the document, and Word shows them too.	Pulsanti che eseguono le macro di questo documento. Vengono salvati con il documento e anche Word li mostra.
+	No buttons yet.	Ancora nessun pulsante.
+	runs {macro}	esegue {macro}
+	This document's ribbon came from another program with more than buttons: its buttons run, but WordCraft doesn't change it.	La barra multifunzione di questo documento viene da un altro programma e contiene più che semplici pulsanti: i suoi pulsanti funzionano, ma WordCraft non la modifica.
+	New button	Nuovo pulsante
+	Macro:	Macro:
+	or type a name: Module1.Go	oppure digita un nome: Module1.Go
+	the macro's name	il nome della macro
+	Tab:	Scheda:
+	or a new tab's name	oppure il nome di una nuova scheda
+	Group:	Gruppo:
+	Picture:	Immagine:
+	Small button (three to a column)	Pulsante piccolo (tre per colonna)
+	Add to Ribbon…	Aggiungi alla barra multifunzione…
+	A ribbon button that runs this macro, saved with the document	Un pulsante della barra multifunzione che esegue questa macro, salvato con il documento
+	Filter	Filtro
+	Nothing to show.	Niente da mostrare.
+	{label} must be a number.	{label} deve essere un numero.
+	The add-in {name} reported an error: {error}	Il componente aggiuntivo {name} ha segnalato un errore: {error}
+	The add-in {name} didn't finish its command.	Il componente aggiuntivo {name} non ha completato il comando.
+	Start Live Session	Avvia sessione dal vivo
+	Join Live Session	Partecipa a sessione dal vivo
+	Leave Live Session	Esci dalla sessione dal vivo
+	Live Session	Sessione dal vivo
+	Live session	Sessione dal vivo
+	Live Session Name and Colour	Nome e colore nelle sessioni dal vivo
+	Title bar	Barra del titolo
+	Joining…	Partecipazione in corso…
+	Live	Dal vivo
+	Connecting…	Connessione in corso…
+	Offline	Offline
+	Session ended	Sessione terminata
+	Share this document in a live session	Condividi questo documento in una sessione dal vivo
+	{name} (you)	{name} (tu)
+	{name}'s caret isn't in a shared paragraph	Il cursore di {name} non è in un paragrafo condiviso
+	Encrypted end to end	Crittografato end-to-end
+	Encrypt end to end	Crittografa end-to-end
+	People here	Persone presenti
+	Go to their caret	Vai al suo cursore
+	Copy Invitation	Copia invito
+	Invitation copied	Invito copiato
+	{count} others	Altri: {count}
+	Start a live session	Avvia una sessione dal vivo
+	Join a live session	Partecipa a una sessione dal vivo
+	Connection:	Connessione:
+	Your name:	Il tuo nome:
+	Your colour:	Il tuo colore:
+	Invitation:	Invito:
+	Paste the invitation link	Incolla il link d’invito
+	Joining replaces this document, which has unsaved changes.	Partecipare sostituisce questo documento, che ha modifiche non salvate.
+	Discard my unsaved changes	Scarta le mie modifiche non salvate
+	Join	Partecipa
+	Start	Avvia
+	Choose a connection	Scegli una connessione
+	This add-in has no {command} command	Questo componente aggiuntivo non ha il comando {command}
+	The add-in didn't start a live session	Il componente aggiuntivo non ha avviato una sessione dal vivo
+	Live sessions need a co-editing add-in (a transport). Add one in File › Options › Add-ins.	Le sessioni dal vivo richiedono un componente aggiuntivo di co-editing (un trasporto). Aggiungine uno in File › Opzioni › Componenti aggiuntivi.
+	{why}. Install {name} anyway?	{why}. Installare comunque {name}?
+	{name} (release {tag})	{name} (release {tag})
+	The add-ins that need the installed version are blocked until it suits them again.	I componenti aggiuntivi che richiedono la versione installata restano bloccati finché non sarà di nuovo compatibile.
+	Install Anyway	Installa comunque
+	{addin}; version {version} is installed	{addin}; è installata la versione {version}
+	{name} can use {addin}. Install it too?	{name} può usare {addin}. Installare anche questo?
+	{name} needs {addin}. Install it too?	{name} richiede {addin}. Installare anche questo?
+	the newest release in range	la release più recente nell'intervallo
+	Add-ins are programs that run with your permissions. Install them only if you trust their authors.	I componenti aggiuntivi sono programmi che vengono eseguiti con le tue autorizzazioni. Installali solo se ti fidi dei loro autori.
+	Install Selected	Installa selezionati
+	Not Now	Non ora
+	Blocked	Bloccato
+	Install Missing	Installa mancanti
+	{who} needs {name}. Turn both off?	{who} richiede {name}. Disattivare entrambi?
+	{who} need {name}. Turn them all off?	{who} richiedono {name}. Disattivarli tutti?
+	Turn Both Off	Disattiva entrambi
+	Turn All Off	Disattiva tutti
+	Install Missing Add-ins	Installa componenti aggiuntivi mancanti
+	Add-in Requirements	Requisiti del componente aggiuntivo
+	Chat	Chat
+	Chat copied to the clipboard	Chat copiata negli appunti
+	Chat, {count} unread	Chat, non letti: {count}
+	Chat options	Opzioni chat
+	Clear chat…	Cancella chat…
+	Clear Chat	Cancella chat
+	edited	modificato
+	Editing your message	Modifica del messaggio
+	just now	adesso
+	Kept in the file; Office drops it when it saves	Salvata nel file; Office la elimina quando salva
+	Message deleted	Messaggio eliminato
+	{name} is typing…	{name} sta scrivendo…
+	{names} are typing…	{names} stanno scrivendo…
+	{n} h ago	{n} h fa
+	{n} min ago	{n} min fa
+	No messages yet. Messages are kept in the document.	Ancora nessun messaggio. I messaggi restano nel documento.
+	Remove the whole chat from the document for everyone?	Rimuovere l'intera chat dal documento per tutti?
+	Replying to {name}	Risposta a {name}
+	Send	Invia
+	Write a message	Scrivi un messaggio
+	Chat Messages	Messaggi della chat
+	Send Chat Message	Invia messaggio in chat
+	Edit Chat Message	Modifica messaggio della chat
+	Delete Chat Message	Elimina messaggio della chat
+	Export Chat	Esporta chat
+	Typing in Chat	Scrittura in chat
+	Close the document and go back to Nextcloud	Chiudi il documento e torna a Nextcloud
+	craft-live refused the connection: {reason}	craft-live ha rifiutato la connessione: {reason}
+	Saved to Nextcloud	Salvato in Nextcloud
+	Couldn't save to Nextcloud: {error}	Impossibile salvare in Nextcloud: {error}
+	The editing session expired. Close the document and open it again from Nextcloud.	La sessione di modifica è scaduta. Chiudi il documento e riaprilo da Nextcloud.
+	Couldn't open the document from Nextcloud: {error}	Impossibile aprire il documento da Nextcloud: {error}
+	This document is view only	Questo documento è di sola lettura
+	Saving to Nextcloud…	Salvataggio in Nextcloud…
+	Not connected: Nextcloud saves the document once the connection is back	Non connesso: Nextcloud salverà il documento quando la connessione tornerà
 # Bibliography styles, proofing messages and labels the French, Hungarian, Polish and Bulgarian catalogs added
 	APA	APA
 	Capitalize the first word of a sentence	Metti la maiuscola alla prima parola della frase

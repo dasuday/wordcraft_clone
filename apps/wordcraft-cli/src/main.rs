@@ -47,6 +47,7 @@ USAGE:
   wordcraft-cli [<command>] -h | --help       this help
   wordcraft-cli --version
 
+Any command: --plugin DIR (repeatable) loads the add-in(s) in DIR; so does WORDCRAFT_PLUGIN_PATH.
 Paper: documents created here, and HTML, Markdown and text files (which give no page size), use
 the system region's paper (A4, or Letter in the US and other Letter regions), read from
 LC_ALL / LC_PAPER / LANG or the platform. Set WORDCRAFT_REGION=en-US (or another tag) for the
@@ -555,8 +556,39 @@ fn parity_markdown(p: &Value) -> String {
     s
 }
 
+/// Takes the global `--plugin DIR` options (any number, anywhere) out of `args`: the add-in
+/// folders to load.
+fn take_plugins(args: Vec<OsString>) -> Result<(Vec<OsString>, Vec<PathBuf>), String> {
+    let mut left = Vec::new();
+    let mut dirs = Vec::new();
+    let mut it = args.into_iter();
+    while let Some(a) = it.next() {
+        if a == "--plugin" {
+            let dir = it.next().filter(|d| !d.as_encoded_bytes().starts_with(b"--")).ok_or("--plugin needs a folder")?;
+            dirs.push(dir.into());
+        } else if let Some(d) = a.to_str().and_then(|a| a.strip_prefix("--plugin=")) {
+            dirs.push(d.into());
+        } else {
+            left.push(a);
+        }
+    }
+    Ok((left, dirs))
+}
+
 fn main() -> ExitCode {
-    let args: Vec<OsString> = std::env::args_os().skip(1).collect();
+    let (args, plugin_dirs) = match take_plugins(std::env::args_os().skip(1).collect()) {
+        Ok(x) => x,
+        Err(e) => {
+            eprintln!("wordcraft-cli: {e}");
+            return ExitCode::FAILURE;
+        }
+    };
+    // Add-ins named with --plugin, then those in WORDCRAFT_PLUGIN_PATH. Each starts on first use.
+    for (dir, r) in wordcraft_plugin::autoload(&plugin_dirs) {
+        if let Err(e) = r {
+            eprintln!("wordcraft-cli: add-in {}: {e}", dir.display());
+        }
+    }
     match run(&args) {
         Ok(()) | Err(Failure::StdoutClosed) => ExitCode::SUCCESS,
         Err(Failure::Error(e)) => {
@@ -572,6 +604,16 @@ mod tests {
 
     fn args(values: &[&str]) -> Vec<String> {
         values.iter().map(|value| (*value).into()).collect()
+    }
+
+    #[test]
+    fn plugin_folders_are_taken_out_of_the_arguments() {
+        let os = |v: &[&str]| -> Vec<OsString> { v.iter().map(OsString::from).collect() };
+        let (left, dirs) = take_plugins(os(&["--plugin", "a", "run", "--plugin=b", "--cmd", "x"])).unwrap();
+        assert_eq!(left, os(&["run", "--cmd", "x"]));
+        assert_eq!(dirs, vec![PathBuf::from("a"), "b".into()]);
+        assert!(take_plugins(os(&["run", "--plugin"])).is_err());
+        assert!(take_plugins(os(&["--plugin", "--cmd"])).is_err());
     }
 
     #[test]

@@ -6,15 +6,14 @@
 //!
 //! Differences from the desktop app: no TCP control channel; Open and Insert › Pictures use the
 //! browser file picker (bytes arrive through `Services::inbox`); Save and Export download.
-//! URL flags: `?webgl` forces WebGL2; `?sample` opens the sample document.
+//! URL flags: `?webgl` forces WebGL2; `?sample` opens the sample document. A
+//! `#craft-live=1&…` fragment makes it a live editor inside Nextcloud Office (craft-live, see
+//! `wordcraft_web::live` and `docs/collab.md`).
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 
 #[cfg(target_arch = "wasm32")]
-mod web;
-
-#[cfg(target_arch = "wasm32")]
 fn main() {
-    web::start();
+    wordcraft_web::web::start();
 }
 
 #[cfg(not(target_arch = "wasm32"))]

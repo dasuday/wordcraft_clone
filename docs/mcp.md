@@ -47,6 +47,9 @@ config works across the suite) keep the agent to the folders you give it:
 - Every file a command writes must lie inside the **write root**: `save_document`, `file.save`,
   `file.saveAs`, `file.rename` (the file and its new name), `file.exportPdf`, `file.exportPng`, `file.printPdf`,
   `file.saveTemplate`, and `mailings.finish` with a `path`.
+- Add-ins are programs, so with either root given `plugins.load`, `plugins.install`,
+  `plugins.installMissing` and turning an add-in on (`plugins.setEnabled`) are refused. Add-ins loaded with `--plugin` before the server
+  starts still run ([plugins.md](plugins.md)).
 - Read and write access are separate. Give the same folder twice for both; a root left out grants
   none of its access (with only `--automation-read-root`, nothing can be written to disk). Without
   either flag nothing changes.

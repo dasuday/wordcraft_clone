@@ -27,7 +27,9 @@ pub mod autoscroll;
 pub mod backstage;
 pub mod canvas;
 pub mod caret_glide;
+pub mod chat_ui;
 pub mod chrome;
+pub mod collab_ui;
 pub mod colors;
 pub mod content_controls;
 pub mod control;
@@ -37,6 +39,7 @@ pub mod desktop_theme;
 pub mod dialogs;
 pub mod dialogs_chart;
 pub mod dialogs_controls;
+pub mod dialogs_developer;
 pub mod dialogs_insert;
 pub mod dialogs_keyboard;
 pub mod dialogs_layout;
@@ -63,9 +66,12 @@ pub mod keys;
 pub mod keytips;
 pub mod mini_toolbar;
 pub mod objects;
+pub mod office_pane;
 pub mod options;
 pub mod panes;
 pub mod paste_picture;
+pub mod plugin_dialog;
+pub mod plugin_ui;
 pub mod previews;
 pub mod print_page;
 pub mod printing;
@@ -132,6 +138,8 @@ pub struct Services {
     /// Desktop: the picture on the system clipboard, if any — egui's paste only carries text
     /// (#45). Read when Paste finds no text; see [`paste_picture`].
     pub clipboard_picture: Option<Box<dyn Fn() -> Option<paste_picture::ClipboardPicture>>>,
+    /// Web views for Office add-ins' task panes (the desktop app on macOS and Windows).
+    pub office: Option<Box<dyn office_pane::OfficeHost>>,
     /// Whether the system has animation effects on (Windows: Animation effects; macOS: Reduce
     /// motion; Linux and the BSDs: the desktop's setting; browsers: `prefers-reduced-motion`), or
     /// `None` when it doesn't say. What "Use system setting" follows ([`theme::Animations`]).
@@ -167,6 +175,20 @@ pub struct Services {
     /// `xdg-mime`. `None` (web, macOS) hides the button; macOS shows how to do it in Finder
     /// instead. An error means nothing changed.
     pub make_default_app: Option<Box<dyn Fn() -> Result<DefaultApp, String>>>,
+    /// Web, inside craft-live (a Nextcloud file edited live, `docs/collab.md`): the page that
+    /// embeds the app saves and closes the document. File › Save (Ctrl+S) asks the room to save
+    /// into Nextcloud, File › Close (Ctrl+W) and the title bar's Close button hand the document
+    /// back to Nextcloud; Save As still downloads a copy. `None` everywhere else.
+    pub host: Option<Box<dyn Fn(HostRequest)>>,
+}
+
+/// What [`Services::host`] is asked to do.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum HostRequest {
+    /// Save the document where it lives (craft-live: the room saves into Nextcloud).
+    Save,
+    /// Close the document (craft-live: Nextcloud closes the editor).
+    Close,
 }
 
 /// How Save in the Save Changes prompt went.
@@ -432,6 +454,8 @@ pub struct WordApp {
     /// The Restrict Editing pane (#412).
     pub restrict: dialogs_review::RestrictPane,
     pub status_msg: Option<(String, f64)>,
+    /// Live sessions: others' edits highlighted, the recovery timer.
+    pub collab: collab_ui::CollabUi,
     pub previews: previews::Previews,
     /// Media key of the picture a pending Change Picture replaces (#147).
     pub change_picture_target: Option<String>,
@@ -444,6 +468,12 @@ pub struct WordApp {
     /// A file picked for the open dialog (Templates and Add-ins › Attach…, Organizer ›
     /// Browse…); the dialog takes it on its next frame.
     pub(crate) dialog_pick: Option<String>,
+    /// Installing an add-in from GitHub (File › Options › Add-ins, Insert › Add-ins).
+    pub plugin_install: plugin_ui::Install,
+    /// Office add-ins' task panes.
+    pub office: office_pane::Panes,
+    /// The document (`document_id`) whose "macros disabled" bar was closed or acted on.
+    pub macro_bar_done: Option<u64>,
     /// macOS: the window has no title bar; leave room for the traffic lights.
     pub integrated_titlebar: bool,
     /// macOS: the title bar's height and where its content starts, around the traffic lights.
@@ -502,6 +532,8 @@ pub struct WordApp {
     /// Escape may leave full screen. Read before anything handles the frame's keys.
     escape_free: bool,
     pub quit_requested: bool,
+    /// Add-ins have been told the document closes with the app ([`WordApp::closing`]).
+    closing_told: bool,
     pub autosave: bool,
     pub word_count: (u64, usize),
     last_autosave: f64,
@@ -582,6 +614,7 @@ impl WordApp {
             colors: None,
             restrict: Default::default(),
             status_msg: None,
+            collab: Default::default(),
             previews: previews::Previews::default(),
             integrated_titlebar: false,
             mac_titlebar: chrome::MacTitleBar::default(),
@@ -615,6 +648,7 @@ impl WordApp {
             seen_full_screen: None,
             escape_free: false,
             quit_requested: false,
+            closing_told: false,
             autosave: true,
             word_count: (0, 0),
             last_autosave: 0.0,
@@ -633,6 +667,9 @@ impl WordApp {
             recipient_list_pending: false,
             font_generation: wordcraft_fonts::FontDb::global().generation(),
             dialog_pick: None,
+            plugin_install: Default::default(),
+            office: office_pane::Panes::default(),
+            macro_bar_done: None,
             file_dialog: None,
             #[cfg(not(target_arch = "wasm32"))]
             file_browser: file_browser::State::default(),
@@ -751,6 +788,11 @@ impl WordApp {
     /// Close, Envelopes, Labels and Finish & Merge on a document with unsaved changes first ask
     /// Save / Don't Save / Cancel, and the command runs once that is answered (`ui.saveChanges`).
     pub fn run(&mut self, id: &str, params: Value) -> Result<Value, String> {
+        if let Some(r) = self.host_command(id) {
+            return r;
+        }
+        // An add-in command run from the interface: its dialog or file comes after it (below).
+        let plugin = (id == "plugins.run").then(|| params.get("plugin").and_then(Value::as_str).map(str::to_string)).flatten();
         if id == "file.recover" && params.as_object().is_none_or(|p| p.is_empty()) {
             self.ui.backstage = true;
             self.ui.backstage_page = "recover".into();
@@ -793,6 +835,9 @@ impl WordApp {
             self.select_inserted_picture(&r);
         }
         let r = system_clipboard::explain(self, id, r);
+        if let (Some(plugin), Ok(v)) = (&plugin, &r) {
+            plugin_ui::after_run(self, plugin, v);
+        }
         // Check Accessibility shows its findings in the Accessibility pane, kept up to date there.
         if id == "file.accessibility" && r.is_ok() {
             self.session.view.accessibility_pane = true;
@@ -822,6 +867,9 @@ impl WordApp {
             let e = tl!("No document is open. Create a document or open one first.").to_string();
             self.status(e.clone());
             return Err(e);
+        }
+        if let Some(r) = self.host_command(id) {
+            return r;
         }
         if let Some(r) = self.ui_command(id, &params) {
             return r;
@@ -938,6 +986,19 @@ impl WordApp {
             self.status(e.clone());
         }
         r
+    }
+
+    /// Save and Close when the page embedding the app owns the document ([`Services::host`]):
+    /// handed to it, never asking about unsaved changes (the live room keeps every edit).
+    fn host_command(&mut self, id: &str) -> Option<Result<Value, String>> {
+        let request = match id {
+            "file.save" => HostRequest::Save,
+            "file.close" => HostRequest::Close,
+            _ => return None,
+        };
+        let host = self.services.host.as_ref()?;
+        host(request);
+        Some(Ok(json!({"host": if request == HostRequest::Save { "save" } else { "close" }})))
     }
 
     /// Web: store a font added from bytes, or forget the removed ones ([`Services::store_font`]).
@@ -1156,6 +1217,18 @@ impl WordApp {
         saved
     }
 
+    /// The app is quitting: add-ins that listen hear that the document closes (protocol 1.2's
+    /// documentClosed), waiting at most 5 s for them. Once; best effort.
+    pub fn closing(&mut self) {
+        if std::mem::replace(&mut self.closing_told, true) || !self.has_document() {
+            return;
+        }
+        if let Some(path) = self.session.path.clone() {
+            wordcraft_engine::cmd::plugins::notify(wordcraft_plugin::DocumentEvent::Closed, &path, &self.session.plugin_document_id());
+            wordcraft_plugin::wait_for_events(wordcraft_plugin::DocumentEvent::Closed.timeout());
+        }
+    }
+
     /// The window's close button (or the system) asked to quit. Returns true to let the window
     /// close; with unsaved changes it asks first and returns false.
     pub fn close_requested(&mut self) -> bool {
@@ -1218,6 +1291,10 @@ impl WordApp {
         if req.get("focus").and_then(Value::as_str) == Some("navSearch") {
             self.nav_search_focus = true;
         }
+        // An add-in's web page (`plugins.openHomepage`); only web links get this far.
+        if let Some(url) = req.get("openUrl").and_then(Value::as_str) {
+            self.canvas.open_url = Some(url.to_string());
+        }
         if let Some(what) = req.get("open").and_then(Value::as_str) {
             match what {
                 "openFile" => self.open_dialog(),
@@ -1244,6 +1321,19 @@ impl WordApp {
         }
         if req.get("close").is_some() {
             self.quit_requested = true;
+        }
+        // An Office add-in's command: its task pane, or a function in its hidden page.
+        if let Some(p) = req.get("officePane") {
+            let s = |k: &str| p.get(k).and_then(Value::as_str).unwrap_or("").to_string();
+            office_pane::open(self, &s("plugin"), &s("title"), &s("url"), p.get("pane").and_then(Value::as_str));
+        }
+        if let Some(p) = req.get("officeFunction") {
+            let s = |k: &str| p.get(k).and_then(Value::as_str).unwrap_or("").to_string();
+            office_pane::run_function(self, &s("plugin"), &s("url"), &s("function"), &s("control"));
+        }
+        // A word from a command for the status bar (Save turning a .docx with macros into a .docm).
+        if let Some(text) = req.get("status").and_then(Value::as_str) {
+            self.status(text.to_string());
         }
     }
 
@@ -1311,6 +1401,13 @@ impl WordApp {
                 }
                 self.colors = Some(d);
                 json!({"dialog": "colors"})
+            }
+            // Developer › Ribbon Buttons with a macro picked (`macro`), as the Macros window's Add to Ribbon.
+            "ui.dialog" if s("name") == Some("ribbonButtons") => {
+                let macro_name = s("macro").map(str::to_string);
+                let d = dialogs_developer::buttons_dialog(self, macro_name.as_deref());
+                self.dialog = Some(dialogs::Dialog::Developer(Box::new(d)));
+                json!({"dialog": "ribbonButtons"})
             }
             "ui.dialog" => {
                 self.dialog = dialogs::Dialog::open(s("name").unwrap_or(""), self);
@@ -1749,8 +1846,14 @@ impl WordApp {
         if self.applied_editing != Some(lang) {
             self.session.set_editing_language(lang.editing_lang());
             self.applied_editing = Some(lang);
+            // Add-ins started from now on are told the interface language (`host.language`).
+            wordcraft_plugin::set_host_language(lang.code());
         }
         options::sync(self);
+        plugin_ui::poll_install(self, ctx);
+        plugin_ui::poll_events(self, ctx);
+        // Live sessions: remote changes into the document, the selection out (protocol 2).
+        collab_ui::pump(self, ctx);
         self.settle_async_saves();
         // Chinese text wants the Chinese face before the Japanese one (one glyph style per line).
         // An installed CJK font is read only once CJK text is shown (#241): a CJK interface, the
@@ -1947,7 +2050,8 @@ impl WordApp {
     fn autosave_tick(&mut self, now: f64) {
         if self.autosaves() && self.session.dirty && now - self.last_autosave > 2500.0 && now - self.canvas.caret_visible_since > 1500.0 {
             self.last_autosave = now;
-            if let Err(e) = self.session.run("file.save", &json!({})) {
+            // AutoSave's writes aren't saves add-ins hear of (`autosave`).
+            if let Err(e) = self.session.run("file.save", &json!({"autosave": true})) {
                 log::warn!("AutoSave failed: {e}");
                 self.autosave_path = None;
                 self.status(i18n::fmt(tl!("AutoSave failed: {error}. Save the document to turn AutoSave back on."), &[("error", &e.to_string())]));
@@ -1996,24 +2100,32 @@ impl WordApp {
         // Keytips are read before layout so the frame paints the new state; badges paint after
         // the ribbon so they sit on top of it.
         crate::keytips::logic(self, &ctx);
+        office_pane::pump(self, ctx.input(|i| i.time));
         // Focus (View › Immersive, the status bar) keeps only the title bar and the page; Escape
         // brings the rest back, as in Word.
         if self.session.view.focus_mode && self.dialog.is_none() && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
             let _ = self.run("view.focus", json!({"value": false}));
         }
         if self.ui.backstage {
+            office_pane::covered(self);
             backstage::show(self, ui);
         } else if !self.has_document() {
             // No document open (#1129): the ribbon greyed out but for Help, and no page.
+            office_pane::covered(self);
             chrome::title_bar(self, ui);
             ribbon::show(self, ui);
             chrome::status_bar(self, ui);
             egui::CentralPanel::default().frame(egui::Frame::NONE.fill(t.canvas)).show(ui, |_| {});
         } else {
             chrome::title_bar(self, ui);
-            if !self.session.view.focus_mode {
+            if self.session.view.focus_mode {
+                // Focus hides the task pane with the rest of the chrome.
+                office_pane::covered(self);
+            } else {
                 ribbon::show(self, ui);
+                dialogs_developer::macro_bar(self, ui);
                 chrome::status_bar(self, ui);
+                office_pane::show(self, ui);
                 panes::show(self, ui);
             }
             egui::CentralPanel::default().frame(egui::Frame::NONE.fill(t.canvas)).show(ui, |ui| {

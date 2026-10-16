@@ -2526,6 +2526,59 @@ preview	Title	Örnek
 	Level 7	Düzey 7
 	Level 8	Düzey 8
 	Level 9	Düzey 9
+	Add-ins	Eklentiler
+	Get Add-ins	Eklenti Al
+	Get\nAdd-ins	Eklenti\nAl
+	Load Add-in	Eklenti yükle
+	Load Add-in…	Eklenti yükle…
+	Install Add-in from GitHub	GitHub'dan eklenti yükle
+	Unload Add-in	Eklentiyi kaldır
+	Turn Add-in On or Off	Eklentiyi aç veya kapat
+	Add-in Documentation	Eklenti belgeleri
+	Run Add-in Command	Eklenti komutunu çalıştır
+	Add-in manifest	Eklenti bildirimi
+	Install from GitHub:	GitHub'dan yükle:
+	Install	Yükle
+	Installing…	Yükleniyor…
+	Installed {name}	{name} yüklendi
+	An add-in is a program that runs with your permissions. Install it only if you trust its author.	Eklenti, sizin izinlerinizle çalışan bir programdır. Yalnızca yazarına güveniyorsanız yükleyin.
+	Install and run {repo}?	{repo} yüklensin ve çalıştırılsın mı?
+	Documentation	Belgeler
+	Activate	Etkinleştir
+	Deactivate	Devre dışı bırak
+	Unload	Kaldır
+	Until the next start	Bir sonraki başlatmaya kadar
+	Active	Etkin
+	Inactive	Devre dışı
+	No add-ins are loaded.	Yüklü eklenti yok.
+	owner/repository	sahip/depo
+	Pick the add-in's plugin.json	Eklentinin plugin.json dosyasını seçin
+	Add-ins need the desktop app.	Eklentiler masaüstü uygulamasını gerektirir.
+	There's no add-ins folder to install into.	Yükleme yapılacak bir eklenti klasörü yok.
+	Code	Kod
+	Disable all macros	Tüm makroları devre dışı bırak
+	Disable macros with notification (enable them per document)	Makroları bildirimle devre dışı bırak (her belge için ayrı etkinleştir)
+	Edit	Düzenle
+	Enable Content	İçeriği Etkinleştir
+	Enable all macros (not recommended: a macro is a program)	Tüm makroları etkinleştir (önerilmez: makro bir programdır)
+	Insert Module	Modül Ekle
+	Macro Security	Makro Güvenliği
+	Macro name:	Makro adı:
+	Macros are disabled for this document. Enable Content in the message bar, or change Macro Security.	Bu belgede makrolar devre dışı. İleti çubuğunda İçeriği Etkinleştir'e tıklayın veya Makro Güvenliği ayarını değiştirin.
+	Macros have been disabled.	Makrolar devre dışı bırakıldı.
+	Modules	Modüller
+	No code yet: Insert Module.	Henüz kod yok: Modül Ekle.
+	Office Add-in	Office Eklentisi
+	Office add-ins need the WordCraft desktop app on macOS or Windows.	Office eklentileri, macOS veya Windows'ta WordCraft masaüstü uygulamasını gerektirir.
+	Remove Module	Modülü Kaldır
+	Run	Çalıştır
+	Run Macro	Makro Çalıştır
+	SECURITY WARNING	GÜVENLİK UYARISI
+	Save Module	Modülü Kaydet
+	Saves the module into the document (save the document as .docm to keep it)	Modülü belgeye kaydeder (korumak için belgeyi .docm olarak kaydedin)
+	Stop Recording	Kaydı Durdur
+	This document has no macros yet: type a name and Create.	Bu belgede henüz makro yok: bir ad yazın ve Oluştur'a tıklayın.
+	Visual Basic	Visual Basic
 	Copy to	Şuraya kopyala
 
 # Document naming and account controls.
@@ -2611,6 +2664,124 @@ preview	Title	Örnek
 # Backstage › Recover (#586)
 	Recover	Kurtar
 
+# Developer › Ribbon Buttons: the document's buttons that run macros (Gaps #22)
+	Ribbon Buttons	Şerit Düğmeleri
+	Add Ribbon Button	Şeride Düğme Ekle
+	Edit Ribbon Button	Şerit Düğmesini Düzenle
+	Remove Ribbon Button	Şerit Düğmesini Kaldır
+	Press Ribbon Button	Şerit Düğmesine Bas
+	Runs the macro {macro}	{macro} makrosunu çalıştırır
+	Buttons that run this document's macros. They are saved with the document, and Word shows them too.	Bu belgenin makrolarını çalıştıran düğmeler. Belgeyle birlikte kaydedilir ve Word de bunları gösterir.
+	No buttons yet.	Henüz düğme yok.
+	runs {macro}	{macro} çalıştırır
+	This document's ribbon came from another program with more than buttons: its buttons run, but WordCraft doesn't change it.	Bu belgenin şeridi başka bir programdan geliyor ve düğmelerden fazlasını içeriyor: düğmeleri çalışır, ancak WordCraft şeridi değiştirmez.
+	New button	Yeni düğme
+	Macro:	Makro:
+	or type a name: Module1.Go	veya bir ad yazın: Module1.Go
+	the macro's name	makronun adı
+	Tab:	Sekme:
+	or a new tab's name	veya yeni bir sekmenin adı
+	Group:	Grup:
+	Picture:	Resim:
+	Small button (three to a column)	Küçük düğme (sütun başına üç)
+	Add to Ribbon…	Şeride Ekle…
+	A ribbon button that runs this macro, saved with the document	Bu makroyu çalıştıran, belgeyle birlikte kaydedilen bir şerit düğmesi
+	Filter	Filtre
+	Nothing to show.	Gösterilecek bir şey yok.
+	{label} must be a number.	{label} bir sayı olmalıdır.
+	The add-in {name} reported an error: {error}	{name} eklentisi bir hata bildirdi: {error}
+	The add-in {name} didn't finish its command.	{name} eklentisi komutunu tamamlamadı.
+	Start Live Session	Canlı oturum başlat
+	Join Live Session	Canlı oturuma katıl
+	Leave Live Session	Canlı oturumdan ayrıl
+	Live Session	Canlı oturum
+	Live session	Canlı oturum
+	Live Session Name and Colour	Canlı oturumda ad ve renk
+	Title bar	Başlık çubuğu
+	Joining…	Katılınıyor…
+	Live	Canlı
+	Connecting…	Bağlanıyor…
+	Offline	Çevrimdışı
+	Session ended	Oturum sona erdi
+	Share this document in a live session	Bu belgeyi canlı oturumda paylaş
+	{name} (you)	{name} (siz)
+	{name}'s caret isn't in a shared paragraph	{name} adlı kişinin imleci paylaşılan bir paragrafta değil
+	Encrypted end to end	Uçtan uca şifreli
+	Encrypt end to end	Uçtan uca şifrele
+	People here	Buradakiler
+	Go to their caret	İmlecine git
+	Copy Invitation	Daveti kopyala
+	Invitation copied	Davet kopyalandı
+	{count} others	Diğerleri: {count}
+	Start a live session	Canlı oturum başlat
+	Join a live session	Canlı oturuma katıl
+	Connection:	Bağlantı:
+	Your name:	Adınız:
+	Your colour:	Renginiz:
+	Invitation:	Davet:
+	Paste the invitation link	Davet bağlantısını yapıştırın
+	Joining replaces this document, which has unsaved changes.	Katılmak, kaydedilmemiş değişiklikleri olan bu belgenin yerini alır.
+	Discard my unsaved changes	Kaydedilmemiş değişikliklerimi at
+	Join	Katıl
+	Start	Başlat
+	Choose a connection	Bir bağlantı seçin
+	This add-in has no {command} command	Bu eklentinin {command} komutu yok
+	The add-in didn't start a live session	Eklenti canlı oturum başlatmadı
+	Live sessions need a co-editing add-in (a transport). Add one in File › Options › Add-ins.	Canlı oturumlar için birlikte düzenleme eklentisi (aktarım) gerekir. Dosya › Seçenekler › Eklentiler bölümünden bir tane ekleyin.
+	{why}. Install {name} anyway?	{why}. {name} yine de yüklensin mi?
+	{name} (release {tag})	{name} (sürüm {tag})
+	The add-ins that need the installed version are blocked until it suits them again.	Yüklü sürüme ihtiyaç duyan eklentiler, sürüm yeniden uygun olana kadar engelli kalır.
+	Install Anyway	Yine de yükle
+	{addin}; version {version} is installed	{addin}; {version} sürümü yüklü
+	{name} can use {addin}. Install it too?	{name}, {addin} kullanabilir. Bu da yüklensin mi?
+	{name} needs {addin}. Install it too?	{name}, {addin} gerektiriyor. Bu da yüklensin mi?
+	the newest release in range	aralıktaki en yeni sürüm
+	Add-ins are programs that run with your permissions. Install them only if you trust their authors.	Eklentiler, sizin izinlerinizle çalışan programlardır. Yalnızca yazarlarına güveniyorsanız yükleyin.
+	Install Selected	Seçilenleri yükle
+	Not Now	Şimdi değil
+	Blocked	Engellendi
+	Install Missing	Eksikleri yükle
+	{who} needs {name}. Turn both off?	{who}, {name} gerektiriyor. İkisi de kapatılsın mı?
+	{who} need {name}. Turn them all off?	{who}, {name} gerektiriyor. Hepsi kapatılsın mı?
+	Turn Both Off	İkisini de kapat
+	Turn All Off	Tümünü kapat
+	Install Missing Add-ins	Eksik eklentileri yükle
+	Add-in Requirements	Eklenti gereksinimleri
+	Chat	Sohbet
+	Chat copied to the clipboard	Sohbet panoya kopyalandı
+	Chat, {count} unread	Sohbet, okunmamış: {count}
+	Chat options	Sohbet seçenekleri
+	Clear chat…	Sohbeti temizle…
+	Clear Chat	Sohbeti temizle
+	edited	düzenlendi
+	Editing your message	İletiniz düzenleniyor
+	just now	şimdi
+	Kept in the file; Office drops it when it saves	Dosyada saklanır; Office kaydederken siler
+	Message deleted	İleti silindi
+	{name} is typing…	{name} yazıyor…
+	{names} are typing…	{names} yazıyor…
+	{n} h ago	{n} sa önce
+	{n} min ago	{n} dk önce
+	No messages yet. Messages are kept in the document.	Henüz ileti yok. İletiler belgede kalır.
+	Remove the whole chat from the document for everyone?	Tüm sohbet herkes için belgeden kaldırılsın mı?
+	Replying to {name}	Yanıtlanan: {name}
+	Send	Gönder
+	Write a message	Bir ileti yazın
+	Chat Messages	Sohbet iletileri
+	Send Chat Message	Sohbet iletisi gönder
+	Edit Chat Message	Sohbet iletisini düzenle
+	Delete Chat Message	Sohbet iletisini sil
+	Export Chat	Sohbeti dışa aktar
+	Typing in Chat	Sohbette yazma
+	Close the document and go back to Nextcloud	Belgeyi kapat ve Nextcloud'a dön
+	craft-live refused the connection: {reason}	craft-live bağlantıyı reddetti: {reason}
+	Saved to Nextcloud	Nextcloud'a kaydedildi
+	Couldn't save to Nextcloud: {error}	Nextcloud'a kaydedilemedi: {error}
+	The editing session expired. Close the document and open it again from Nextcloud.	Düzenleme oturumunun süresi doldu. Belgeyi kapatıp Nextcloud'dan yeniden açın.
+	Couldn't open the document from Nextcloud: {error}	Belge Nextcloud'dan açılamadı: {error}
+	This document is view only	Bu belge yalnızca görüntülenebilir
+	Saving to Nextcloud…	Nextcloud'a kaydediliyor…
+	Not connected: Nextcloud saves the document once the connection is back	Bağlantı yok: Bağlantı geri geldiğinde Nextcloud belgeyi kaydedecek
 # Page Setup › Mirror margins (#1239)
 	Mirror margins	Yansıtılmış kenar boşlukları
 

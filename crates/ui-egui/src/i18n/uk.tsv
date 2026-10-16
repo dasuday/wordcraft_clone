@@ -2149,6 +2149,59 @@
 	Start-up	Запуск
 	Show the Start screen when WordCraft starts	Показувати початковий екран під час запуску WordCraft
 	On: WordCraft opens on File › Home, with a blank document, the templates and your recent documents. Off: it opens a blank document.	Увімкнено: WordCraft відкривається на сторінці Файл › Основне з порожнім документом, шаблонами та нещодавніми документами. Вимкнено: відкривається порожній документ.
+	Add-ins	Надбудови
+	Get Add-ins	Отримати надбудови
+	Get\nAdd-ins	Отримати\nнадбудови
+	Load Add-in	Завантажити надбудову
+	Load Add-in…	Завантажити надбудову…
+	Install Add-in from GitHub	Інсталювати надбудову з GitHub
+	Unload Add-in	Вивантажити надбудову
+	Turn Add-in On or Off	Увімкнути або вимкнути надбудову
+	Add-in Documentation	Документація надбудови
+	Run Add-in Command	Виконати команду надбудови
+	Add-in manifest	Маніфест надбудови
+	Install from GitHub:	Інсталювати з GitHub:
+	Install	Інсталювати
+	Installing…	Інсталяція…
+	Installed {name}	Інстальовано: {name}
+	An add-in is a program that runs with your permissions. Install it only if you trust its author.	Надбудова — це програма, що працює з вашими дозволами. Інсталюйте її, лише якщо довіряєте авторові.
+	Install and run {repo}?	Інсталювати й запустити {repo}?
+	Documentation	Документація
+	Activate	Увімкнути
+	Deactivate	Вимкнути
+	Unload	Вивантажити
+	Until the next start	До наступного запуску
+	Active	Увімкнено
+	Inactive	Вимкнено
+	No add-ins are loaded.	Надбудови не завантажено.
+	owner/repository	власник/репозиторій
+	Pick the add-in's plugin.json	Виберіть файл plugin.json надбудови
+	Add-ins need the desktop app.	Для надбудов потрібна класична програма.
+	There's no add-ins folder to install into.	Немає папки надбудов для інсталяції.
+	Code	Код
+	Disable all macros	Вимкнути всі макроси
+	Disable macros with notification (enable them per document)	Вимкнути макроси зі сповіщенням (вмикати їх для кожного документа окремо)
+	Edit	Редагувати
+	Enable Content	Увімкнути вміст
+	Enable all macros (not recommended: a macro is a program)	Увімкнути всі макроси (не рекомендовано: макрос — це програма)
+	Insert Module	Вставити модуль
+	Macro Security	Безпека макросів
+	Macro name:	Ім'я макросу:
+	Macros are disabled for this document. Enable Content in the message bar, or change Macro Security.	Макроси в цьому документі вимкнено. Натисніть «Увімкнути вміст» на панелі повідомлень або змініть «Безпека макросів».
+	Macros have been disabled.	Макроси вимкнено.
+	Modules	Модулі
+	No code yet: Insert Module.	Коду ще немає: «Вставити модуль».
+	Office Add-in	Надбудова Office
+	Office add-ins need the WordCraft desktop app on macOS or Windows.	Для надбудов Office потрібна класична програма WordCraft для macOS або Windows.
+	Remove Module	Видалити модуль
+	Run	Виконати
+	Run Macro	Виконати макрос
+	SECURITY WARNING	ПОПЕРЕДЖЕННЯ БЕЗПЕКИ
+	Save Module	Зберегти модуль
+	Saves the module into the document (save the document as .docm to keep it)	Зберігає модуль у документі (щоб не втратити його, збережіть документ як .docm)
+	Stop Recording	Зупинити запис
+	This document has no macros yet: type a name and Create.	У цьому документі ще немає макросів: введіть ім'я та натисніть «Створити».
+	Visual Basic	Visual Basic
 	Copy to	Копіювати до
 
 # Document naming and account controls.
@@ -2227,6 +2280,124 @@
 # Backstage › Recover (#586)
 	Recover	Відновити
 
+# Developer › Ribbon Buttons: the document's buttons that run macros (Gaps #22)
+	Ribbon Buttons	Кнопки на стрічці
+	Add Ribbon Button	Додати кнопку на стрічку
+	Edit Ribbon Button	Змінити кнопку на стрічці
+	Remove Ribbon Button	Видалити кнопку зі стрічки
+	Press Ribbon Button	Натиснути кнопку на стрічці
+	Runs the macro {macro}	Виконує макрос {macro}
+	Buttons that run this document's macros. They are saved with the document, and Word shows them too.	Кнопки, що виконують макроси цього документа. Вони зберігаються разом із документом, і Word теж їх показує.
+	No buttons yet.	Кнопок поки немає.
+	runs {macro}	виконує {macro}
+	This document's ribbon came from another program with more than buttons: its buttons run, but WordCraft doesn't change it.	Стрічка цього документа походить з іншої програми й містить не лише кнопки: її кнопки працюють, але WordCraft її не змінює.
+	New button	Нова кнопка
+	Macro:	Макрос:
+	or type a name: Module1.Go	або введіть ім'я: Module1.Go
+	the macro's name	ім'я макросу
+	Tab:	Вкладка:
+	or a new tab's name	або ім'я нової вкладки
+	Group:	Група:
+	Picture:	Зображення:
+	Small button (three to a column)	Маленька кнопка (по три в стовпці)
+	Add to Ribbon…	Додати на стрічку…
+	A ribbon button that runs this macro, saved with the document	Кнопка на стрічці, що виконує цей макрос і зберігається разом із документом
+	Filter	Фільтр
+	Nothing to show.	Нічого показати.
+	{label} must be a number.	{label}: потрібне число.
+	The add-in {name} reported an error: {error}	Надбудова {name} повідомила про помилку: {error}
+	The add-in {name} didn't finish its command.	Надбудова {name} не завершила свою команду.
+	Start Live Session	Почати сеанс спільної роботи
+	Join Live Session	Приєднатися до сеансу спільної роботи
+	Leave Live Session	Вийти із сеансу спільної роботи
+	Live Session	Сеанс спільної роботи
+	Live session	Сеанс спільної роботи
+	Live Session Name and Colour	Ім’я та колір у сеансах спільної роботи
+	Title bar	Рядок заголовка
+	Joining…	Приєднання…
+	Live	У мережі
+	Connecting…	Підключення…
+	Offline	Не в мережі
+	Session ended	Сеанс завершено
+	Share this document in a live session	Відкрити спільну роботу над цим документом
+	{name} (you)	{name} (ви)
+	{name}'s caret isn't in a shared paragraph	Курсор користувача {name} не в спільному абзаці
+	Encrypted end to end	Наскрізне шифрування
+	Encrypt end to end	Використовувати наскрізне шифрування
+	People here	Учасники
+	Go to their caret	Перейти до курсора
+	Copy Invitation	Копіювати запрошення
+	Invitation copied	Запрошення скопійовано
+	{count} others	Інших: {count}
+	Start a live session	Почати сеанс спільної роботи
+	Join a live session	Приєднатися до сеансу спільної роботи
+	Connection:	Підключення:
+	Your name:	Ваше ім’я:
+	Your colour:	Ваш колір:
+	Invitation:	Запрошення:
+	Paste the invitation link	Вставте посилання-запрошення
+	Joining replaces this document, which has unsaved changes.	Приєднання замінить цей документ, а в ньому є незбережені зміни.
+	Discard my unsaved changes	Відкинути мої незбережені зміни
+	Join	Приєднатися
+	Start	Почати
+	Choose a connection	Виберіть підключення
+	This add-in has no {command} command	Ця надбудова не має команди {command}
+	The add-in didn't start a live session	Надбудова не почала сеанс спільної роботи
+	Live sessions need a co-editing add-in (a transport). Add one in File › Options › Add-ins.	Для спільної роботи потрібна надбудова-транспорт. Додайте її в розділі Файл › Параметри › Надбудови.
+	{why}. Install {name} anyway?	{why}. Усе одно інсталювати {name}?
+	{name} (release {tag})	{name} (випуск {tag})
+	The add-ins that need the installed version are blocked until it suits them again.	Надбудови, яким потрібна інстальована версія, залишаються заблокованими, доки вона знову їм не підійде.
+	Install Anyway	Усе одно інсталювати
+	{addin}; version {version} is installed	{addin}; інстальовано версію {version}
+	{name} can use {addin}. Install it too?	{name} може використовувати {addin}. Інсталювати і її?
+	{name} needs {addin}. Install it too?	Для {name} потрібна надбудова {addin}. Інсталювати і її?
+	the newest release in range	найновіший випуск у діапазоні
+	Add-ins are programs that run with your permissions. Install them only if you trust their authors.	Надбудови — це програми, що працюють з вашими дозволами. Інсталюйте їх, лише якщо довіряєте їхнім авторам.
+	Install Selected	Інсталювати вибрані
+	Not Now	Не зараз
+	Blocked	Заблоковано
+	Install Missing	Інсталювати відсутні
+	{who} needs {name}. Turn both off?	Для {who} потрібна надбудова {name}. Вимкнути обидві?
+	{who} need {name}. Turn them all off?	Для {who} потрібна надбудова {name}. Вимкнути всі?
+	Turn Both Off	Вимкнути обидві
+	Turn All Off	Вимкнути всі
+	Install Missing Add-ins	Інсталювати відсутні надбудови
+	Add-in Requirements	Вимоги надбудови
+	Chat	Чат
+	Chat copied to the clipboard	Чат скопійовано до буфера обміну
+	Chat, {count} unread	Чат, непрочитаних: {count}
+	Chat options	Параметри чату
+	Clear chat…	Очистити чат…
+	Clear Chat	Очистити чат
+	edited	змінено
+	Editing your message	Редагування повідомлення
+	just now	щойно
+	Kept in the file; Office drops it when it saves	Зберігається у файлі; Office видаляє його під час збереження
+	Message deleted	Повідомлення видалено
+	{name} is typing…	{name} друкує…
+	{names} are typing…	Друкують: {names}…
+	{n} h ago	{n} год тому
+	{n} min ago	{n} хв тому
+	No messages yet. Messages are kept in the document.	Повідомлень ще немає. Повідомлення зберігаються в документі.
+	Remove the whole chat from the document for everyone?	Видалити весь чат із документа для всіх?
+	Replying to {name}	Відповідь для: {name}
+	Send	Надіслати
+	Write a message	Напишіть повідомлення
+	Chat Messages	Повідомлення чату
+	Send Chat Message	Надіслати повідомлення в чат
+	Edit Chat Message	Змінити повідомлення чату
+	Delete Chat Message	Видалити повідомлення чату
+	Export Chat	Експортувати чат
+	Typing in Chat	Набір тексту в чаті
+	Close the document and go back to Nextcloud	Закрити документ і повернутися до Nextcloud
+	craft-live refused the connection: {reason}	craft-live відхилив з’єднання: {reason}
+	Saved to Nextcloud	Збережено в Nextcloud
+	Couldn't save to Nextcloud: {error}	Не вдалося зберегти в Nextcloud: {error}
+	The editing session expired. Close the document and open it again from Nextcloud.	Сеанс редагування закінчився. Закрийте документ і відкрийте його знову з Nextcloud.
+	Couldn't open the document from Nextcloud: {error}	Не вдалося відкрити документ із Nextcloud: {error}
+	This document is view only	Цей документ доступний лише для перегляду
+	Saving to Nextcloud…	Збереження в Nextcloud…
+	Not connected: Nextcloud saves the document once the connection is back	Немає з’єднання: Nextcloud збереже документ, щойно з’єднання відновиться
 # Page Setup › Mirror margins (#1239)
 	Mirror margins	Дзеркальні поля
 

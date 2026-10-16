@@ -2149,6 +2149,59 @@
 	Start-up	启动
 	Show the Start screen when WordCraft starts	启动 WordCraft 时显示开始屏幕
 	On: WordCraft opens on File › Home, with a blank document, the templates and your recent documents. Off: it opens a blank document.	开：WordCraft 打开时显示“文件 › 开始”，其中有空白文档、模板和最近使用的文档。关：直接打开空白文档。
+	Add-ins	加载项
+	Get Add-ins	获取加载项
+	Get\nAdd-ins	获取\n加载项
+	Load Add-in	加载加载项
+	Load Add-in…	加载加载项…
+	Install Add-in from GitHub	从 GitHub 安装加载项
+	Unload Add-in	卸载加载项
+	Turn Add-in On or Off	打开或关闭加载项
+	Add-in Documentation	加载项文档
+	Run Add-in Command	运行加载项命令
+	Add-in manifest	加载项清单
+	Install from GitHub:	从 GitHub 安装:
+	Install	安装
+	Installing…	正在安装…
+	Installed {name}	已安装 {name}
+	An add-in is a program that runs with your permissions. Install it only if you trust its author.	加载项是以你的权限运行的程序。只有在信任其作者时才安装。
+	Install and run {repo}?	安装并运行 {repo}?
+	Documentation	文档
+	Activate	启用
+	Deactivate	停用
+	Unload	卸载
+	Until the next start	直到下次启动
+	Active	已启用
+	Inactive	已停用
+	No add-ins are loaded.	未加载任何加载项。
+	owner/repository	所有者/存储库
+	Pick the add-in's plugin.json	选择加载项的 plugin.json
+	Add-ins need the desktop app.	加载项需要桌面应用。
+	There's no add-ins folder to install into.	没有可供安装的加载项文件夹。
+	Code	代码
+	Disable all macros	禁用所有宏
+	Disable macros with notification (enable them per document)	禁用宏并发出通知（可按文档启用）
+	Edit	编辑
+	Enable Content	启用内容
+	Enable all macros (not recommended: a macro is a program)	启用所有宏（不推荐：宏是一种程序）
+	Insert Module	插入模块
+	Macro Security	宏安全性
+	Macro name:	宏名称：
+	Macros are disabled for this document. Enable Content in the message bar, or change Macro Security.	此文档的宏已被禁用。请点击消息栏中的“启用内容”，或更改“宏安全性”。
+	Macros have been disabled.	宏已被禁用。
+	Modules	模块
+	No code yet: Insert Module.	尚无代码：请点击“插入模块”。
+	Office Add-in	Office 加载项
+	Office add-ins need the WordCraft desktop app on macOS or Windows.	Office 加载项需要 macOS 或 Windows 上的 WordCraft 桌面应用。
+	Remove Module	删除模块
+	Run	运行
+	Run Macro	运行宏
+	SECURITY WARNING	安全警告
+	Save Module	保存模块
+	Saves the module into the document (save the document as .docm to keep it)	将模块保存到文档中（要保留它，请将文档另存为 .docm）
+	Stop Recording	停止录制
+	This document has no macros yet: type a name and Create.	此文档还没有宏：请输入名称，然后点击“创建”。
+	Visual Basic	Visual Basic
 	Copy to	复制到
 
 # Document naming and account controls.
@@ -2227,6 +2280,124 @@
 # Backstage › Recover (#586)
 	Recover	恢复
 
+# Developer › Ribbon Buttons: the document's buttons that run macros (Gaps #22)
+	Ribbon Buttons	功能区按钮
+	Add Ribbon Button	添加功能区按钮
+	Edit Ribbon Button	编辑功能区按钮
+	Remove Ribbon Button	删除功能区按钮
+	Press Ribbon Button	按下功能区按钮
+	Runs the macro {macro}	运行宏 {macro}
+	Buttons that run this document's macros. They are saved with the document, and Word shows them too.	运行此文档中宏的按钮。它们随文档一起保存，Word 也会显示它们。
+	No buttons yet.	还没有按钮。
+	runs {macro}	运行 {macro}
+	This document's ribbon came from another program with more than buttons: its buttons run, but WordCraft doesn't change it.	此文档的功能区来自另一个程序，且不只包含按钮：其中的按钮可以运行，但 WordCraft 不会修改它。
+	New button	新按钮
+	Macro:	宏：
+	or type a name: Module1.Go	或输入名称：Module1.Go
+	the macro's name	宏的名称
+	Tab:	选项卡：
+	or a new tab's name	或新选项卡的名称
+	Group:	组：
+	Picture:	图片：
+	Small button (three to a column)	小按钮（每列三个）
+	Add to Ribbon…	添加到功能区…
+	A ribbon button that runs this macro, saved with the document	运行此宏的功能区按钮，随文档一起保存
+	Filter	筛选
+	Nothing to show.	没有可显示的内容。
+	{label} must be a number.	{label} 必须是数字。
+	The add-in {name} reported an error: {error}	加载项 {name} 报告了错误：{error}
+	The add-in {name} didn't finish its command.	加载项 {name} 未完成其命令。
+	Start Live Session	开始实时会话
+	Join Live Session	加入实时会话
+	Leave Live Session	离开实时会话
+	Live Session	实时会话
+	Live session	实时会话
+	Live Session Name and Colour	实时会话中的名称和颜色
+	Title bar	标题栏
+	Joining…	正在加入…
+	Live	在线
+	Connecting…	正在连接…
+	Offline	离线
+	Session ended	会话已结束
+	Share this document in a live session	在实时会话中共享此文档
+	{name} (you)	{name}（你）
+	{name}'s caret isn't in a shared paragraph	{name} 的光标不在共享段落中
+	Encrypted end to end	端到端加密
+	Encrypt end to end	使用端到端加密
+	People here	当前成员
+	Go to their caret	转到其光标
+	Copy Invitation	复制邀请
+	Invitation copied	已复制邀请
+	{count} others	其他 {count} 人
+	Start a live session	开始实时会话
+	Join a live session	加入实时会话
+	Connection:	连接：
+	Your name:	你的名称：
+	Your colour:	你的颜色：
+	Invitation:	邀请：
+	Paste the invitation link	粘贴邀请链接
+	Joining replaces this document, which has unsaved changes.	加入会替换此文档，而它有未保存的更改。
+	Discard my unsaved changes	放弃我未保存的更改
+	Join	加入
+	Start	开始
+	Choose a connection	请选择连接
+	This add-in has no {command} command	此加载项没有 {command} 命令
+	The add-in didn't start a live session	加载项未开始实时会话
+	Live sessions need a co-editing add-in (a transport). Add one in File › Options › Add-ins.	实时会话需要协同编辑加载项（传输）。请在“文件 › 选项 › 加载项”中添加。
+	{why}. Install {name} anyway?	{why}。仍要安装 {name} 吗？
+	{name} (release {tag})	{name}（发布版 {tag}）
+	The add-ins that need the installed version are blocked until it suits them again.	需要已安装版本的加载项将保持阻止状态，直到该版本再次符合其要求。
+	Install Anyway	仍要安装
+	{addin}; version {version} is installed	{addin}；已安装版本 {version}
+	{name} can use {addin}. Install it too?	{name} 可以使用 {addin}。也安装它吗？
+	{name} needs {addin}. Install it too?	{name} 需要 {addin}。也安装它吗？
+	the newest release in range	范围内的最新发布版
+	Add-ins are programs that run with your permissions. Install them only if you trust their authors.	加载项是以你的权限运行的程序。只有在信任其作者时才安装。
+	Install Selected	安装所选项
+	Not Now	以后再说
+	Blocked	已阻止
+	Install Missing	安装缺少的项
+	{who} needs {name}. Turn both off?	{who} 需要 {name}。两者都停用吗？
+	{who} need {name}. Turn them all off?	{who} 需要 {name}。全部停用吗？
+	Turn Both Off	两者都停用
+	Turn All Off	全部停用
+	Install Missing Add-ins	安装缺少的加载项
+	Add-in Requirements	加载项要求
+	Chat	聊天
+	Chat copied to the clipboard	已将聊天复制到剪贴板
+	Chat, {count} unread	聊天，{count} 条未读
+	Chat options	聊天选项
+	Clear chat…	清除聊天…
+	Clear Chat	清除聊天
+	edited	已编辑
+	Editing your message	正在编辑你的消息
+	just now	刚刚
+	Kept in the file; Office drops it when it saves	保存在文件中；Office 保存时会将其删除
+	Message deleted	消息已删除
+	{name} is typing…	{name} 正在输入…
+	{names} are typing…	{names} 正在输入…
+	{n} h ago	{n} 小时前
+	{n} min ago	{n} 分钟前
+	No messages yet. Messages are kept in the document.	还没有消息。消息会保存在文档中。
+	Remove the whole chat from the document for everyone?	要为所有人从文档中删除整个聊天吗？
+	Replying to {name}	回复 {name}
+	Send	发送
+	Write a message	输入消息
+	Chat Messages	聊天消息
+	Send Chat Message	发送聊天消息
+	Edit Chat Message	编辑聊天消息
+	Delete Chat Message	删除聊天消息
+	Export Chat	导出聊天
+	Typing in Chat	正在聊天中输入
+	Close the document and go back to Nextcloud	关闭文档并返回 Nextcloud
+	craft-live refused the connection: {reason}	craft-live 拒绝了连接：{reason}
+	Saved to Nextcloud	已保存到 Nextcloud
+	Couldn't save to Nextcloud: {error}	无法保存到 Nextcloud：{error}
+	The editing session expired. Close the document and open it again from Nextcloud.	编辑会话已过期。请关闭文档，然后从 Nextcloud 重新打开。
+	Couldn't open the document from Nextcloud: {error}	无法从 Nextcloud 打开文档：{error}
+	This document is view only	此文档仅供查看
+	Saving to Nextcloud…	正在保存到 Nextcloud…
+	Not connected: Nextcloud saves the document once the connection is back	未连接：连接恢复后 Nextcloud 会保存文档
 # Page Setup › Mirror margins (#1239)
 	Mirror margins	对称页边距
 

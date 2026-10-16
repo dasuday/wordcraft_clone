@@ -2144,6 +2144,59 @@
 	Table Properties…	Propriétés du tableau…
 	Search	Rechercher
 	Title Bar	Barre de titre
+	Add-ins	Compléments
+	Get Add-ins	Obtenir des compléments
+	Get\nAdd-ins	Obtenir des\ncompléments
+	Load Add-in	Charger un complément
+	Load Add-in…	Charger un complément…
+	Install Add-in from GitHub	Installer un complément depuis GitHub
+	Unload Add-in	Décharger le complément
+	Turn Add-in On or Off	Activer ou désactiver le complément
+	Add-in Documentation	Documentation du complément
+	Run Add-in Command	Exécuter une commande du complément
+	Add-in manifest	Manifeste de complément
+	Install from GitHub:	Installer depuis GitHub :
+	Install	Installer
+	Installing…	Installation…
+	Installed {name}	{name} installé
+	An add-in is a program that runs with your permissions. Install it only if you trust its author.	Un complément est un programme qui s’exécute avec vos autorisations. Installez-le seulement si vous faites confiance à son auteur.
+	Install and run {repo}?	Installer et exécuter {repo} ?
+	Documentation	Documentation
+	Activate	Activer
+	Deactivate	Désactiver
+	Unload	Décharger
+	Until the next start	Jusqu’au prochain démarrage
+	Active	Actif
+	Inactive	Inactif
+	No add-ins are loaded.	Aucun complément n’est chargé.
+	owner/repository	propriétaire/dépôt
+	Pick the add-in's plugin.json	Choisir le fichier plugin.json du complément
+	Add-ins need the desktop app.	Les compléments nécessitent l’application de bureau.
+	There's no add-ins folder to install into.	Il n’y a pas de dossier de compléments où installer.
+	Code	Code
+	Disable all macros	Désactiver toutes les macros
+	Disable macros with notification (enable them per document)	Désactiver les macros avec notification (les activer document par document)
+	Edit	Modifier
+	Enable Content	Activer le contenu
+	Enable all macros (not recommended: a macro is a program)	Activer toutes les macros (déconseillé : une macro est un programme)
+	Insert Module	Insérer un module
+	Macro Security	Sécurité des macros
+	Macro name:	Nom de la macro :
+	Macros are disabled for this document. Enable Content in the message bar, or change Macro Security.	Les macros sont désactivées pour ce document. Cliquez sur « Activer le contenu » dans la barre de message, ou modifiez la « Sécurité des macros ».
+	Macros have been disabled.	Les macros ont été désactivées.
+	Modules	Modules
+	No code yet: Insert Module.	Pas encore de code : « Insérer un module ».
+	Office Add-in	Complément Office
+	Office add-ins need the WordCraft desktop app on macOS or Windows.	Les compléments Office nécessitent l’application de bureau WordCraft sous macOS ou Windows.
+	Remove Module	Supprimer le module
+	Run	Exécuter
+	Run Macro	Exécuter une macro
+	SECURITY WARNING	AVERTISSEMENT DE SÉCURITÉ
+	Save Module	Enregistrer le module
+	Saves the module into the document (save the document as .docm to keep it)	Enregistre le module dans le document (enregistrez le document au format .docm pour le conserver)
+	Stop Recording	Arrêter l’enregistrement
+	This document has no macros yet: type a name and Create.	Ce document n’a pas encore de macro : tapez un nom puis cliquez sur « Créer ».
+	Visual Basic	Visual Basic
 	Copy to	Copier vers
 
 # Document naming and account controls.
@@ -2222,6 +2275,124 @@
 # Backstage › Recover (#586)
 	Recover	Récupérer
 
+# Developer › Ribbon Buttons: the document's buttons that run macros (Gaps #22)
+	Ribbon Buttons	Boutons du ruban
+	Add Ribbon Button	Ajouter un bouton au ruban
+	Edit Ribbon Button	Modifier un bouton du ruban
+	Remove Ribbon Button	Supprimer un bouton du ruban
+	Press Ribbon Button	Appuyer sur un bouton du ruban
+	Runs the macro {macro}	Exécute la macro {macro}
+	Buttons that run this document's macros. They are saved with the document, and Word shows them too.	Des boutons qui exécutent les macros de ce document. Ils sont enregistrés avec le document, et Word les affiche aussi.
+	No buttons yet.	Aucun bouton pour l’instant.
+	runs {macro}	exécute {macro}
+	This document's ribbon came from another program with more than buttons: its buttons run, but WordCraft doesn't change it.	Le ruban de ce document vient d’un autre programme et contient plus que des boutons : ses boutons fonctionnent, mais WordCraft ne le modifie pas.
+	New button	Nouveau bouton
+	Macro:	Macro :
+	or type a name: Module1.Go	ou tapez un nom : Module1.Go
+	the macro's name	le nom de la macro
+	Tab:	Onglet :
+	or a new tab's name	ou le nom d’un nouvel onglet
+	Group:	Groupe :
+	Picture:	Image :
+	Small button (three to a column)	Petit bouton (trois par colonne)
+	Add to Ribbon…	Ajouter au ruban…
+	A ribbon button that runs this macro, saved with the document	Un bouton du ruban qui exécute cette macro, enregistré avec le document
+	Filter	Filtre
+	Nothing to show.	Rien à afficher.
+	{label} must be a number.	{label} doit être un nombre.
+	The add-in {name} reported an error: {error}	Le complément {name} a signalé une erreur : {error}
+	The add-in {name} didn't finish its command.	Le complément {name} n’a pas terminé sa commande.
+	Start Live Session	Démarrer une session en direct
+	Join Live Session	Rejoindre une session en direct
+	Leave Live Session	Quitter la session en direct
+	Live Session	Session en direct
+	Live session	Session en direct
+	Live Session Name and Colour	Nom et couleur en session en direct
+	Title bar	Barre de titre
+	Joining…	Connexion à la session…
+	Live	En direct
+	Connecting…	Connexion…
+	Offline	Hors ligne
+	Session ended	Session terminée
+	Share this document in a live session	Partager ce document dans une session en direct
+	{name} (you)	{name} (vous)
+	{name}'s caret isn't in a shared paragraph	Le curseur de {name} n’est pas dans un paragraphe partagé
+	Encrypted end to end	Chiffré de bout en bout
+	Encrypt end to end	Chiffrer de bout en bout
+	People here	Personnes présentes
+	Go to their caret	Aller à son curseur
+	Copy Invitation	Copier l’invitation
+	Invitation copied	Invitation copiée
+	{count} others	Autres : {count}
+	Start a live session	Démarrer une session en direct
+	Join a live session	Rejoindre une session en direct
+	Connection:	Connexion :
+	Your name:	Votre nom :
+	Your colour:	Votre couleur :
+	Invitation:	Invitation :
+	Paste the invitation link	Collez le lien d’invitation
+	Joining replaces this document, which has unsaved changes.	Rejoindre remplace ce document, qui contient des modifications non enregistrées.
+	Discard my unsaved changes	Abandonner mes modifications non enregistrées
+	Join	Rejoindre
+	Start	Démarrer
+	Choose a connection	Choisissez une connexion
+	This add-in has no {command} command	Ce complément n’a pas de commande {command}
+	The add-in didn't start a live session	Le complément n’a pas démarré de session en direct
+	Live sessions need a co-editing add-in (a transport). Add one in File › Options › Add-ins.	Les sessions en direct nécessitent un complément de coédition (un transport). Ajoutez-en un dans Fichier › Options › Compléments.
+	{why}. Install {name} anyway?	{why}. Installer {name} quand même ?
+	{name} (release {tag})	{name} (version {tag})
+	The add-ins that need the installed version are blocked until it suits them again.	Les compléments qui ont besoin de la version installée restent bloqués jusqu’à ce qu’elle leur convienne de nouveau.
+	Install Anyway	Installer quand même
+	{addin}; version {version} is installed	{addin} ; la version {version} est installée
+	{name} can use {addin}. Install it too?	{name} peut utiliser {addin}. L’installer aussi ?
+	{name} needs {addin}. Install it too?	{name} a besoin de {addin}. L’installer aussi ?
+	the newest release in range	la version la plus récente dans la plage
+	Add-ins are programs that run with your permissions. Install them only if you trust their authors.	Les compléments sont des programmes qui s’exécutent avec vos autorisations. Installez-les seulement si vous faites confiance à leurs auteurs.
+	Install Selected	Installer la sélection
+	Not Now	Pas maintenant
+	Blocked	Bloqué
+	Install Missing	Installer les manquants
+	{who} needs {name}. Turn both off?	{who} a besoin de {name}. Désactiver les deux ?
+	{who} need {name}. Turn them all off?	{who} ont besoin de {name}. Tout désactiver ?
+	Turn Both Off	Désactiver les deux
+	Turn All Off	Tout désactiver
+	Install Missing Add-ins	Installer les compléments manquants
+	Add-in Requirements	Prérequis du complément
+	Chat	Discussion
+	Chat copied to the clipboard	Discussion copiée dans le presse-papiers
+	Chat, {count} unread	Discussion, non lus : {count}
+	Chat options	Options de la discussion
+	Clear chat…	Effacer la discussion…
+	Clear Chat	Effacer la discussion
+	edited	modifié
+	Editing your message	Modification de votre message
+	just now	à l'instant
+	Kept in the file; Office drops it when it saves	Enregistrée dans le fichier ; Office la supprime à l'enregistrement
+	Message deleted	Message supprimé
+	{name} is typing…	{name} écrit…
+	{names} are typing…	{names} écrivent…
+	{n} h ago	il y a {n} h
+	{n} min ago	il y a {n} min
+	No messages yet. Messages are kept in the document.	Aucun message pour l'instant. Les messages restent dans le document.
+	Remove the whole chat from the document for everyone?	Supprimer toute la discussion du document pour tout le monde ?
+	Replying to {name}	Réponse à {name}
+	Send	Envoyer
+	Write a message	Écrire un message
+	Chat Messages	Messages de la discussion
+	Send Chat Message	Envoyer un message
+	Edit Chat Message	Modifier un message
+	Delete Chat Message	Supprimer un message
+	Export Chat	Exporter la discussion
+	Typing in Chat	Saisie dans la discussion
+	Close the document and go back to Nextcloud	Fermer le document et revenir à Nextcloud
+	craft-live refused the connection: {reason}	craft-live a refusé la connexion : {reason}
+	Saved to Nextcloud	Enregistré dans Nextcloud
+	Couldn't save to Nextcloud: {error}	Impossible d’enregistrer dans Nextcloud : {error}
+	The editing session expired. Close the document and open it again from Nextcloud.	La session de modification a expiré. Fermez le document et rouvrez-le depuis Nextcloud.
+	Couldn't open the document from Nextcloud: {error}	Impossible d’ouvrir le document depuis Nextcloud : {error}
+	This document is view only	Ce document est en lecture seule
+	Saving to Nextcloud…	Enregistrement dans Nextcloud…
+	Not connected: Nextcloud saves the document once the connection is back	Pas de connexion : Nextcloud enregistrera le document dès que la connexion sera rétablie
 # Page Setup › Mirror margins (#1239)
 	Mirror margins	Marges en vis-à-vis
 

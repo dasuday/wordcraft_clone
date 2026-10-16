@@ -2527,6 +2527,59 @@ preview	Title	Пример
 	Level 7	Уровень 7
 	Level 8	Уровень 8
 	Level 9	Уровень 9
+	Add-ins	Надстройки
+	Get Add-ins	Получить надстройки
+	Get\nAdd-ins	Получить\nнадстройки
+	Load Add-in	Загрузить надстройку
+	Load Add-in…	Загрузить надстройку…
+	Install Add-in from GitHub	Установить надстройку из GitHub
+	Unload Add-in	Выгрузить надстройку
+	Turn Add-in On or Off	Включить или отключить надстройку
+	Add-in Documentation	Документация надстройки
+	Run Add-in Command	Выполнить команду надстройки
+	Add-in manifest	Манифест надстройки
+	Install from GitHub:	Установить из GitHub:
+	Install	Установить
+	Installing…	Установка…
+	Installed {name}	Установлено: {name}
+	An add-in is a program that runs with your permissions. Install it only if you trust its author.	Надстройка — это программа, которая работает с вашими правами. Устанавливайте её, только если доверяете автору.
+	Install and run {repo}?	Установить и запустить {repo}?
+	Documentation	Документация
+	Activate	Включить
+	Deactivate	Отключить
+	Unload	Выгрузить
+	Until the next start	До следующего запуска
+	Active	Включена
+	Inactive	Отключена
+	No add-ins are loaded.	Надстройки не загружены.
+	owner/repository	владелец/репозиторий
+	Pick the add-in's plugin.json	Выберите файл plugin.json надстройки
+	Add-ins need the desktop app.	Для надстроек нужно классическое приложение.
+	There's no add-ins folder to install into.	Нет папки надстроек для установки.
+	Code	Код
+	Disable all macros	Отключить все макросы
+	Disable macros with notification (enable them per document)	Отключить макросы с уведомлением (включать их для каждого документа)
+	Edit	Изменить
+	Enable Content	Включить содержимое
+	Enable all macros (not recommended: a macro is a program)	Включить все макросы (не рекомендуется: макрос — это программа)
+	Insert Module	Вставить модуль
+	Macro Security	Безопасность макросов
+	Macro name:	Имя макроса:
+	Macros are disabled for this document. Enable Content in the message bar, or change Macro Security.	Макросы в этом документе отключены. Нажмите «Включить содержимое» на панели сообщений или измените «Безопасность макросов».
+	Macros have been disabled.	Макросы отключены.
+	Modules	Модули
+	No code yet: Insert Module.	Кода пока нет: «Вставить модуль».
+	Office Add-in	Надстройка Office
+	Office add-ins need the WordCraft desktop app on macOS or Windows.	Для надстроек Office нужно классическое приложение WordCraft для macOS или Windows.
+	Remove Module	Удалить модуль
+	Run	Выполнить
+	Run Macro	Выполнить макрос
+	SECURITY WARNING	ПРЕДУПРЕЖДЕНИЕ СИСТЕМЫ БЕЗОПАСНОСТИ
+	Save Module	Сохранить модуль
+	Saves the module into the document (save the document as .docm to keep it)	Сохраняет модуль в документе (чтобы он не пропал, сохраните документ как .docm)
+	Stop Recording	Остановить запись
+	This document has no macros yet: type a name and Create.	В этом документе пока нет макросов: введите имя и нажмите «Создать».
+	Visual Basic	Visual Basic
 	Copy to	Копировать в
 
 # Document naming and account controls.
@@ -2612,6 +2665,124 @@ preview	Title	Пример
 # Backstage › Recover (#586)
 	Recover	Восстановить
 
+# Developer › Ribbon Buttons: the document's buttons that run macros (Gaps #22)
+	Ribbon Buttons	Кнопки на ленте
+	Add Ribbon Button	Добавить кнопку на ленту
+	Edit Ribbon Button	Изменить кнопку на ленте
+	Remove Ribbon Button	Удалить кнопку с ленты
+	Press Ribbon Button	Нажать кнопку на ленте
+	Runs the macro {macro}	Выполняет макрос {macro}
+	Buttons that run this document's macros. They are saved with the document, and Word shows them too.	Кнопки, которые выполняют макросы этого документа. Они сохраняются вместе с документом, и Word тоже их показывает.
+	No buttons yet.	Кнопок пока нет.
+	runs {macro}	выполняет {macro}
+	This document's ribbon came from another program with more than buttons: its buttons run, but WordCraft doesn't change it.	Лента этого документа создана в другой программе и содержит не только кнопки: её кнопки работают, но WordCraft её не изменяет.
+	New button	Новая кнопка
+	Macro:	Макрос:
+	or type a name: Module1.Go	или введите имя: Module1.Go
+	the macro's name	имя макроса
+	Tab:	Вкладка:
+	or a new tab's name	или имя новой вкладки
+	Group:	Группа:
+	Picture:	Рисунок:
+	Small button (three to a column)	Маленькая кнопка (по три в столбце)
+	Add to Ribbon…	Добавить на ленту…
+	A ribbon button that runs this macro, saved with the document	Кнопка на ленте, которая выполняет этот макрос и сохраняется вместе с документом
+	Filter	Фильтр
+	Nothing to show.	Нечего показать.
+	{label} must be a number.	{label}: требуется число.
+	The add-in {name} reported an error: {error}	Надстройка {name} сообщила об ошибке: {error}
+	The add-in {name} didn't finish its command.	Надстройка {name} не завершила свою команду.
+	Start Live Session	Начать сеанс совместной работы
+	Join Live Session	Присоединиться к сеансу совместной работы
+	Leave Live Session	Покинуть сеанс совместной работы
+	Live Session	Сеанс совместной работы
+	Live session	Сеанс совместной работы
+	Live Session Name and Colour	Имя и цвет в сеансах совместной работы
+	Title bar	Строка заголовка
+	Joining…	Присоединение…
+	Live	В сети
+	Connecting…	Подключение…
+	Offline	Не в сети
+	Session ended	Сеанс завершён
+	Share this document in a live session	Открыть совместную работу над этим документом
+	{name} (you)	{name} (вы)
+	{name}'s caret isn't in a shared paragraph	Курсор пользователя {name} не в общем абзаце
+	Encrypted end to end	Сквозное шифрование
+	Encrypt end to end	Использовать сквозное шифрование
+	People here	Участники
+	Go to their caret	Перейти к курсору
+	Copy Invitation	Копировать приглашение
+	Invitation copied	Приглашение скопировано
+	{count} others	Других: {count}
+	Start a live session	Начать сеанс совместной работы
+	Join a live session	Присоединиться к сеансу совместной работы
+	Connection:	Подключение:
+	Your name:	Ваше имя:
+	Your colour:	Ваш цвет:
+	Invitation:	Приглашение:
+	Paste the invitation link	Вставьте ссылку-приглашение
+	Joining replaces this document, which has unsaved changes.	При присоединении этот документ будет заменён, а в нём есть несохранённые изменения.
+	Discard my unsaved changes	Отменить мои несохранённые изменения
+	Join	Присоединиться
+	Start	Начать
+	Choose a connection	Выберите подключение
+	This add-in has no {command} command	У этой надстройки нет команды {command}
+	The add-in didn't start a live session	Надстройка не начала сеанс совместной работы
+	Live sessions need a co-editing add-in (a transport). Add one in File › Options › Add-ins.	Для совместной работы нужна надстройка-транспорт. Добавьте её в разделе Файл › Параметры › Надстройки.
+	{why}. Install {name} anyway?	{why}. Всё равно установить {name}?
+	{name} (release {tag})	{name} (выпуск {tag})
+	The add-ins that need the installed version are blocked until it suits them again.	Надстройки, которым нужна установленная версия, остаются заблокированными, пока она снова им не подойдёт.
+	Install Anyway	Всё равно установить
+	{addin}; version {version} is installed	{addin}; установлена версия {version}
+	{name} can use {addin}. Install it too?	{name} может использовать {addin}. Установить и её?
+	{name} needs {addin}. Install it too?	Для {name} нужна надстройка {addin}. Установить и её?
+	the newest release in range	новейший выпуск в диапазоне
+	Add-ins are programs that run with your permissions. Install them only if you trust their authors.	Надстройки — это программы, которые работают с вашими правами. Устанавливайте их, только если доверяете их авторам.
+	Install Selected	Установить выбранные
+	Not Now	Не сейчас
+	Blocked	Заблокирована
+	Install Missing	Установить недостающие
+	{who} needs {name}. Turn both off?	Для {who} нужна надстройка {name}. Отключить обе?
+	{who} need {name}. Turn them all off?	Для {who} нужна надстройка {name}. Отключить все?
+	Turn Both Off	Отключить обе
+	Turn All Off	Отключить все
+	Install Missing Add-ins	Установить недостающие надстройки
+	Add-in Requirements	Требования надстройки
+	Chat	Чат
+	Chat copied to the clipboard	Чат скопирован в буфер обмена
+	Chat, {count} unread	Чат, непрочитанных: {count}
+	Chat options	Параметры чата
+	Clear chat…	Очистить чат…
+	Clear Chat	Очистить чат
+	edited	изменено
+	Editing your message	Редактирование сообщения
+	just now	только что
+	Kept in the file; Office drops it when it saves	Хранится в файле; Office удаляет его при сохранении
+	Message deleted	Сообщение удалено
+	{name} is typing…	{name} печатает…
+	{names} are typing…	Печатают: {names}…
+	{n} h ago	{n} ч назад
+	{n} min ago	{n} мин назад
+	No messages yet. Messages are kept in the document.	Сообщений пока нет. Сообщения хранятся в документе.
+	Remove the whole chat from the document for everyone?	Удалить весь чат из документа для всех?
+	Replying to {name}	Ответ для: {name}
+	Send	Отправить
+	Write a message	Напишите сообщение
+	Chat Messages	Сообщения чата
+	Send Chat Message	Отправить сообщение в чат
+	Edit Chat Message	Изменить сообщение чата
+	Delete Chat Message	Удалить сообщение чата
+	Export Chat	Экспортировать чат
+	Typing in Chat	Набор текста в чате
+	Close the document and go back to Nextcloud	Закрыть документ и вернуться в Nextcloud
+	craft-live refused the connection: {reason}	craft-live отклонил подключение: {reason}
+	Saved to Nextcloud	Сохранено в Nextcloud
+	Couldn't save to Nextcloud: {error}	Не удалось сохранить в Nextcloud: {error}
+	The editing session expired. Close the document and open it again from Nextcloud.	Сеанс редактирования истёк. Закройте документ и снова откройте его из Nextcloud.
+	Couldn't open the document from Nextcloud: {error}	Не удалось открыть документ из Nextcloud: {error}
+	This document is view only	Этот документ доступен только для просмотра
+	Saving to Nextcloud…	Сохранение в Nextcloud…
+	Not connected: Nextcloud saves the document once the connection is back	Нет подключения: Nextcloud сохранит документ, когда подключение восстановится
 # Page Setup › Mirror margins (#1239)
 	Mirror margins	Зеркальные поля
 

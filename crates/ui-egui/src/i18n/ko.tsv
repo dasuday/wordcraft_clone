@@ -2488,3 +2488,173 @@ preview	Title	제목
 	Bottom Right Cell	오른쪽 아래 셀
 	Inside Horizontal Border	안쪽 가로 테두리
 	Inside Vertical Border	안쪽 세로 테두리
+	Add-ins	추가 기능
+	Get Add-ins	추가 기능 가져오기
+	Get\nAdd-ins	추가 기능\n가져오기
+	Load Add-in	추가 기능 불러오기
+	Load Add-in…	추가 기능 불러오기…
+	Install Add-in from GitHub	GitHub에서 추가 기능 설치
+	Unload Add-in	추가 기능 내리기
+	Turn Add-in On or Off	추가 기능 켜기 또는 끄기
+	Add-in Documentation	추가 기능 설명서
+	Run Add-in Command	추가 기능 명령 실행
+	Add-in manifest	추가 기능 매니페스트
+	Install from GitHub:	GitHub에서 설치:
+	Install	설치
+	Installing…	설치 중…
+	Installed {name}	{name} 설치됨
+	An add-in is a program that runs with your permissions. Install it only if you trust its author.	추가 기능은 사용자 권한으로 실행되는 프로그램입니다. 만든 사람을 신뢰할 때만 설치하세요.
+	Install and run {repo}?	{repo}을(를) 설치하고 실행할까요?
+	Documentation	설명서
+	Activate	활성화
+	Deactivate	비활성화
+	Unload	내리기
+	Until the next start	다음 시작까지
+	Active	활성
+	Inactive	비활성
+	No add-ins are loaded.	불러온 추가 기능이 없습니다.
+	owner/repository	소유자/저장소
+	Pick the add-in's plugin.json	추가 기능의 plugin.json 선택
+	Add-ins need the desktop app.	추가 기능에는 데스크톱 앱이 필요합니다.
+	There's no add-ins folder to install into.	설치할 추가 기능 폴더가 없습니다.
+	Code	코드
+	Disable all macros	모든 매크로 사용 안 함
+	Disable macros with notification (enable them per document)	알림과 함께 매크로 사용 안 함(문서마다 사용 설정)
+	Edit	편집
+	Enable Content	콘텐츠 사용
+	Enable all macros (not recommended: a macro is a program)	모든 매크로 사용(권장하지 않음: 매크로는 프로그램입니다)
+	Insert Module	모듈 삽입
+	Macro Security	매크로 보안
+	Macro name:	매크로 이름:
+	Macros are disabled for this document. Enable Content in the message bar, or change Macro Security.	이 문서에서는 매크로를 사용할 수 없습니다. 메시지 표시줄에서 콘텐츠 사용을 누르거나 매크로 보안을 변경하세요.
+	Macros have been disabled.	매크로를 사용할 수 없게 했습니다.
+	Modules	모듈
+	No code yet: Insert Module.	아직 코드가 없습니다: 모듈을 삽입하세요.
+	Office Add-in	Office 추가 기능
+	Office add-ins need the WordCraft desktop app on macOS or Windows.	Office 추가 기능에는 macOS 또는 Windows용 WordCraft 데스크톱 앱이 필요합니다.
+	Remove Module	모듈 제거
+	Run	실행
+	Run Macro	매크로 실행
+	SECURITY WARNING	보안 경고
+	Save Module	모듈 저장
+	Saves the module into the document (save the document as .docm to keep it)	모듈을 문서에 저장합니다(유지하려면 문서를 .docm으로 저장하세요)
+	Stop Recording	기록 중지
+	This document has no macros yet: type a name and Create.	이 문서에는 아직 매크로가 없습니다: 이름을 입력하고 만들기를 누르세요.
+	Visual Basic	Visual Basic
+	Ribbon Buttons	리본 단추
+	Add Ribbon Button	리본 단추 추가
+	Edit Ribbon Button	리본 단추 편집
+	Remove Ribbon Button	리본 단추 제거
+	Press Ribbon Button	리본 단추 누르기
+	Runs the macro {macro}	매크로 {macro} 실행
+	Buttons that run this document's macros. They are saved with the document, and Word shows them too.	이 문서의 매크로를 실행하는 단추입니다. 문서와 함께 저장되며 Word에서도 표시됩니다.
+	No buttons yet.	아직 단추가 없습니다.
+	runs {macro}	{macro} 실행
+	This document's ribbon came from another program with more than buttons: its buttons run, but WordCraft doesn't change it.	이 문서의 리본은 단추 외의 요소가 있는 다른 프로그램에서 만들어졌습니다. 단추는 실행되지만 WordCraft는 리본을 변경하지 않습니다.
+	New button	새 단추
+	Macro:	매크로:
+	or type a name: Module1.Go	또는 이름 입력: Module1.Go
+	the macro's name	매크로 이름
+	Tab:	탭:
+	or a new tab's name	또는 새 탭 이름
+	Group:	그룹:
+	Picture:	그림:
+	Small button (three to a column)	작은 단추(열당 세 개)
+	Add to Ribbon…	리본에 추가…
+	A ribbon button that runs this macro, saved with the document	이 매크로를 실행하는 리본 단추(문서와 함께 저장됨)
+	Filter	필터
+	Nothing to show.	표시할 항목이 없습니다.
+	{label} must be a number.	{label}은(는) 숫자여야 합니다.
+	The add-in {name} reported an error: {error}	추가 기능 {name}에서 오류를 보고했습니다: {error}
+	The add-in {name} didn't finish its command.	추가 기능 {name}이(가) 명령을 끝내지 못했습니다.
+	Start Live Session	실시간 세션 시작
+	Join Live Session	실시간 세션 참가
+	Leave Live Session	실시간 세션 나가기
+	Live Session	실시간 세션
+	Live session	실시간 세션
+	Live Session Name and Colour	실시간 세션 이름 및 색
+	Title bar	제목 표시줄
+	Joining…	참가 중…
+	Live	실시간
+	Connecting…	연결 중…
+	Offline	오프라인
+	Session ended	세션 종료됨
+	Share this document in a live session	실시간 세션에서 이 문서 공유
+	{name} (you)	{name}(나)
+	{name}'s caret isn't in a shared paragraph	{name}의 커서가 공유된 단락에 있지 않습니다
+	Encrypted end to end	종단 간 암호화됨
+	Encrypt end to end	종단 간 암호화
+	People here	참가자
+	Go to their caret	해당 사용자의 커서로 이동
+	Copy Invitation	초대 복사
+	Invitation copied	초대를 복사했습니다
+	{count} others	외 {count}명
+	Start a live session	실시간 세션 시작
+	Join a live session	실시간 세션 참가
+	Connection:	연결:
+	Your name:	이름:
+	Your colour:	색:
+	Invitation:	초대:
+	Paste the invitation link	초대 링크 붙여넣기
+	Joining replaces this document, which has unsaved changes.	참가하면 저장하지 않은 변경 내용이 있는 이 문서가 바뀝니다.
+	Discard my unsaved changes	저장하지 않은 변경 내용 버리기
+	Join	참가
+	Start	시작
+	Choose a connection	연결 선택
+	This add-in has no {command} command	이 추가 기능에는 {command} 명령이 없습니다
+	The add-in didn't start a live session	추가 기능이 실시간 세션을 시작하지 않았습니다
+	Live sessions need a co-editing add-in (a transport). Add one in File › Options › Add-ins.	실시간 세션에는 공동 편집 추가 기능(전송)이 필요합니다. 파일 › 옵션 › 추가 기능에서 추가하세요.
+	{why}. Install {name} anyway?	{why}. 그래도 {name}을(를) 설치할까요?
+	{name} (release {tag})	{name}(릴리스 {tag})
+	The add-ins that need the installed version are blocked until it suits them again.	설치된 버전이 필요한 추가 기능은 다시 맞는 버전이 될 때까지 차단됩니다.
+	Install Anyway	그래도 설치
+	{addin}; version {version} is installed	{addin}; 버전 {version}이(가) 설치되어 있음
+	{name} can use {addin}. Install it too?	{name}은(는) {addin}을(를) 사용할 수 있습니다. 함께 설치할까요?
+	{name} needs {addin}. Install it too?	{name}에는 {addin}이(가) 필요합니다. 함께 설치할까요?
+	the newest release in range	범위 내 최신 릴리스
+	Add-ins are programs that run with your permissions. Install them only if you trust their authors.	추가 기능은 사용자 권한으로 실행되는 프로그램입니다. 만든 사람을 신뢰할 때만 설치하세요.
+	Install Selected	선택 항목 설치
+	Not Now	나중에
+	Blocked	차단됨
+	Install Missing	누락된 항목 설치
+	{who} needs {name}. Turn both off?	{who}에는 {name}이(가) 필요합니다. 둘 다 끌까요?
+	{who} need {name}. Turn them all off?	{who}에는 {name}이(가) 필요합니다. 모두 끌까요?
+	Turn Both Off	둘 다 끄기
+	Turn All Off	모두 끄기
+	Install Missing Add-ins	누락된 추가 기능 설치
+	Add-in Requirements	추가 기능 요구 사항
+	Chat	채팅
+	Chat copied to the clipboard	채팅을 클립보드에 복사했습니다
+	Chat, {count} unread	채팅, 읽지 않음 {count}개
+	Chat options	채팅 옵션
+	Clear chat…	채팅 지우기…
+	Clear Chat	채팅 지우기
+	edited	편집됨
+	Editing your message	메시지 편집 중
+	just now	방금
+	Kept in the file; Office drops it when it saves	파일에 보관됨. Office에서 저장하면 삭제됩니다
+	Message deleted	메시지가 삭제됨
+	{name} is typing…	{name}님이 입력 중…
+	{names} are typing…	{names}님이 입력 중…
+	{n} h ago	{n}시간 전
+	{n} min ago	{n}분 전
+	No messages yet. Messages are kept in the document.	아직 메시지가 없습니다. 메시지는 문서에 보관됩니다.
+	Remove the whole chat from the document for everyone?	모든 사람에게서 문서의 채팅 전체를 제거할까요?
+	Replying to {name}	{name}님에게 답장
+	Send	보내기
+	Write a message	메시지 입력
+	Chat Messages	채팅 메시지
+	Send Chat Message	채팅 메시지 보내기
+	Edit Chat Message	채팅 메시지 편집
+	Delete Chat Message	채팅 메시지 삭제
+	Export Chat	채팅 내보내기
+	Typing in Chat	채팅 입력 중
+	Close the document and go back to Nextcloud	문서를 닫고 Nextcloud로 돌아가기
+	craft-live refused the connection: {reason}	craft-live에서 연결을 거부했습니다: {reason}
+	Saved to Nextcloud	Nextcloud에 저장됨
+	Couldn't save to Nextcloud: {error}	Nextcloud에 저장하지 못했습니다: {error}
+	The editing session expired. Close the document and open it again from Nextcloud.	편집 세션이 만료되었습니다. 문서를 닫고 Nextcloud에서 다시 여세요.
+	Couldn't open the document from Nextcloud: {error}	Nextcloud에서 문서를 열지 못했습니다: {error}
+	This document is view only	이 문서는 보기 전용입니다
+	Saving to Nextcloud…	Nextcloud에 저장 중…
+	Not connected: Nextcloud saves the document once the connection is back	연결되지 않음: 연결이 복구되면 Nextcloud에서 문서를 저장합니다

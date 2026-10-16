@@ -2136,6 +2136,59 @@
 	Add whether it is above or below	Angeben, ob er darüber oder darunter steht
 	Search	Suchen
 	Title Bar	Titelleiste
+	Add-ins	Add-Ins
+	Get Add-ins	Add-Ins abrufen
+	Get\nAdd-ins	Add-Ins\nabrufen
+	Load Add-in	Add-In laden
+	Load Add-in…	Add-In laden…
+	Install Add-in from GitHub	Add-In von GitHub installieren
+	Unload Add-in	Add-In entladen
+	Turn Add-in On or Off	Add-In ein- oder ausschalten
+	Add-in Documentation	Add-In-Dokumentation
+	Run Add-in Command	Add-In-Befehl ausführen
+	Add-in manifest	Add-In-Manifest
+	Install from GitHub:	Von GitHub installieren:
+	Install	Installieren
+	Installing…	Wird installiert…
+	Installed {name}	{name} installiert
+	An add-in is a program that runs with your permissions. Install it only if you trust its author.	Ein Add-In ist ein Programm, das mit Ihren Berechtigungen läuft. Installieren Sie es nur, wenn Sie seinem Autor vertrauen.
+	Install and run {repo}?	{repo} installieren und ausführen?
+	Documentation	Dokumentation
+	Activate	Aktivieren
+	Deactivate	Deaktivieren
+	Unload	Entladen
+	Until the next start	Bis zum nächsten Start
+	Active	Aktiv
+	Inactive	Inaktiv
+	No add-ins are loaded.	Keine Add-Ins geladen.
+	owner/repository	Besitzer/Repository
+	Pick the add-in's plugin.json	Die plugin.json des Add-Ins auswählen
+	Add-ins need the desktop app.	Add-Ins benötigen die Desktop-App.
+	There's no add-ins folder to install into.	Es gibt keinen Add-In-Ordner zum Installieren.
+	Code	Code
+	Disable all macros	Alle Makros deaktivieren
+	Disable macros with notification (enable them per document)	Makros mit Benachrichtigung deaktivieren (pro Dokument aktivierbar)
+	Edit	Bearbeiten
+	Enable Content	Inhalt aktivieren
+	Enable all macros (not recommended: a macro is a program)	Alle Makros aktivieren (nicht empfohlen: Ein Makro ist ein Programm)
+	Insert Module	Modul einfügen
+	Macro Security	Makrosicherheit
+	Macro name:	Makroname:
+	Macros are disabled for this document. Enable Content in the message bar, or change Macro Security.	Makros sind für dieses Dokument deaktiviert. Klicken Sie in der Meldungsleiste auf „Inhalt aktivieren“, oder ändern Sie die „Makrosicherheit“.
+	Macros have been disabled.	Makros wurden deaktiviert.
+	Modules	Module
+	No code yet: Insert Module.	Noch kein Code: „Modul einfügen“.
+	Office Add-in	Office-Add-In
+	Office add-ins need the WordCraft desktop app on macOS or Windows.	Office-Add-Ins benötigen die WordCraft-Desktop-App unter macOS oder Windows.
+	Remove Module	Modul entfernen
+	Run	Ausführen
+	Run Macro	Makro ausführen
+	SECURITY WARNING	SICHERHEITSWARNUNG
+	Save Module	Modul speichern
+	Saves the module into the document (save the document as .docm to keep it)	Speichert das Modul im Dokument (speichern Sie das Dokument als .docm, um es zu behalten)
+	Stop Recording	Aufzeichnung beenden
+	This document has no macros yet: type a name and Create.	Dieses Dokument enthält noch keine Makros: Geben Sie einen Namen ein und klicken Sie auf „Erstellen“.
+	Visual Basic	Visual Basic
 	Copy to	Kopieren nach
 
 # Document naming and account controls.
@@ -2214,6 +2267,124 @@
 # Backstage › Recover (#586)
 	Recover	Wiederherstellen
 
+# Developer › Ribbon Buttons: the document's buttons that run macros (Gaps #22)
+	Ribbon Buttons	Menüband-Schaltflächen
+	Add Ribbon Button	Schaltfläche zum Menüband hinzufügen
+	Edit Ribbon Button	Menüband-Schaltfläche bearbeiten
+	Remove Ribbon Button	Menüband-Schaltfläche entfernen
+	Press Ribbon Button	Menüband-Schaltfläche drücken
+	Runs the macro {macro}	Führt das Makro {macro} aus
+	Buttons that run this document's macros. They are saved with the document, and Word shows them too.	Schaltflächen, die die Makros dieses Dokuments ausführen. Sie werden mit dem Dokument gespeichert, und auch Word zeigt sie an.
+	No buttons yet.	Noch keine Schaltflächen.
+	runs {macro}	führt {macro} aus
+	This document's ribbon came from another program with more than buttons: its buttons run, but WordCraft doesn't change it.	Das Menüband dieses Dokuments stammt aus einem anderen Programm und enthält mehr als Schaltflächen: Seine Schaltflächen funktionieren, aber WordCraft ändert es nicht.
+	New button	Neue Schaltfläche
+	Macro:	Makro:
+	or type a name: Module1.Go	oder einen Namen eingeben: Module1.Go
+	the macro's name	der Name des Makros
+	Tab:	Registerkarte:
+	or a new tab's name	oder der Name einer neuen Registerkarte
+	Group:	Gruppe:
+	Picture:	Bild:
+	Small button (three to a column)	Kleine Schaltfläche (drei pro Spalte)
+	Add to Ribbon…	Zum Menüband hinzufügen…
+	A ribbon button that runs this macro, saved with the document	Eine Menüband-Schaltfläche, die dieses Makro ausführt, gespeichert mit dem Dokument
+	Filter	Filter
+	Nothing to show.	Nichts anzuzeigen.
+	{label} must be a number.	{label} muss eine Zahl sein.
+	The add-in {name} reported an error: {error}	Das Add-In {name} hat einen Fehler gemeldet: {error}
+	The add-in {name} didn't finish its command.	Das Add-In {name} hat seinen Befehl nicht abgeschlossen.
+	Start Live Session	Live-Sitzung starten
+	Join Live Session	An Live-Sitzung teilnehmen
+	Leave Live Session	Live-Sitzung verlassen
+	Live Session	Live-Sitzung
+	Live session	Live-Sitzung
+	Live Session Name and Colour	Name und Farbe in Live-Sitzungen
+	Title bar	Titelleiste
+	Joining…	Wird beigetreten…
+	Live	Live
+	Connecting…	Verbindung wird hergestellt…
+	Offline	Offline
+	Session ended	Sitzung beendet
+	Share this document in a live session	Dieses Dokument in einer Live-Sitzung teilen
+	{name} (you)	{name} (Sie)
+	{name}'s caret isn't in a shared paragraph	Die Einfügemarke von {name} steht nicht in einem geteilten Absatz
+	Encrypted end to end	Ende-zu-Ende-verschlüsselt
+	Encrypt end to end	Ende-zu-Ende verschlüsseln
+	People here	Anwesende
+	Go to their caret	Zur Einfügemarke springen
+	Copy Invitation	Einladung kopieren
+	Invitation copied	Einladung kopiert
+	{count} others	Weitere: {count}
+	Start a live session	Live-Sitzung starten
+	Join a live session	An einer Live-Sitzung teilnehmen
+	Connection:	Verbindung:
+	Your name:	Ihr Name:
+	Your colour:	Ihre Farbe:
+	Invitation:	Einladung:
+	Paste the invitation link	Einladungslink einfügen
+	Joining replaces this document, which has unsaved changes.	Beim Beitreten wird dieses Dokument ersetzt, und es hat ungespeicherte Änderungen.
+	Discard my unsaved changes	Meine ungespeicherten Änderungen verwerfen
+	Join	Beitreten
+	Start	Starten
+	Choose a connection	Wählen Sie eine Verbindung
+	This add-in has no {command} command	Dieses Add-In hat keinen Befehl {command}
+	The add-in didn't start a live session	Das Add-In hat keine Live-Sitzung gestartet
+	Live sessions need a co-editing add-in (a transport). Add one in File › Options › Add-ins.	Live-Sitzungen brauchen ein Add-In für gemeinsames Bearbeiten (einen Transport). Fügen Sie eines unter Datei › Optionen › Add-Ins hinzu.
+	{why}. Install {name} anyway?	{why}. {name} trotzdem installieren?
+	{name} (release {tag})	{name} (Release {tag})
+	The add-ins that need the installed version are blocked until it suits them again.	Die Add-Ins, die die installierte Version benötigen, bleiben gesperrt, bis sie wieder passt.
+	Install Anyway	Trotzdem installieren
+	{addin}; version {version} is installed	{addin}; Version {version} ist installiert
+	{name} can use {addin}. Install it too?	{name} kann {addin} nutzen. Auch installieren?
+	{name} needs {addin}. Install it too?	{name} benötigt {addin}. Auch installieren?
+	the newest release in range	die neueste Release im Bereich
+	Add-ins are programs that run with your permissions. Install them only if you trust their authors.	Add-Ins sind Programme, die mit Ihren Berechtigungen laufen. Installieren Sie sie nur, wenn Sie ihren Autoren vertrauen.
+	Install Selected	Auswahl installieren
+	Not Now	Nicht jetzt
+	Blocked	Gesperrt
+	Install Missing	Fehlende installieren
+	{who} needs {name}. Turn both off?	{who} benötigt {name}. Beide deaktivieren?
+	{who} need {name}. Turn them all off?	{who} benötigen {name}. Alle deaktivieren?
+	Turn Both Off	Beide deaktivieren
+	Turn All Off	Alle deaktivieren
+	Install Missing Add-ins	Fehlende Add-Ins installieren
+	Add-in Requirements	Add-In-Anforderungen
+	Chat	Chat
+	Chat copied to the clipboard	Chat in die Zwischenablage kopiert
+	Chat, {count} unread	Chat, ungelesen: {count}
+	Chat options	Chatoptionen
+	Clear chat…	Chat leeren…
+	Clear Chat	Chat leeren
+	edited	bearbeitet
+	Editing your message	Nachricht bearbeiten
+	just now	gerade eben
+	Kept in the file; Office drops it when it saves	In der Datei gespeichert; Office entfernt ihn beim Speichern
+	Message deleted	Nachricht gelöscht
+	{name} is typing…	{name} schreibt…
+	{names} are typing…	{names} schreiben…
+	{n} h ago	vor {n} Std.
+	{n} min ago	vor {n} Min.
+	No messages yet. Messages are kept in the document.	Noch keine Nachrichten. Nachrichten bleiben im Dokument.
+	Remove the whole chat from the document for everyone?	Den gesamten Chat für alle aus dem Dokument entfernen?
+	Replying to {name}	Antwort an {name}
+	Send	Senden
+	Write a message	Nachricht schreiben
+	Chat Messages	Chatnachrichten
+	Send Chat Message	Chatnachricht senden
+	Edit Chat Message	Chatnachricht bearbeiten
+	Delete Chat Message	Chatnachricht löschen
+	Export Chat	Chat exportieren
+	Typing in Chat	Tippen im Chat
+	Close the document and go back to Nextcloud	Dokument schließen und zu Nextcloud zurückkehren
+	craft-live refused the connection: {reason}	craft-live hat die Verbindung abgelehnt: {reason}
+	Saved to Nextcloud	In Nextcloud gespeichert
+	Couldn't save to Nextcloud: {error}	Speichern in Nextcloud fehlgeschlagen: {error}
+	The editing session expired. Close the document and open it again from Nextcloud.	Die Bearbeitungssitzung ist abgelaufen. Schließen Sie das Dokument und öffnen Sie es erneut in Nextcloud.
+	Couldn't open the document from Nextcloud: {error}	Das Dokument aus Nextcloud konnte nicht geöffnet werden: {error}
+	This document is view only	Dieses Dokument kann nur angezeigt werden
+	Saving to Nextcloud…	Wird in Nextcloud gespeichert…
+	Not connected: Nextcloud saves the document once the connection is back	Keine Verbindung: Nextcloud speichert das Dokument, sobald die Verbindung wieder besteht
 # Page Setup › Mirror margins (#1239)
 	Mirror margins	Gegenüberliegende Seiten
 

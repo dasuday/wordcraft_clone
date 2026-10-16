@@ -2518,6 +2518,59 @@
 	Table Properties…	Свойства на таблица…
 	Search	Търсене
 	Title Bar	Заглавна лента
+	Add-ins	Добавки
+	Get Add-ins	Вземане на добавки
+	Get\nAdd-ins	Вземане на\nдобавки
+	Load Add-in	Зареждане на добавка
+	Load Add-in…	Зареждане на добавка…
+	Install Add-in from GitHub	Инсталиране на добавка от GitHub
+	Unload Add-in	Разтоварване на добавка
+	Turn Add-in On or Off	Включване или изключване на добавка
+	Add-in Documentation	Документация на добавката
+	Run Add-in Command	Изпълнение на команда на добавка
+	Add-in manifest	Манифест на добавка
+	Install from GitHub:	Инсталиране от GitHub:
+	Install	Инсталиране
+	Installing…	Инсталиране…
+	Installed {name}	Инсталирано: {name}
+	An add-in is a program that runs with your permissions. Install it only if you trust its author.	Добавката е програма, която работи с вашите разрешения. Инсталирайте я само ако имате доверие на нейния автор.
+	Install and run {repo}?	Да се инсталира и изпълни ли {repo}?
+	Documentation	Документация
+	Activate	Активиране
+	Deactivate	Деактивиране
+	Unload	Разтоварване
+	Until the next start	До следващото стартиране
+	Active	Активна
+	Inactive	Неактивна
+	No add-ins are loaded.	Няма заредени добавки.
+	owner/repository	собственик/хранилище
+	Pick the add-in's plugin.json	Изберете файла plugin.json на добавката
+	Add-ins need the desktop app.	Добавките изискват настолното приложение.
+	There's no add-ins folder to install into.	Няма папка за добавки, в която да се инсталира.
+	Code	Код
+	Disable all macros	Изключване на всички макроси
+	Disable macros with notification (enable them per document)	Изключване на макросите с известяване (включват се за всеки документ поотделно)
+	Edit	Редактиране
+	Enable Content	Разрешаване на съдържанието
+	Enable all macros (not recommended: a macro is a program)	Включване на всички макроси (не се препоръчва: макросът е програма)
+	Insert Module	Вмъкване на модул
+	Macro Security	Защита на макросите
+	Macro name:	Име на макроса:
+	Macros are disabled for this document. Enable Content in the message bar, or change Macro Security.	Макросите в този документ са изключени. Щракнете върху „Разрешаване на съдържанието“ в лентата за съобщения или променете „Защита на макросите“.
+	Macros have been disabled.	Макросите са изключени.
+	Modules	Модули
+	No code yet: Insert Module.	Още няма код: „Вмъкване на модул“.
+	Office Add-in	Добавка за Office
+	Office add-ins need the WordCraft desktop app on macOS or Windows.	Добавките за Office изискват настолното приложение WordCraft за macOS или Windows.
+	Remove Module	Премахване на модул
+	Run	Изпълнение
+	Run Macro	Изпълнение на макрос
+	SECURITY WARNING	ПРЕДУПРЕЖДЕНИЕ ЗА ЗАЩИТА
+	Save Module	Запазване на модул
+	Saves the module into the document (save the document as .docm to keep it)	Запазва модула в документа (запазете документа като .docm, за да го съхраните)
+	Stop Recording	Спиране на записа
+	This document has no macros yet: type a name and Create.	Този документ още няма макроси: въведете име и щракнете върху „Създаване“.
+	Visual Basic	Visual Basic
 	Copy to	Копиране в
 
 # Document naming and account controls.
@@ -2603,6 +2656,124 @@
 # Backstage › Recover (#586)
 	Recover	Възстановяване
 
+# Developer › Ribbon Buttons: the document's buttons that run macros (Gaps #22)
+	Ribbon Buttons	Бутони на лентата
+	Add Ribbon Button	Добавяне на бутон към лентата
+	Edit Ribbon Button	Редактиране на бутон от лентата
+	Remove Ribbon Button	Премахване на бутон от лентата
+	Press Ribbon Button	Натискане на бутон от лентата
+	Runs the macro {macro}	Изпълнява макроса {macro}
+	Buttons that run this document's macros. They are saved with the document, and Word shows them too.	Бутони, които изпълняват макросите на този документ. Записват се заедно с документа и Word също ги показва.
+	No buttons yet.	Все още няма бутони.
+	runs {macro}	изпълнява {macro}
+	This document's ribbon came from another program with more than buttons: its buttons run, but WordCraft doesn't change it.	Лентата на този документ идва от друга програма и съдържа повече от бутони: бутоните в нея работят, но WordCraft не я променя.
+	New button	Нов бутон
+	Macro:	Макрос:
+	or type a name: Module1.Go	или въведете име: Module1.Go
+	the macro's name	името на макроса
+	Tab:	Раздел:
+	or a new tab's name	или име на нов раздел
+	Group:	Група:
+	Picture:	Картинка:
+	Small button (three to a column)	Малък бутон (по три в колона)
+	Add to Ribbon…	Добавяне към лентата…
+	A ribbon button that runs this macro, saved with the document	Бутон на лентата, който изпълнява този макрос и се записва с документа
+	Filter	Филтър
+	Nothing to show.	Няма нищо за показване.
+	{label} must be a number.	{label} трябва да е число.
+	The add-in {name} reported an error: {error}	Добавката {name} съобщи за грешка: {error}
+	The add-in {name} didn't finish its command.	Добавката {name} не завърши командата си.
+	Start Live Session	Започване на сесия на живо
+	Join Live Session	Присъединяване към сесия на живо
+	Leave Live Session	Напускане на сесията на живо
+	Live Session	Сесия на живо
+	Live session	Сесия на живо
+	Live Session Name and Colour	Име и цвят в сесията на живо
+	Title bar	Заглавна лента
+	Joining…	Присъединяване…
+	Live	На живо
+	Connecting…	Свързване…
+	Offline	Без връзка
+	Session ended	Сесията приключи
+	Share this document in a live session	Споделяне на този документ в сесия на живо
+	{name} (you)	{name} (вие)
+	{name}'s caret isn't in a shared paragraph	Курсорът на {name} не е в споделен абзац
+	Encrypted end to end	Шифровано от край до край
+	Encrypt end to end	Шифроване от край до край
+	People here	Хора тук
+	Go to their caret	Към курсора му
+	Copy Invitation	Копиране на поканата
+	Invitation copied	Поканата е копирана
+	{count} others	Други: {count}
+	Start a live session	Започване на сесия на живо
+	Join a live session	Присъединяване към сесия на живо
+	Connection:	Връзка:
+	Your name:	Вашето име:
+	Your colour:	Вашият цвят:
+	Invitation:	Покана:
+	Paste the invitation link	Поставете връзката от поканата
+	Joining replaces this document, which has unsaved changes.	Присъединяването заменя този документ, който има незаписани промени.
+	Discard my unsaved changes	Отхвърляне на незаписаните ми промени
+	Join	Присъединяване
+	Start	Започване
+	Choose a connection	Изберете връзка
+	This add-in has no {command} command	Тази добавка няма команда {command}
+	The add-in didn't start a live session	Добавката не започна сесия на живо
+	Live sessions need a co-editing add-in (a transport). Add one in File › Options › Add-ins.	Сесиите на живо изискват добавка за съвместно редактиране (транспорт). Добавете такава от Файл › Опции › Добавки.
+	{why}. Install {name} anyway?	{why}. Да се инсталира ли {name} въпреки това?
+	{name} (release {tag})	{name} (издание {tag})
+	The add-ins that need the installed version are blocked until it suits them again.	Добавките, които се нуждаят от инсталираната версия, остават блокирани, докато тя отново не им подхожда.
+	Install Anyway	Инсталиране въпреки това
+	{addin}; version {version} is installed	{addin}; инсталирана е версия {version}
+	{name} can use {addin}. Install it too?	{name} може да използва {addin}. Да се инсталира ли и тя?
+	{name} needs {addin}. Install it too?	{name} се нуждае от {addin}. Да се инсталира ли и тя?
+	the newest release in range	най-новото издание в диапазона
+	Add-ins are programs that run with your permissions. Install them only if you trust their authors.	Добавките са програми, които работят с вашите разрешения. Инсталирайте ги само ако имате доверие на техните автори.
+	Install Selected	Инсталиране на избраните
+	Not Now	Не сега
+	Blocked	Блокирана
+	Install Missing	Инсталиране на липсващите
+	{who} needs {name}. Turn both off?	{who} се нуждае от {name}. Да се изключат ли и двете?
+	{who} need {name}. Turn them all off?	{who} се нуждаят от {name}. Да се изключат ли всички?
+	Turn Both Off	Изключване на двете
+	Turn All Off	Изключване на всички
+	Install Missing Add-ins	Инсталиране на липсващите добавки
+	Add-in Requirements	Изисквания на добавката
+	Chat	Чат
+	Chat copied to the clipboard	Чатът е копиран в клипборда
+	Chat, {count} unread	Чат, непрочетени: {count}
+	Chat options	Опции на чата
+	Clear chat…	Изчистване на чата…
+	Clear Chat	Изчистване на чата
+	edited	редактирано
+	Editing your message	Редактиране на съобщението
+	just now	току-що
+	Kept in the file; Office drops it when it saves	Пази се във файла; Office го премахва при записване
+	Message deleted	Съобщението е изтрито
+	{name} is typing…	{name} пише…
+	{names} are typing…	Пишат: {names}…
+	{n} h ago	преди {n} ч
+	{n} min ago	преди {n} мин
+	No messages yet. Messages are kept in the document.	Още няма съобщения. Съобщенията остават в документа.
+	Remove the whole chat from the document for everyone?	Да се премахне ли целият чат от документа за всички?
+	Replying to {name}	Отговор до {name}
+	Send	Изпращане
+	Write a message	Напишете съобщение
+	Chat Messages	Съобщения в чата
+	Send Chat Message	Изпращане на съобщение в чата
+	Edit Chat Message	Редактиране на съобщение в чата
+	Delete Chat Message	Изтриване на съобщение в чата
+	Export Chat	Експортиране на чата
+	Typing in Chat	Писане в чата
+	Close the document and go back to Nextcloud	Затворете документа и се върнете в Nextcloud
+	craft-live refused the connection: {reason}	craft-live отказа връзката: {reason}
+	Saved to Nextcloud	Запазено в Nextcloud
+	Couldn't save to Nextcloud: {error}	Не можа да се запази в Nextcloud: {error}
+	The editing session expired. Close the document and open it again from Nextcloud.	Сесията за редактиране изтече. Затворете документа и го отворете отново от Nextcloud.
+	Couldn't open the document from Nextcloud: {error}	Документът от Nextcloud не можа да се отвори: {error}
+	This document is view only	Този документ е само за преглед
+	Saving to Nextcloud…	Запазване в Nextcloud…
+	Not connected: Nextcloud saves the document once the connection is back	Няма връзка: Nextcloud ще запази документа, когато връзката се възстанови
 # Page Setup › Mirror margins (#1239)
 	Mirror margins	Огледални полета
 
