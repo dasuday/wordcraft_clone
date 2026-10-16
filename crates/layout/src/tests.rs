@@ -7263,3 +7263,143 @@ fn row_nil_overrides_style() {
     d.insert_block(StoryRef::Body, &Path::top(1), wordcraft_doc::Block::Table(t)).unwrap();
     assert_eq!(rules_on_page0(&lay(&d)), vec![2.0]);
 }
+
+#[test]
+fn foreground_survives_later_text() {
+    use wordcraft_doc::para::{Anchor, Float, ShapeKind};
+    for wrap in [Wrap::InFrontOfText, Wrap::Square, Wrap::BehindText] {
+        let mut d = Document::from_text("\nLater body text");
+        d.insert_object(
+            &Pos::body(1, 0),
+            InlineObject::Image {
+                media: "original-layer-probe".into(),
+                w: 120.0,
+                h: 80.0,
+                alt: String::new(),
+                float: Default::default(),
+                crop: [0.0; 4],
+                ole: None,
+            },
+            &Default::default(),
+        )
+        .unwrap();
+        let id = text_box(
+            &mut d,
+            0,
+            "Foreground label",
+            180.0,
+            80.0,
+            Float { wrap, h_rel: Anchor::Page, v_rel: Anchor::Page, x: 72.0, y: 90.0, ..Default::default() },
+        );
+        let l = lay(&d);
+        let items = &l.pages[0].items;
+        let later = items.iter().position(|it| matches!(it, Placed::Lines { story: StoryRef::Body, path, .. } if path.0 == [1])).unwrap();
+        let frame = items.iter().position(|it| matches!(it, Placed::Shape { kind: ShapeKind::TextBox, .. })).unwrap();
+        let label = items.iter().position(|it| matches!(it, Placed::Lines { story: StoryRef::Part(part), .. } if *part == id)).unwrap();
+        if wrap == Wrap::BehindText {
+            assert!(frame < label && label < later, "behind-text box stays below later content");
+        } else {
+            assert!(later < frame && frame < label, "foreground frame and label stay above later content: {wrap:?}");
+        }
+        assert_eq!(l.index[&(StoryRef::Body, Path::top(1))][0].1, later);
+        let rect = box_rect(&l, id);
+        assert!((rect.x - 72.0).abs() < 0.01 && (rect.y - 90.0).abs() < 0.01, "paint order must not change the anchor");
+    }
+}
+
+#[test]
+fn foreground_keeps_z_order() {
+    use wordcraft_doc::para::{Anchor, Float};
+    let mut d = Document::from_text("\nLater content");
+    let float = |z| Float { wrap: Wrap::InFrontOfText, z_order: z, h_rel: Anchor::Page, v_rel: Anchor::Page, x: 72.0, y: 90.0, ..Default::default() };
+    let low = text_box(&mut d, 0, "Lower", 180.0, 80.0, float(2));
+    // Inserted at the same offset: the higher layer precedes the lower one in text order.
+    let high = text_box(&mut d, 0, "Higher", 180.0, 80.0, float(7));
+    let behind = text_box(&mut d, 0, "Behind", 180.0, 80.0, Float { wrap: Wrap::BehindText, ..float(9) });
+    let l = lay(&d);
+    let layers: Vec<_> = l.pages[0]
+        .items
+        .iter()
+        .filter_map(|it| match it {
+            Placed::Object { text_box: Some(id), .. } => Some(*id),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(layers, [behind, low, high]);
+    for id in [low, high] {
+        let marker = l.pages[0].items.iter().position(|it| matches!(it, Placed::Object { text_box: Some(part), .. } if *part == id)).unwrap();
+        assert!(matches!(&l.pages[0].items[marker + 1], Placed::Lines { story: StoryRef::Part(part), .. } if *part == id));
+    }
+}
+
+#[test]
+fn foreground_in_header_story() {
+    use wordcraft_doc::para::{Anchor, Float};
+    let mut d = Document::from_text("\nLater header text");
+    let id = text_box(
+        &mut d,
+        0,
+        "Header overlay",
+        180.0,
+        80.0,
+        Float { wrap: Wrap::InFrontOfText, h_rel: Anchor::Page, v_rel: Anchor::Page, x: 72.0, y: 30.0, ..Default::default() },
+    );
+    let blocks = std::mem::take(&mut d.body);
+    let header = d.add_part(wordcraft_doc::PartKind::Header, blocks);
+    d.last_section.headers.default = Some(header);
+    d.body = Document::from_text("Body").body;
+    let l = lay(&d);
+    let items = &l.pages[0].header;
+    let later = items
+        .iter()
+        .position(|it| matches!(it, Placed::Lines { story: StoryRef::Part(part), path, .. } if *part == header && path.0 == [1]))
+        .unwrap();
+    let overlay = items.iter().position(|it| matches!(it, Placed::Object { text_box: Some(part), .. } if *part == id)).unwrap();
+    assert!(later < overlay);
+}
+
+#[test]
+fn foreground_respects_stories() {
+    use wordcraft_doc::para::{Anchor, Float, ShapeKind};
+    use wordcraft_doc::props::Rgb;
+    let mut d = Document::from_text("");
+    let header = d.add_part(wordcraft_doc::PartKind::Header, Document::from_text("").body);
+    d.last_section.headers.default = Some(header);
+    let logo = InlineObject::Shape {
+        kind: ShapeKind::Rectangle,
+        w: 120.0,
+        h: 80.0,
+        fill: Some(Rgb(200, 30, 30)),
+        stroke: None,
+        stroke_width: 0.0,
+        story: None,
+        freeform: None,
+        effects: Default::default(),
+        extra: Default::default(),
+        float: Float {
+            wrap: Wrap::InFrontOfText,
+            z_order: u32::MAX,
+            h_rel: Anchor::Page,
+            v_rel: Anchor::Page,
+            x: 72.0,
+            y: 72.0,
+            ..Default::default()
+        },
+    };
+    d.insert_object(&Pos { story: StoryRef::Part(header), path: Path::top(0), off: 0 }, logo, &Default::default()).unwrap();
+    let mask = InlineObject::Image {
+        media: "original-body-mask".into(),
+        w: 160.0,
+        h: 100.0,
+        alt: String::new(),
+        float: Default::default(),
+        crop: [0.0; 4],
+        ole: None,
+    };
+    d.insert_object(&Pos::body(0, 0), mask, &Default::default()).unwrap();
+    let l = lay(&d);
+    let draws = display::page_display(&d, &l.pages[0], &display::DisplayOptions::default());
+    let logo = draws.iter().position(|it| matches!(it, display::Draw::Shape { fill: Some(Rgb(200, 30, 30)), .. })).unwrap();
+    let mask = draws.iter().position(|it| matches!(it, display::Draw::Image { media, .. } if media == "original-body-mask")).unwrap();
+    assert!(logo < mask, "header foreground remains below body masks, even at maximum relativeHeight");
+}
