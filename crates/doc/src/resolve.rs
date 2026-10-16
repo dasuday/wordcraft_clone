@@ -406,6 +406,32 @@ mod tests {
     use super::*;
 
     #[test]
+    fn font_dialog_theme_links_and_automatic_underline_resolve_through_styles() {
+        use crate::props::ThemeFont;
+        let mut doc = crate::Document::new();
+        doc.settings.minor_font = "Body family".into();
+        doc.settings.major_font = "Heading family".into();
+        for (theme, family) in [(ThemeFont::Body, "Body family"), (ThemeFont::Headings, "Heading family")] {
+            doc.styles.get_mut("Normal").unwrap().chr = CharProps {
+                font: Some("Theme fallback".into()),
+                font_theme: Some(theme),
+                underline_color: Some(Rgb(255, 0, 0)),
+                ..Default::default()
+            };
+            let props = CharProps { underline_auto: Some(true), ..Default::default() };
+            let resolved = doc.resolve_char(None, &props);
+            assert_eq!((&*resolved.font, &*resolved.font_cs), (family, family));
+            assert_eq!(resolved.underline_color, None, "Automatic overrides the style's underline color");
+            let explicit_cs = doc.resolve_char(None, &CharProps { font_cs: Some("Complex script family".into()), ..props.clone() });
+            assert_eq!(explicit_cs.font, family);
+            assert_eq!(explicit_cs.font_cs, "Complex script family");
+            let explicit = doc.resolve_char(None, &CharProps { font: Some("Explicit family".into()), ..props });
+            assert_eq!(explicit.font, "Explicit family");
+            assert_eq!(explicit.font_theme, None, "choosing a family removes the inherited theme link");
+        }
+    }
+
+    #[test]
     fn heading_resolves() {
         let s = StyleSheet::builtin();
         let p = s.resolve_para(&ParaProps { style: Some("Heading1".into()), ..Default::default() });

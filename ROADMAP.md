@@ -135,7 +135,7 @@ Ranked, to beta (detail and remaining milestones in [docs/roadmap.md](docs/roadm
 
 | Date | What landed |
 |---|---|
-| 2026-10-15 | Added twelve focused Font dialog regression tests covering UI drafts, exclusive effects, defaults, preview point sizes/scripts and DOCX persistence. `cargo xtask ci` passes all six gates (formatting, Clippy, workspace tests, assets, layers and WASM): 1,921 tests pass and two existing tests remain ignored. |
+| 2026-10-15 | Added twelve focused Font dialog regression tests covering UI drafts, exclusive effects, defaults, preview point sizes/scripts and DOCX persistence. `cargo xtask ci` passes all six gates (formatting, Clippy, workspace tests, assets, layers and WASM): 1,925 tests pass and two existing tests remain ignored. |
 | 2026-10-15 | Font preview now matches document point sizes at 100% zoom. Overflow clips instead of reducing the chosen size. |
 | 2026-10-15 | Restored Font/size scrollbar hover/fade behavior while preserving edge alignment; removed the Set As Default explanatory note. |
 | 2026-10-15 | Font dialog polish: scrollbars stay at the font/size list edges, long font names do not wrap, and Hidden adds no explanatory message. |
