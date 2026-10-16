@@ -2713,3 +2713,8 @@ preview	Title	Titel
 	Type a size in any unit, such as 5 cm or 300 px. The other side follows, so the picture keeps its proportions.	Skriv en storlek i valfri enhet, till exempel 5 cm eller 300 px. Den andra sidan följer med, så att bilden behåller sina proportioner.
 
 	Import…	Importera…
+
+# File › Options › Add-ins
+	Add-ins	Tillägg
+	No add-ins are installed.	Inga tillägg är installerade.
+	Each add-in stays off until you turn it on.	Varje tillägg är avstängt tills du slår på det.
