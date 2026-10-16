@@ -661,7 +661,15 @@ struct Ctx<'a> {
     /// Cache-key hashes of the table-style text formatting cells were laid out with
     /// ([`Ctx::table_key`]).
     table_keys: Vec<(para::CellText, u64)>,
+    /// Table cell paragraphs shaped while measuring their columns, by their cache key with no
+    /// width, for laying them out at the cell's width without shaping them again
+    /// ([`Ctx::para_measured`], [`Ctx::para_labelled`]). Emptied when the outermost table is done.
+    shaped: HashMap<Key, para::Shaped>,
 }
+
+/// The most shaped paragraphs [`Ctx::shaped`] keeps: a longer table's other cells are shaped
+/// twice rather than hold more.
+const MAX_SHAPED: usize = 65_536;
 
 impl Ctx<'_> {
     /// The outline Tight and Through wrapping follow around `o` (see [`contour::wrap_outline`]);
@@ -748,7 +756,12 @@ impl Ctx<'_> {
             return pl.clone();
         }
         self.cache.misses += 1;
-        let pl = Arc::new(para::layout_para(p, &self.para_env(width, label, table, exclusions, eq_number)));
+        let shaped = if self.shaped.is_empty() { None } else { self.shaped.remove(&Key { width: 0, ..key.clone() }) };
+        let env = self.para_env(width, label, table, exclusions, eq_number);
+        let pl = Arc::new(match shaped {
+            Some(s) => para::finish_para(s, &env),
+            None => para::layout_para(p, &env),
+        });
         self.cache.paras.insert(key, pl.clone());
         pl
     }
@@ -756,6 +769,8 @@ impl Ctx<'_> {
     /// What `measure` reads from `p` laid out as [`Ctx::para_labelled`] would, remembering only
     /// the result: a table's columns measure every cell once at an unbounded width, and keeping
     /// those layouts would double what a long table holds (and walk them all again on each pass).
+    /// The shaped paragraph is kept until its table is laid out ([`Ctx::shaped`]), so the cell's
+    /// layout only breaks it into lines again.
     fn para_measured(
         &mut self,
         p: &Paragraph,
@@ -771,7 +786,16 @@ impl Ctx<'_> {
             return *m;
         }
         self.cache.misses += 1;
-        let m = measure(&para::layout_para(p, &self.para_env(width, label, table, &[], eq_number)));
+        let env = self.para_env(width, label, table, &[], eq_number);
+        let (m, shaped) = if para::width_free(p, &env) {
+            let shaped = para::shape_para(p, &env);
+            (measure(&para::finish_para(shaped.clone(), &env)), Some(shaped))
+        } else {
+            (measure(&para::layout_para(p, &env)), None)
+        };
+        if let Some(s) = shaped.filter(|_| self.shaped.len() < MAX_SHAPED) {
+            self.shaped.insert(Key { width: 0, ..key.clone() }, s);
+        }
         self.cache.measures.insert(key, m);
         m
     }
@@ -2024,6 +2048,7 @@ fn layout_pass(
         quiet_marks: Vec::new(),
         mirror: false,
         table_keys: Vec::new(),
+        shaped: HashMap::new(),
     };
     let sections = doc.sections();
     let web = matches!(opts.view, ViewMode::Web | ViewMode::Draft | ViewMode::Outline);

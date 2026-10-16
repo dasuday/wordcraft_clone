@@ -1198,6 +1198,34 @@ pub(crate) fn left_out(rc: &ResolvedChar, show_hidden: bool, hide_deleted: bool)
 
 /// Lay out one paragraph.
 pub fn layout_para(p: &Paragraph, env: &ParaEnv) -> ParaLayout {
+    finish_para(shape_para(p, env), env)
+}
+
+/// A paragraph shaped but not yet broken into lines: what [`layout_para`] works out before line
+/// breaking. For a [`width_free`] paragraph it is the same at every width, so a table cell's
+/// paragraph shaped to measure its column (at an unbounded width) is broken again at the cell's
+/// width without shaping it twice.
+#[derive(Clone)]
+pub(crate) struct Shaped {
+    pl: ParaLayout,
+    mark_style: u32,
+}
+
+/// Whether shaping `p` doesn't depend on `env.width`: nothing in it is sized to the line (an
+/// equation, a note separator, or a drawing shrunk to fit it).
+pub(crate) fn width_free(p: &Paragraph, env: &ParaEnv) -> bool {
+    !p.objects.iter().any(|o| matches!(o, InlineObject::Equation { .. }) || o.as_note_separator().is_some() || (env.fit_objects && o.is_drawing()))
+}
+
+/// Break a shaped paragraph into lines at `env.width`.
+pub(crate) fn finish_para(s: Shaped, env: &ParaEnv) -> ParaLayout {
+    let Shaped { mut pl, mark_style } = s;
+    break_lines(&mut pl, env, mark_style, env.label.as_ref().map(|(_, l)| l));
+    pl
+}
+
+/// Everything [`layout_para`] does before breaking lines.
+pub(crate) fn shape_para(p: &Paragraph, env: &ParaEnv) -> Shaped {
     let doc = env.doc;
     let mut rp = doc.styles.resolve_para_in(&p.props, env.table.map(|t| &t.para));
     if let Some(spacing) = env.read_line_spacing.filter(|s| s.is_finite() && (1.0..=2.0).contains(s)) {
@@ -1586,8 +1614,7 @@ pub fn layout_para(p: &Paragraph, env: &ParaEnv) -> ParaLayout {
             c.break_after = true;
         }
     }
-    break_lines(&mut pl, env, mark_style, env.label.as_ref().map(|(_, l)| l));
-    pl
+    Shaped { pl, mark_style }
 }
 
 /// Next tab stop after `x` (column coordinates): explicit stops, the hanging-indent implicit stop,
@@ -2794,5 +2821,116 @@ mod label_spacing_tests {
         for line in &lines[1..] {
             assert!((line.height - 17.52).abs() <= 0.25, "{}", line.height);
         }
+    }
+}
+
+#[cfg(test)]
+mod shaped_tests {
+    use super::*;
+    use wordcraft_doc::numbering::Level;
+
+    fn env<'a>(doc: &'a Document, fields: &'a FieldCtx, width: f32, label: Option<(String, Level)>, fit_objects: bool) -> ParaEnv<'a> {
+        ParaEnv {
+            doc,
+            width,
+            label,
+            fields,
+            show_hidden: false,
+            field_codes: false,
+            hide_deleted: false,
+            table: None,
+            proofing: None,
+            numeral: crate::NumeralMode::default(),
+            exclusions: &[],
+            eq_number: 0,
+            read_line_spacing: None,
+            grid: Grid::default(),
+            fit_objects,
+        }
+    }
+
+    fn paras() -> Vec<Paragraph> {
+        let long = "Table cells measured at an unbounded width wrap again at their own. ".repeat(4);
+        let mut out = Vec::new();
+        for align in [None, Some(Align::Center), Some(Align::Right), Some(Align::Justify)] {
+            let mut p = Paragraph::with_text(&long, Default::default());
+            p.props.align = align;
+            out.push(p);
+        }
+        let mut tabs = Paragraph::with_text("Name\tDots\tTotal", Default::default());
+        tabs.props.tabs = Some(vec![
+            TabStop { pos: 90.0, align: TabAlign::Center, leader: TabLeader::None },
+            TabStop { pos: 180.0, align: TabAlign::Right, leader: TabLeader::Dot },
+        ]);
+        out.push(tabs);
+        let mut rtl = Paragraph::with_text("שלום עולם and some English مرحبا بالعالم", Default::default());
+        rtl.props.bidi = Some(true);
+        out.push(rtl);
+        out.push(Paragraph::with_text(&format!("co{SOFT_HYPHEN}operation{LINE_BREAK}after a break"), Default::default()));
+        let mut drop = Paragraph::with_text("Once upon a time in a cell", Default::default());
+        drop.props.drop_cap = Some(2);
+        out.push(drop);
+        let mut objects = Paragraph::with_text("A field and a picture: ", Default::default());
+        let field = InlineObject::Field {
+            instr: "AUTHOR".into(),
+            result: "a-field-result-longer-than-the-text".into(),
+            locked: false,
+            dirty: false,
+            code: false,
+            form: String::new(),
+        };
+        let picture = InlineObject::Image {
+            media: "none.png".into(),
+            w: 300.0,
+            h: 20.0,
+            alt: String::new(),
+            float: Default::default(),
+            crop: [0.0; 4],
+            ole: None,
+        };
+        assert!(objects.insert_object(2, field, &CharProps::default()).is_ok());
+        let end = objects.text.len();
+        assert!(objects.insert_object(end, picture, &CharProps::default()).is_ok());
+        out.push(objects);
+        out
+    }
+
+    /// A paragraph shaped once at an unbounded width and broken at a cell's width lays out exactly
+    /// as laying it out at that width does: what a table cell's layout reuses from measuring it.
+    #[test]
+    fn shaped_once_breaks_like_a_fresh_layout() {
+        let doc = Document::new();
+        let fields = FieldCtx::default();
+        let level = Level { suffix: LevelSuffix::Tab, indent: 36.0, hanging: 18.0, ..Default::default() };
+        for p in paras() {
+            for label in [None, Some(("1.".to_string(), level.clone()))] {
+                let wide = env(&doc, &fields, 100_000.0, label.clone(), false);
+                assert!(width_free(&p, &wide), "{:?}", p.text);
+                let shaped = shape_para(&p, &wide);
+                for width in [12.0, 40.0, 72.0, 150.0, 468.0, 100_000.0] {
+                    let at = env(&doc, &fields, width, label.clone(), false);
+                    let reused = finish_para(shaped.clone(), &at);
+                    assert_eq!(format!("{reused:?}"), format!("{:?}", layout_para(&p, &at)), "{:?} at {width}", p.text);
+                }
+            }
+        }
+    }
+
+    /// What is sized to the line is shaped at the line's width, so it isn't reused across widths.
+    #[test]
+    fn line_sized_objects_are_not_width_free() {
+        let doc = Document::new();
+        let fields = FieldCtx::default();
+        let picture = paras().pop().unwrap();
+        assert!(width_free(&picture, &env(&doc, &fields, 100.0, None, false)));
+        assert!(!width_free(&picture, &env(&doc, &fields, 100.0, None, true)));
+        let mut eq = Paragraph::with_text("x", Default::default());
+        let math = InlineObject::Equation {
+            linear: "a=b".into(),
+            display: false,
+            math: wordcraft_doc::math::Math { nodes: wordcraft_doc::math::parse_linear("a=b"), ..Default::default() },
+        };
+        assert!(eq.insert_object(0, math, &CharProps::default()).is_ok());
+        assert!(!width_free(&eq, &env(&doc, &fields, 100.0, None, false)));
     }
 }
