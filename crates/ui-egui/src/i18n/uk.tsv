@@ -15,6 +15,8 @@
 	(no suggestions)	(немає пропозицій)
 	1.5 Line Spacing	Міжрядковий інтервал 1,5
 	A free, open-source word processor written from scratch in Rust.\nPart of the Crafting Apps from the ArtCraft team.	Безкоштовний текстовий процесор із відкритим кодом, написаний з нуля мовою Rust.\nЧастина Crafting Apps від команди ArtCraft.
+	3D Models	3D Models
+	3D models need a path: 3D rendering isn't supported, the model is kept as a labelled placeholder	3D models need a path: 3D rendering isn't supported, the model is kept as a labelled placeholder
 	About	Про програму
 	About WordCraft	Про WordCraft
 	Accept	Прийняти
@@ -30,6 +32,7 @@
 	Add space between Asian text and numbers	Додавати інтервал між азійським текстом і числами
 	Add tab stop at:	Додати позицію табуляції:
 	Add Text	Додати текст
+	Add-ins	Add-ins
 	Add to Dictionary	Додати до словника
 	Add to Style Gallery	Додати до колекції стилів
 	Address Block	Блок адреси
@@ -117,6 +120,7 @@
 	List Definition	Визначення списку
 	Mark grammar errors as you type	Позначати граматичні помилки під час введення
 	Measurement units:	Одиниці виміру:
+	Media	Media
 	Millimeters	Міліметри
 	New comments and tracked changes are recorded under this name and these initials.	Нові коментарі та відстежувані зміни записуються під цим іменем і цими ініціалами.
 	New word	Нове слово
@@ -127,6 +131,10 @@
 	Number alignment:	Вирівнювання номера:
 	Number format	Формат номера
 	Number style for this level:	Стиль номера для цього рівня:
+	Online Pictures	Online Pictures
+	Online Video	Online Video
+	Online\nVideo	Online\nVideo
+	online video needs a url, a path or a poster frame: paste a poster or use Insert › Pictures	online video needs a url, a path or a poster frame: paste a poster or use Insert › Pictures
 	Only for the selected text	Лише для виділеного тексту
 	Outside border	Зовнішня межа
 	Overtype	Заміна
@@ -172,6 +180,8 @@
 	Border Painter	Пензель меж
 	Border\nPainter	Пензель\nмеж
 	Borders	Межі
+	Screenshot	Screenshot
+	screenshot capture isn't available here: take one with your system tool, then paste it or use Insert › Pictures	screenshot capture isn't available here: take one with your system tool, then paste it or use Insert › Pictures
 	Search	Пошук
 	Show the mini toolbar when text is selected	Показувати міні-панель інструментів під час виділення тексту
 	Spaces	Пробіли
@@ -442,6 +452,8 @@
 	Formatting at Selection	Форматування виділення
 	Formula	Формула
 	General	Загальні
+	Get Add-ins	Get Add-ins
+	Get\nAdd-ins	Get\nAdd-ins
 	Go To	Перейти
 	Go to	Перейти
 	Go To (⌘⌥G)	Перейти (⌘⌥G)
@@ -1951,7 +1963,10 @@
 	Recolor Selected Ink	Змінити колір виділеного рукопису
 	Add Pen	Додати перо
 	Remove Pen	Вилучити перо
+	Ink Equation	Ink Equation
+	Ink to Math	Ink to Math
 	Ink to Shape	Рукопис у фігуру
+	Convert to Math	Convert to Math
 	Convert to Shapes	Перетворити на фігури
 	Ink Replay	Відтворити рукопис
 	Add\nPen	Додати\nперо

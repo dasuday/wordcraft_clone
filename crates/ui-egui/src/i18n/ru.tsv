@@ -17,6 +17,8 @@
 	1.5 Line Spacing	Полуторный интервал
 	A free, open-source word processor written from scratch in Rust.\nPart of the Crafting Apps from the ArtCraft team.	Бесплатный текстовый процессор с открытым исходным кодом, написанный с нуля на Rust.\nВходит в Crafting Apps от команды ArtCraft.
 	AaBbCcDd	АаБбВвГг
+	3D Models	3D Models
+	3D models need a path: 3D rendering isn't supported, the model is kept as a labelled placeholder	3D models need a path: 3D rendering isn't supported, the model is kept as a labelled placeholder
 	About	О программе
 	About WordCraft	О WordCraft
 	Accept	Принять
@@ -28,6 +30,7 @@
 	Add a Table	Добавить таблицу
 	Add Space Before Paragraph	Добавить интервал перед абзацем
 	Add Text	Добавить текст
+	Add-ins	Add-ins
 	Add to Dictionary	Добавить в словарь
 	Add to Style Gallery	Добавить в коллекцию стилей
 	Address Block	Блок адреса
@@ -193,9 +196,16 @@
 	Delete Table	Удалить таблицу
 	Design	Дизайн
 	In the margin	На полях
-	Only for the selected text	Только для выделенного текста
+	Media	Media
 	No document is open. Create a document or open one first.	Нет открытого документа. Сначала создайте или откройте документ.
+	Online Pictures	Online Pictures
+	Online Video	Online Video
+	Online\nVideo	Online\nVideo
+	online video needs a url, a path or a poster frame: paste a poster or use Insert › Pictures	online video needs a url, a path or a poster frame: paste a poster or use Insert › Pictures
+	Only for the selected text	Только для выделенного текста
+	Screenshot	Screenshot
 	Search	Поиск
+	screenshot capture isn't available here: take one with your system tool, then paste it or use Insert › Pictures	screenshot capture isn't available here: take one with your system tool, then paste it or use Insert › Pictures
 	Title Bar	Строка заголовка
 	development build	сборка для разработки
 	Diagonal	Диагональ
@@ -297,6 +307,8 @@
 	Formatting at Selection	Форматирование выделенного фрагмента
 	Formula	Формула
 	General	Общие
+	Get Add-ins	Get Add-ins
+	Get\nAdd-ins	Get\nAdd-ins
 	Go To	Перейти
 	Go to	Перейти
 	Go To (⌘⌥G)	Перейти (⌘⌥G)
@@ -1988,7 +2000,10 @@ preview	Title	Пример
 	Recolor Selected Ink	Перекрасить выделенные штрихи
 	Add Pen	Добавить перо
 	Remove Pen	Удалить перо
+	Ink Equation	Ink Equation
+	Ink to Math	Ink to Math
 	Ink to Shape	Рукописный ввод в фигуры
+	Convert to Math	Convert to Math
 	Convert to Shapes	Преобразовать в фигуры
 	Ink Replay	Воспроизведение рукописного ввода
 	Add\nPen	Добавить\nперо

@@ -16,6 +16,8 @@
 	1.5 Line Spacing	1,5 Satır Aralığı
 	A free, open-source word processor written from scratch in Rust.\nPart of the Crafting Apps from the ArtCraft team.	Rust ile sıfırdan yazılmış ücretsiz, açık kaynak bir kelime işlemci.\nArtCraft ekibinin Crafting Apps ailesinin bir parçası.
 	AaBbCcDd	AaBbCcÇç
+	3D Models	3D Models
+	3D models need a path: 3D rendering isn't supported, the model is kept as a labelled placeholder	3D models need a path: 3D rendering isn't supported, the model is kept as a labelled placeholder
 	About	Hakkında
 	About WordCraft	WordCraft Hakkında
 	Accept	Kabul Et
@@ -27,6 +29,7 @@
 	Add a Table	Tablo Ekle
 	Add Space Before Paragraph	Paragraf Öncesine Boşluk Ekle
 	Add Text	Metin Ekle
+	Add-ins	Add-ins
 	Add to Dictionary	Sözlüğe Ekle
 	Add to Style Gallery	Stil Galerisine Ekle
 	Address Block	Adres Bloğu
@@ -192,8 +195,15 @@
 	Delete Style	Stili Sil
 	Delete Table	Tabloyu Sil
 	Design	Tasarım
+	Media	Media
 	No document is open. Create a document or open one first.	Açık belge yok. Önce bir belge oluşturun veya açın.
+	Online Pictures	Online Pictures
+	Online Video	Online Video
+	Online\nVideo	Online\nVideo
+	online video needs a url, a path or a poster frame: paste a poster or use Insert › Pictures	online video needs a url, a path or a poster frame: paste a poster or use Insert › Pictures
+	Screenshot	Screenshot
 	development build	geliştirme derlemesi
+	screenshot capture isn't available here: take one with your system tool, then paste it or use Insert › Pictures	screenshot capture isn't available here: take one with your system tool, then paste it or use Insert › Pictures
 	Diagonal	Çapraz
 	Diamond	Eşkenar Dörtgen
 	Dictate	Dikte Et
@@ -293,6 +303,8 @@
 	Formatting at Selection	Seçimdeki Biçimlendirme
 	Formula	Formül
 	General	Genel
+	Get Add-ins	Get Add-ins
+	Get\nAdd-ins	Get\nAdd-ins
 	Go To	Git
 	Go to	Git
 	Go To (⌘⌥G)	Git (⌘⌥G)
@@ -1990,7 +2002,10 @@ preview	Title	Örnek
 	Recolor Selected Ink	Seçili Mürekkebi Yeniden Renklendir
 	Add Pen	Kalem Ekle
 	Remove Pen	Kalemi Kaldır
+	Ink Equation	Ink Equation
+	Ink to Math	Ink to Math
 	Ink to Shape	Mürekkepten Şekle
+	Convert to Math	Convert to Math
 	Convert to Shapes	Şekillere Dönüştür
 	Ink Replay	Mürekkep Yeniden Oynatma
 	Add\nPen	Kalem\nEkle

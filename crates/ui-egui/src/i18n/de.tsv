@@ -15,6 +15,8 @@
 	(no suggestions)	(keine Vorschläge)
 	1.5 Line Spacing	Zeilenabstand 1,5
 	A free, open-source word processor written from scratch in Rust.\nPart of the Crafting Apps from the ArtCraft team.	Ein kostenloses, quelloffenes Textverarbeitungsprogramm, von Grund auf in Rust geschrieben.\nTeil der Crafting Apps des ArtCraft-Teams.
+	3D Models	3D Models
+	3D models need a path: 3D rendering isn't supported, the model is kept as a labelled placeholder	3D models need a path: 3D rendering isn't supported, the model is kept as a labelled placeholder
 	About	Info
 	About WordCraft	Über WordCraft
 	Accept	Annehmen
@@ -30,6 +32,7 @@
 	Add space between Asian text and numbers	Abstand zwischen asiatischem Text und Zahlen hinzufügen
 	Add tab stop at:	Tabstopp hinzufügen bei:
 	Add Text	Text hinzufügen
+	Add-ins	Add-ins
 	Add to Dictionary	Zum Wörterbuch hinzufügen
 	Add to Style Gallery	Zum Formatvorlagenkatalog hinzufügen
 	Address Block	Adressblock
@@ -104,6 +107,7 @@
 	Line breaking	Zeilenumbruch
 	Link level to style:	Ebene mit Formatvorlage verknüpfen:
 	List Definition	Listendefinition
+	Media	Media
 	More templates →	Weitere Vorlagen →
 	No document is open. Create a document or open one first.	Es ist kein Dokument geöffnet. Erstellen oder öffnen Sie zuerst ein Dokument.
 	No templates match your search.	Keine Vorlagen entsprechen Ihrer Suche.
@@ -111,12 +115,18 @@
 	Number alignment:	Nummernausrichtung:
 	Number format	Nummernformat
 	Number style for this level:	Nummernstil für diese Ebene:
+	Online Pictures	Online Pictures
+	Online Video	Online Video
+	Online\nVideo	Online\nVideo
+	online video needs a url, a path or a poster frame: paste a poster or use Insert › Pictures	online video needs a url, a path or a poster frame: paste a poster or use Insert › Pictures
 	Only for the selected text	Nur für den ausgewählten Text
 	Outside border	Äußere Rahmenlinie
 	Reopen	Erneut öffnen
 	Restart list after:	Liste neu starten nach:
 	Right border	Rechte Rahmenlinie
 	Right Margin	Rechter Rand
+	Screenshot	Screenshot
+	screenshot capture isn't available here: take one with your system tool, then paste it or use Insert › Pictures	screenshot capture isn't available here: take one with your system tool, then paste it or use Insert › Pictures
 	Search for templates	Vorlagen suchen
 	Show all revisions inline	Alle Änderungen im Text anzeigen
 	Show documents with their colours inverted, like View › Switch Modes. Saving, printing and PDFs are unchanged.	Zeigt Dokumente mit invertierten Farben an, wie Ansicht › Modus wechseln. Speichern, Drucken und PDFs bleiben unverändert.
@@ -374,6 +384,8 @@
 	Formatting at Selection	Formatierung an der Auswahl
 	Formula	Formel
 	General	Allgemein
+	Get Add-ins	Get Add-ins
+	Get\nAdd-ins	Get\nAdd-ins
 	Go To	Gehe zu
 	Go to	Gehe zu
 	Go To (⌘⌥G)	Gehe zu (⌘⌥G)
@@ -1920,7 +1932,10 @@
 	Recolor Selected Ink	Ausgewählte Freihandeingabe umfärben
 	Add Pen	Stift hinzufügen
 	Remove Pen	Stift entfernen
+	Ink Equation	Ink Equation
+	Ink to Math	Ink to Math
 	Ink to Shape	Freihand zu Form
+	Convert to Math	Convert to Math
 	Convert to Shapes	In Formen umwandeln
 	Ink Replay	Freihand-Wiedergabe
 	Add\nPen	Stift\nhinzufügen
