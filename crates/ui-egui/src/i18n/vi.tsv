@@ -2764,3 +2764,12 @@
 	Delete Chat Message	Xóa tin nhắn trò chuyện
 	Export Chat	Xuất cuộc trò chuyện
 	Typing in Chat	Đang nhập trong trò chuyện
+	Close the document and go back to Nextcloud	Đóng tài liệu và quay lại Nextcloud
+	craft-live refused the connection: {reason}	craft-live đã từ chối kết nối: {reason}
+	Saved to Nextcloud	Đã lưu vào Nextcloud
+	Couldn't save to Nextcloud: {error}	Không thể lưu vào Nextcloud: {error}
+	The editing session expired. Close the document and open it again from Nextcloud.	Phiên chỉnh sửa đã hết hạn. Hãy đóng tài liệu và mở lại từ Nextcloud.
+	Couldn't open the document from Nextcloud: {error}	Không thể mở tài liệu từ Nextcloud: {error}
+	This document is view only	Tài liệu này chỉ để xem
+	Saving to Nextcloud…	Đang lưu vào Nextcloud…
+	Not connected: Nextcloud saves the document once the connection is back	Không có kết nối: Nextcloud sẽ lưu tài liệu khi kết nối trở lại

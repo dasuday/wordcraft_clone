@@ -2353,3 +2353,12 @@
 	Delete Chat Message	Обриши поруку ћаскања
 	Export Chat	Извези ћаскање
 	Typing in Chat	Куцање у ћаскању
+	Close the document and go back to Nextcloud	Затвори документ и врати се у Nextcloud
+	craft-live refused the connection: {reason}	craft-live је одбио везу: {reason}
+	Saved to Nextcloud	Сачувано у Nextcloud
+	Couldn't save to Nextcloud: {error}	Чување у Nextcloud није успело: {error}
+	The editing session expired. Close the document and open it again from Nextcloud.	Сесија уређивања је истекла. Затворите документ и поново га отворите из Nextcloud-а.
+	Couldn't open the document from Nextcloud: {error}	Документ из Nextcloud-а није могуће отворити: {error}
+	This document is view only	Овај документ је само за преглед
+	Saving to Nextcloud…	Чување у Nextcloud…
+	Not connected: Nextcloud saves the document once the connection is back	Нема везе: Nextcloud ће сачувати документ када се веза врати

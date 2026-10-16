@@ -2730,3 +2730,12 @@ preview	Title	Ukázka
 	Delete Chat Message	Odstranit zprávu chatu
 	Export Chat	Exportovat chat
 	Typing in Chat	Psaní v chatu
+	Close the document and go back to Nextcloud	Zavřít dokument a vrátit se do Nextcloudu
+	craft-live refused the connection: {reason}	craft-live odmítl připojení: {reason}
+	Saved to Nextcloud	Uloženo do Nextcloudu
+	Couldn't save to Nextcloud: {error}	Uložení do Nextcloudu se nezdařilo: {error}
+	The editing session expired. Close the document and open it again from Nextcloud.	Relace úprav vypršela. Zavřete dokument a otevřete ho znovu z Nextcloudu.
+	Couldn't open the document from Nextcloud: {error}	Dokument z Nextcloudu nelze otevřít: {error}
+	This document is view only	Tento dokument je jen pro čtení
+	Saving to Nextcloud…	Ukládání do Nextcloudu…
+	Not connected: Nextcloud saves the document once the connection is back	Bez připojení: Nextcloud dokument uloží, jakmile se připojení obnoví

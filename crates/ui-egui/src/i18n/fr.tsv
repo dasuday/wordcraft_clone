@@ -2346,3 +2346,12 @@
 	Delete Chat Message	Supprimer un message
 	Export Chat	Exporter la discussion
 	Typing in Chat	Saisie dans la discussion
+	Close the document and go back to Nextcloud	Fermer le document et revenir à Nextcloud
+	craft-live refused the connection: {reason}	craft-live a refusé la connexion : {reason}
+	Saved to Nextcloud	Enregistré dans Nextcloud
+	Couldn't save to Nextcloud: {error}	Impossible d’enregistrer dans Nextcloud : {error}
+	The editing session expired. Close the document and open it again from Nextcloud.	La session de modification a expiré. Fermez le document et rouvrez-le depuis Nextcloud.
+	Couldn't open the document from Nextcloud: {error}	Impossible d’ouvrir le document depuis Nextcloud : {error}
+	This document is view only	Ce document est en lecture seule
+	Saving to Nextcloud…	Enregistrement dans Nextcloud…
+	Not connected: Nextcloud saves the document once the connection is back	Pas de connexion : Nextcloud enregistrera le document dès que la connexion sera rétablie

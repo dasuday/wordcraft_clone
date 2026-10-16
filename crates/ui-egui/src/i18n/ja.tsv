@@ -2339,3 +2339,12 @@
 	Delete Chat Message	チャットのメッセージを削除
 	Export Chat	チャットをエクスポート
 	Typing in Chat	チャットで入力中
+	Close the document and go back to Nextcloud	ドキュメントを閉じて Nextcloud に戻る
+	craft-live refused the connection: {reason}	craft-live が接続を拒否しました: {reason}
+	Saved to Nextcloud	Nextcloud に保存しました
+	Couldn't save to Nextcloud: {error}	Nextcloud に保存できませんでした: {error}
+	The editing session expired. Close the document and open it again from Nextcloud.	編集セッションの有効期限が切れました。ドキュメントを閉じて、Nextcloud からもう一度開いてください。
+	Couldn't open the document from Nextcloud: {error}	Nextcloud からドキュメントを開けませんでした: {error}
+	This document is view only	このドキュメントは閲覧のみです
+	Saving to Nextcloud…	Nextcloud に保存しています…
+	Not connected: Nextcloud saves the document once the connection is back	接続されていません: 接続が戻ると Nextcloud がドキュメントを保存します

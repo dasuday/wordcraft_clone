@@ -2735,3 +2735,12 @@ preview	Title	Örnek
 	Delete Chat Message	Sohbet iletisini sil
 	Export Chat	Sohbeti dışa aktar
 	Typing in Chat	Sohbette yazma
+	Close the document and go back to Nextcloud	Belgeyi kapat ve Nextcloud'a dön
+	craft-live refused the connection: {reason}	craft-live bağlantıyı reddetti: {reason}
+	Saved to Nextcloud	Nextcloud'a kaydedildi
+	Couldn't save to Nextcloud: {error}	Nextcloud'a kaydedilemedi: {error}
+	The editing session expired. Close the document and open it again from Nextcloud.	Düzenleme oturumunun süresi doldu. Belgeyi kapatıp Nextcloud'dan yeniden açın.
+	Couldn't open the document from Nextcloud: {error}	Belge Nextcloud'dan açılamadı: {error}
+	This document is view only	Bu belge yalnızca görüntülenebilir
+	Saving to Nextcloud…	Nextcloud'a kaydediliyor…
+	Not connected: Nextcloud saves the document once the connection is back	Bağlantı yok: Bağlantı geri geldiğinde Nextcloud belgeyi kaydedecek

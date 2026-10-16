@@ -2340,3 +2340,12 @@
 	Delete Chat Message	刪除聊天訊息
 	Export Chat	匯出聊天
 	Typing in Chat	正在聊天中輸入
+	Close the document and go back to Nextcloud	關閉文件並返回 Nextcloud
+	craft-live refused the connection: {reason}	craft-live 拒絕了連線：{reason}
+	Saved to Nextcloud	已儲存到 Nextcloud
+	Couldn't save to Nextcloud: {error}	無法儲存到 Nextcloud：{error}
+	The editing session expired. Close the document and open it again from Nextcloud.	編輯工作階段已過期。請關閉文件，然後從 Nextcloud 重新開啟。
+	Couldn't open the document from Nextcloud: {error}	無法從 Nextcloud 開啟文件：{error}
+	This document is view only	此文件僅供檢視
+	Saving to Nextcloud…	正在儲存到 Nextcloud…
+	Not connected: Nextcloud saves the document once the connection is back	未連線：連線恢復後 Nextcloud 會儲存文件

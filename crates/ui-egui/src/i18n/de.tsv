@@ -2338,3 +2338,12 @@
 	Delete Chat Message	Chatnachricht löschen
 	Export Chat	Chat exportieren
 	Typing in Chat	Tippen im Chat
+	Close the document and go back to Nextcloud	Dokument schließen und zu Nextcloud zurückkehren
+	craft-live refused the connection: {reason}	craft-live hat die Verbindung abgelehnt: {reason}
+	Saved to Nextcloud	In Nextcloud gespeichert
+	Couldn't save to Nextcloud: {error}	Speichern in Nextcloud fehlgeschlagen: {error}
+	The editing session expired. Close the document and open it again from Nextcloud.	Die Bearbeitungssitzung ist abgelaufen. Schließen Sie das Dokument und öffnen Sie es erneut in Nextcloud.
+	Couldn't open the document from Nextcloud: {error}	Das Dokument aus Nextcloud konnte nicht geöffnet werden: {error}
+	This document is view only	Dieses Dokument kann nur angezeigt werden
+	Saving to Nextcloud…	Wird in Nextcloud gespeichert…
+	Not connected: Nextcloud saves the document once the connection is back	Keine Verbindung: Nextcloud speichert das Dokument, sobald die Verbindung wieder besteht

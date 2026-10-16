@@ -2726,3 +2726,12 @@
 	Delete Chat Message	Изтриване на съобщение в чата
 	Export Chat	Експортиране на чата
 	Typing in Chat	Писане в чата
+	Close the document and go back to Nextcloud	Затворете документа и се върнете в Nextcloud
+	craft-live refused the connection: {reason}	craft-live отказа връзката: {reason}
+	Saved to Nextcloud	Запазено в Nextcloud
+	Couldn't save to Nextcloud: {error}	Не можа да се запази в Nextcloud: {error}
+	The editing session expired. Close the document and open it again from Nextcloud.	Сесията за редактиране изтече. Затворете документа и го отворете отново от Nextcloud.
+	Couldn't open the document from Nextcloud: {error}	Документът от Nextcloud не можа да се отвори: {error}
+	This document is view only	Този документ е само за преглед
+	Saving to Nextcloud…	Запазване в Nextcloud…
+	Not connected: Nextcloud saves the document once the connection is back	Няма връзка: Nextcloud ще запази документа, когато връзката се възстанови

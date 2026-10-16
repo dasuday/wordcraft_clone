@@ -170,6 +170,20 @@ pub struct Services {
     /// `xdg-mime`. `None` (web, macOS) hides the button; macOS shows how to do it in Finder
     /// instead. An error means nothing changed.
     pub make_default_app: Option<Box<dyn Fn() -> Result<DefaultApp, String>>>,
+    /// Web, inside craft-live (a Nextcloud file edited live, `docs/collab.md`): the page that
+    /// embeds the app saves and closes the document. File › Save (Ctrl+S) asks the room to save
+    /// into Nextcloud, File › Close (Ctrl+W) and the title bar's Close button hand the document
+    /// back to Nextcloud; Save As still downloads a copy. `None` everywhere else.
+    pub host: Option<Box<dyn Fn(HostRequest)>>,
+}
+
+/// What [`Services::host`] is asked to do.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum HostRequest {
+    /// Save the document where it lives (craft-live: the room saves into Nextcloud).
+    Save,
+    /// Close the document (craft-live: Nextcloud closes the editor).
+    Close,
 }
 
 /// How Save in the Save Changes prompt went.
@@ -738,6 +752,9 @@ impl WordApp {
     /// Close, Envelopes, Labels and Finish & Merge on a document with unsaved changes first ask
     /// Save / Don't Save / Cancel, and the command runs once that is answered (`ui.saveChanges`).
     pub fn run(&mut self, id: &str, params: Value) -> Result<Value, String> {
+        if let Some(r) = self.host_command(id) {
+            return r;
+        }
         // An add-in command run from the interface: its dialog or file comes after it (below).
         let plugin = (id == "plugins.run").then(|| params.get("plugin").and_then(Value::as_str).map(str::to_string)).flatten();
         if id == "file.recover" && params.as_object().is_none_or(|p| p.is_empty()) {
@@ -811,6 +828,9 @@ impl WordApp {
             let e = tl!("No document is open. Create a document or open one first.").to_string();
             self.status(e.clone());
             return Err(e);
+        }
+        if let Some(r) = self.host_command(id) {
+            return r;
         }
         if let Some(r) = self.ui_command(id, &params) {
             return r;
@@ -917,6 +937,19 @@ impl WordApp {
             self.status(e.clone());
         }
         r
+    }
+
+    /// Save and Close when the page embedding the app owns the document ([`Services::host`]):
+    /// handed to it, never asking about unsaved changes (the live room keeps every edit).
+    fn host_command(&mut self, id: &str) -> Option<Result<Value, String>> {
+        let request = match id {
+            "file.save" => HostRequest::Save,
+            "file.close" => HostRequest::Close,
+            _ => return None,
+        };
+        let host = self.services.host.as_ref()?;
+        host(request);
+        Some(Ok(json!({"host": if request == HostRequest::Save { "save" } else { "close" }})))
     }
 
     /// Web: store a font added from bytes, or forget the removed ones ([`Services::store_font`]).

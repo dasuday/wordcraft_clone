@@ -98,6 +98,12 @@ fn has_transport() -> bool {
 /// bar's right-to-left layout, so the button comes first.
 pub fn title_bar(app: &mut WordApp, ui: &mut Ui, control_h: f32) {
     let t = Tokens::get(ui.ctx());
+    // Inside craft-live the page has no close button of its own (Nextcloud shows none): Close
+    // hands the document back to Nextcloud. Rightmost, as a window's close is.
+    if app.services.host.is_some() {
+        close_button(app, ui, control_h);
+        ui.add_space(6.0);
+    }
     let in_room = app.session.active_room().is_some();
     let label = tl!("Share").to_string();
     let state = state_text(app);
@@ -148,6 +154,25 @@ pub fn title_bar(app: &mut WordApp, ui: &mut Ui, control_h: f32) {
     if in_room {
         ui.add_space(6.0);
         people(app, ui, control_h);
+    }
+}
+
+/// The title bar's Close button inside craft-live ([`crate::Services::host`]): `file.close`.
+fn close_button(app: &mut WordApp, ui: &mut Ui, control_h: f32) {
+    let t = Tokens::get(ui.ctx());
+    let label = tl!("Close").to_string();
+    let font = medium(11.5);
+    let text_w = ui.painter().layout_no_wrap(label.clone(), font.clone(), t.text).size().x;
+    let (r, resp) = ui.allocate_exact_size(vec2(text_w + 34.0, control_h.min(24.0)), Sense::click());
+    if resp.hovered() {
+        ui.painter().rect_filled(r, 5.0, t.hover);
+    }
+    ui.painter().rect_stroke(r, 5.0, Stroke::new(1.0, t.border), egui::StrokeKind::Inside);
+    crate::icons::paint(ui.painter(), Rect::from_center_size(pos2(r.min.x + 14.0, r.center().y), vec2(12.0, 12.0)), "close", t.text, t.text);
+    ui.painter().text(pos2(r.min.x + 25.0, r.center().y), Align2::LEFT_CENTER, &label, font, t.text);
+    resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, tl!("Close")));
+    if resp.on_hover_text(tl!("Close the document and go back to Nextcloud")).clicked() {
+        let _ = app.run("file.close", json!({}));
     }
 }
 
@@ -267,7 +292,13 @@ fn session_popover(ui: &mut Ui, app: &mut WordApp) {
         app.status(tl!("Invitation copied").to_string());
         ui.close();
     }
-    if ui.button(tl!("Leave Live Session")).clicked() {
+    // Inside craft-live the document is the Nextcloud file: it can be closed, not left.
+    if app.services.host.is_some() {
+        if ui.button(tl!("Close")).clicked() {
+            let _ = app.run("file.close", json!({}));
+            ui.close();
+        }
+    } else if ui.button(tl!("Leave Live Session")).clicked() {
         if let Err(e) = app.run("collab.leave", json!({})) {
             app.status(e);
         }

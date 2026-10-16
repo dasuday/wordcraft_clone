@@ -2736,3 +2736,12 @@ preview	Title	Пример
 	Delete Chat Message	Удалить сообщение чата
 	Export Chat	Экспортировать чат
 	Typing in Chat	Набор текста в чате
+	Close the document and go back to Nextcloud	Закрыть документ и вернуться в Nextcloud
+	craft-live refused the connection: {reason}	craft-live отклонил подключение: {reason}
+	Saved to Nextcloud	Сохранено в Nextcloud
+	Couldn't save to Nextcloud: {error}	Не удалось сохранить в Nextcloud: {error}
+	The editing session expired. Close the document and open it again from Nextcloud.	Сеанс редактирования истёк. Закройте документ и снова откройте его из Nextcloud.
+	Couldn't open the document from Nextcloud: {error}	Не удалось открыть документ из Nextcloud: {error}
+	This document is view only	Этот документ доступен только для просмотра
+	Saving to Nextcloud…	Сохранение в Nextcloud…
+	Not connected: Nextcloud saves the document once the connection is back	Нет подключения: Nextcloud сохранит документ, когда подключение восстановится

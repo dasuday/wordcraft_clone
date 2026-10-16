@@ -2734,3 +2734,12 @@
 	Delete Chat Message	Csevegőüzenet törlése
 	Export Chat	Csevegés exportálása
 	Typing in Chat	Gépelés a csevegésben
+	Close the document and go back to Nextcloud	A dokumentum bezárása és visszatérés a Nextcloudba
+	craft-live refused the connection: {reason}	A craft-live elutasította a kapcsolatot: {reason}
+	Saved to Nextcloud	Mentve a Nextcloudba
+	Couldn't save to Nextcloud: {error}	Nem sikerült menteni a Nextcloudba: {error}
+	The editing session expired. Close the document and open it again from Nextcloud.	A szerkesztési munkamenet lejárt. Zárja be a dokumentumot, és nyissa meg újra a Nextcloudból.
+	Couldn't open the document from Nextcloud: {error}	A dokumentumot nem sikerült megnyitni a Nextcloudból: {error}
+	This document is view only	Ez a dokumentum csak megtekinthető
+	Saving to Nextcloud…	Mentés a Nextcloudba…
+	Not connected: Nextcloud saves the document once the connection is back	Nincs kapcsolat: a Nextcloud menti a dokumentumot, amint helyreáll a kapcsolat

@@ -98,7 +98,11 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
                         }
                         "save" => {
                             let r = app.run("file.save", json!({}));
-                            if r.is_ok_and(|v| v.get("saved").and_then(serde_json::Value::as_bool) == Some(true) || v.get("downloaded").is_some()) {
+                            if r.is_ok_and(|v| {
+                                v.get("saved").and_then(serde_json::Value::as_bool) == Some(true)
+                                    || v.get("downloaded").is_some()
+                                    || v.get("host").is_some()
+                            }) {
                                 app.ui.backstage = false;
                                 app.canvas.want_focus = true;
                             } else {

@@ -2373,3 +2373,12 @@
 	Delete Chat Message	Kustuta vestlussõnum
 	Export Chat	Ekspordi vestlus
 	Typing in Chat	Vestlusse kirjutamine
+	Close the document and go back to Nextcloud	Sulge dokument ja naase Nextcloudi
+	craft-live refused the connection: {reason}	craft-live keeldus ühendusest: {reason}
+	Saved to Nextcloud	Salvestatud Nextcloudi
+	Couldn't save to Nextcloud: {error}	Nextcloudi salvestamine ebaõnnestus: {error}
+	The editing session expired. Close the document and open it again from Nextcloud.	Redigeerimisseanss aegus. Sulge dokument ja ava see Nextcloudist uuesti.
+	Couldn't open the document from Nextcloud: {error}	Dokumenti ei saanud Nextcloudist avada: {error}
+	This document is view only	Seda dokumenti saab ainult vaadata
+	Saving to Nextcloud…	Salvestamine Nextcloudi…
+	Not connected: Nextcloud saves the document once the connection is back	Ühendus puudub: Nextcloud salvestab dokumendi, kui ühendus taastub

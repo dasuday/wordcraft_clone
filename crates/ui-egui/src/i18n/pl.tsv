@@ -2728,3 +2728,12 @@ preview	Title	Tytuł
 	Delete Chat Message	Usuń wiadomość czatu
 	Export Chat	Eksportuj czat
 	Typing in Chat	Pisanie na czacie
+	Close the document and go back to Nextcloud	Zamknij dokument i wróć do Nextcloud
+	craft-live refused the connection: {reason}	craft-live odrzucił połączenie: {reason}
+	Saved to Nextcloud	Zapisano w Nextcloud
+	Couldn't save to Nextcloud: {error}	Nie udało się zapisać w Nextcloud: {error}
+	The editing session expired. Close the document and open it again from Nextcloud.	Sesja edycji wygasła. Zamknij dokument i otwórz go ponownie z Nextcloud.
+	Couldn't open the document from Nextcloud: {error}	Nie udało się otworzyć dokumentu z Nextcloud: {error}
+	This document is view only	Ten dokument jest tylko do odczytu
+	Saving to Nextcloud…	Zapisywanie w Nextcloud…
+	Not connected: Nextcloud saves the document once the connection is back	Brak połączenia: Nextcloud zapisze dokument po przywróceniu połączenia
