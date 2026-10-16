@@ -1,6 +1,7 @@
 //! Links on Linux and the BSDs (#2349): the `Services::open_url` hook.
 //!
-//! egui's opener (the `webbrowser` crate) looks for the browser itself: `$BROWSER`, then
+//! egui's opener (the `webbrowser` crate) looks for the browser itself (outside Flatpak, where
+//! it runs `xdg-open`): `$BROWSER`, then
 //! `xdg-settings` and the browser's desktop file in the XDG data folders, then commands named
 //! after the desktop it guesses from `XDG_CURRENT_DESKTOP`. A game launcher such as Steam on
 //! SteamOS starts apps without those variables, so it finds nothing ("No valid browsers
@@ -11,7 +12,7 @@
 //! 3. the `webbrowser` crate last, for systems with neither (a bare window manager with
 //!    `$BROWSER`, WSL).
 //!
-//! Each runs on a worker thread, never the UI thread, and gives up waiting after a few seconds.
+//! Each runs on a worker thread, never the UI thread, and stops waiting after a few seconds.
 
 use std::process::{Command, Stdio};
 use std::sync::mpsc::channel;
@@ -20,8 +21,9 @@ use std::time::{Duration, Instant};
 /// How long `xdg-open` may run before it counts as opened: without a desktop it runs the browser
 /// itself and only returns when the browser closes. It is reaped in the background.
 const XDG_OPEN_WAIT: Duration = Duration::from_secs(5);
-/// How long the portal may take to answer. It answers once the link is handed to an app; if it
-/// asks the user to choose one, a slow answer counts as a failure and the next way is tried.
+/// How long to wait for the portal's answer, which comes once the link is handed to an app. A
+/// quick "couldn't" moves on to the next way; no answer yet counts as opened (it may be asking
+/// the user to choose an app).
 const PORTAL_WAIT: Duration = Duration::from_secs(10);
 
 /// The hook: opens `url` on a worker, sends the result and wakes the UI.
@@ -116,7 +118,9 @@ mod portal {
     }
 
     /// OpenURI on `connection`, waiting up to `wait` for the portal's answer: 0 (opened) and 1
-    /// (the user closed the app chooser) are fine, 2 is a failure.
+    /// (the user closed the app chooser) are fine, 2 is a failure. Once the portal has taken the
+    /// request, no answer within `wait` counts as opened too: it may be showing its app chooser,
+    /// and trying another way behind it would open the link twice.
     pub(super) fn open_uri_on(connection: &Connection, url: &str, wait: Duration) -> Result<(), String> {
         static NEXT: AtomicU32 = AtomicU32::new(0);
         let token = format!("wordcraft{}_{}", std::process::id(), NEXT.fetch_add(1, Ordering::Relaxed));
@@ -135,7 +139,7 @@ mod portal {
             return Ok(());
         }
         // The signal iterator has no timeout: it is read on a helper, which ends with the
-        // answer or the connection.
+        // answer or the connection (after a timeout it keeps waiting for the user's choice).
         let (tx, rx) = channel();
         std::thread::Builder::new()
             .name("open-url-portal".into())
@@ -148,7 +152,10 @@ mod portal {
             Ok(Some(0 | 1)) => Ok(()),
             Ok(Some(code)) => Err(format!("couldn't open it (response {code})")),
             Ok(None) => Err("no answer".into()),
-            Err(_) => Err(format!("no answer within {} s", wait.as_secs())),
+            Err(_) => {
+                log::info!("desktop portal took the link and hasn't answered in {} s (an app chooser may be open)", wait.as_secs());
+                Ok(())
+            }
         }
     }
 }
@@ -216,8 +223,8 @@ mod tests {
     fn an_opener_still_running_counts_as_opened() {
         let s = Scratch::new("slow");
         let start = Instant::now();
-        assert_eq!(run(&s.script("xdg-open", "sleep 30"), Duration::from_millis(200)), Ok(()));
-        assert!(start.elapsed() < Duration::from_secs(5));
+        assert_eq!(run(&s.script("xdg-open", "sleep 3"), Duration::from_millis(200)), Ok(()));
+        assert!(start.elapsed() < Duration::from_secs(2));
     }
 
     #[test]
@@ -259,9 +266,10 @@ mod tests {
         use zbus::zvariant::{ObjectPath, OwnedValue};
 
         use super::super::portal::open_uri_on;
-        use super::URL;
+        use super::{Scratch, URL};
 
-        struct Bus(Child, String);
+        /// The bus daemon, its address, and the folder holding its configuration.
+        struct Bus(Child, String, #[allow(dead_code, reason = "removed on drop")] Scratch);
 
         impl Drop for Bus {
             fn drop(&mut self) {
@@ -271,8 +279,9 @@ mod tests {
         }
 
         /// A session bus with no services to start, so nothing real can answer.
-        fn private_bus() -> Option<Bus> {
-            let conf = std::env::temp_dir().join(format!("wordcraft-open-url-bus-{}.conf", std::process::id()));
+        fn private_bus(name: &str) -> Option<Bus> {
+            let scratch = Scratch::new(name);
+            let conf = scratch.0.join("bus.conf");
             std::fs::write(
                 &conf,
                 r#"<!DOCTYPE busconfig PUBLIC "-//freedesktop//DTD D-Bus Bus Configuration 1.0//EN" "http://www.freedesktop.org/standards/dbus/1.0/busconfig.dtd">
@@ -288,11 +297,12 @@ mod tests {
                 .ok()?;
             let mut address = String::new();
             BufReader::new(child.stdout.take()?).read_line(&mut address).ok()?;
-            Some(Bus(child, address.trim().to_string()))
+            Some(Bus(child, address.trim().to_string(), scratch))
         }
 
-        /// A stand-in portal: answers each OpenURI with `code` (or not at all) and reports the URL.
-        fn fake_portal(bus: &Bus, code: Option<u32>, seen: Sender<String>) -> Connection {
+        /// A stand-in portal: answers each OpenURI with `code` after `delay` (or not at all) and
+        /// reports the URL.
+        fn fake_portal(bus: &Bus, code: Option<u32>, delay: Duration, seen: Sender<String>) -> Connection {
             let conn = connection::Builder::address(bus.1.as_str()).unwrap().build().unwrap();
             conn.request_name("org.freedesktop.portal.Desktop").unwrap();
             let serving = conn.clone();
@@ -310,50 +320,56 @@ mod tests {
                     serving.reply(&h, &ObjectPath::try_from(path.as_str()).unwrap()).unwrap();
                     let _ = seen.send(uri);
                     if let Some(code) = code {
+                        std::thread::sleep(delay);
                         let results: std::collections::HashMap<String, OwnedValue> = Default::default();
-                        serving
-                            .emit_signal(
-                                h.sender().map(|s| s.to_owned()),
-                                path.as_str(),
-                                "org.freedesktop.portal.Request",
-                                "Response",
-                                &(code, results),
-                            )
-                            .unwrap();
+                        // The bus may be gone by then (an answer later than the test waits).
+                        let _ = serving.emit_signal(
+                            h.sender().map(|s| s.to_owned()),
+                            path.as_str(),
+                            "org.freedesktop.portal.Request",
+                            "Response",
+                            &(code, results),
+                        );
                     }
                 }
             });
             conn
         }
 
-        fn ask(code: Option<u32>) -> Option<(Result<(), String>, String)> {
-            let Some(bus) = private_bus() else {
+        /// Ask the stand-in portal (answering `code` after `delay`), waiting up to 500 ms.
+        fn ask(name: &str, code: Option<u32>, delay: Duration) -> Option<(Result<(), String>, String)> {
+            let Some(bus) = private_bus(name) else {
                 eprintln!("skipped: no dbus-daemon");
                 return None;
             };
             let (tx, rx) = std::sync::mpsc::channel();
-            let _portal = fake_portal(&bus, code, tx);
+            let _portal = fake_portal(&bus, code, delay, tx);
             let app = connection::Builder::address(bus.1.as_str()).unwrap().build().unwrap();
-            let result = open_uri_on(&app, URL, Duration::from_millis(1500));
+            let result = open_uri_on(&app, URL, Duration::from_millis(500));
             Some((result, rx.recv_timeout(Duration::from_secs(5)).unwrap()))
         }
 
         #[test]
         fn the_portal_gets_the_link_and_its_answer_counts() {
-            let Some((result, uri)) = ask(Some(0)) else { return };
+            let now = Duration::ZERO;
+            let Some((result, uri)) = ask("portal-0", Some(0), now) else { return };
             assert_eq!(uri, URL);
             assert_eq!(result, Ok(()));
-            let Some((result, _)) = ask(Some(1)) else { return };
+            let Some((result, _)) = ask("portal-1", Some(1), now) else { return };
             assert_eq!(result, Ok(()), "the user closing the app chooser isn't a failure");
-            let Some((result, _)) = ask(Some(2)) else { return };
+            let Some((result, _)) = ask("portal-2", Some(2), now) else { return };
             assert!(result.unwrap_err().contains("response 2"));
         }
 
+        /// A portal that took the link and is still asking the user which app to use: opened, so
+        /// no other way runs behind its chooser.
         #[test]
-        fn a_portal_that_never_answers_is_a_failure() {
-            let Some((result, uri)) = ask(None) else { return };
+        fn a_portal_slow_to_answer_counts_as_opened() {
+            let Some((result, uri)) = ask("portal-late", Some(0), Duration::from_secs(2)) else { return };
             assert_eq!(uri, URL);
-            assert!(result.unwrap_err().contains("no answer"));
+            assert_eq!(result, Ok(()));
+            let Some((result, _)) = ask("portal-never", None, Duration::ZERO) else { return };
+            assert_eq!(result, Ok(()));
         }
     }
 }
