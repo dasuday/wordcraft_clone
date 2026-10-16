@@ -346,6 +346,17 @@ fn region_borders(parts: &[(TablePart, Borders)], (ri, nrows): (usize, usize), (
 }
 
 pub fn layout_table(ctx: &mut Ctx, story: StoryRef, t: &Table, path: &[u32], avail: f32, depth: usize) -> TableLayout {
+    // Measuring the columns keeps the cells' paragraphs shaped for laying them out; a table
+    // inside a cell leaves them to the table around it, the outermost one lets them go.
+    let outermost = ctx.shaped.is_empty();
+    let tl = lay_out_table(ctx, story, t, path, avail, depth);
+    if outermost {
+        ctx.shaped = Default::default();
+    }
+    tl
+}
+
+fn lay_out_table(ctx: &mut Ctx, story: StoryRef, t: &Table, path: &[u32], avail: f32, depth: usize) -> TableLayout {
     let style = table_style(ctx, t);
     // Cell text formatting and looks per set of style parts, built once per table.
     let mut cell_text: Vec<(Region, CellText)> = Vec::new();

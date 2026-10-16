@@ -1376,6 +1376,45 @@ fn cache_keeps_one_layout_per_table_cell() {
     assert_eq!(c.misses, misses + 1);
 }
 
+/// Measuring a table's columns shapes its cells' paragraphs once; laying the cells out breaks
+/// those shaped paragraphs at the cells' widths instead of shaping them again. The pages are the
+/// same as laying every cell out afresh (here: with the measures cached, so nothing is kept
+/// shaped), whatever the cells hold.
+#[test]
+fn table_cells_shaped_while_measuring_lay_out_as_fresh_ones() {
+    let mut d = Document::from_text("before\nafter");
+    let num = d.numbering.add_list(wordcraft_doc::ListKind::Numbered);
+    let mut t = Table::new(6, 4, 468.0);
+    for (r, row) in t.rows.iter_mut().enumerate() {
+        for (k, cell) in row.cells.iter_mut().enumerate() {
+            let text = if (r + k) % 3 == 0 { "a long cell text that has to wrap inside its column ".repeat(3) } else { format!("row {r}\tcell {k}") };
+            let mut p = wordcraft_doc::Paragraph::with_text(&text, Default::default());
+            p.props.align = [None, Some(Align::Center), Some(Align::Right), Some(Align::Justify)].get(k).copied().flatten();
+            if r == 2 {
+                p.props.numbering = Some(wordcraft_doc::props::NumRef { num, level: 0 });
+            }
+            if r == 3 && k == 1 {
+                let field = InlineObject::Field {
+                    instr: "AUTHOR".into(),
+                    result: "a-field-result".into(),
+                    locked: false,
+                    dirty: false,
+                    code: false,
+                    form: String::new(),
+                };
+                p.insert_object(0, field, &Default::default()).unwrap();
+            }
+            cell.blocks = vec![wordcraft_doc::para_block(p)];
+        }
+    }
+    d.insert_block(StoryRef::Body, &Path::top(1), wordcraft_doc::Block::Table(t)).unwrap();
+    let mut c = LayoutCache::new();
+    let reused = layout(&d, &mut c, &LayoutOptions::default());
+    c.paras.clear();
+    let fresh = layout(&d, &mut c, &LayoutOptions::default());
+    assert_eq!(format!("{:?}", reused.pages), format!("{:?}", fresh.pages));
+}
+
 #[test]
 fn selection_rects_cover_range() {
     let d = Document::from_text("Hello world\nSecond line");
