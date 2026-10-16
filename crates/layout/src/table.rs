@@ -27,6 +27,8 @@ pub struct RowLayout {
 
 /// A cell of a [`RowLayout`].
 pub struct CellPart {
+    /// Index of this cell's closing rule in the row items.
+    pub(crate) bottom_rule: Option<usize>,
     /// Reserved closing band for an unmerged, non-exact final row.
     pub(crate) bottom_band: f32,
     /// Its items in the row's `items` (its fill, text, borders and cell area).
@@ -734,8 +736,10 @@ pub fn layout_table(ctx: &mut Ctx, story: StoryRef, t: &Table, path: &[u32], ava
             if top_vis && let Some(e) = b.top.filter(Border::is_visible) {
                 items.push(Placed::Rule { x0: hx0, y0, x1: hx1, y1: y0, border: e });
             }
+            let mut bottom_rule = None;
             let last_of_merge = c.vmerge == VMerge::None || !cont.get(ri + 1).is_some_and(|v| v.contains(&c.g));
             if last_of_merge && let Some(e) = b.bottom.filter(Border::is_visible) {
+                bottom_rule = Some(items.len());
                 let bottom_y = y1 - bottom_band / 2.0;
                 items.push(Placed::Rule { x0: hx0, y0: bottom_y, x1: hx1, y1: bottom_y, border: e });
             }
@@ -754,7 +758,7 @@ pub fn layout_table(ctx: &mut Ctx, story: StoryRef, t: &Table, path: &[u32], ava
                 story,
                 clip: exact && c.h > span_h + 0.01,
             });
-            parts.push(CellPart { bottom_band, items: first..items.len(), end });
+            parts.push(CellPart { bottom_rule, bottom_band, items: first..items.len(), end });
         }
         out.push(RowLayout { height: rh, items, bottom: bottoms.get(ri).copied().unwrap_or(0.0), cells: parts });
     }
@@ -870,7 +874,9 @@ pub fn split_row(row: &RowLayout, cut: f32) -> Option<(RowLayout, RowLayout)> {
     let mut parts = Vec::with_capacity(cells.len());
     for (((c, items), splits), &shift) in row.cells.iter().zip(&cells).zip(&splits).zip(&shifts) {
         let start = b.len();
-        for (it, &split) in items.iter().zip(splits) {
+        let mut bottom_rule = None;
+        for (index, (it, &split)) in items.iter().zip(splits).enumerate() {
+            let source = c.items.start.saturating_add(index);
             if let Some(r) = it.turned_bounds() {
                 let mut it = it.clone();
                 if fits(r.bottom()) {
@@ -940,15 +946,16 @@ pub fn split_row(row: &RowLayout, cut: f32) -> Option<(RowLayout, RowLayout)> {
                 Placed::Rule { x0, y0, x1, y1, border } => {
                     if (y0 - y1).abs() < 0.01 {
                         // Horizontal: the top edge stays, the bottom edge moves; both fragments close.
-                        if *y0 <= 0.01 {
-                            a.push(it.clone());
-                            b.push(Placed::Rule { x0: *x0, y0: 0.0, x1: *x1, y1: 0.0, border: *border });
-                        } else if *y0 >= row.height - c.bottom_band / 2.0 - 0.01 {
+                        if c.bottom_rule == Some(source) {
                             // Keep the entire closing stroke inside each physical fragment's band.
                             let above = cut - c.bottom_band / 2.0;
                             let below = if c.bottom_band > 0.0 { height - c.bottom_band / 2.0 } else { y0 - rest };
                             a.push(Placed::Rule { x0: *x0, y0: above, x1: *x1, y1: above, border: *border });
+                            bottom_rule = Some(b.len());
                             b.push(Placed::Rule { x0: *x0, y0: below, x1: *x1, y1: below, border: *border });
+                        } else if *y0 <= 0.01 {
+                            a.push(it.clone());
+                            b.push(Placed::Rule { x0: *x0, y0: 0.0, x1: *x1, y1: 0.0, border: *border });
                         } else if *y0 <= cut {
                             a.push(it.clone());
                         } else {
@@ -967,7 +974,7 @@ pub fn split_row(row: &RowLayout, cut: f32) -> Option<(RowLayout, RowLayout)> {
                 }
             }
         }
-        parts.push(CellPart { bottom_band: c.bottom_band, items: start..b.len(), end: c.end.map(|e| e - shift) });
+        parts.push(CellPart { bottom_rule, bottom_band: c.bottom_band, items: start..b.len(), end: c.end.map(|e| e - shift) });
     }
     // The part left on the page is placed and never split again.
     Some((

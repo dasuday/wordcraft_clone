@@ -157,13 +157,13 @@ No overall parity estimate changes from these probes.
 
 ## Final row closing strokes
 
-Unmerged, non-exact final rows paint their closing border inside the reserved band, including whole rows and repeated page continuations. Original fixtures cover automatic and minimum heights, multiple stroke widths and cell margins. Exact rows, nonfinal rows and vertical merges retain their existing paths. Row sizing and fit decisions are unchanged. Native Word for Mac 16.113.2 controls confirm the bounded rule; separate pagination and stroke-thickness differences remain.
+Unmerged, non-exact final rows paint their closing border inside the reserved band, including whole rows and repeated page continuations. Original fixtures cover automatic and minimum heights, multiple stroke widths and cell margins. Closing rules retain their owning cell and item index through splits. Other row types keep their border offsets. Row sizing and fit decisions are unchanged. Native Word for Mac 16.113.2 controls confirm the bounded rule; separate pagination and stroke-thickness differences remain.
 
 ## Revision history
 
 | Date | Change | Summary |
 |---|---|---|
-| 2026-10-16 | trivial | Keep unmerged, non-exact final-row closing strokes inside their reserved bands on whole and split rows. |
+| 2026-10-16 | trivial | Keep unmerged, non-exact final-row closing strokes inside their reserved bands and preserve closing-rule ownership through splits. |
 | 2026-10-14 | trivial | Row table border exceptions draw without leaking into other rows |
 | 2026-10-14 | trivial | Consistent cell widths override a stale table grid |
 | 2026-10-14 | trivial | Paragraphs inside complex-field instructions take no flow height; empty result paragraphs keep their line. |
