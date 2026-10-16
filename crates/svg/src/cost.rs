@@ -96,7 +96,7 @@ fn path_bytes(p: &usvg::Path, ts: Transform, stroke: bool) -> u64 {
     let (sx, sy) = ts.get_scale();
     let scale = f64::from(sx.max(sy));
     let scale = if scale.is_finite() { scale } else { 1.0 };
-    let (mut lines, mut curves, mut curve_len, mut all_len) = (0u64, 0u64, 0f64, 0f64);
+    let (mut lines, mut curves, mut curve_len, mut all_len, mut subpaths) = (0u64, 0u64, 0f64, 0f64, 0u64);
     let mut last = Point::zero();
     let dist = |a: Point, b: Point| {
         let d = f64::from(b.x - a.x).hypot(f64::from(b.y - a.y));
@@ -104,7 +104,10 @@ fn path_bytes(p: &usvg::Path, ts: Transform, stroke: bool) -> u64 {
     };
     for seg in p.data().segments() {
         match seg {
-            PathSegment::MoveTo(q) => last = q,
+            PathSegment::MoveTo(q) => {
+                subpaths += 1;
+                last = q;
+            }
             PathSegment::LineTo(q) => {
                 lines += 1;
                 all_len += dist(last, q);
@@ -130,20 +133,30 @@ fn path_bytes(p: &usvg::Path, ts: Transform, stroke: bool) -> u64 {
     let Some(s) = p.stroke() else { return 0 };
     let mut bytes = lines.saturating_mul(400).saturating_add(curves.saturating_mul(600)).saturating_add(px(curve_len, 4.0));
     let width = f64::from(s.width().get());
-    if matches!(s.linejoin(), usvg::LineJoin::Round) || matches!(s.linecap(), usvg::LineCap::Round) {
-        // A round join or cap is a curve around each vertex.
-        let round = 600u64.saturating_add(px(width * 4.0, 4.0));
+    // A round join or cap is a curve around a vertex; a square cap a few lines.
+    let round = 600u64.saturating_add(px(width * 4.0, 4.0));
+    let cap = match s.linecap() {
+        usvg::LineCap::Round => round,
+        usvg::LineCap::Square => 400,
+        usvg::LineCap::Butt => 0,
+    };
+    if matches!(s.linejoin(), usvg::LineJoin::Round) {
         bytes = bytes.saturating_add(lines.saturating_add(curves).saturating_mul(round));
     }
+    bytes = bytes.saturating_add(cap.saturating_mul(2).saturating_mul(subpaths));
     if let Some(dash) = s.dasharray() {
-        // tiny-skia's own count: the path's length times the dashes per interval; past a
-        // million it doesn't stroke the path at all. Each dash is a piece of the outline.
+        // tiny-skia's own count, from the path's length (it measures the curves themselves,
+        // which are never longer than the lines through their points) times the dashes per
+        // interval; past a million it gives up, so at most a million are made. Each dash is a
+        // piece of the outline, with caps at both ends (review 11 I-7).
         let period: f64 = dash.iter().map(|d| f64::from(*d)).sum();
-        let dashes = if period > 0.0 && period.is_finite() { all_len / period * (dash.len() as f64 / 2.0).max(1.0) } else { 0.0 };
-        if dashes > MAX_DASHES as f64 {
-            return 0;
-        }
-        bytes = bytes.saturating_add((dashes as u64).saturating_mul(800)).saturating_add(px(all_len, 4.0));
+        let dashes = if period > 0.0 && period.is_finite() {
+            (all_len / period * (dash.len() as f64 / 2.0).max(1.0)).ceil().min(MAX_DASHES as f64) as u64
+        } else {
+            MAX_DASHES
+        };
+        let one = 800u64.saturating_add(cap.saturating_mul(2));
+        bytes = bytes.saturating_add(dashes.max(1).saturating_mul(one)).saturating_add(px(all_len, 4.0));
     }
     bytes
 }

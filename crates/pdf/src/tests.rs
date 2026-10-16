@@ -1555,3 +1555,46 @@ fn svg_with_an_ordinary_filter_stays_vectors() {
     assert!(raw.contains("1 0 0 rg"), "the red rectangle is a path (a raster of the picture has none)");
     assert!(!raw.contains("0.8156"), "no grey box");
 }
+
+/// A PNG whose header says `w` × `h` (its pixel data cut short), in an SVG as a `data:` URL.
+fn svg_with_png(w: u32, h: u32) -> Vec<u8> {
+    let mut png = b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR".to_vec();
+    png.extend_from_slice(&w.to_be_bytes());
+    png.extend_from_slice(&h.to_be_bytes());
+    png.extend_from_slice(&[8, 6, 0, 0, 0, 0, 0, 0, 0]);
+    png.extend_from_slice(b"\0\0\0\x01IDAT\0\0\0\0\0");
+    const T: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut b64 = String::new();
+    for ch in png.chunks(3) {
+        let n = (ch[0] as u32) << 16 | (*ch.get(1).unwrap_or(&0) as u32) << 8 | *ch.get(2).unwrap_or(&0) as u32;
+        for i in 0..4 {
+            b64.push(if i <= ch.len() { T[(n >> (18 - 6 * i) & 63) as usize] as char } else { '=' });
+        }
+    }
+    format!(r##"<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><rect width="100" height="40" fill="#ff0000"/><image width="100" height="100" href="data:image/png;base64,{b64}"/></svg>"##).into_bytes()
+}
+
+/// #1910 review 11 C-15: krilla decodes a raster image inside an SVG when it writes the PDF; one
+/// whose header says 30,000² would take 3.6 GB. The picture goes in as our budgeted raster.
+#[test]
+fn svg_with_a_huge_embedded_image_is_exported_as_a_raster() {
+    let raw = pdf_with_svg(&svg_with_png(30_000, 30_000), 75.0);
+    assert!(raw.contains("/Width 150") || raw.contains("0.8156"), "a raster of the picture or the grey box");
+}
+
+/// #1910 review 11 I-8: an SVG holding an image krilla can't decode doesn't fail the export.
+#[test]
+fn svg_with_a_broken_embedded_image_still_exports() {
+    let raw = pdf_with_svg(&svg_with_png(10, 10), 75.0);
+    assert!(raw.starts_with("%PDF"));
+    assert!(raw.contains("/Width 150") || raw.contains("0.8156"), "a raster of the picture or the grey box");
+}
+
+/// #1910 review 11 C-14: a filter whose layer is rotated thin, and a filter in a nested picture
+/// drawn larger, go in as a raster rather than make krilla allocate gigabytes.
+#[test]
+fn svg_filters_rotated_or_nested_are_exported_within_the_budget() {
+    let rotated = br##"<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><defs><filter id="o" filterUnits="userSpaceOnUse" x="0" y="50" width="100" height="0.02"><feOffset/></filter><filter id="i" filterUnits="userSpaceOnUse" x="-500" y="-500" width="1000" height="1000"><feFlood flood-color="red"/></filter></defs><g transform="rotate(90 50 50)"><g filter="url(#o)"><rect width="100" height="100" filter="url(#i)"/></g></g></svg>"##;
+    let raw = pdf_with_svg(rotated, 75.0);
+    assert!(raw.contains("/Width 150") || raw.contains("0.8156"), "rotated: a raster of the picture or the grey box");
+}

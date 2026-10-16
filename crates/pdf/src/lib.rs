@@ -1720,7 +1720,9 @@ fn svg_picture(s: &mut Surface, svg: &wordcraft_svg::Svg, rect: &Rect, crop: &[f
     let t = s.cur_transform();
     let page = t.sx().hypot(t.ky()).max(t.kx().hypot(t.sy()));
     let scale = page * (size.width() / sw).max(size.height() / sh);
-    let drawn = if svg.pdf_vectors_fit(scale) {
+    // krilla decodes the raster images an SVG holds when it writes the file: one it can't decode
+    // would fail the whole export (review 11 I-8), so they are tried first.
+    let drawn = if svg.pdf_vectors_fit(scale) && svg.raster_images().iter().all(image_decodes) {
         s.draw_svg(svg.tree(), size, SvgSettings { embed_text: false, filter_scale: 2.0 })
     } else {
         svg_raster(svg, size, page).map(|img| s.draw_image(img, size))
@@ -1785,6 +1787,16 @@ fn load_image(data: &Arc<Vec<u8>>) -> Option<Image> {
         return Image::from_jpeg(data.clone().into(), true).ok();
     }
     Some(Image::from_rgba8(dec.to_rgba8().into_raw(), w, h))
+}
+
+/// Whether a picture decodes within the same limits as [`load_image`].
+fn image_decodes(data: &Arc<Vec<u8>>) -> bool {
+    let Ok(mut reader) = image::ImageReader::new(std::io::Cursor::new(data.as_slice())).with_guessed_format() else { return false };
+    let mut limits = image::Limits::default();
+    limits.max_image_width = Some(MAX_IMAGE_SIDE);
+    limits.max_image_height = Some(MAX_IMAGE_SIDE);
+    reader.limits(limits);
+    reader.decode().is_ok()
 }
 
 #[cfg(test)]

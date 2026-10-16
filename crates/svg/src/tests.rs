@@ -1353,3 +1353,70 @@ fn ordinary_pictures_draw_at_full_size() {
     assert!(svg.draw_bytes(2048, 2048, [20.48, 0.0, 0.0, 20.48, 0.0, 0.0]) <= MAX_DRAW_BYTES);
     assert!(svg.pdf_vectors_fit(4.0));
 }
+
+/// Review 11 C-13: a raster side of one pixel can't shrink, so the estimate is for the size drawn:
+/// a thin picture's PNG fallback, and a strip of a picture (the rows the window shows).
+#[test]
+fn thin_rasters_are_estimated_as_drawn() {
+    let thin = r##"<svg xmlns="http://www.w3.org/2000/svg" width="100000" height="1"><filter id="f" filterUnits="userSpaceOnUse" x="0" y="-50000000" width="100000" height="100000000"><feFlood flood-color="red"/></filter><rect width="100000" height="1" filter="url(#f)"/></svg>"##;
+    let _ = fallback_png(thin.as_bytes());
+    let d = pic(
+        r##"<filter id="f" filterUnits="userSpaceOnUse" x="-50000" y="-50000" width="100000" height="100000"><feFlood flood-color="red"/></filter><rect width="50" height="50" filter="url(#f)"/>"##,
+    );
+    let svg = parse(d.as_bytes()).unwrap();
+    for rows in [1u32, 3] {
+        let _ = svg.render(1024, rows, [10.24, 0.0, 0.0, 10.24, 0.0, 0.0]);
+    }
+}
+
+/// Review 11 I-7: tiny-skia measures the curves themselves; the lines through their points can be
+/// much longer, so a count past a million is still up to a million dashes, each with its caps.
+#[test]
+fn dashes_count_whatever_the_curve() {
+    let cur = format!("M500 500{}", " c500 0 -500 0 0 0".repeat(900));
+    let d = format!(
+        r##"<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="1000"><path d="{cur}" fill="none" stroke="black" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="0.3 0.3"/></svg>"##
+    );
+    let svg = parse(d.as_bytes()).unwrap();
+    // About a million dashes, each with two round caps: past the budget, as tiny-skia's 1.1 GB.
+    assert!(svg.draw_bytes(1024, 1024, [1.024, 0.0, 0.0, 1.024, 0.0, 0.0]) > MAX_DRAW_BYTES);
+    let _ = svg.render(1024, 1024, [1.024, 0.0, 0.0, 1.024, 0.0, 0.0]);
+}
+
+/// Review 11 C-14: krilla-svg's raster scale for a filter is bounded from above: a rotated thin
+/// layer, and a filter in a nested picture drawn 100 times larger, don't fit as vectors.
+#[test]
+fn pdf_filter_scale_is_bounded_from_above() {
+    let rotated = pic(
+        r##"<defs><filter id="o" filterUnits="userSpaceOnUse" x="0" y="50" width="100" height="0.02"><feOffset/></filter><filter id="i" filterUnits="userSpaceOnUse" x="-500" y="-500" width="1000" height="1000"><feFlood flood-color="red"/></filter></defs><g transform="rotate(90 50 50)"><g filter="url(#o)"><rect width="100" height="100" filter="url(#i)"/></g></g>"##,
+    );
+    assert!(!parse(rotated.as_bytes()).unwrap().pdf_vectors_fit(1.0));
+    let inner = r##"<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"><filter id="o" x="0" y="0" width="1" height="1"><feOffset/></filter><filter id="i" filterUnits="userSpaceOnUse" x="-500" y="-500" width="1000" height="1000"><feFlood flood-color="red"/></filter><g filter="url(#o)"><rect width="1" height="1" filter="url(#i)"/></g></svg>"##;
+    let nested = pic(&format!(r#"<image width="100" height="100" href="data:image/svg+xml;base64,{}"/>"#, base64_encode(inner.as_bytes())));
+    assert!(!parse(nested.as_bytes()).unwrap().pdf_vectors_fit(1.0));
+    // An ordinary blur stays vectors.
+    let blur = pic(r##"<filter id="b"><feGaussianBlur stdDeviation="2"/></filter><circle cx="50" cy="50" r="30" filter="url(#b)"/>"##);
+    assert!(parse(blur.as_bytes()).unwrap().pdf_vectors_fit(3.0));
+}
+
+/// A PNG whose header says `w` × `h` (its pixel data cut short).
+fn png_header(w: u32, h: u32) -> Vec<u8> {
+    let mut v = b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR".to_vec();
+    v.extend_from_slice(&w.to_be_bytes());
+    v.extend_from_slice(&h.to_be_bytes());
+    v.extend_from_slice(&[8, 6, 0, 0, 0, 0, 0, 0, 0]);
+    v.extend_from_slice(b"\0\0\0\x01IDAT\0\0\0\0\0");
+    v
+}
+
+/// Review 11 C-15: a raster image in the picture is checked by its header before krilla decodes
+/// it for a PDF: one past the budget, or unreadable, means no vectors.
+#[test]
+fn pdf_embedded_images_are_checked() {
+    let with = |png: &[u8]| pic(&format!(r#"<image width="100" height="100" href="data:image/png;base64,{}"/>"#, base64_encode(png)));
+    let big = parse(with(&png_header(30_000, 30_000)).as_bytes()).unwrap();
+    assert!(!big.pdf_vectors_fit(1.0));
+    assert_eq!(big.raster_images().len(), 1);
+    let small = parse(with(&png_header(100, 100)).as_bytes()).unwrap();
+    assert!(small.pdf_vectors_fit(1.0));
+}

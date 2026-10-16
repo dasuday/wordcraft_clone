@@ -1078,18 +1078,20 @@ impl Svg {
         let ts = resvg::tiny_skia::Transform::from_row(sx, ky, kx, sy, tx, ty);
         // What resvg will hold to draw it (review 10): past the budget, draw it smaller and scale
         // it up; if even a few pixels are past it, not at all (the caller draws a placeholder).
-        let need =
-            |w: u32, h: u32, k: f32| cost::draw_bytes(self.tree.root(), ts.post_scale(k, k), w, h).saturating_add(u64::from(w) * u64::from(h) * 4);
-        if need(width, height, 1.0) <= MAX_DRAW_BYTES {
+        if cost::draw_bytes(self.tree.root(), ts, width, height).saturating_add(u64::from(width) * u64::from(height) * 4) <= MAX_DRAW_BYTES {
             let mut pm = resvg::tiny_skia::Pixmap::new(width, height)?;
             resvg::render(&self.tree, ts, &mut pm.as_mut());
             return Some(pm);
         }
+        // The size drawn, and the estimate for exactly that size (review 11 C-13: a side already
+        // one pixel wide stays one pixel, so the scale on it doesn't shrink).
         let mut k = 1.0f32;
         let (w, h) = loop {
             k *= 0.5;
             let (w, h) = (((width as f32 * k) as u32).max(1), ((height as f32 * k) as u32).max(1));
-            if need(w, h, k) <= MAX_DRAW_BYTES {
+            let (kx_, ky_) = (w as f32 / width as f32, h as f32 / height as f32);
+            let need = cost::draw_bytes(self.tree.root(), ts.post_scale(kx_, ky_), w, h).saturating_add(u64::from(w) * u64::from(h) * 4);
+            if need <= MAX_DRAW_BYTES {
                 break (w, h);
             }
             if w == 1 && h == 1 {
@@ -1106,52 +1108,133 @@ impl Svg {
     }
 
     /// Whether krilla-svg can draw it into a PDF as vectors within the memory budget, at `scale`
-    /// PDF units per SVG user unit where it is placed (review 10 C-11). krilla-svg draws
-    /// everything as vectors but a group with filters, which it rasterises with resvg at twice
-    /// that scale (at most 5,000 pixels a side), and resvg then holds what [`cost`] works out.
+    /// PDF units per SVG user unit where it is placed (the norm of the transform there).
+    ///
+    /// krilla-svg draws everything as vectors but a group with filters, which it rasterises with
+    /// resvg, and the raster images it holds, which it decodes. Rather than follow krilla's own
+    /// scale (review 11 C-14), this bounds it from above: krilla scales a filter group's layer by
+    /// how its bounds map onto the page, at most the norm of every transform above it (nested
+    /// pictures' placements included) times the layer's longer side over its shorter (a
+    /// rotated thin layer), twice over, and at most 5,000 pixels a side. resvg's work at that
+    /// scale ([`cost`]) and krilla's copies must fit the budget. Every raster image must have a
+    /// readable header and a decoded size within the budget (review 11 C-15).
     pub fn pdf_vectors_fit(&self, scale: f32) -> bool {
-        const FILTER_SCALE: f32 = 2.0;
-        const MAX_SIDE: f32 = 5000.0;
+        const FILTER_SCALE: f64 = 2.0;
+        const MAX_SIDE: f64 = 5000.0;
         if !scale.is_finite() || scale <= 0.0 {
             return false;
         }
+        // An upper bound on a transform's stretch (its Frobenius norm).
+        let norm = |t: resvg::tiny_skia::Transform| {
+            let n = f64::from(t.sx).hypot(f64::from(t.ky)).hypot(f64::from(t.kx).hypot(f64::from(t.sy)));
+            if n.is_finite() { n } else { f64::INFINITY }
+        };
+        let mut stack: Vec<(&usvg::Group, f64)> = vec![(self.tree.root(), f64::from(scale))];
+        let mut seen = 0u64;
+        while let Some((g, n)) = stack.pop() {
+            seen += 1;
+            if seen > 1 << 22 || !n.is_finite() {
+                return false;
+            }
+            let inside = n * norm(g.transform());
+            if !g.filters().is_empty()
+                && let Some(lb) = g.layer_bounding_box().transform(g.transform())
+            {
+                let (lw, lh) = (f64::from(lb.width()), f64::from(lb.height()));
+                let rs = (FILTER_SCALE * n * (lw + lh) / lw.min(lh)).min(MAX_SIDE / lw).min(MAX_SIDE / lh);
+                let (w, h) = ((lw * rs).ceil(), (lh * rs).ceil());
+                if !(rs.is_finite() && w.is_finite() && h.is_finite()) {
+                    return false;
+                }
+                if w >= 1.0 && h >= 1.0 {
+                    let (w, h) = (w as u32, h as u32);
+                    let ts = resvg::tiny_skia::Transform::from_scale(rs as f32, rs as f32).pre_translate(-lb.x(), -lb.y());
+                    // Its raster, the copies krilla makes of it, and resvg's work.
+                    let raster = u64::from(w) * u64::from(h) * 4;
+                    if cost::node_bytes(g, ts, w, h).saturating_add(raster.saturating_mul(3)) > MAX_DRAW_BYTES {
+                        return false;
+                    }
+                }
+            }
+            let mut clip = g.clip_path();
+            while let Some(c) = clip {
+                stack.push((c.root(), inside * norm(c.transform())));
+                clip = c.clip_path();
+            }
+            let mut mask = g.mask();
+            while let Some(m) = mask {
+                stack.push((m.root(), inside));
+                mask = m.mask();
+            }
+            for f in g.filters() {
+                for p in f.primitives() {
+                    if let usvg::filter::Kind::Image(img) = p.kind() {
+                        stack.push((img.root(), inside));
+                    }
+                }
+            }
+            for c in g.children() {
+                match c {
+                    usvg::Node::Group(cg) => stack.push((cg, inside)),
+                    usvg::Node::Text(t) => stack.push((t.flattened(), inside)),
+                    usvg::Node::Path(p) => {
+                        for paint in [p.fill().map(|f| f.paint()), p.stroke().map(|s| s.paint())].into_iter().flatten() {
+                            if let usvg::Paint::Pattern(pat) = paint {
+                                stack.push((pat.root(), inside * norm(pat.transform())));
+                            }
+                        }
+                    }
+                    usvg::Node::Image(img) => match img.kind() {
+                        usvg::ImageKind::SVG(tree) => {
+                            // Placed at the image's size: at most that much larger again.
+                            let (iw, ih) = (f64::from(img.size().width()), f64::from(img.size().height()));
+                            let (tw, th) = (f64::from(tree.size().width()), f64::from(tree.size().height()));
+                            let k = (iw / tw).max(ih / th).max(1.0) * std::f64::consts::SQRT_2;
+                            stack.push((tree.root(), inside * k));
+                        }
+                        kind => {
+                            let data = match kind {
+                                usvg::ImageKind::JPEG(d) | usvg::ImageKind::PNG(d) | usvg::ImageKind::GIF(d) | usvg::ImageKind::WEBP(d) => d,
+                                usvg::ImageKind::SVG(_) => continue,
+                            };
+                            // krilla decodes it, then converts and compresses a copy.
+                            let Ok(size) = imagesize::blob_size(data) else { return false };
+                            let bytes = (size.width as u64).saturating_mul(size.height as u64).saturating_mul(4);
+                            if size.width == 0 || size.height == 0 || bytes.saturating_mul(3) > MAX_DRAW_BYTES {
+                                return false;
+                            }
+                        }
+                    },
+                }
+            }
+        }
+        true
+    }
+
+    /// The raster images (JPEG, PNG, GIF, WebP data) the picture draws, nested pictures' and
+    /// those in clip paths, masks, patterns and filters included, each once.
+    pub fn raster_images(&self) -> Vec<std::sync::Arc<Vec<u8>>> {
+        let mut out: Vec<std::sync::Arc<Vec<u8>>> = Vec::new();
         let mut stack: Vec<&usvg::Group> = vec![self.tree.root()];
         let mut seen = 0u64;
         while let Some(g) = stack.pop() {
             seen += 1;
             if seen > 1 << 22 {
-                return false;
+                break;
             }
             for n in g.children() {
                 if let usvg::Node::Group(cg) = n {
                     stack.push(cg);
                 }
-            }
-            for n in g.children() {
                 push_subroots(n, &mut stack);
-            }
-            if g.filters().is_empty() {
-                continue;
-            }
-            // krilla-svg's raster for it: the group's layer, at the page scale times its
-            // transforms, twice over, at most 5,000 pixels a side.
-            let Some(lb) = g.layer_bounding_box().transform(g.transform()) else { continue };
-            let (ax, ay) = g.abs_transform().get_scale();
-            let (ox, oy) = g.transform().get_scale();
-            let mut rs = scale * FILTER_SCALE * ax.max(ay).max(ax / ox.max(f32::MIN_POSITIVE)).max(ay / oy.max(f32::MIN_POSITIVE));
-            rs = rs.min(MAX_SIDE / lb.width()).min(MAX_SIDE / lb.height());
-            let (w, h) = ((lb.width() * rs).round(), (lb.height() * rs).round());
-            if !(w.is_finite() && h.is_finite() && rs.is_finite()) || w < 1.0 || h < 1.0 {
-                continue;
-            }
-            let (w, h) = (w as u32, h as u32);
-            let ts = resvg::tiny_skia::Transform::from_scale(rs, rs).pre_translate(-lb.x(), -lb.y());
-            // Its raster, a copy krilla makes of it, and resvg's work.
-            let raster = u64::from(w) * u64::from(h) * 4;
-            if cost::node_bytes(g, ts, w, h).saturating_add(raster.saturating_mul(3)) > MAX_DRAW_BYTES {
-                return false;
+                if let usvg::Node::Image(img) = n
+                    && let usvg::ImageKind::JPEG(d) | usvg::ImageKind::PNG(d) | usvg::ImageKind::GIF(d) | usvg::ImageKind::WEBP(d) = img.kind()
+                    && !out.iter().any(|o| std::sync::Arc::ptr_eq(o, d))
+                {
+                    out.push(d.clone());
+                }
             }
         }
-        true
+        out
     }
 }
