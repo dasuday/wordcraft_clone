@@ -2632,3 +2632,7 @@ preview	Title	Naslov
 	Bottom Right Cell	Donja desna ćelija
 	Inside Horizontal Border	Unutarnji vodoravni obrub
 	Inside Vertical Border	Unutarnji okomiti obrub
+
+# Backstage › Recover: size limits (#2456)
+	This document is too large for a recovery copy. WordCraft tries again after the next edit.	Ovaj je dokument prevelik za kopiju za oporavak. WordCraft će pokušati ponovno nakon sljedeće izmjene.
+	The recovery folder is full. Discard older copies to make room. WordCraft tries again after the next edit.	Mapa za oporavak je puna. Odbacite starije kopije kako biste oslobodili prostor. WordCraft će pokušati ponovno nakon sljedeće izmjene.

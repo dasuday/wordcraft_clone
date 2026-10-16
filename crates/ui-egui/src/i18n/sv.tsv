@@ -2647,3 +2647,7 @@ preview	Title	Titel
 	Bottom Right Cell	Nedre högra cellen
 	Inside Horizontal Border	Inre vågrät kantlinje
 	Inside Vertical Border	Inre lodrät kantlinje
+
+# Backstage › Recover: size limits (#2456)
+	This document is too large for a recovery copy. WordCraft tries again after the next edit.	Dokumentet är för stort för en återställningskopia. WordCraft försöker igen efter nästa ändring.
+	The recovery folder is full. Discard older copies to make room. WordCraft tries again after the next edit.	Återställningsmappen är full. Kassera äldre kopior för att frigöra utrymme. WordCraft försöker igen efter nästa ändring.

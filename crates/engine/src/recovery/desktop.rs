@@ -1,7 +1,7 @@
 use super::RecoveryInfo;
 use crate::Session;
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, BufReader, BufWriter, Read, Write};
 use std::path::{Path, PathBuf};
@@ -16,6 +16,50 @@ const MAX_FILES: usize = 16;
 const DISK_BUDGET: u64 = 2 << 30;
 /// Times a record lock held for a moment (by a process being started) is tried again.
 const LOCK_RETRIES: u32 = 10;
+
+/// Size caps on snapshot files, smaller in tests.
+#[derive(Clone, Copy)]
+struct Limits {
+    /// Encoded bytes in one snapshot.
+    snapshot: u64,
+    /// Snapshot bytes in the whole recovery folder.
+    folder: u64,
+}
+const LIMITS: Limits = Limits { snapshot: MAX_BYTES, folder: DISK_BUDGET };
+
+/// Why a worker job failed.
+#[derive(Debug)]
+enum Failure {
+    /// The snapshot passed `limit` (the folder's remaining room if `folder`) at `at_least` bytes.
+    TooLarge {
+        at_least: u64,
+        limit: u64,
+        folder: bool,
+    },
+    Other(String),
+}
+impl From<String> for Failure {
+    fn from(e: String) -> Self {
+        Self::Other(e)
+    }
+}
+impl From<&str> for Failure {
+    fn from(e: &str) -> Self {
+        Self::Other(e.into())
+    }
+}
+/// The File › Recover message for a snapshot that didn't fit.
+fn size_message(folder: bool) -> &'static str {
+    if folder { super::FOLDER_FULL_MESSAGE } else { super::TOO_LARGE_MESSAGE }
+}
+impl From<Failure> for String {
+    fn from(f: Failure) -> Self {
+        match f {
+            Failure::TooLarge { folder, .. } => size_message(folder).into(),
+            Failure::Other(e) => e,
+        }
+    }
+}
 
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -34,6 +78,12 @@ struct Store {
     entries: BTreeMap<String, Entry>,
     // Advisory locks prevent another running instance from restoring/discarding a live copy.
     locks: BTreeMap<String, File>,
+    limits: Limits,
+    /// Records whose last snapshot didn't fit: the next is measured before anything is written.
+    oversize: BTreeSet<String>,
+    /// Temporary files created, so tests can tell an attempt wrote nothing.
+    #[cfg(test)]
+    temp_files: usize,
 }
 fn private_dir(path: &Path) -> io::Result<()> {
     let mut b = fs::DirBuilder::new();
@@ -100,7 +150,15 @@ fn read_snapshot(path: &Path) -> Result<Snapshot, String> {
 impl Store {
     fn new(root: PathBuf) -> Result<Self, String> {
         private_dir(&root).map_err(|e| e.to_string())?;
-        Ok(Self { root, entries: BTreeMap::new(), locks: BTreeMap::new() })
+        Ok(Self {
+            root,
+            entries: BTreeMap::new(),
+            locks: BTreeMap::new(),
+            limits: LIMITS,
+            oversize: BTreeSet::new(),
+            #[cfg(test)]
+            temp_files: 0,
+        })
     }
     fn directories(&self) -> Result<Vec<PathBuf>, String> {
         let mut dirs = Vec::new();
@@ -222,8 +280,9 @@ impl Store {
         }
         Ok(used)
     }
-    fn save(&mut self, s: Snapshot) -> Result<(), String> {
+    fn save(&mut self, s: Snapshot) -> Result<(), Failure> {
         let id = s.info.id.clone();
+        let measured = self.oversize.contains(&id);
         let result = self.write_snapshot(s);
         // Include failures before temp-file creation (quota checks, locking, etc.).
         // A record containing any committed generation is never removed here.
@@ -233,9 +292,21 @@ impl Store {
         {
             log::warn!("recovery: cannot remove failed empty record: {e}");
         }
+        // Other failures say nothing about size, so they keep the measuring.
+        if matches!(result, Err(Failure::TooLarge { .. })) || (measured && result.is_err()) {
+            self.oversize.insert(id);
+        } else {
+            self.oversize.remove(&id);
+        }
         result
     }
-    fn write_snapshot(&mut self, mut s: Snapshot) -> Result<(), String> {
+    fn write_snapshot(&mut self, mut s: Snapshot) -> Result<(), Failure> {
+        let room = self.limits.folder.saturating_sub(self.disk_used()?);
+        let cap = self.limits.snapshot;
+        // After a snapshot that didn't fit, measure the next in memory before touching its record.
+        if self.oversize.contains(&s.info.id) {
+            encode(io::sink(), &s, room, cap)?;
+        }
         let dir = self.root.join(&s.info.id);
         if !dir.exists() {
             if self.directories()?.len() >= MAX_RECORDS {
@@ -250,16 +321,18 @@ impl Store {
         }
         s.generation = files.first().and_then(|p| generation(p)).unwrap_or(0).checked_add(1).ok_or("recovery generation overflow")?;
         let previous = self.entries.get(&s.info.id).map(|e| e.path.clone());
-        let limit = MAX_BYTES.min(DISK_BUDGET.saturating_sub(self.disk_used()?));
         let tmp = dir.join(format!("pending-{}.tmp", new_id()?));
         let final_path = dir.join(format!("snapshot-{:020}.json", s.generation));
-        let result = (|| {
+        #[cfg(test)]
+        {
+            self.temp_files += 1;
+        }
+        let result = (|| -> Result<(), Failure> {
             let file = private_file(&tmp, true).map_err(|e| e.to_string())?;
-            let mut writer = Limited { inner: BufWriter::new(file), remaining: limit };
-            serde_json::to_writer(&mut writer, &s).map_err(|e| e.to_string())?;
-            writer.flush().map_err(|e| e.to_string())?;
-            writer.inner.get_ref().sync_all().map_err(|e| e.to_string())?;
-            drop(writer);
+            let mut out = encode(BufWriter::new(file), &s, room, cap)?;
+            out.flush().map_err(|e| e.to_string())?;
+            out.get_ref().sync_all().map_err(|e| e.to_string())?;
+            drop(out);
             let check = read_snapshot(&tmp)?;
             if check.document != s.document {
                 return Err("recovery format did not preserve the full document".into());
@@ -291,6 +364,7 @@ impl Store {
         if !id_ok(id) {
             return Err("invalid recovery id".into());
         }
+        self.oversize.remove(id);
         let dir = self.root.join(id);
         if !dir.exists() {
             self.entries.remove(id);
@@ -328,19 +402,37 @@ impl Store {
 }
 struct Limited<W> {
     inner: W,
-    remaining: u64,
+    /// Bytes past this are counted, not written.
+    limit: u64,
+    /// Writing fails once the count passes this.
+    cap: u64,
+    count: u64,
 }
 impl<W: Write> Write for Limited<W> {
     fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
-        if bytes.len() as u64 > self.remaining {
-            return Err(io::Error::other("recovery snapshot or folder size limit exceeded"));
+        let total = self.count.saturating_add(bytes.len() as u64);
+        if total > self.cap {
+            self.count = total;
+            return Err(io::Error::other("recovery snapshot size limit exceeded"));
         }
-        let n = self.inner.write(bytes)?;
-        self.remaining -= n as u64;
+        let n = if total > self.limit { bytes.len() } else { self.inner.write(bytes)? };
+        self.count = self.count.saturating_add(n as u64);
         Ok(n)
     }
     fn flush(&mut self) -> io::Result<()> {
         self.inner.flush()
+    }
+}
+/// Encode `s` into `out`, writing at most `room` bytes and counting on to `cap` to tell a full
+/// folder from a snapshot over the cap.
+fn encode<W: Write>(out: W, s: &Snapshot, room: u64, cap: u64) -> Result<W, Failure> {
+    let limit = room.min(cap);
+    let mut w = Limited { inner: out, limit, cap, count: 0 };
+    match serde_json::to_writer(&mut w, s) {
+        Ok(()) if w.count <= limit => Ok(w.inner),
+        Ok(()) => Err(Failure::TooLarge { at_least: w.count, limit, folder: true }),
+        Err(_) if w.count > cap => Err(Failure::TooLarge { at_least: w.count, limit: cap, folder: false }),
+        Err(e) => Err(Failure::Other(e.to_string())),
     }
 }
 enum Job {
@@ -356,7 +448,7 @@ enum Outcome {
 }
 struct Event {
     documents: Vec<RecoveryInfo>,
-    outcome: Result<Outcome, String>,
+    outcome: Result<Outcome, Failure>,
 }
 pub(crate) struct Recovery {
     tx: mpsc::SyncSender<Job>,
@@ -370,9 +462,18 @@ pub(crate) struct Recovery {
     revision: Option<u64>,
     due: Instant,
     alive: bool,
+    /// The document whose too-large snapshot was logged, so the warning appears once per document.
+    warned: Option<u64>,
+    /// The document of the snapshot under way.
+    saving: Option<u64>,
+    /// `Some(folder_full)` while the current document's last snapshot doesn't fit.
+    too_large: Option<bool>,
 }
 impl Recovery {
     pub fn start(root: PathBuf, wake: Arc<dyn Fn() + Send + Sync>) -> Result<Self, String> {
+        Self::start_with(root, wake, LIMITS)
+    }
+    fn start_with(root: PathBuf, wake: Arc<dyn Fn() + Send + Sync>, limits: Limits) -> Result<Self, String> {
         let (tx, jobs) = mpsc::sync_channel(1);
         let (events, rx) = mpsc::channel();
         std::thread::Builder::new()
@@ -381,12 +482,13 @@ impl Recovery {
                 let mut store = match Store::new(root) {
                     Ok(s) => s,
                     Err(e) => {
-                        let _ = events.send(Event { documents: Vec::new(), outcome: Err(e) });
+                        let _ = events.send(Event { documents: Vec::new(), outcome: Err(e.into()) });
                         wake();
                         return;
                     }
                 };
-                let initial = store.scan().map(|_| Outcome::Done);
+                store.limits = limits;
+                let initial = store.scan().map(|_| Outcome::Done).map_err(Failure::Other);
                 if events.send(Event { documents: store.inventory(), outcome: initial }).is_err() {
                     return;
                 }
@@ -394,9 +496,9 @@ impl Recovery {
                 while let Ok(job) = jobs.recv() {
                     let result = match job {
                         Job::Save(s) => store.save(*s).map(|_| Outcome::Done),
-                        Job::Scan => store.scan().map(|_| Outcome::Done),
-                        Job::Load(id, expected) => store.load(&id).map(|s| Outcome::Loaded(Box::new(s), expected)),
-                        Job::Discard(id) => store.discard(&id).map(|_| Outcome::Discarded(id)),
+                        Job::Scan => store.scan().map(|_| Outcome::Done).map_err(Failure::Other),
+                        Job::Load(id, expected) => store.load(&id).map(|s| Outcome::Loaded(Box::new(s), expected)).map_err(Failure::Other),
+                        Job::Discard(id) => store.discard(&id).map(|_| Outcome::Discarded(id)).map_err(Failure::Other),
                     };
                     if events.send(Event { documents: store.inventory(), outcome: result }).is_err() {
                         break;
@@ -417,6 +519,9 @@ impl Recovery {
             revision: None,
             due: Instant::now() + INTERVAL,
             alive: true,
+            warned: None,
+            saving: None,
+            too_large: None,
         })
     }
     fn queue(&mut self, job: Job) -> Result<(), String> {
@@ -431,23 +536,54 @@ impl Recovery {
         self.error = None;
         Ok(())
     }
+    /// The error to show: the last job's, else why the document has no recovery copy.
+    pub fn message(&self) -> Option<&str> {
+        self.error.as_deref().or(self.too_large.map(size_message))
+    }
     pub fn poll(&mut self) -> Option<(Snapshot, (u64, u64))> {
         match self.rx.try_recv() {
             Ok(e) => {
                 self.busy = false;
                 self.ready = true;
                 self.documents = e.documents;
+                let saved = self.saving.take();
+                if saved.is_some() {
+                    self.too_large = None;
+                }
                 match e.outcome {
-                    Ok(Outcome::Done) => None,
+                    Ok(Outcome::Done) => {
+                        // A rescan may show room freed elsewhere, so a full folder is tried again.
+                        if self.too_large == Some(true) {
+                            self.revision = None;
+                        }
+                        None
+                    }
                     Ok(Outcome::Discarded(id)) => {
                         if self.id.as_deref() == Some(&id) {
                             self.id = None;
+                        } else if self.too_large == Some(true) {
+                            // Discarding another copy frees room in a full folder.
+                            self.revision = None;
                         }
                         None
                     }
                     Ok(Outcome::Loaded(s, expected)) => Some((*s, expected)),
+                    Err(Failure::TooLarge { at_least, limit, folder }) => {
+                        if self.warned != saved {
+                            self.warned = saved;
+                            let cap = if folder { "remaining folder" } else { "snapshot" };
+                            log::warn!("recovery: snapshot reached {at_least} bytes, over the {limit}-byte {cap} limit; this revision gets no copy");
+                        }
+                        // A late result for a document no longer open says nothing about this one.
+                        if saved.is_some() && saved == self.document {
+                            // Keep the attempted revision: only an edit tries again.
+                            self.too_large = Some(folder);
+                            self.due = Instant::now() + INTERVAL;
+                        }
+                        None
+                    }
                     Err(e) => {
-                        self.error = Some(e);
+                        self.error = Some(e.into());
                         self.revision = None;
                         self.due = Instant::now() + INTERVAL;
                         None
@@ -466,6 +602,7 @@ impl Recovery {
         }
     }
     pub fn adopt(&mut self, id: String, document: u64, revision: u64) {
+        self.too_large = None;
         self.id = Some(id);
         self.document = Some(document);
         self.revision = Some(revision);
@@ -476,11 +613,13 @@ impl Recovery {
             self.document = Some(s.document_id());
             self.id = None;
             self.revision = None;
+            self.too_large = None;
         }
         if self.busy || !self.ready || !self.alive {
             return Ok(());
         }
         if !s.dirty || s.password.is_some() {
+            self.too_large = None;
             if let Some(id) = self.id.clone() {
                 self.queue(Job::Discard(id))?;
             }
@@ -496,6 +635,7 @@ impl Recovery {
         let name = s.path.as_ref().and_then(|p| p.file_name()).map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| "Untitled draft".into());
         let info = RecoveryInfo { id: id.clone(), name, saved_at: crate::cmd::now_iso() };
         self.queue(Job::Save(Box::new(Snapshot { version: 1, info, generation: 0, document: s.doc.clone() })))?;
+        self.saving = self.document;
         self.id = Some(id);
         self.revision = Some(s.rev());
         self.due = now + INTERVAL;
@@ -536,6 +676,7 @@ impl Recovery {
             self.documents = e.documents;
             self.busy = false;
             self.ready = true;
+            self.saving = None;
             if matches!(e.outcome, Ok(Outcome::Loaded(..))) {
                 return Err("finish recovery before protecting this document".into());
             }
@@ -547,6 +688,7 @@ impl Recovery {
         e.outcome?;
         self.id = None;
         self.revision = None;
+        self.too_large = None;
         Ok(())
     }
 }
@@ -627,6 +769,21 @@ mod tests {
         s.recovery_tick();
         settle(s);
     }
+    /// A session whose recovery worker uses `limits` instead of the real caps.
+    fn limited_session(root: &Path, limits: Limits) -> Session {
+        let mut s = Session::new(Document::new());
+        s.recovery = Some(Recovery::start_with(root.to_owned(), Arc::new(|| {}), limits).unwrap());
+        settle(&mut s);
+        s
+    }
+    /// Tick with the interval elapsed and report whether a snapshot was queued.
+    fn attempts(s: &mut Session) -> bool {
+        s.recovery.as_mut().unwrap().due = Instant::now();
+        s.recovery_tick();
+        let queued = s.recovery_busy();
+        settle(s);
+        queued
+    }
 
     #[test]
     fn recovery_commands_only_address_known_profile_records() {
@@ -690,9 +847,15 @@ mod tests {
 
     #[test]
     fn size_limit_and_lossy_values_fail_without_committing() {
-        let mut out = Limited { inner: Vec::new(), remaining: 3 };
+        let mut out = Limited { inner: Vec::new(), limit: 3, cap: 3, count: 0 };
         assert!(out.write_all(b"four").is_err());
         assert!(out.inner.is_empty());
+        assert_eq!(out.count, 4);
+        // Past the limit but under the cap, bytes are counted and not written.
+        let mut out = Limited { inner: Vec::new(), limit: 2, cap: 8, count: 0 };
+        out.write_all(b"four").unwrap();
+        assert!(out.inner.is_empty());
+        assert_eq!(out.count, 4);
         let t = Temp::new();
         let id = new_id().unwrap();
         let mut store = Store::new(t.0.clone()).unwrap();
@@ -704,6 +867,181 @@ mod tests {
         assert!(store.save(invalid).is_err());
         assert_eq!(fs::read(first).unwrap(), bytes);
         assert_eq!(Store::files(&t.0.join(id)).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn a_snapshot_that_did_not_fit_is_measured_before_anything_is_written() {
+        let t = Temp::new();
+        let id = new_id().unwrap();
+        let mut store = Store::new(t.0.clone()).unwrap();
+        let small = snapshot(&id, "Small synthetic draft");
+        let limit = serde_json::to_vec(&small).unwrap().len() as u64 + 1024;
+        store.limits.snapshot = limit;
+        store.save(small).unwrap();
+        let first = store.entries[&id].path.clone();
+        let bytes = fs::read(&first).unwrap();
+        let large = || snapshot(&id, &"Synthetic words ".repeat(400));
+        match store.save(large()) {
+            Err(Failure::TooLarge { at_least, limit: l, folder: false }) => assert!(l == limit && at_least > limit, "{at_least} {l}"),
+            other => panic!("expected a size failure, got {other:?}"),
+        }
+        assert_eq!(store.temp_files, 2);
+        // Still too large: measured in memory, and no file is written.
+        assert!(matches!(store.save(large()), Err(Failure::TooLarge { folder: false, .. })));
+        assert_eq!(store.temp_files, 2);
+        assert_eq!(fs::read(&first).unwrap(), bytes);
+        let names: Vec<_> = fs::read_dir(t.0.join(&id)).unwrap().map(|e| e.unwrap().file_name()).collect();
+        assert_eq!(names.len(), 2, "only the lock and the valid copy: {names:?}");
+        // A failure that isn't about size keeps the measuring.
+        let mut lossy = snapshot(&id, "Lossy synthetic draft");
+        lossy.document.last_section.page_w = f32::NAN;
+        assert!(matches!(store.save(lossy), Err(Failure::Other(_))));
+        assert_eq!(store.temp_files, 3);
+        assert!(matches!(store.save(large()), Err(Failure::TooLarge { .. })));
+        assert_eq!(store.temp_files, 3);
+        // Once it fits again it is written.
+        store.save(snapshot(&id, "Smaller synthetic draft")).unwrap();
+        assert_eq!(store.temp_files, 4);
+        assert!(store.oversize.is_empty());
+        assert_eq!(load_retrying(&mut store, &id).document.plain_text(StoryRef::Body), "Smaller synthetic draft");
+    }
+
+    #[test]
+    fn a_full_recovery_folder_is_reported_as_full() {
+        let t = Temp::new();
+        let mut store = Store::new(t.0.clone()).unwrap();
+        store.save(snapshot(&new_id().unwrap(), "First synthetic draft")).unwrap();
+        store.limits.folder = store.disk_used().unwrap() + 64;
+        let second = new_id().unwrap();
+        let small = snapshot(&second, "Second synthetic draft");
+        let size = serde_json::to_vec(&small).unwrap().len() as u64;
+        let err = store.save(small).unwrap_err();
+        // Counted to the end, so the log gives the snapshot's size.
+        assert!(matches!(err, Failure::TooLarge { at_least, limit: 64, folder: true } if at_least == size), "{err:?}");
+        assert_eq!(String::from(err), crate::recovery::FOLDER_FULL_MESSAGE);
+        assert!(!t.0.join(&second).exists(), "a failed first write leaves no record");
+        // A snapshot over the cap as well is too large, not a full folder.
+        store.limits.snapshot = size;
+        let err = store.save(snapshot(&second, &"Synthetic words ".repeat(400))).unwrap_err();
+        assert!(matches!(err, Failure::TooLarge { limit, folder: false, .. } if limit == size), "{err:?}");
+        assert_eq!(String::from(err), crate::recovery::TOO_LARGE_MESSAGE);
+    }
+
+    #[test]
+    fn a_too_large_document_is_tried_again_only_after_it_changes() {
+        let t = Temp::new();
+        let base = serde_json::to_vec(&Session::new(Document::new()).doc).unwrap().len() as u64;
+        let mut s = limited_session(&t.0, Limits { snapshot: base + 4096, folder: DISK_BUDGET });
+        s.run("text.insert", &json!({"text": "Small synthetic draft"})).unwrap();
+        save_now(&mut s);
+        assert!(s.recovery_error().is_none());
+        let id = s.recovery_documents()[0].id.clone();
+        let first = Store::files(&t.0.join(&id)).unwrap()[0].clone();
+        let bytes = fs::read(&first).unwrap();
+        s.run("text.insert", &json!({"text": " synthetic words".repeat(1000)})).unwrap();
+        save_now(&mut s);
+        assert_eq!(s.recovery_error(), Some(crate::recovery::TOO_LARGE_MESSAGE));
+        assert_eq!(s.recovery.as_ref().unwrap().warned, Some(s.document_id()));
+        // The previous valid copy stays listed and unchanged.
+        assert_eq!(s.recovery_documents().len(), 1);
+        assert_eq!(Store::files(&t.0.join(&id)).unwrap(), vec![first.clone()]);
+        assert_eq!(fs::read(&first).unwrap(), bytes);
+        assert!(s.recovery_wait().is_none(), "no idle wakeups for an unchanged document");
+        // Refreshing the list keeps the message and doesn't retry a document over the cap.
+        s.run("file.recover", &json!({"refresh": true})).unwrap();
+        settle(&mut s);
+        assert_eq!(s.recovery_error(), Some(crate::recovery::TOO_LARGE_MESSAGE));
+        assert!(s.recovery_wait().is_none());
+        // An edit allows one attempt, at the normal interval.
+        s.run("text.insert", &json!({"text": "!"})).unwrap();
+        assert!(s.recovery_wait().is_some());
+        s.recovery_tick();
+        assert!(!s.recovery_busy(), "not before the interval");
+        assert!(attempts(&mut s));
+        assert_eq!(s.recovery_error(), Some(crate::recovery::TOO_LARGE_MESSAGE));
+        // Unchanged: no new attempt, however long it waits.
+        for _ in 0..3 {
+            assert!(!attempts(&mut s), "an unchanged document is not tried again");
+        }
+        assert!(s.recovery_wait().is_none());
+        s.run("text.insert", &json!({"text": "?"})).unwrap();
+        assert!(attempts(&mut s));
+        assert!(!attempts(&mut s), "one attempt per change");
+        assert_eq!(fs::read(&first).unwrap(), bytes);
+    }
+
+    #[test]
+    fn a_full_folder_is_tried_again_when_another_copy_is_discarded() {
+        let t = Temp::new();
+        let ours = serde_json::to_vec(&Session::new(Document::new()).doc).unwrap().len();
+        let other = new_id().unwrap();
+        let mut store = Store::new(t.0.clone()).unwrap();
+        store.save(snapshot(&other, &"Other synthetic draft ".repeat(ours / 10 + 200))).unwrap();
+        let used = store.disk_used().unwrap();
+        drop(store);
+        let mut s = limited_session(&t.0, Limits { snapshot: MAX_BYTES, folder: used + 64 });
+        assert_eq!(s.recovery_documents().len(), 1);
+        s.run("text.insert", &json!({"text": "Synthetic draft"})).unwrap();
+        save_now(&mut s);
+        assert_eq!(s.recovery_error(), Some(crate::recovery::FOLDER_FULL_MESSAGE));
+        assert!(s.recovery_wait().is_none(), "an unchanged document waits");
+        // A refresh keeps the message and allows one retry, which still doesn't fit.
+        s.run("file.recover", &json!({"refresh": true})).unwrap();
+        settle(&mut s);
+        assert_eq!(s.recovery_error(), Some(crate::recovery::FOLDER_FULL_MESSAGE));
+        assert!(s.recovery_wait().is_some());
+        assert!(attempts(&mut s));
+        assert_eq!(s.recovery_error(), Some(crate::recovery::FOLDER_FULL_MESSAGE));
+        assert!(s.recovery_wait().is_none());
+        // Discarding the other copy makes room: the same revision is tried again and fits.
+        s.run("file.recover", &json!({"discard": other})).unwrap();
+        settle(&mut s);
+        assert_eq!(s.recovery_error(), Some(crate::recovery::FOLDER_FULL_MESSAGE));
+        assert!(s.recovery_wait().is_some());
+        assert!(attempts(&mut s));
+        assert!(s.recovery_error().is_none());
+        let documents = s.recovery_documents();
+        assert_eq!(documents.len(), 1);
+        assert_ne!(documents[0].id, other);
+    }
+
+    #[test]
+    fn a_late_size_failure_does_not_show_on_the_next_document() {
+        let t = Temp::new();
+        let base = serde_json::to_vec(&Session::new(Document::new()).doc).unwrap().len() as u64;
+        let mut s = limited_session(&t.0, Limits { snapshot: base + 4096, folder: DISK_BUDGET });
+        s.run("text.insert", &json!({"text": " synthetic words".repeat(1000)})).unwrap();
+        let first = s.document_id();
+        s.recovery.as_mut().unwrap().due = Instant::now();
+        s.recovery_tick();
+        assert!(s.recovery_busy());
+        // The host sees the new document, already edited, before the snapshot's result arrives.
+        s.run("file.new", &json!({})).unwrap();
+        s.run("text.insert", &json!({"text": "Second synthetic draft"})).unwrap();
+        let mut r = s.recovery.take().unwrap();
+        r.tick(&s, Instant::now()).unwrap();
+        s.recovery = Some(r);
+        settle(&mut s);
+        assert!(s.recovery_error().is_none());
+        assert_eq!(s.recovery.as_ref().unwrap().warned, Some(first));
+    }
+
+    #[test]
+    fn other_failures_are_retried_after_the_interval() {
+        let t = Temp::new();
+        let mut s = session(&t.0);
+        s.run("text.insert", &json!({"text": "Synthetic draft"})).unwrap();
+        // A value the format can't keep fails the write's check, not the size limit.
+        s.doc.last_section.page_w = f32::NAN;
+        save_now(&mut s);
+        let error = s.recovery_error().unwrap().to_string();
+        assert_ne!(error, crate::recovery::TOO_LARGE_MESSAGE);
+        assert!(s.recovery_wait().is_some(), "a failed write schedules another");
+        s.recovery_tick();
+        assert!(!s.recovery_busy(), "not before the interval");
+        assert!(attempts(&mut s), "the same revision is tried again");
+        assert!(attempts(&mut s));
+        assert!(s.recovery_documents().is_empty());
     }
 
     #[test]

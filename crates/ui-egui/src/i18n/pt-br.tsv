@@ -2245,3 +2245,7 @@
 # Reading Mode column widths (#1040)
 	Narrow	Estreita
 	Medium	Média
+
+# Backstage › Recover: size limits (#2456)
+	This document is too large for a recovery copy. WordCraft tries again after the next edit.	Este documento é grande demais para uma cópia de recuperação. O WordCraft tentará novamente após a próxima edição.
+	The recovery folder is full. Discard older copies to make room. WordCraft tries again after the next edit.	A pasta de recuperação está cheia. Descarte cópias mais antigas para liberar espaço. O WordCraft tentará novamente após a próxima edição.

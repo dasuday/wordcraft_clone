@@ -2267,3 +2267,7 @@
 # Reading Mode column widths (#1040)
 	Narrow	Kitsas
 	Medium	Keskmine
+
+# Backstage › Recover: size limits (#2456)
+	This document is too large for a recovery copy. WordCraft tries again after the next edit.	See dokument on taastekoopia jaoks liiga suur. WordCraft proovib pärast järgmist muudatust uuesti.
+	The recovery folder is full. Discard older copies to make room. WordCraft tries again after the next edit.	Taastekaust on täis. Loobu vanematest koopiatest, et ruumi vabastada. WordCraft proovib pärast järgmist muudatust uuesti.

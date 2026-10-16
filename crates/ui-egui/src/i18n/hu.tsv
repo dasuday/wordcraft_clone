@@ -2628,3 +2628,7 @@
 # Reading Mode column widths (#1040)
 	Narrow	Keskeny
 	Medium	Közepes
+
+# Backstage › Recover: size limits (#2456)
+	This document is too large for a recovery copy. WordCraft tries again after the next edit.	Ez a dokumentum túl nagy a helyreállítási másolathoz. A WordCraft a következő módosítás után újra megpróbálja.
+	The recovery folder is full. Discard older copies to make room. WordCraft tries again after the next edit.	A helyreállítási mappa megtelt. Vesse el a régebbi másolatokat, hogy helyet szabadítson fel. A WordCraft a következő módosítás után újra megpróbálja.

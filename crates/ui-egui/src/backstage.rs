@@ -167,7 +167,8 @@ fn recovery_page(app: &mut WordApp, ui: &mut Ui) {
         ui.label(tl!("Recovery is disabled while this document has a password."));
     }
     if let Some(error) = app.session.recovery_error() {
-        ui.label(error);
+        // Engine messages are English; the catalog translates the ones it knows.
+        ui.label(tl!(error));
     }
     if !app.session.recovery_ready() {
         ui.label(tl!("Local recovery is unavailable or still loading."));
@@ -537,6 +538,20 @@ mod tests {
         // Worker completion is a state boundary; egui needs subsequent frames to finish
         // font installation/layout and expose the resulting buttons to AccessKit.
         h.run_steps(4);
+    }
+
+    #[test]
+    fn recovery_size_messages_are_translated_in_every_language() {
+        use crate::i18n::{Lang, tr};
+        let mut missing = Vec::new();
+        for l in Lang::all().filter(|l| *l != Lang::EN) {
+            for m in [wordcraft_engine::recovery::TOO_LARGE_MESSAGE, wordcraft_engine::recovery::FOLDER_FULL_MESSAGE] {
+                if tr(l, m) == m {
+                    missing.push(format!("{}: {m}", l.code()));
+                }
+            }
+        }
+        assert!(missing.is_empty(), "untranslated: {missing:#?}");
     }
 
     #[test]

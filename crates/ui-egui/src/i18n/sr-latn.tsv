@@ -2243,3 +2243,7 @@
 # Reading Mode column widths (#1040)
 	Narrow	Uska
 	Medium	Srednja
+
+# Backstage › Recover: size limits (#2456)
+	This document is too large for a recovery copy. WordCraft tries again after the next edit.	Ovaj dokument je prevelik za kopiju za oporavak. WordCraft će pokušati ponovo posle sledeće izmene.
+	The recovery folder is full. Discard older copies to make room. WordCraft tries again after the next edit.	Fascikla za oporavak je puna. Odbacite starije kopije da biste oslobodili prostor. WordCraft će pokušati ponovo posle sledeće izmene.

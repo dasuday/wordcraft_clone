@@ -11,6 +11,11 @@ pub struct RecoveryInfo {
     pub saved_at: String,
 }
 
+/// Shown when a document's snapshot is over the size cap.
+pub const TOO_LARGE_MESSAGE: &str = "This document is too large for a recovery copy. WordCraft tries again after the next edit.";
+/// Shown when the recovery folder has no room left for the snapshot.
+pub const FOLDER_FULL_MESSAGE: &str = "The recovery folder is full. Discard older copies to make room. WordCraft tries again after the next edit.";
+
 #[cfg(not(target_arch = "wasm32"))]
 mod desktop;
 #[cfg(not(target_arch = "wasm32"))]
@@ -48,7 +53,7 @@ impl Session {
     pub fn recovery_error(&self) -> Option<&str> {
         #[cfg(not(target_arch = "wasm32"))]
         if let Some(r) = &self.recovery {
-            return r.error.as_deref();
+            return r.message();
         }
         None
     }
@@ -71,8 +76,8 @@ impl Session {
             if let Err(e) = r.tick(self, std::time::Instant::now()) {
                 r.error = Some(e);
             }
-            if let Some(e) = &r.error {
-                self.status = e.clone();
+            if let Some(e) = r.message() {
+                self.status = e.to_string();
             }
             self.recovery = Some(r);
         }

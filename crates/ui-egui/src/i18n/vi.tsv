@@ -2672,3 +2672,7 @@ template	Letter	Thư
 # Reading Mode column widths (#1040)
 	Narrow	Hẹp
 	Medium	Trung bình
+
+# Backstage › Recover: size limits (#2456)
+	This document is too large for a recovery copy. WordCraft tries again after the next edit.	Tài liệu này quá lớn để tạo bản sao khôi phục. WordCraft sẽ thử lại sau lần chỉnh sửa tiếp theo.
+	The recovery folder is full. Discard older copies to make room. WordCraft tries again after the next edit.	Thư mục khôi phục đã đầy. Hãy loại bỏ các bản sao cũ hơn để giải phóng dung lượng. WordCraft sẽ thử lại sau lần chỉnh sửa tiếp theo.

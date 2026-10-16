@@ -50,9 +50,20 @@ Windows is therefore unverified.
 Limits are 256 MiB of encoded JSON per snapshot, 2 GiB of snapshot files per profile, 128 records
 and 16 generations per record during discovery. Ordinarily only two valid generations remain.
 Copies are retained until saved or explicitly discarded; there is no automatic age-based deletion.
-Over-limit writes report an error and retain the previous valid copy. JSON stores binary parts
-as byte arrays, so it can be substantially larger than DOCX. This first version has a fixed
-interval, English fallback for new labels, and no cloud, version-history or browser recovery.
+
+A document whose snapshot is over a size limit gets no new recovery copy. The write stops at the
+limit and the previous valid copy, if any, stays. File › Recover says the document is too large
+for a recovery copy, or that the recovery folder is full when the 2 GiB budget ran out. The
+message stays until the next attempt, or until the document is saved or closed. That revision
+is not tried again. The next attempt waits for the next edit and the usual interval, so a
+document that can't fit costs at most one attempt per change. A full folder is also tried again
+after another copy is discarded or the list is refreshed. After a size failure the next
+snapshot is measured in memory first and touches no file if it is still too large. The log gets
+one warning per document with the size and the limit, without document content. Other
+failures, such as I/O errors, are tried again at the next interval. JSON stores binary parts as
+byte arrays, so it can be substantially larger than DOCX. A more compact storage format is under
+discussion in #2456. This first version has a fixed interval, English fallback for new labels,
+and no cloud, version-history or browser recovery.
 
 ## Commands and verification
 
@@ -67,7 +78,8 @@ user restores over dirty work use the existing Save Changes prompt.
 Focused tests are `cargo test -p wordcraft-engine recovery`,
 `cargo test -p wordcraft-engine --test recovery_format`, and
 `cargo test -p wordcraft-ui-egui recovery`. They cover lifecycle, preservation, original-file
-protection, failed writes, corruption, locks, password cleanup and the actual recovery buttons.
+protection, failed writes, size limits, corruption, locks, password cleanup and the actual
+recovery buttons.
 The contribution also uses a native SIGKILL/restart replay in temporary profiles for both new
 drafts and edited existing files. It uses synthetic inputs and hashes the original before and
 after. No Microsoft Word operation is needed for this reliability test.

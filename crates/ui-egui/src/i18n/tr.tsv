@@ -2629,3 +2629,7 @@ preview	Title	Örnek
 # Reading Mode column widths (#1040)
 	Narrow	Dar
 	Medium	Orta
+
+# Backstage › Recover: size limits (#2456)
+	This document is too large for a recovery copy. WordCraft tries again after the next edit.	Bu belge kurtarma kopyası için çok büyük. WordCraft bir sonraki düzenlemeden sonra yeniden deneyecek.
+	The recovery folder is full. Discard older copies to make room. WordCraft tries again after the next edit.	Kurtarma klasörü dolu. Yer açmak için eski kopyaları atın. WordCraft bir sonraki düzenlemeden sonra yeniden deneyecek.
