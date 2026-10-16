@@ -170,6 +170,9 @@ struct Budget {
     elements: AtomicU64,
     /// Bytes of nested pictures read so far (usvg reads a nested picture once per copy of it).
     nested: AtomicU64,
+    /// Bytes of raster image data read so far (usvg decodes a `data:` image once per copy of
+    /// it, and keeps each).
+    images: AtomicU64,
     /// The deepest usvg is to recurse for any picture read so far (nested ones included).
     deepest: AtomicU64,
     /// Why a nested picture went past the caps: the whole picture is refused.
@@ -219,6 +222,13 @@ fn parse_nested(bytes: &[u8], level: u32, base: u64, budget: &Budget) -> Result<
         resources_dir: None,
         image_href_resolver: usvg::ImageHrefResolver {
             resolve_data: Box::new(move |mime: &str, data: std::sync::Arc<Vec<u8>>, _: &usvg::Options| match mime {
+                // Past the cap on image data, the whole picture is refused (review 12 C-17).
+                "image/jpg" | "image/jpeg" | "image/png" | "image/gif" | "image/webp"
+                    if budget.images.fetch_add(data.len() as u64, Ordering::Relaxed).saturating_add(data.len() as u64) > MAX_IMAGE_DATA =>
+                {
+                    let _ = budget.over.set(IMAGES_TOO_LARGE);
+                    None
+                }
                 "image/jpg" | "image/jpeg" => Some(usvg::ImageKind::JPEG(data)),
                 "image/png" => Some(usvg::ImageKind::PNG(data)),
                 "image/gif" => Some(usvg::ImageKind::GIF(data)),
@@ -307,6 +317,9 @@ struct Entities<'a> {
 
 const TEXT_TOO_LONG: &str = "SVG text this long is not supported";
 const NESTED_TOO_LARGE: &str = "SVG with this many nested pictures is not supported";
+const IMAGES_TOO_LARGE: &str = "SVG with this much picture data is not supported";
+/// Most raster image data a picture (and the pictures nested in it) may hold, copies counted.
+const MAX_IMAGE_DATA: u64 = 256 << 20;
 
 impl Budget {
     /// Refuses this picture, and with it the pictures it is nested in.
@@ -439,6 +452,10 @@ fn check_copies(xml: &usvg::roxmltree::Document, base: u64, budget: &Budget) -> 
     if c.trefs.saturating_mul(nodes) > MAX_TREF_WORK {
         return budget.refuse(TREFS_TOO_MANY);
     }
+    // Before usvg decodes them all (review 12 C-17; the same cap is kept as it reads them).
+    if budget.images.load(Ordering::Relaxed).saturating_add(c.image_data) > MAX_IMAGE_DATA.saturating_mul(4) {
+        return budget.refuse(IMAGES_TOO_LARGE);
+    }
     // usvg matches every selector against every element it builds, `<use>` copies included.
     if c.matched > refs::MAX_MATCH_WORK {
         return budget.refuse(SELECTORS_TOO_COMPLEX);
@@ -490,6 +507,8 @@ struct Copies {
     matched: u64,
     /// How deep usvg recurses to build it (only on the total).
     depth: u64,
+    /// Bytes of `data:` pictures usvg decodes, copies counted (only on the total).
+    image_data: u64,
 }
 
 impl Copies {
@@ -506,6 +525,7 @@ impl Copies {
         url: true,
         matched: u64::MAX,
         depth: u64::MAX,
+        image_data: u64::MAX,
     };
 
     /// Places any marker may be drawn.
@@ -527,6 +547,7 @@ impl Copies {
             url: self.url || o.url,
             matched: self.matched.saturating_add(o.matched),
             depth: self.depth.max(o.depth),
+            image_data: self.image_data.saturating_add(o.image_data),
         }
     }
 }
@@ -841,6 +862,12 @@ fn copies_matching<'a, 'i>(xml: &'a usvg::roxmltree::Document<'i>, per_depth: &[
             *m = (*m).max(k);
         }
     }
+    // usvg decodes a `data:` picture's data for every copy of its element: the data, copies
+    // counted (base64 is four characters for three bytes).
+    for n in all.iter().filter(|n| svg_element(**n) && matches!(n.tag_name().name(), "image" | "feImage")) {
+        let len = n.attributes().filter(|a| a.name() == "href").map(|a| a.value().len() as u64).max().unwrap_or(0);
+        total.image_data = total.image_data.saturating_add((len / 4 * 3).saturating_mul(made.get(at(*n)).copied().unwrap_or(0)));
+    }
     // Every element usvg builds is matched against the style sheets once (copies included).
     if !per_depth.is_empty() {
         let mut depth = vec![0usize; len];
@@ -1141,7 +1168,14 @@ impl Svg {
                 && let Some(lb) = g.layer_bounding_box().transform(g.transform())
             {
                 let (lw, lh) = (f64::from(lb.width()), f64::from(lb.height()));
-                let rs = (FILTER_SCALE * n * (lw + lh) / lw.min(lh)).min(MAX_SIDE / lw).min(MAX_SIDE / lh);
+                // krilla maps the group's own (untransformed) layer by the transforms above and
+                // then by the group's: its per-axis ratio is at most the norm above times the own
+                // layer's longer side over its shorter (review 12 C-16). The mapped layer's own
+                // proportions are counted too, which only adds.
+                let own = g.layer_bounding_box();
+                let (ow, oh) = (f64::from(own.width()), f64::from(own.height()));
+                let aspect = ((ow + oh) / ow.min(oh)).max((lw + lh) / lw.min(lh));
+                let rs = (FILTER_SCALE * n * aspect).min(MAX_SIDE / lw).min(MAX_SIDE / lh);
                 let (w, h) = ((lw * rs).ceil(), (lh * rs).ceil());
                 if !(rs.is_finite() && w.is_finite() && h.is_finite()) {
                     return false;
@@ -1197,10 +1231,14 @@ impl Svg {
                                 usvg::ImageKind::JPEG(d) | usvg::ImageKind::PNG(d) | usvg::ImageKind::GIF(d) | usvg::ImageKind::WEBP(d) => d,
                                 usvg::ImageKind::SVG(_) => continue,
                             };
-                            // krilla decodes it, then converts and compresses a copy.
                             let Ok(size) = imagesize::blob_size(data) else { return false };
+                            if size.width == 0 || size.height == 0 {
+                                return false;
+                            }
+                            // krilla embeds a JPEG as it is (review 12 M-18); any other it decodes,
+                            // then converts and compresses a copy.
                             let bytes = (size.width as u64).saturating_mul(size.height as u64).saturating_mul(4);
-                            if size.width == 0 || size.height == 0 || bytes.saturating_mul(3) > MAX_DRAW_BYTES {
+                            if !matches!(kind, usvg::ImageKind::JPEG(_)) && bytes.saturating_mul(3) > MAX_DRAW_BYTES {
                                 return false;
                             }
                         }
@@ -1211,10 +1249,11 @@ impl Svg {
         true
     }
 
-    /// The raster images (JPEG, PNG, GIF, WebP data) the picture draws, nested pictures' and
-    /// those in clip paths, masks, patterns and filters included, each once.
-    pub fn raster_images(&self) -> Vec<std::sync::Arc<Vec<u8>>> {
-        let mut out: Vec<std::sync::Arc<Vec<u8>>> = Vec::new();
+    /// The raster images the picture draws, nested pictures' and those in clip paths, masks,
+    /// patterns and filters included, each once: their kind as usvg read it (`"jpeg"`, `"png"`,
+    /// `"gif"`, `"webp"`: what krilla decodes them as) and their data.
+    pub fn raster_images(&self) -> Vec<(&'static str, std::sync::Arc<Vec<u8>>)> {
+        let mut out: Vec<(&'static str, std::sync::Arc<Vec<u8>>)> = Vec::new();
         let mut stack: Vec<&usvg::Group> = vec![self.tree.root()];
         let mut seen = 0u64;
         while let Some(g) = stack.pop() {
@@ -1227,11 +1266,17 @@ impl Svg {
                     stack.push(cg);
                 }
                 push_subroots(n, &mut stack);
-                if let usvg::Node::Image(img) = n
-                    && let usvg::ImageKind::JPEG(d) | usvg::ImageKind::PNG(d) | usvg::ImageKind::GIF(d) | usvg::ImageKind::WEBP(d) = img.kind()
-                    && !out.iter().any(|o| std::sync::Arc::ptr_eq(o, d))
-                {
-                    out.push(d.clone());
+                if let usvg::Node::Image(img) = n {
+                    let (kind, d) = match img.kind() {
+                        usvg::ImageKind::JPEG(d) => ("jpeg", d),
+                        usvg::ImageKind::PNG(d) => ("png", d),
+                        usvg::ImageKind::GIF(d) => ("gif", d),
+                        usvg::ImageKind::WEBP(d) => ("webp", d),
+                        usvg::ImageKind::SVG(_) => continue,
+                    };
+                    if !out.iter().any(|(_, o)| std::sync::Arc::ptr_eq(o, d)) {
+                        out.push((kind, d.clone()));
+                    }
                 }
             }
         }

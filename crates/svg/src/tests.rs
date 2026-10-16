@@ -1420,3 +1420,59 @@ fn pdf_embedded_images_are_checked() {
     let small = parse(with(&png_header(100, 100)).as_bytes()).unwrap();
     assert!(small.pdf_vectors_fit(1.0));
 }
+
+/// Review 12 C-16: a filter group stretched one way under a rotation: krilla's ratio follows
+/// the group's own (untransformed) layer, here 0.1 by 1000.
+#[test]
+fn pdf_filter_scale_follows_the_own_layer() {
+    for above in ["rotate(90 50 50)", "skewX(45)", "rotate(45 50 50)"] {
+        let d = pic(&format!(
+            r##"<defs><filter id="o" filterUnits="userSpaceOnUse" x="0" y="0" width="0.1" height="1000"><feOffset/></filter><filter id="i" filterUnits="userSpaceOnUse" x="0" y="0" width="0.5" height="5000"><feFlood flood-color="red"/></filter></defs><g transform="{above}"><g transform="scale(1000 0.1)" filter="url(#o)"><rect width="0.1" height="1000" filter="url(#i)"/></g></g>"##
+        ));
+        assert!(!parse(d.as_bytes()).unwrap().pdf_vectors_fit(0.75), "{above}");
+    }
+}
+
+/// A `width` × `height` PNG of noise (it doesn't compress).
+fn noise_png(width: u32, height: u32) -> Vec<u8> {
+    let mut pm = resvg::tiny_skia::Pixmap::new(width, height).unwrap();
+    let mut x = 0x2545_f491u32;
+    for b in pm.data_mut().chunks_mut(4) {
+        x ^= x << 13;
+        x ^= x >> 17;
+        x ^= x << 5;
+        b.copy_from_slice(&[x as u8, (x >> 8) as u8, (x >> 16) as u8, 255]);
+    }
+    pm.encode_png().unwrap()
+}
+
+/// Review 12 C-17: usvg decodes a `data:` image once per `<use>` copy and keeps each: the image
+/// data a picture may hold is capped, copies counted.
+#[test]
+fn image_data_copies_are_capped() {
+    let png = base64_encode(&noise_png(400, 400));
+    let uses = r##"<use href="#p"/>"##.repeat(5000);
+    let d = pic(&format!(r#"<defs><image id="p" width="10" height="10" href="data:image/png;base64,{png}"/></defs>{uses}"#));
+    let r = parse(d.as_bytes());
+    assert!(matches!(&r, Err(Error::Parse(m)) if m.contains("picture data")), "{:?}", r.err());
+    // An icon set reusing one small image a few hundred times opens.
+    let icon = base64_encode(&noise_png(32, 32));
+    let uses = r##"<use href="#p"/>"##.repeat(500);
+    let d = pic(&format!(r#"<defs><image id="p" width="10" height="10" href="data:image/png;base64,{icon}"/></defs>{uses}"#));
+    let r = parse(d.as_bytes());
+    assert!(r.is_ok(), "{:?}", r.err());
+}
+
+/// Review 12 M-18: krilla embeds a JPEG without decoding it, so a big photo keeps a PDF vectors.
+#[test]
+fn pdf_jpegs_are_not_charged_as_decoded() {
+    // A JPEG header (start, a baseline frame of 6000 × 8000, end).
+    let mut jpg = vec![0xFF, 0xD8, 0xFF, 0xC0, 0x00, 0x11, 0x08];
+    jpg.extend_from_slice(&8000u16.to_be_bytes());
+    jpg.extend_from_slice(&6000u16.to_be_bytes());
+    jpg.extend_from_slice(&[0x03, 1, 0x22, 0, 2, 0x11, 1, 3, 0x11, 1, 0xFF, 0xD9]);
+    let d = pic(&format!(r#"<image width="100" height="100" href="data:image/jpeg;base64,{}"/>"#, base64_encode(&jpg)));
+    let svg = parse(d.as_bytes()).unwrap();
+    assert!(svg.pdf_vectors_fit(1.0));
+    assert_eq!(svg.raster_images().first().map(|(k, _)| *k), Some("jpeg"));
+}

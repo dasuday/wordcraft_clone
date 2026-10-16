@@ -1597,4 +1597,49 @@ fn svg_filters_rotated_or_nested_are_exported_within_the_budget() {
     let rotated = br##"<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><defs><filter id="o" filterUnits="userSpaceOnUse" x="0" y="50" width="100" height="0.02"><feOffset/></filter><filter id="i" filterUnits="userSpaceOnUse" x="-500" y="-500" width="1000" height="1000"><feFlood flood-color="red"/></filter></defs><g transform="rotate(90 50 50)"><g filter="url(#o)"><rect width="100" height="100" filter="url(#i)"/></g></g></svg>"##;
     let raw = pdf_with_svg(rotated, 75.0);
     assert!(raw.contains("/Width 150") || raw.contains("0.8156"), "rotated: a raster of the picture or the grey box");
+    // Review 12 M-19: a 1 × 1 picture with a filter, nested and drawn 100 times larger.
+    let inner = br##"<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"><filter id="o" x="0" y="0" width="1" height="1"><feOffset/></filter><filter id="i" filterUnits="userSpaceOnUse" x="-500" y="-500" width="1000" height="1000"><feFlood flood-color="red"/></filter><g filter="url(#o)"><rect width="1" height="1" filter="url(#i)"/></g></svg>"##;
+    let nested = format!(
+        r#"<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><image width="100" height="100" href="data:image/svg+xml;base64,{}"/></svg>"#,
+        b64(inner)
+    );
+    let raw = pdf_with_svg(nested.as_bytes(), 75.0);
+    assert!(raw.contains("/Width 150") || raw.contains("0.8156"), "nested: a raster of the picture or the grey box");
+    // Review 12 C-16: a filter group stretched one way under a rotation.
+    let stretched = br##"<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><defs><filter id="o" filterUnits="userSpaceOnUse" x="0" y="0" width="0.1" height="1000"><feOffset/></filter><filter id="i" filterUnits="userSpaceOnUse" x="0" y="0" width="0.5" height="5000"><feFlood flood-color="red"/></filter></defs><g transform="rotate(90 50 50)"><g transform="scale(1000 0.1)" filter="url(#o)"><rect width="0.1" height="1000" filter="url(#i)"/></g></g></svg>"##;
+    let raw = pdf_with_svg(stretched, 75.0);
+    assert!(raw.contains("/Width 150") || raw.contains("0.8156"), "stretched: a raster of the picture or the grey box");
+}
+
+/// #1910 review 12 I-9: krilla decodes a GIF with the gif crate's 50 MB limit; a 3700 × 3700 one
+/// is past it. The picture goes in as our raster (or the grey box) and the export succeeds.
+#[test]
+fn svg_with_a_big_gif_still_exports() {
+    let (w, h) = (3700u16, 3700u16);
+    let mut gif_bytes = Vec::new();
+    {
+        let mut enc = gif::Encoder::new(&mut gif_bytes, w, h, &[0, 0, 0, 255, 0, 0]).unwrap();
+        let pixels = vec![1u8; usize::from(w) * usize::from(h)];
+        let frame = gif::Frame { width: w, height: h, buffer: std::borrow::Cow::Borrowed(&pixels), ..Default::default() };
+        enc.write_frame(&frame).unwrap();
+    }
+    let svg = format!(
+        r##"<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><rect width="100" height="40" fill="#ff0000"/><image width="100" height="100" href="data:image/gif;base64,{}"/></svg>"##,
+        b64(&gif_bytes)
+    );
+    let raw = pdf_with_svg(svg.as_bytes(), 75.0);
+    assert!(raw.contains("/Width 150") || raw.contains("0.8156"), "a raster of the picture or the grey box");
+}
+
+/// Base64 of `data`.
+fn b64(data: &[u8]) -> String {
+    const T: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::new();
+    for ch in data.chunks(3) {
+        let n = (ch[0] as u32) << 16 | (*ch.get(1).unwrap_or(&0) as u32) << 8 | *ch.get(2).unwrap_or(&0) as u32;
+        for i in 0..4 {
+            out.push(if i <= ch.len() { T[(n >> (18 - 6 * i) & 63) as usize] as char } else { '=' });
+        }
+    }
+    out
 }

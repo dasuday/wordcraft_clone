@@ -1722,7 +1722,7 @@ fn svg_picture(s: &mut Surface, svg: &wordcraft_svg::Svg, rect: &Rect, crop: &[f
     let scale = page * (size.width() / sw).max(size.height() / sh);
     // krilla decodes the raster images an SVG holds when it writes the file: one it can't decode
     // would fail the whole export (review 11 I-8), so they are tried first.
-    let drawn = if svg.pdf_vectors_fit(scale) && svg.raster_images().iter().all(image_decodes) {
+    let drawn = if svg.pdf_vectors_fit(scale) && svg.raster_images().iter().all(|(kind, data)| image_decodes(kind, data)) {
         s.draw_svg(svg.tree(), size, SvgSettings { embed_text: false, filter_scale: 2.0 })
     } else {
         svg_raster(svg, size, page).map(|img| s.draw_image(img, size))
@@ -1789,9 +1789,22 @@ fn load_image(data: &Arc<Vec<u8>>) -> Option<Image> {
     Some(Image::from_rgba8(dec.to_rgba8().into_raw(), w, h))
 }
 
-/// Whether a picture decodes within the same limits as [`load_image`].
-fn image_decodes(data: &Arc<Vec<u8>>) -> bool {
-    let Ok(mut reader) = image::ImageReader::new(std::io::Cursor::new(data.as_slice())).with_guessed_format() else { return false };
+/// Whether krilla can embed a raster image of an SVG picture, `kind` as usvg read it: a JPEG as
+/// it is (krilla doesn't decode it), a GIF as krilla decodes it (the gif crate's own 50 MB limit;
+/// review 12 I-9), a PNG or WebP within the same limits as [`load_image`].
+fn image_decodes(kind: &str, data: &Arc<Vec<u8>>) -> bool {
+    let format = match kind {
+        "jpeg" => return true,
+        "gif" => {
+            let mut opts = gif::DecodeOptions::new();
+            opts.set_color_output(gif::ColorOutput::RGBA);
+            return opts.read_info(data.as_slice()).ok().and_then(|mut d| d.read_next_frame().ok().flatten().map(|_| ())).is_some();
+        }
+        "png" => image::ImageFormat::Png,
+        "webp" => image::ImageFormat::WebP,
+        _ => return false,
+    };
+    let mut reader = image::ImageReader::with_format(std::io::Cursor::new(data.as_slice()), format);
     let mut limits = image::Limits::default();
     limits.max_image_width = Some(MAX_IMAGE_SIDE);
     limits.max_image_height = Some(MAX_IMAGE_SIDE);

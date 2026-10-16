@@ -5510,6 +5510,7 @@ name = "wordcraft-pdf"
 version = "0.7.0"
 dependencies = [
  "craft-pdf",
+ "gif",
  "hayro-cmap",
  "hayro-interpret",
  "hayro-syntax",

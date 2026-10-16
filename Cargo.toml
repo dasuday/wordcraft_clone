@@ -67,6 +67,8 @@ resvg = { version = "0.47", default-features = false, features = ["text", "raste
 svgtypes = "0.16"
 # Image sizes from their headers, for the SVG drawing budget (already built for usvg).
 imagesize = "0.14"
+# GIF decoding with the same options krilla embeds GIFs with (SVG pictures in PDF export).
+gif = "0.14"
 # The style sheets in an SVG are matched with usvg's own CSS parser (the version usvg 0.47 uses).
 simplecss = "0.2"
 krilla-svg = "0.8"
