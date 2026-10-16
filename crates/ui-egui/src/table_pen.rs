@@ -12,6 +12,11 @@ use wordcraft_layout::DocLayout;
 use crate::WordApp;
 use crate::theme::Tokens;
 
+/// How near (screen points) the eraser has to be to a border: the same at every zoom, as in Word.
+const REACH_PX: f32 = 6.0;
+/// An eraser press that moves less than this (screen points) both ways is a click.
+const ERASER_CLICK_PX: f32 = 3.0;
+
 /// Which table tool is on.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TableTool {
@@ -50,11 +55,12 @@ pub fn toggle(app: &mut WordApp, id: &str, p: &Value) -> Option<Result<Value, St
     let on = p.get("on").and_then(Value::as_bool).unwrap_or(app.canvas.table_tool != Some(tool));
     app.canvas.table_tool = on.then_some(tool);
     app.canvas.table_stroke = None;
+    show_gridlines(app);
     if on {
         app.canvas.want_focus = true;
         app.status(match tool {
             TableTool::Draw => tl!("Drag a rectangle to draw a table, or a line across cells to split them. Esc stops."),
-            TableTool::Erase => tl!("Click a border between two cells to merge them. Esc stops."),
+            TableTool::Erase => tl!("Click a border, or drag across borders, to erase them. Esc stops."),
         });
     }
     Some(Ok(json!({"tool": app.canvas.table_tool.map(TableTool::id)})))
@@ -65,7 +71,43 @@ pub fn stop(app: &mut WordApp) -> bool {
     let was = app.canvas.table_tool.is_some();
     app.canvas.table_tool = None;
     app.canvas.table_stroke = None;
+    show_gridlines(app);
     was
+}
+
+/// Esc: during a stroke it drops just the stroke and the tool stays on, as in Word; else it
+/// turns the tool off.
+pub fn escape(app: &mut WordApp) -> bool {
+    app.canvas.table_stroke.take().is_some() || stop(app)
+}
+
+/// While a tool is on, the table gridlines show (so hidden borders do), as in Word; when it's
+/// off again, View Gridlines is back as it was.
+fn show_gridlines(app: &mut WordApp) {
+    let view = &mut app.session.view;
+    match (app.canvas.table_tool.is_some(), app.canvas.table_gridlines) {
+        (true, None) => {
+            app.canvas.table_gridlines = Some(view.table_gridlines);
+            view.table_gridlines = true;
+        }
+        (false, Some(was)) => {
+            view.table_gridlines = was;
+            app.canvas.table_gridlines = None;
+        }
+        _ => {}
+    }
+}
+
+/// Page points per screen point on page `page`.
+fn page_points(rects: &[Rect], layout: &DocLayout, scale: f32, page: usize) -> f32 {
+    let scale = rects.get(page).zip(layout.pages.get(page)).filter(|(_, pg)| pg.w > 0.0).map_or(scale, |(r, pg)| r.width() / pg.w);
+    if scale > 0.0 { 1.0 / scale } else { 1.0 }
+}
+
+/// Whether an eraser stroke is a click (it works at its start): it barely moved.
+fn erase_click(st: &PenStroke, points: f32) -> bool {
+    let near = ERASER_CLICK_PX * points;
+    (st.to.0 - st.from.0).abs() < near && (st.to.1 - st.from.1).abs() < near
 }
 
 /// The page point under screen point `p` on page `page` (its screen rect from `rects`).
@@ -79,7 +121,7 @@ fn on_page(rects: &[Rect], layout: &DocLayout, scale: f32, page: usize, p: Pos2)
 pub fn pointer(app: &mut WordApp, ui: &Ui, resp: &egui::Response, rects: &[Rect], layout: &DocLayout, scale: f32) -> bool {
     let Some(tool) = app.canvas.table_tool else { return false };
     if !app.canvas.focused && ui.input(|i| i.key_pressed(egui::Key::Escape)) {
-        stop(app);
+        escape(app);
         return true;
     }
     let latest = ui.input(|i| i.pointer.latest_pos());
@@ -110,7 +152,20 @@ pub fn pointer(app: &mut WordApp, ui: &Ui, resp: &egui::Response, rects: &[Rect]
             }
             json!({"page": st.page, "x0": st.from.0, "y0": st.from.1, "x1": st.to.0, "y1": st.to.1})
         }
-        TableTool::Erase => json!({"page": st.page, "x": st.to.0, "y": st.to.1}),
+        TableTool::Erase => {
+            let points = page_points(rects, layout, scale, st.page);
+            let reach = REACH_PX * points;
+            let (x, y) = st.from;
+            if !erase_click(&st, points) {
+                json!({"page": st.page, "x0": x, "y0": y, "x1": st.to.0, "y1": st.to.1, "reach": reach})
+            } else if layout.cell_at(st.page, x, y).is_none() && table_draw::erase_target(&app.session.doc, layout, st.page, x, y, reach).is_none() {
+                // A click off every table puts the eraser down, as in Word.
+                stop(app);
+                return true;
+            } else {
+                json!({"page": st.page, "x": x, "y": y, "reach": reach})
+            }
+        }
     };
     if let Err(e) = app.run(tool.id(), params) {
         app.status(e);
@@ -118,11 +173,41 @@ pub fn pointer(app: &mut WordApp, ui: &Ui, resp: &egui::Response, rects: &[Rect]
     true
 }
 
-/// The pointer while a tool is on (a crosshair; the tool's icon is drawn beside it).
+/// The pointer while a tool is on: the drawn eraser for the eraser; for the pen a crosshair
+/// (the pen's icon is drawn beside it).
 pub fn cursor(app: &WordApp, ui: &Ui, resp: &egui::Response) {
     if app.canvas.table_tool.is_some() && (resp.hovered() || app.canvas.table_stroke.is_some()) {
-        ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair);
+        if app.canvas.table_tool == Some(TableTool::Erase) {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::None);
+            if let Some(p) = ui.input(|i| i.pointer.hover_pos()) {
+                eraser_pointer(ui.painter(), p);
+            }
+        } else {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair);
+        }
     }
+}
+
+/// The eraser's pointer, our own drawing (egui has no cursor images; the system pointer is
+/// hidden): a white eraser with a grey sleeve, seen a little from the side, tilted up and to the
+/// right from the point it works at (the middle of its lower end); outlined in black with a
+/// white edge, so it shows on dark paper too.
+fn eraser_pointer(painter: &egui::Painter, at: Pos2) {
+    let (sin, cos) = 40f32.to_radians().sin_cos();
+    let (along, across) = (vec2(cos, -sin), vec2(sin, cos));
+    // The part from `s0` to `s1` along the eraser and from `w0` to `w1` across it (screen points).
+    let part = |s0: f32, s1: f32, w0: f32, w1: f32| {
+        vec![at + along * s0 + across * w0, at + along * s1 + across * w0, at + along * s1 + across * w1, at + along * s0 + across * w1]
+    };
+    let (ink, white) = (Stroke::new(1.0, egui::Color32::from_gray(0x14)), egui::Color32::WHITE);
+    // The top face is 9.6 points wide; its side shows 2.4 points below it; the sleeve starts 9 points up.
+    let (top, whole) = (part(0.0, 21.0, -4.8, 4.8), part(0.0, 21.0, -4.8, 7.2));
+    painter.add(egui::Shape::convex_polygon(whole.clone(), white, Stroke::new(2.6, white)));
+    painter.add(egui::Shape::convex_polygon(part(0.0, 21.0, 4.8, 7.2), egui::Color32::from_gray(0x78), Stroke::NONE));
+    painter.add(egui::Shape::convex_polygon(part(9.0, 21.0, -4.8, 4.8), egui::Color32::from_gray(0xCD), Stroke::NONE));
+    painter.line_segment([at + along * 9.0 - across * 4.8, at + along * 9.0 + across * 7.2], ink);
+    painter.add(egui::Shape::closed_line(top, ink));
+    painter.add(egui::Shape::closed_line(whole, ink));
 }
 
 fn dashed_rect(painter: &egui::Painter, r: Rect, s: Stroke) {
@@ -130,8 +215,8 @@ fn dashed_rect(painter: &egui::Painter, r: Rect, s: Stroke) {
     painter.extend(egui::Shape::dashed_line(&pts, s, 5.0, 3.0));
 }
 
-/// The live preview: the rectangle or line being drawn, or the border the eraser would remove;
-/// and the tool's icon beside the pointer.
+/// The live preview: the rectangle or line being drawn, or the borders the eraser would remove;
+/// and the pen's icon beside the pointer.
 pub fn paint(app: &WordApp, painter: &egui::Painter, t: &Tokens, layout: &DocLayout, pages: &[Rect], scale: f32) {
     let Some(tool) = app.canvas.table_tool else { return };
     let to_screen = |page: usize, x: f32, y: f32| -> Option<Pos2> {
@@ -165,21 +250,32 @@ pub fn paint(app: &WordApp, painter: &egui::Painter, t: &Tokens, layout: &DocLay
                 }
             }
         },
-        (TableTool::Erase, _) => {
-            if let Some(p) = hover
-                && let Some((page, x, y)) = crate::canvas::page_at(pages, layout, scale, p)
-                && let Some(e) = table_draw::erase_target(layout, page, x, y)
-                && let (Some(a), Some(b)) = (to_screen(page, e.from.0, e.from.1), to_screen(page, e.to.0, e.to.1))
-            {
-                painter.line_segment([a, b], Stroke::new(3.0, t.red));
+        // While pressed (only then, as in Word): the drag's thin red rectangle and, thick, every
+        // border it would erase; for a click, the border at the press.
+        (TableTool::Erase, Some(st)) => {
+            let (doc, points) = (&app.session.doc, page_points(pages, layout, scale, st.page));
+            let found = if erase_click(&st, points) {
+                table_draw::erase_target(doc, layout, st.page, st.from.0, st.from.1, REACH_PX * points).into_iter().collect()
+            } else {
+                if let (Some(a), Some(b)) = (to_screen(st.page, st.from.0, st.from.1), to_screen(st.page, st.to.0, st.to.1)) {
+                    painter.rect_stroke(Rect::from_two_pos(a, b), 0.0, Stroke::new(1.0, t.red), egui::StrokeKind::Middle);
+                }
+                table_draw::erase_targets(doc, layout, st.page, st.from, st.to, REACH_PX * points)
+            };
+            let ink = if app.session.view.dark_mode { egui::Color32::WHITE } else { egui::Color32::BLACK };
+            for e in found {
+                if let (Some(a), Some(b)) = (to_screen(st.page, e.from.0, e.from.1), to_screen(st.page, e.to.0, e.to.1)) {
+                    painter.line_segment([a, b], Stroke::new(3.0, ink));
+                }
             }
         }
         _ => {}
     }
-    if let Some(p) = hover.filter(|p| pages.iter().any(|r| r.contains(*p))) {
+    if tool == TableTool::Draw
+        && let Some(p) = hover.filter(|p| pages.iter().any(|r| r.contains(*p)))
+    {
         let r = Rect::from_min_size(p + vec2(8.0, 6.0), vec2(16.0, 16.0));
-        let icon = if tool == TableTool::Draw { "pencil" } else { "eraser" };
-        crate::icons::paint(painter, r, icon, t.icon, t.accent);
+        crate::icons::paint(painter, r, "pencil", t.icon, t.accent);
     }
 }
 
@@ -219,5 +315,63 @@ mod tests {
         assert_eq!(a.canvas.table_tool, Some(TableTool::Erase));
         a.run("table.deleteRow", json!({})).unwrap();
         assert_eq!(a.canvas.table_tool, None);
+    }
+
+    /// A real mouse drag with the eraser (its drawn pointer over the page): across a row it
+    /// merges the row's cells on release, one undo step, and the eraser stays on. Esc during a
+    /// drag drops only the drag. The gridlines show while the eraser is on; a click off the
+    /// table puts it down and the gridlines back as they were, as in Word.
+    #[test]
+    fn the_eraser_drags_across_borders_and_esc_drops_only_the_drag() {
+        use crate::table_resize::tests::{button, cell, screen, steps, table_window};
+        let row_spans = |a: &WordApp, r: usize| -> Vec<usize> {
+            let t = a.session.doc.body.iter().find_map(|b| b.as_table()).unwrap();
+            t.rows[r].cells.iter().map(|c| c.span()).collect()
+        };
+        let mut h = table_window();
+        h.state_mut().session.view.table_gridlines = false;
+        h.state_mut().run("table.eraser", json!({})).unwrap();
+        assert!(h.state().session.view.table_gridlines, "the eraser shows the gridlines");
+        let (a, c) = (cell(&mut h, 0, 0), cell(&mut h, 0, 2));
+        let (from, to) = (screen(&mut h, a.x + a.w / 2.0, a.y + a.h / 2.0), screen(&mut h, c.x + c.w / 2.0, c.y + c.h / 2.0));
+        h.event(egui::Event::PointerMoved(from));
+        steps(&mut h, 2);
+        assert_eq!(h.output().platform_output.cursor_icon, egui::CursorIcon::None, "the drawn eraser");
+        let depth = h.state().session.undo_depth();
+        button(&h, from, true);
+        h.step();
+        h.event(egui::Event::PointerMoved(to));
+        h.step();
+        assert!(h.state().canvas.table_stroke.is_some());
+        button(&h, to, false);
+        steps(&mut h, 2);
+        assert_eq!(row_spans(h.state(), 0), [3]);
+        assert_eq!(h.state().session.undo_depth(), depth + 1);
+        assert_eq!(h.state().canvas.table_tool, Some(TableTool::Erase), "the eraser stays on");
+        let (a, c) = (cell(&mut h, 1, 0), cell(&mut h, 1, 2));
+        let (from, to) = (screen(&mut h, a.x + a.w / 2.0, a.y + a.h / 2.0), screen(&mut h, c.x + c.w / 2.0, c.y + c.h / 2.0));
+        h.event(egui::Event::PointerMoved(from));
+        h.step();
+        button(&h, from, true);
+        h.step();
+        h.event(egui::Event::PointerMoved(to));
+        h.step();
+        let esc = egui::Event::Key { key: egui::Key::Escape, physical_key: None, pressed: true, repeat: false, modifiers: Default::default() };
+        h.event(esc);
+        h.step();
+        assert!(h.state().canvas.table_stroke.is_none(), "Esc drops the drag");
+        assert_eq!(h.state().canvas.table_tool, Some(TableTool::Erase), "and leaves the eraser on");
+        button(&h, to, false);
+        steps(&mut h, 2);
+        assert_eq!(row_spans(h.state(), 1), [1, 1, 1], "nothing erased");
+        let below = screen(&mut h, a.x + a.w / 2.0, a.bottom() + 60.0);
+        h.event(egui::Event::PointerMoved(below));
+        h.step();
+        button(&h, below, true);
+        h.step();
+        button(&h, below, false);
+        steps(&mut h, 2);
+        assert_eq!(h.state().canvas.table_tool, None, "a click off the table puts the eraser down");
+        assert!(!h.state().session.view.table_gridlines, "and the gridlines are back as they were");
     }
 }
