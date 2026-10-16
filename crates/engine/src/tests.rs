@@ -8308,3 +8308,66 @@ fn toc_keeps_direct_number_tabs() {
         assert_eq!(entries, 2);
     }
 }
+
+fn caret(s: &mut Session, off: usize) {
+    run(s, "select.range", json!({"anchor": {"block": 0, "off": off}, "focus": {"block": 0, "off": off}}));
+}
+
+#[test]
+fn collapsed_caret_state_is_the_run_at_the_caret_not_the_whole_word() {
+    // #1418: "Hel" in Courier New 20 bold + "lo" plain. With the caret inside the word the ribbon
+    // shows the character before the caret, never blank; a selection across both stays mixed.
+    let mut s = s();
+    run(&mut s, "document.setText", json!({"text": "Hello"}));
+    run(&mut s, "select.range", json!({"anchor": {"block": 0, "off": 0}, "focus": {"block": 0, "off": 3}}));
+    run(&mut s, "format.font", json!({"name": "Courier New"}));
+    run(&mut s, "format.size", json!({"size": 20}));
+    run(&mut s, "format.bold", json!({"value": true}));
+    caret(&mut s, 2);
+    let st = run(&mut s, "format.state", json!({}));
+    assert_eq!((st["font"].as_str(), st["size"].as_f64(), st["bold"].as_bool()), (Some("Courier New"), Some(20.0), Some(true)), "{st}");
+    caret(&mut s, 4);
+    let st = run(&mut s, "format.state", json!({}));
+    assert_ne!(st["font"].as_str(), Some("Courier New"), "{st}");
+    assert_ne!(st["size"].as_f64(), Some(20.0), "{st}");
+    assert_eq!(st["bold"], false, "{st}");
+    run(&mut s, "select.range", json!({"anchor": {"block": 0, "off": 0}, "focus": {"block": 0, "off": 5}}));
+    let st = run(&mut s, "format.state", json!({}));
+    assert!(st["font"].is_null() && st["size"].is_null() && st["bold"] == false, "a mixed selection stays blank: {st}");
+}
+
+#[test]
+fn collapsed_caret_inside_a_word_still_formats_the_whole_word() {
+    // #1418: pinned (Word's default "Select entire word").
+    let mut s = s();
+    run(&mut s, "document.setText", json!({"text": "Hello world"}));
+    caret(&mut s, 2);
+    run(&mut s, "format.bold", json!({"value": true}));
+    let bold = |s: &Session, off| s.doc.para(StoryRef::Body, &wordcraft_doc::Path::top(0)).unwrap().props_of_char(off).bold;
+    assert!((0..5).all(|i| bold(&s, i) == Some(true)));
+    assert_ne!(bold(&s, 6), Some(true));
+}
+
+#[test]
+fn font_box_shows_and_sets_the_east_asian_font_for_cjk_text() {
+    // #1418: caret in CJK text: the Font box shows w:eastAsia; picking a font sets it.
+    let mut s = s();
+    run(&mut s, "document.setText", json!({"text": "Hello 你好"}));
+    run(&mut s, "select.all", json!({}));
+    run(&mut s, "format.font", json!({"name": "Georgia", "eastAsia": "SimSun"}));
+    let n = "Hello ".len();
+    caret(&mut s, n + 3);
+    let st = run(&mut s, "format.state", json!({}));
+    assert_eq!((st["script"].as_str(), st["fontShown"].as_str()), (Some("eastAsia"), Some("SimSun")), "{st}");
+    caret(&mut s, 2);
+    let st = run(&mut s, "format.state", json!({}));
+    assert_eq!((st["script"].as_str(), st["fontShown"].as_str()), (Some("latin"), Some("Georgia")), "{st}");
+    // Selecting just the CJK text and picking a font sets the East Asian font only.
+    run(&mut s, "select.range", json!({"anchor": {"block": 0, "off": n}, "focus": {"block": 0, "off": n + 6}}));
+    assert_eq!(run(&mut s, "format.state", json!({}))["fontShown"], "SimSun");
+    run(&mut s, "format.font", json!({"name": "Arial"}));
+    let p = s.doc.para(StoryRef::Body, &wordcraft_doc::Path::top(0)).unwrap();
+    let c = p.props_of_char(n).clone();
+    assert_eq!((c.font, c.font_ea), (Some("Georgia".into()), Some("Arial".into())));
+    assert_eq!(p.props_of_char(0).font_ea.as_deref(), Some("SimSun"));
+}

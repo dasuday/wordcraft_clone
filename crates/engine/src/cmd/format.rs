@@ -266,6 +266,78 @@ fn resolved(s: &Session) -> Vec<ResolvedChar> {
     out
 }
 
+/// What the ribbon shows: with a collapsed caret, the formatting of the character before it (the
+/// first one at a paragraph start), as in Word, even though formatting applies to the whole word;
+/// otherwise [`resolved`].
+fn shown(s: &Session) -> Vec<ResolvedChar> {
+    let (a, b) = s.sel.ordered();
+    if a == b
+        && column_rows(s).is_none()
+        && target(s).is_some()
+        && let Some(p) = s.doc.para_at(&a)
+    {
+        return vec![s.doc.styles.resolve_char(p.props.style.as_deref(), p.props_at(a.off))];
+    }
+    resolved(s)
+}
+
+/// The script of the text the Font box describes.
+#[derive(Clone, Copy, PartialEq)]
+enum Script {
+    Latin,
+    EastAsia,
+    Complex,
+}
+
+impl Script {
+    fn name(self) -> &'static str {
+        match self {
+            Script::Latin => "latin",
+            Script::EastAsia => "eastAsia",
+            Script::Complex => "complex",
+        }
+    }
+    /// `None` for neutral characters (spaces, digits, punctuation).
+    fn of(c: char) -> Option<Script> {
+        if wordcraft_layout::para::is_east_asian(c) {
+            Some(Script::EastAsia)
+        } else if wordcraft_doc::bidi::is_complex_script(c) {
+            Some(Script::Complex)
+        } else if c.is_alphabetic() {
+            Some(Script::Latin)
+        } else {
+            None
+        }
+    }
+}
+
+/// East Asian (or complex-script) when every letter in the selection is; for a collapsed caret the
+/// character before it (else after it). Anything else is Latin.
+fn script_at(s: &Session) -> Script {
+    let (a, b) = s.sel.ordered();
+    if a == b {
+        let Some(p) = s.doc.para_at(&a) else { return Script::Latin };
+        let before = p.text.get(..a.off).and_then(|t| t.chars().next_back());
+        let after = p.text.get(a.off..).and_then(|t| t.chars().next());
+        return before.and_then(Script::of).or_else(|| after.and_then(Script::of)).unwrap_or(Script::Latin);
+    }
+    let mut found: Option<Script> = None;
+    for path in s.doc.paths_between(&a, &b).into_iter().take(1000) {
+        let Some(p) = s.doc.para(a.story, &path) else { continue };
+        let from = if path == a.path { a.off } else { 0 };
+        let to = if path == b.path { b.off } else { p.len() };
+        let Some(text) = p.text.get(from..to) else { continue };
+        for sc in text.chars().take(10_000).filter_map(Script::of) {
+            match found {
+                None => found = Some(sc),
+                Some(f) if f != sc => return Script::Latin,
+                _ => {}
+            }
+        }
+    }
+    found.unwrap_or(Script::Latin)
+}
+
 fn toggle(s: &mut Session, v: &Value, get: fn(&ResolvedChar) -> bool, set: fn(&mut CharProps, bool)) -> CmdResult {
     let on = match p::bool(v, "value") {
         Some(b) => b,
@@ -303,12 +375,16 @@ fn font(s: &mut Session, v: &Value) -> CmdResult {
     // The font applies to Persian/Arabic text in the selection too (its complex-script font). A
     // Chinese, Japanese or Korean font is the East Asian text's font as well (`w:eastAsia`), as in
     // Word; choosing a Latin font leaves that text's font as it was.
+    let explicit_ea = east_asia.is_some();
     let ea = east_asia.or_else(|| {
         name.clone().filter(|n| {
             let r = wordcraft_fonts::word::resolve(n, false, false);
             !r.substituted && r.face.is_east_asian()
         })
     });
+    // In East Asian text the Font box picks the East Asian font (what it shows), leaving the Latin
+    // font as it was.
+    let (name, ea) = if !explicit_ea && script_at(s) == Script::EastAsia { (None, ea.or(name)) } else { (name, ea) };
     apply(s, &|c| {
         if let Some(n) = &name {
             c.font = Some(n.clone());
@@ -661,7 +737,8 @@ fn set(s: &mut Session, v: &Value) -> CmdResult {
 
 /// What the ribbon shows: the formatting at the selection (mixed values are null).
 pub fn state(s: &Session) -> Value {
-    let all = resolved(s);
+    let all = shown(s);
+    let script = script_at(s);
     let first = all.first().cloned();
     let same = |f: &dyn Fn(&ResolvedChar) -> Value| -> Value {
         let Some(r) = &first else { return Value::Null };
@@ -673,6 +750,14 @@ pub fn state(s: &Session) -> Value {
     json!({
         "font": same(&|r| json!(r.font)),
         "fontEastAsia": same(&|r| json!(r.font_ea)),
+        // The script of the text at the caret (or of the whole selection) and the font the Font box
+        // shows for it: the East Asian font for CJK text, the complex-script font for Arabic.
+        "script": script.name(),
+        "fontShown": same(&|r| match script {
+            Script::EastAsia => json!(r.font_ea.as_ref().unwrap_or(&r.font)),
+            Script::Complex => json!(r.font_cs),
+            Script::Latin => json!(r.font),
+        }),
         "size": same(&|r| json!(r.size)),
         "bold": all.iter().all(|r| r.bold),
         "italic": all.iter().all(|r| r.italic),
