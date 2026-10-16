@@ -3,7 +3,7 @@
 use vello_cpu::kurbo::{self, BezPath, Shape};
 use wordcraft_doc::para::ShapeKind;
 
-pub fn shape_path(kind: ShapeKind, r: kurbo::Rect) -> BezPath {
+pub fn shape_path(kind: ShapeKind, r: kurbo::Rect, corner: Option<u32>) -> BezPath {
     let (cx, cy) = (r.center().x, r.center().y);
     let (w, h) = (r.width().max(1.0), r.height().max(1.0));
     let (x0, y0, x1, y1) = (r.x0, r.y0, r.x1, r.y1);
@@ -46,7 +46,11 @@ pub fn shape_path(kind: ShapeKind, r: kurbo::Rect) -> BezPath {
 
     match kind {
         ShapeKind::Rectangle | ShapeKind::TextBox | ShapeKind::DrawingCanvas | ShapeKind::FlowchartProcess => r.to_path(0.1),
-        ShapeKind::RoundedRectangle | ShapeKind::FlowchartAlternateProcess => kurbo::RoundedRect::from_rect(r, w.min(h) * 0.16).to_path(0.1),
+        ShapeKind::RoundedRectangle => {
+            let radius = wordcraft_doc::connector::corner_radius(corner, r.width() as f32, r.height() as f32);
+            kurbo::RoundedRect::from_rect(r, f64::from(radius)).to_path(0.1)
+        }
+        ShapeKind::FlowchartAlternateProcess => kurbo::RoundedRect::from_rect(r, w.min(h) * 0.16).to_path(0.1),
         ShapeKind::SingleCornerSnipped => {
             let cut = w.min(h) * 0.2;
             poly(&[(x0 + cut, y0), (x1, y0), (x1, y1), (x0, y1), (x0, y0 + cut)])
@@ -611,7 +615,7 @@ pub fn shape_path(kind: ShapeKind, r: kurbo::Rect) -> BezPath {
             p
         }
         ShapeKind::MathNotEqual => {
-            let mut p = shape_path(ShapeKind::MathEqual, r);
+            let mut p = shape_path(ShapeKind::MathEqual, r, corner);
             p.move_to((x0 + w * 0.7, y0));
             p.line_to((x0 + w * 0.3, y1));
             p
@@ -647,8 +651,8 @@ pub fn shape_path(kind: ShapeKind, r: kurbo::Rect) -> BezPath {
             p
         }
         ShapeKind::FlowchartMultidocument => {
-            let mut p = shape_path(ShapeKind::FlowchartDocument, kurbo::Rect::new(x0 + 4.0, y0 + 4.0, x1, y1));
-            p.extend(shape_path(ShapeKind::FlowchartDocument, kurbo::Rect::new(x0, y0, x1 - 4.0, y1 - 4.0)).elements().iter().copied());
+            let mut p = shape_path(ShapeKind::FlowchartDocument, kurbo::Rect::new(x0 + 4.0, y0 + 4.0, x1, y1), corner);
+            p.extend(shape_path(ShapeKind::FlowchartDocument, kurbo::Rect::new(x0, y0, x1 - 4.0, y1 - 4.0), corner).elements().iter().copied());
             p
         }
         ShapeKind::FlowchartTerminator | ShapeKind::FlowchartDelay => {
@@ -801,7 +805,7 @@ pub fn shape_path(kind: ShapeKind, r: kurbo::Rect) -> BezPath {
             p
         }
         ShapeKind::DoubleWave => {
-            let mut p = shape_path(ShapeKind::Wave, r);
+            let mut p = shape_path(ShapeKind::Wave, r, corner);
             p.move_to((x0, cy));
             p.line_to((x1, cy));
             p
@@ -862,7 +866,7 @@ pub fn shape_path(kind: ShapeKind, r: kurbo::Rect) -> BezPath {
 /// Returns a list of `(closed, points)` for each contour.
 pub fn shape_preview_contours(kind: ShapeKind, w: f32, h: f32) -> Vec<(bool, Vec<(f32, f32)>)> {
     let r = kurbo::Rect::new(0.0, 0.0, w as f64, h as f64);
-    let path = shape_path(kind, r);
+    let path = shape_path(kind, r, None);
     let mut contours = Vec::new();
     let mut current = Vec::new();
     let mut is_closed = false;

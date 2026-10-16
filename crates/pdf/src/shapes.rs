@@ -8,8 +8,9 @@ fn ok(v: f32) -> bool {
     v.is_finite()
 }
 
-pub(crate) fn shape_path(kind: ShapeKind, r: &Rect) -> Option<Path> {
-    if !(ok(r.x) && ok(r.y) && ok(r.w) && ok(r.h)) || r.w <= 0.0 || r.h <= 0.0 {
+pub(crate) fn shape_path(kind: ShapeKind, r: &Rect, corner: Option<u32>) -> Option<Path> {
+    let flat_ok = (kind.is_open() || kind.is_line_like()) && r.w.max(r.h) > 0.0 && r.w.min(r.h) >= 0.0;
+    if !(ok(r.x) && ok(r.y) && ok(r.w) && ok(r.h)) || !(flat_ok || r.w > 0.0 && r.h > 0.0) {
         return None;
     }
     let (x0, y0, x1, y1) = (r.x, r.y, r.x + r.w, r.y + r.h);
@@ -63,7 +64,21 @@ pub(crate) fn shape_path(kind: ShapeKind, r: &Rect) -> Option<Path> {
         ShapeKind::Rectangle | ShapeKind::TextBox | ShapeKind::DrawingCanvas | ShapeKind::FlowchartProcess => {
             poly(&mut pb, &[(x0, y0), (x1, y0), (x1, y1), (x0, y1)])
         }
-        ShapeKind::RoundedRectangle | ShapeKind::FlowchartAlternateProcess => {
+        ShapeKind::RoundedRectangle => {
+            let rad = wordcraft_doc::connector::corner_radius(corner, r.w, r.h);
+            let k = rad * (1.0 - K);
+            pb.move_to(x0 + rad, y0);
+            pb.line_to(x1 - rad, y0);
+            pb.cubic_to(x1 - k, y0, x1, y0 + k, x1, y0 + rad);
+            pb.line_to(x1, y1 - rad);
+            pb.cubic_to(x1, y1 - k, x1 - k, y1, x1 - rad, y1);
+            pb.line_to(x0 + rad, y1);
+            pb.cubic_to(x0 + k, y1, x0, y1 - k, x0, y1 - rad);
+            pb.line_to(x0, y0 + rad);
+            pb.cubic_to(x0, y0 + k, x0 + k, y0, x0 + rad, y0);
+            pb.close();
+        }
+        ShapeKind::FlowchartAlternateProcess => {
             let rad = r.w.min(r.h) * 0.16;
             let k = rad * (1.0 - K);
             pb.move_to(x0 + rad, y0);
@@ -496,8 +511,19 @@ pub(crate) fn shape_path(kind: ShapeKind, r: &Rect) -> Option<Path> {
         ShapeKind::FlowchartPunchedTape => {
             poly(&mut pb, &[(x0, y0), (x1, y0), (x1, y1), (x0, y1)]);
         }
-        ShapeKind::FlowchartSummingJunction | ShapeKind::FlowchartOr => {
+        ShapeKind::FlowchartSummingJunction => {
             ellipse(&mut pb, cx, cy, w / 2.0, h / 2.0);
+            pb.move_to(x0 + w * 0.15, y0 + h * 0.15);
+            pb.line_to(x1 - w * 0.15, y1 - h * 0.15);
+            pb.move_to(x1 - w * 0.15, y0 + h * 0.15);
+            pb.line_to(x0 + w * 0.15, y1 - h * 0.15);
+        }
+        ShapeKind::FlowchartOr => {
+            ellipse(&mut pb, cx, cy, w / 2.0, h / 2.0);
+            pb.move_to(cx, y0);
+            pb.line_to(cx, y1);
+            pb.move_to(x0, cy);
+            pb.line_to(x1, cy);
         }
         ShapeKind::FlowchartCollate | ShapeKind::FlowchartMerge => poly(&mut pb, &[(x0, y0), (x1, y0), (cx, y1)]),
         ShapeKind::FlowchartSort => poly(&mut pb, &[(cx, y0), (x1, cy), (cx, y1), (x0, cy)]),
