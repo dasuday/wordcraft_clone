@@ -3030,7 +3030,7 @@ fn place_para(ctx: &mut Ctx, pb: &mut PageBuilder, p: &Paragraph, block: usize, 
         // Word keeps the line when a new page's section contains only this mark.
         if p.section.is_some()
             && p.objects.is_empty()
-            && p.mark.hidden != Some(true)
+            && (ctx.opts.show_hidden || !ctx.doc.styles.resolve_char(p.props.style.as_deref(), &p.mark).hidden)
             && !ctx.has_label(p)
             && (block == 0 || follows_section)
             && pb.at_top()
