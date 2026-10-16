@@ -14,7 +14,7 @@
 use std::collections::HashSet;
 
 use serde_json::{Value, json};
-use wordcraft_engine::doc::{StoryRef, props::CharProps};
+use wordcraft_engine::doc::{Document, PartKind, StoryRef, props::CharProps};
 use wordcraft_languagetool::{Job, LtError, Settings, Worker, http, request};
 
 use crate::WordApp;
@@ -281,33 +281,43 @@ fn take_results(app: &mut WordApp, ctx: &egui::Context, now: f64) {
     }
 }
 
-/// The next body paragraph without a result, from the caret's paragraph on.
+/// Every story LanguageTool checks: the body, then headers, footers, footnotes and endnotes
+/// (#762). Comments and text boxes keep the built-in checker.
+fn stories(doc: &Document) -> Vec<StoryRef> {
+    let parts = doc.parts.iter().filter(|(_, p)| matches!(p.kind, PartKind::Header | PartKind::Footer | PartKind::Footnote | PartKind::Endnote));
+    std::iter::once(StoryRef::Body).chain(parts.map(|(id, _)| StoryRef::Part(*id))).collect()
+}
+
+/// The next paragraph without a result: the body from the caret's paragraph on, then the
+/// other stories.
 fn next_job(app: &WordApp, settings: &Settings) -> Option<Job> {
     let doc = &app.session.doc;
-    let paths = doc.para_paths(StoryRef::Body);
     let caret = &app.session.sel.focus;
-    let start = if caret.story == StoryRef::Body { paths.iter().position(|p| *p == caret.path).unwrap_or(0) } else { 0 };
     let lt = &app.language_tool;
-    let n = paths.len();
-    for k in 0..n {
-        let Some(path) = paths.get((start + k) % n) else { continue };
-        let Some(p) = doc.para(StoryRef::Body, path) else { continue };
-        if p.text.trim().is_empty() || p.text.len() > request::MAX_TEXT_BYTES {
-            continue;
+    for story in stories(doc) {
+        let paths = doc.para_paths(story);
+        let start = if caret.story == story { paths.iter().position(|p| *p == caret.path).unwrap_or(0) } else { 0 };
+        let n = paths.len();
+        for k in 0..n {
+            let Some(path) = paths.get((start + k) % n) else { continue };
+            let Some(p) = doc.para(story, path) else { continue };
+            if p.text.trim().is_empty() || p.text.len() > request::MAX_TEXT_BYTES {
+                continue;
+            }
+            let text = wordcraft_engine::layout::para::proof_text(p);
+            let plain = CharProps::default();
+            let first = p.run_ranges().next().map(|(_, c)| c).unwrap_or(&plain);
+            let lang = doc.styles.resolve_char(p.props.style.as_deref(), first).lang;
+            let language = settings.language_for(lang.as_deref());
+            // A result in another language (the paragraph's language changed since) is asked for
+            // again (#575 review).
+            let key = (language, text);
+            if wordcraft_proof::external::has(&key.1, &key.0) || lt.skipped.contains(&key) {
+                continue;
+            }
+            let (language, text) = key;
+            return Some(Job { text, language });
         }
-        let text = wordcraft_engine::layout::para::proof_text(p);
-        let plain = CharProps::default();
-        let first = p.run_ranges().next().map(|(_, c)| c).unwrap_or(&plain);
-        let lang = doc.styles.resolve_char(p.props.style.as_deref(), first).lang;
-        let language = settings.language_for(lang.as_deref());
-        // A result in another language (the paragraph's language changed since) is asked for
-        // again (#575 review).
-        let key = (language, text);
-        if wordcraft_proof::external::has(&key.1, &key.0) || lt.skipped.contains(&key) {
-            continue;
-        }
-        let (language, text) = key;
-        return Some(Job { text, language });
     }
     None
 }
@@ -436,6 +446,48 @@ mod tests {
         }));
         app.run("ui.languageTool", json!({"enabled": true})).unwrap();
         run_until(&mut app, &ctx, &mut t, |a| a.language_tool.stopped.is_some());
+    }
+
+    /// #762: with the body done, headers, footers, footnotes and endnotes are sent too; comments
+    /// are not.
+    #[test]
+    fn languagetool_checks_headers_footers_and_notes_after_the_body() {
+        use wordcraft_engine::doc::{Paragraph, PartKind, para_block, props::CharProps};
+        let _serial = serial();
+        let mut app = app_with("Body paragraph 762.");
+        let texts = [
+            (PartKind::Header, "Header words 762."),
+            (PartKind::Footer, "Footer words 762."),
+            (PartKind::Footnote, "Footnote words 762."),
+            (PartKind::Endnote, "Endnote words 762."),
+            (PartKind::Comment, "Comment words 762."),
+        ];
+        for (kind, text) in texts {
+            let p = Paragraph::with_text(text, CharProps::default());
+            app.session.doc.add_part(kind, vec![para_block(p)]);
+        }
+        let sent = Arc::new(Mutex::new(Vec::<String>::new()));
+        let log = sent.clone();
+        app.language_tool.fake = Some(Arc::new(move |r: &wordcraft_languagetool::Request| {
+            let f = wordcraft_languagetool::request::fields(&r.body);
+            log.lock().unwrap().push(f.iter().find(|(a, _)| a == "text").map(|(_, b)| b.clone()).unwrap_or_default());
+            Ok(json!({"matches": []}).to_string())
+        }));
+        app.run("ui.languageTool", json!({"enabled": true})).unwrap();
+        let ctx = egui::Context::default();
+        let mut t = 0.0;
+        run_until(&mut app, &ctx, &mut t, |a| a.language_tool.checked >= 5);
+        for _ in 0..20 {
+            t += 1.0;
+            super::poll_at(&mut app, &ctx, t);
+        }
+        let sent = sent.lock().unwrap().clone();
+        assert_eq!(sent.first().map(String::as_str), Some("Body paragraph 762."), "body first: {sent:?}");
+        assert_eq!(sent.len(), 5, "{sent:?}");
+        for (_, text) in &texts[..4] {
+            assert!(sent.iter().any(|s| s == text), "{text} not sent: {sent:?}");
+        }
+        assert!(!sent.iter().any(|s| s.starts_with("Comment")), "{sent:?}");
     }
 
     #[test]
