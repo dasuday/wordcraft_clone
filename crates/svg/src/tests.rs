@@ -513,6 +513,10 @@ fn text_copies_match_usvg() {
         r##"<mask id="k"><text y="9">a</text></mask><rect width="9" height="9" mask="url(#k)"/><rect x="20" width="9" height="9" mask="url(#k)"/>"##,
         r##"<pattern id="p" width="9" height="9" patternUnits="userSpaceOnUse"><text y="9">a</text></pattern><rect width="9" height="9" fill="url(#p)"/><rect x="20" width="9" height="9" fill="url(#p)"/>"##,
         r##"<text id="t" y="9">a</text><filter id="f"><feImage href="#t"/></filter><rect width="9" height="9" filter="url(#f)"/><rect x="20" width="9" height="9" filter="url(#f)"/>"##,
+        // Round 8: two markers in a loop (usvg builds each inside the other, never inside
+        // itself), and a clip path taken again by `inherit`.
+        r##"<marker id="a" overflow="visible"><text>a</text><path d="M0 0L5 5L9 0" stroke="black" marker-mid="url(#b)" marker-end="url(#a)"/></marker><marker id="b" overflow="visible"><text>b</text><path d="M0 0L5 5L9 0" stroke="black" marker-mid="url(#a)" marker-end="url(#b)"/></marker><polyline points="1,1 5,5 9,1 20,20" stroke="black" marker-mid="url(#a)"/>"##,
+        r##"<clipPath id="c" clipPathUnits="objectBoundingBox"><text y="1" font-size="1">a</text></clipPath><g clip-path="url(#c)"><rect width="9" height="9" clip-path="inherit"/><rect x="20" width="9" height="9" clip-path="inherit"/></g>"##,
     ];
     for body in bounded {
         let doc = svg(body);
@@ -904,4 +908,203 @@ fn sheets_with_fonts_and_comments_are_accepted() {
     ));
     let r = parse(d.as_bytes());
     assert!(r.is_ok(), "{:?}", r.err());
+}
+
+/// Review 8 C-5 (h1_feimg_anc): a filter image's target is built where it stands, so it inherits
+/// paint from the group around it; that paint leads back to the filter.
+#[test]
+fn loop_through_a_filter_image_targets_group() {
+    let d = pic(&format!(
+        r##"<filter id="f"><feImage href="#r"/></filter><g fill="url(#p)"><rect id="r" width="5" height="5"/></g><pattern id="p" {PAT}><rect width="5" height="5" filter="url(#f)"/></pattern><rect width="50" height="50" filter="url(#f)"/>"##
+    ));
+    assert!(refused_as_loop(&d));
+}
+
+/// Review 8 C-5 (h1c): the same, with the loop going on through a mask.
+#[test]
+fn loop_through_a_filter_image_targets_group_and_a_mask() {
+    let d = pic(&format!(
+        r##"<filter id="f"><feImage href="#r"/></filter><g fill="url(#p)"><rect id="r" width="5" height="5"/></g><pattern id="p" {PAT}><rect width="5" height="5" mask="url(#m)"/></pattern><mask id="m" maskUnits="userSpaceOnUse" x="0" y="0" width="50" height="50"><rect width="5" height="5" fill="white" filter="url(#f)"/></mask><rect width="50" height="50" filter="url(#f)"/>"##
+    ));
+    assert!(refused_as_loop(&d));
+}
+
+/// Review 8 C-6 (h7_css_string): a quote at a style sheet's top level doesn't hide the selector
+/// after it (simplecss skips to the next `{` and reads on).
+#[test]
+fn selectors_after_a_top_level_quote_are_measured() {
+    let sel = "*+".repeat(100_000);
+    let d = pic(&format!(r#"<style>"{{}} {sel}*{{fill:red}} "</style>{}"#, "<g/>".repeat(100_000)));
+    assert!(refused_as_selectors(&d));
+}
+
+/// Round 8: `inherit` takes a clip path, mask or filter from the parent, though they are not
+/// inherited otherwise (here a clip path's own clip path, from the group around it).
+#[test]
+fn loop_through_an_inherit_keyword() {
+    let d = pic(
+        r##"<g clip-path="url(#B)"><clipPath id="A" clip-path="inherit"><rect width="5" height="5"/></clipPath></g><clipPath id="B" clip-path="url(#C)"><rect width="5" height="5"/></clipPath><clipPath id="C" clip-path="url(#A)"><rect width="5" height="5"/></clipPath><rect width="50" height="50" clip-path="url(#A)"/>"##,
+    );
+    assert!(refused_as_loop(&d));
+}
+
+/// Round 8: the same for a filter image's target, whose filter comes from its group.
+#[test]
+fn loop_through_an_inherit_keyword_below_a_filter_image() {
+    let d = pic(
+        r##"<filter id="f1"><feImage href="#r1"/></filter><filter id="f2"><feImage href="#r2"/></filter><g filter="url(#f2)"><rect id="r1" width="5" height="5" filter="inherit"/></g><rect id="r2" width="5" height="5" filter="url(#f1)"/><rect width="50" height="50" filter="url(#f1)"/>"##,
+    );
+    assert!(refused_as_loop(&d));
+}
+
+/// Round 8: an `id` in another namespace before the element's own one doesn't rename it (usvg
+/// skips the foreign attribute and reads the next).
+#[test]
+fn loop_behind_a_foreign_id() {
+    let d = pic(&format!(
+        r##"<pattern xmlns:x="urn:x" x:id="zzz" id="p" {PAT}><rect width="5" height="5" fill="url(#q)"/></pattern><pattern id="q" {PAT}><rect width="5" height="5" fill="url(#s)"/></pattern><pattern id="s" {PAT}><rect width="5" height="5" fill="url(#p)"/></pattern><rect width="50" height="50" fill="url(#p)"/>"##
+    ));
+    assert!(refused_as_loop(&d));
+}
+
+/// An Illustrator-style export: a class rule per gradient (`.cls-N{fill:url(#linear-gradient-N)}`),
+/// gradients chained by `xlink:href`, a clip path, many paths.
+fn illustrator_export(gradients: usize, paths: usize, stops: usize) -> String {
+    let mut css = String::from(".cls-1{fill:none;}.cls-2{fill:#231f20;}.cls-3{clip-path:url(#clippath);}.cls-4{opacity:.5;}");
+    let mut defs = String::from(r#"<clipPath id="clippath"><rect class="cls-1" width="1000" height="1000"/></clipPath>"#);
+    for g in 0..gradients {
+        let id = if g == 0 { "linear-gradient".to_string() } else { format!("linear-gradient-{g}") };
+        css.push_str(&format!(".cls-{}{{fill:url(#{id});}}", g + 5));
+        if g % 2 == 1 {
+            defs.push_str(&format!(
+                r##"<linearGradient id="{id}" x1="{g}" y1="0" x2="{}" y2="40" xlink:href="#linear-gradient" gradientUnits="userSpaceOnUse"/>"##,
+                g + 50
+            ));
+        } else {
+            let st: String =
+                (0..stops).map(|i| format!(r##"<stop offset="{}" stop-color="#{:06x}"/>"##, i as f32 / (stops - 1) as f32, i * 40_000)).collect();
+            defs.push_str(&format!(
+                r#"<linearGradient id="{id}" x1="{g}" y1="0" x2="{}" y2="40" gradientUnits="userSpaceOnUse">{st}</linearGradient>"#,
+                g + 50
+            ));
+        }
+    }
+    let path = |p: usize| {
+        let class = if p.is_multiple_of(3) { "cls-2".to_string() } else { format!("cls-{}", 5 + p % gradients) };
+        format!(r#"<path class="{class}" d="M{}.5,{}.25c1.2-3.4,5.6-7.8,9-1.1s-2.2,6.6-4.4,8.8-6.1-1-5.6-4.4Z"/>"#, p % 900, p / 9 % 900)
+    };
+    let first: String = (0..paths / 2).map(path).collect();
+    let rest: String = (paths / 2..paths).map(path).collect();
+    format!(
+        r#"<svg id="Layer_1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1000 1000"><defs><style>{css}</style>{defs}</defs><g class="cls-3"><g class="cls-4">{first}</g>{rest}</g></svg>"#
+    )
+}
+
+/// Review 8 I-4: usvg keeps one paint server per gradient, so many paths painted with many
+/// gradient classes are not copies of anything.
+#[test]
+fn illustrator_gradient_classes_are_accepted() {
+    let d = illustrator_export(40, 3000, 5);
+    let r = parse(d.as_bytes());
+    assert!(r.is_ok(), "{:?}", r.err());
+}
+
+/// Round 8: a filter list reads `url (#f)` with a space before the bracket, and an id up to the
+/// next space or bracket.
+#[test]
+fn loop_through_a_spaced_filter_url() {
+    let d = pic(
+        r##"<filter id="f1"><feImage href="#r1"/></filter><filter id="f2"><feImage href="#r2"/></filter><rect id="r1" width="5" height="5" filter="url (#f2)"/><rect id="r2" width="5" height="5" filter="url( #f1 )"/><rect width="50" height="50" filter="url(#f1)"/>"##,
+    );
+    assert!(refused_as_loop(&d));
+}
+
+/// Round 8: a `<use>` copy inherits from the `<use>`, not from the elements around its target, so
+/// a pattern may copy a shape that sits in a group painted with that pattern.
+#[test]
+fn use_copies_inherit_from_the_use() {
+    let d = pic(&format!(
+        r##"<g fill="url(#p)"><rect id="r" width="5" height="5"/></g><pattern id="p" {PAT}><use href="#r"/></pattern><rect width="50" height="50" fill="url(#p)"/>"##
+    ));
+    let r = parse(d.as_bytes());
+    assert!(r.is_ok(), "{:?}", r.err());
+}
+
+/// Round 8: gradients cost no copies (I-4), but usvg walks a template chain from the start for
+/// every attribute it looks up, so long chains of references are refused, quickly.
+#[test]
+fn long_reference_chains_are_refused() {
+    let n = 20_000;
+    let chain: String = (0..n).map(|i| format!(r##"<linearGradient id="g{i}" href="#g{}"/>"##, i + 1)).collect();
+    let users: String = (0..n).map(|i| format!(r##"<rect width="5" height="5" fill="url(#g{i})"/>"##)).collect();
+    let d = pic(&format!(
+        r#"{chain}<linearGradient id="g{n}"><stop offset="0" stop-color="red"/><stop offset="1" stop-color="blue"/></linearGradient>{users}"#
+    ));
+    let t = std::time::Instant::now();
+    let r = parse(d.as_bytes());
+    assert!(matches!(&r, Err(Error::Parse(m)) if m.contains("this deeply")), "{:?}", r.err());
+    assert!(t.elapsed() < std::time::Duration::from_secs(5));
+    let clips: String =
+        (0..2000).map(|i| format!(r##"<clipPath id="c{i}" clip-path="url(#c{})"><rect width="5" height="5"/></clipPath>"##, i + 1)).collect();
+    let d =
+        pic(&format!(r##"{clips}<clipPath id="c2000"><rect width="5" height="5"/></clipPath><rect width="50" height="50" clip-path="url(#c0)"/>"##));
+    assert!(matches!(parse(d.as_bytes()), Err(Error::Parse(m)) if m.contains("this deeply")));
+    // A few hops are ordinary.
+    let d = pic(
+        r##"<linearGradient id="a" href="#b"/><linearGradient id="b" href="#c"/><linearGradient id="c"><stop offset="0" stop-color="red"/><stop offset="1" stop-color="blue"/></linearGradient><clipPath id="k" clip-path="url(#l)"><rect width="9" height="9" fill="url(#a)"/></clipPath><clipPath id="l"><rect width="9" height="9"/></clipPath><rect width="50" height="50" fill="url(#a)" clip-path="url(#k)"/>"##,
+    );
+    let r = parse(d.as_bytes());
+    assert!(r.is_ok(), "{:?}", r.err());
+}
+
+/// Round 8: a loop through more markers than usvg can be counted on is refused; a loop through
+/// one marker (a shape in it that inherits the marker) opens.
+#[test]
+fn loops_through_many_markers_are_refused() {
+    let k = 8;
+    let content: String = (0..k).map(|j| format!(r##"<path d="M0 0L1 1L2 0" stroke="black" marker-mid="url(#m{j})"/>"##)).collect();
+    let markers: String = (0..k).map(|i| format!(r##"<marker id="m{i}" overflow="visible">{content}</marker>"##)).collect();
+    let d = pic(&format!(r##"{markers}<path d="M0 0L1 1L2 0" stroke="black" marker-mid="url(#m0)"/>"##));
+    assert!(refused_as_loop(&d));
+    let d = pic(
+        r##"<style>path{marker-end:url(#arrow)}</style><marker id="arrow" overflow="visible"><path d="M0 0L4 2L0 4z"/></marker><path d="M0 0L50 50" stroke="black"/>"##,
+    );
+    let r = parse(d.as_bytes());
+    assert!(r.is_ok(), "{:?}", r.err());
+}
+
+/// Round 8: an Illustrator-style export with a clip path per class rule
+/// (`.cls-N{clip-path:url(#clippath-N)}`), each on a group of paths. Each clip path is built for
+/// the elements its rule matches, not for every element of the picture.
+#[test]
+fn illustrator_clip_path_classes_are_accepted() {
+    let (clips, groups) = (300, 300);
+    let mut css = String::from(".cls-1{fill:none;}.cls-2{fill:#231f20;}");
+    let mut defs = String::new();
+    for c in 0..clips {
+        let id = if c == 0 { "clippath".to_string() } else { format!("clippath-{c}") };
+        css.push_str(&format!(".cls-{}{{clip-path:url(#{id});}}", c + 3));
+        defs.push_str(&format!(r#"<clipPath id="{id}"><path class="cls-1" d="M{c},0h500v500h-500z"/></clipPath>"#));
+    }
+    let body: String = (0..groups)
+        .map(|g| {
+            let paths: String =
+                (0..20).map(|p| format!(r#"<path class="cls-2" d="M{p}.5,{g}.25c1.2-3.4,5.6-7.8,9-1.1s-2.2,6.6-4.4,8.8Z"/>"#)).collect();
+            format!(r#"<g class="cls-{}">{paths}</g>"#, g % clips + 3)
+        })
+        .collect();
+    let d = format!(r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000"><defs><style>{css}</style>{defs}</defs>{body}</svg>"#);
+    let r = parse(d.as_bytes());
+    assert!(r.is_ok(), "{:?}", r.err());
+}
+
+/// Round 8: `url(`s whose ids never end are read in linear time (each used to search to the end
+/// of the text again).
+#[test]
+fn many_unended_urls_scan_quickly() {
+    let urls = "url(#a".repeat(150_000);
+    let d = pic(&format!(r#"<clipPath id="c"><rect width="5" height="5"/></clipPath><rect width="9" height="9" fill="{urls}"/>"#));
+    let t = std::time::Instant::now();
+    let _ = parse(d.as_bytes());
+    assert!(t.elapsed() < std::time::Duration::from_secs(5), "{:?}", t.elapsed());
 }

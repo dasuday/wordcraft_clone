@@ -121,8 +121,38 @@ pub fn is_svg(bytes: &[u8]) -> bool {
 
 /// Parse an SVG file safely (see the crate docs).
 pub fn parse(bytes: &[u8]) -> Result<Svg, Error> {
-    let budget = Budget::default();
-    parse_nested(bytes, 0, &budget)
+    on_own_stack(|| {
+        let budget = Budget::default();
+        parse_nested(bytes, 0, &budget)
+    })
+}
+
+/// The stack a picture is read on (native targets). usvg builds a picture, and the style sheet
+/// matcher matches it, by recursion along the picture's structure; the checks bound how deep that
+/// goes, and a large stack of its own is a second guard behind them. The memory is only reserved:
+/// pages are used as deep as the recursion actually reaches.
+#[cfg(not(target_arch = "wasm32"))]
+const READ_STACK: usize = 256 << 20;
+
+/// Runs `f` on a thread with a [`READ_STACK`] stack, so a picture that recurses deeper than the
+/// checks foresee still can't overflow the caller's stack (which aborts the process). A panic
+/// in it becomes an error.
+#[cfg(not(target_arch = "wasm32"))]
+fn on_own_stack<T: Send>(f: impl FnOnce() -> Result<T, Error> + Send) -> Result<T, Error> {
+    std::thread::scope(|s| {
+        let reader = std::thread::Builder::new()
+            .name("svg reader".to_string())
+            .stack_size(READ_STACK)
+            .spawn_scoped(s, f)
+            .map_err(|e| Error::Parse(e.to_string()))?;
+        reader.join().unwrap_or_else(|_| refused("the SVG reader stopped"))
+    })
+}
+
+/// On the web there are no threads: the checks are the guard.
+#[cfg(target_arch = "wasm32")]
+fn on_own_stack<T>(f: impl FnOnce() -> Result<T, Error>) -> Result<T, Error> {
+    f()
 }
 
 /// What a picture and the SVG pictures nested in it may hold between them (#1910 review 3).
@@ -307,16 +337,16 @@ const XLINK_NS: &str = "http://www.w3.org/1999/xlink";
 const MAX_TREF_WORK: u64 = 1 << 26;
 const ENDLESS_COPIES: &str = "SVG whose copies of itself never end is not supported";
 const SELECTORS_TOO_COMPLEX: &str = "SVG style sheet with selectors this complex is not supported";
-const STYLE_UNREADABLE: &str = "SVG with style text that can't be read is not supported";
 const REFERENCE_LOOP: &str = "SVG whose clip paths, masks, patterns, filters or markers refer to each other in a loop is not supported";
+const REFERENCES_TOO_DEEP: &str = "SVG whose clip paths, masks, patterns, filters or markers refer to each other this deeply is not supported";
 const TOO_MANY_REFERENCES: &str = "SVG with this many clip paths, masks, patterns, filters or markers is not supported";
 const TOO_MANY_ELEMENTS: &str = "SVG that draws this many elements is not supported";
 fn refusal(r: refs::Refusal) -> &'static str {
     match r {
         refs::Refusal::Loop => REFERENCE_LOOP,
         refs::Refusal::TooBig => TOO_MANY_REFERENCES,
-        refs::Refusal::Unreadable => STYLE_UNREADABLE,
         refs::Refusal::Selectors => SELECTORS_TOO_COMPLEX,
+        refs::Refusal::Deep => REFERENCES_TOO_DEEP,
     }
 }
 
@@ -467,6 +497,11 @@ fn copies<'a, 'i>(xml: &'a usvg::roxmltree::Document<'i>) -> Result<Copies, &'st
     let all: Vec<Node> = xml.descendants().collect();
     let len = all.iter().map(|n| n.id().get_usize() + 1).max().unwrap_or(0);
     let at = |n: Node| n.id().get_usize();
+    // usvg draws a marker's content at every marker place of the shapes that name it, and builds
+    // a clip path, mask, filter or pattern again for each element that names it (unless it can
+    // share one, which isn't counted on). They refer to each other, which usvg follows without
+    // limit: a loop is refused.
+    let graph = refs::graph(xml).map_err(refusal)?;
     let mut ids = std::collections::HashMap::new();
     for n in &all {
         if let Some(id) = n.attribute("id") {
@@ -492,21 +527,29 @@ fn copies<'a, 'i>(xml: &'a usvg::roxmltree::Document<'i>) -> Result<Copies, &'st
     let mut urls = vec![0u64; len];
     let mut sub_slots = vec![0u64; len];
     let mut sub_url = vec![false; len];
-    let sheet_urls = all
-        .iter()
-        .filter(|n| n.is_element() && n.tag_name().name() == "style")
-        .flat_map(|n| n.descendants())
-        .filter_map(|d| d.text().filter(|_| d.is_text()))
-        .fold(0u64, |a, t| a.saturating_add(url_count(t)));
-    let own_slots = |u: u64| 2u64.saturating_add(u).saturating_add(sheet_urls);
+    // Only a `url(` that may name something other than a gradient is a place something is built:
+    // usvg keeps one paint server per gradient, however many elements it paints (review 8 I-4).
+    let built_ids: std::collections::HashSet<&str> =
+        all.iter().filter(|n| n.is_element() && !n.tag_name().name().ends_with("Gradient")).flat_map(|n| refs::ids(*n)).collect();
+    // The `url(`s each element names itself (attributes, `style`, matching style sheet rules).
+    for n in all.iter().filter(|n| svg_element(**n)) {
+        let mut k = 0u64;
+        graph.urls_of(*n, |_, ids| k = k.saturating_add(u64::from(ids.iter().any(|id| built_ids.contains(id)))));
+        if let Some(u) = urls.get_mut(at(*n)) {
+            *u = k;
+        }
+    }
+    // `inherit` copies the parent's clip path, mask or filter: then any element may name as many
+    // as the most any element names.
+    let inherited_urls = if graph.inherit { urls.iter().copied().max().unwrap_or(0) } else { 0 };
+    let own_slots = |u: u64| 2u64.saturating_add(u).saturating_add(inherited_urls);
     for n in all.iter().rev() {
         let i = at(*n);
-        let u = if svg_element(*n) { n.attributes().fold(0u64, |a, at| a.saturating_add(url_count(at.value()))) } else { 0 };
+        let u = urls.get(i).copied().unwrap_or(0);
         let (slots, url) = n.children().fold((if svg_element(*n) { own_slots(u) } else { 0 }, u > 0), |(a, b), c| {
             (a.saturating_add(sub_slots.get(at(c)).copied().unwrap_or(0)), b || sub_url.get(at(c)).copied().unwrap_or(false))
         });
-        if let (Some(us), Some(ss), Some(su)) = (urls.get_mut(i), sub_slots.get_mut(i), sub_url.get_mut(i)) {
-            *us = u;
+        if let (Some(ss), Some(su)) = (sub_slots.get_mut(i), sub_url.get_mut(i)) {
             *ss = slots;
             *su = url;
         }
@@ -631,6 +674,7 @@ fn copies<'a, 'i>(xml: &'a usvg::roxmltree::Document<'i>) -> Result<Copies, &'st
     // 0: not reached, 1: being worked out (on the walk's path), 2: worked out.
     let mut state = vec![0u8; len];
     let mut built = vec![Copies::default(); len];
+    let mut finished: Vec<Node> = Vec::new();
     let mut stack = vec![xml.root()];
     while let Some(&n) = stack.last() {
         let i = at(n);
@@ -650,6 +694,7 @@ fn copies<'a, 'i>(xml: &'a usvg::roxmltree::Document<'i>) -> Result<Copies, &'st
                     *b = c;
                     *s = 2;
                 }
+                finished.push(n);
                 stack.pop();
             }
             _ => {
@@ -662,54 +707,98 @@ fn copies<'a, 'i>(xml: &'a usvg::roxmltree::Document<'i>) -> Result<Copies, &'st
         .iter()
         .filter(|n| kind(**n) == Kind::Text && !in_text.get(at(**n)).copied().unwrap_or(true))
         .fold(0u64, |a, n| a.saturating_add(text.get(at(*n)).copied().unwrap_or(0)));
-    // usvg draws a marker's content at every marker place of the shapes that name it, and builds
-    // a clip path, mask, filter or pattern again for each element that names it (unless it can
-    // share one, which isn't counted on). They refer to each other, which usvg follows without
-    // limit: a loop is refused. Along the references (what each one holds, inherits or names), a
-    // special is built once for every place any referrer may name it, times how often that
-    // referrer is built.
-    let graph = refs::graph(xml).map_err(refusal)?;
     if total.endless {
         return Ok(total);
     }
-    let held = |i: usize| graph.nodes.get(i).and_then(|id| built.get(*id)).copied().unwrap_or_default();
-    let mut times: Vec<u64> = (0..graph.nodes.len())
-        .map(|i| match (graph.named.get(i), graph.marker.get(i)) {
-            (Some(true), Some(true)) => total.marks,
-            (Some(true), _) => total.slots,
-            _ => 0,
-        })
-        .collect();
-    for &x in &graph.order {
+    // How often each node is built in the picture: copies (and copies of copies) counted.
+    let mut made = vec![0u64; len];
+    if let Some(m) = made.get_mut(at(xml.root())) {
+        *m = 1;
+    }
+    for &n in finished.iter().rev() {
+        let k = made.get(at(n)).copied().unwrap_or(0);
+        for d in from(n) {
+            if let Some(m) = made.get_mut(at(d)) {
+                *m = m.saturating_add(k);
+            }
+        }
+    }
+    // A text element's spans are built with it.
+    for n in &all {
+        if in_text.get(at(*n)) == Some(&true)
+            && let Some(k) = n.parent().and_then(|p| made.get(at(p)).copied())
+            && let Some(m) = made.get_mut(at(*n))
+        {
+            *m = (*m).max(k);
+        }
+    }
+    // How often the picture itself builds each special: for each element that names it, once per
+    // copy of the element; for paint (or anything that may pass down), once per element built
+    // inside it too; for a marker, once per marker place inside it.
+    let mut named = vec![0u64; graph.nodes.len()];
+    let mut specials: Vec<u32> = Vec::new();
+    for n in all.iter().filter(|n| svg_element(**n)) {
+        let k = made.get(at(*n)).copied().unwrap_or(0);
+        if k == 0 {
+            continue;
+        }
+        let b = built.get(at(*n)).copied().unwrap_or_default();
+        // What passes down reaches every element built inside it (a text's spans included).
+        let inside = b.elements.max(last.get(at(*n)).map_or(1, |l| (l.saturating_sub(at(*n)) as u64).saturating_add(1)));
+        graph.urls_of(*n, |name, ids| {
+            specials.clear();
+            specials.extend(ids.iter().flat_map(|id| graph.named_by(id)));
+            specials.sort_unstable();
+            specials.dedup();
+            for &s in &specials {
+                let places = if graph.marker.get(s as usize) == Some(&true) {
+                    b.marks
+                } else if graph.passes_down(name) {
+                    inside
+                } else {
+                    1
+                };
+                if let Some(m) = named.get_mut(s as usize) {
+                    *m = m.saturating_add(k.saturating_mul(places));
+                }
+            }
+        });
+    }
+    // Along the references (what each one holds, inherits or names), a special is built once
+    // for every place any referrer may name it, times how often that referrer is built. The
+    // references are walked as the ways usvg may reach each special: a loop through markers is
+    // unrolled, each of its markers built once at most along any path.
+    let st = &graph.states;
+    let special = |x: usize| st.of.get(x).map_or(usize::MAX, |s| *s as usize);
+    let held = |x: usize| graph.nodes.get(special(x)).and_then(|id| built.get(*id)).copied().unwrap_or_default();
+    let is_marker = |x: usize| graph.marker.get(special(x)) == Some(&true);
+    let mut times = vec![0u64; st.of.len()];
+    for (e, k) in st.entry.iter().zip(&named) {
+        if let Some(m) = times.get_mut(*e as usize) {
+            *m = m.saturating_add(*k);
+        }
+    }
+    for &x in &st.order {
         let x = x as usize;
         let (b, k) = (held(x), times.get(x).copied().unwrap_or(0));
-        for &t in graph.edges.get(x).into_iter().flatten() {
-            let places = if graph.marker.get(t as usize) == Some(&true) { b.marks } else { b.slots };
+        for &t in st.edges.get(x).into_iter().flatten() {
+            let places = if is_marker(t as usize) { b.marks } else { b.slots };
             if let Some(m) = times.get_mut(t as usize) {
                 *m = m.saturating_add(places.saturating_mul(k));
             }
         }
     }
-    // A loop through a marker is built once more (usvg won't build a marker inside itself).
-    for &(v, t) in &graph.closing {
-        let (b, k) = (held(v as usize), times.get(v as usize).copied().unwrap_or(0));
-        let places = if graph.marker.get(t as usize) == Some(&true) { b.marks } else { b.slots };
-        if let Some(m) = times.get_mut(t as usize) {
-            *m = m.saturating_add(places.saturating_mul(k));
-        }
-    }
     for (i, k) in times.iter().enumerate() {
+        // Built once, whatever it paints.
+        if graph.gradient.get(special(i)) == Some(&true) {
+            continue;
+        }
         let b = held(i);
         total.bytes = total.bytes.saturating_add(b.bytes.saturating_mul(*k));
         total.texts = total.texts.saturating_add(b.texts.saturating_mul(*k));
         total.elements = total.elements.saturating_add(b.elements.saturating_mul(*k));
     }
     Ok(total)
-}
-
-/// The number of `url(` in `s` (any case).
-fn url_count(s: &str) -> u64 {
-    s.as_bytes().windows(4).filter(|w| w.eq_ignore_ascii_case(b"url(")).count() as u64
 }
 
 /// The length of character data once its entity references are expanded.
