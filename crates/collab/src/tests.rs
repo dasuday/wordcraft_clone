@@ -104,7 +104,7 @@ fn stories_comments_styles_and_lists_travel() {
     // Both add a comment, a footnote and a list at once: their ids don't collide.
     for (d, who) in [(&mut a, "Ann"), (&mut b, "Bob")] {
         let part = d.add_part(PartKind::Comment, vec![para_block(Paragraph::with_text(&format!("{who} says"), CharProps::default()))]);
-        let id = d.next_comment_id();
+        let id = d.next_comment_id().unwrap();
         d.comments.insert(id, Comment { author: who.into(), part, ..Default::default() });
         d.add_part(PartKind::Footnote, vec![para_block(Paragraph::with_text(who, CharProps::default()))]);
         d.numbering.add_list(wordcraft_doc::ListKind::Numbered);
@@ -287,7 +287,7 @@ fn edit(rng: &mut Rng, d: &mut Document, tag: &str) {
         }
         _ => {
             let part = d.add_part(PartKind::Comment, vec![para_block(Paragraph::with_text(tag, CharProps::default()))]);
-            let id = d.next_comment_id();
+            let id = d.next_comment_id().unwrap();
             d.comments.insert(id, Comment { author: tag.into(), part, ..Default::default() });
         }
     }

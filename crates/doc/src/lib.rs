@@ -74,6 +74,27 @@ pub enum DocError {
 
 pub type Result<T> = std::result::Result<T, DocError>;
 
+/// A free id, `min` or more, for something new (a part, a list, a comment): one past `largest`, the
+/// largest id in use, so ids keep growing; once that would pass `u32::MAX` (a file can use any id),
+/// the lowest one `used` (every id in use) doesn't hold. `None` when every id from `min` up is taken.
+pub fn free_id(largest: Option<u32>, used: impl Iterator<Item = u32>, min: u32) -> Option<u32> {
+    let Some(largest) = largest else { return Some(min) };
+    if let Some(next) = largest.checked_add(1) {
+        return Some(next.max(min));
+    }
+    let mut ids: Vec<u32> = used.filter(|&i| i >= min).collect();
+    ids.sort_unstable();
+    ids.dedup();
+    let mut want = min;
+    for i in ids {
+        if i > want {
+            break;
+        }
+        want = want.checked_add(1)?;
+    }
+    Some(want)
+}
+
 /// A block in a story. (Blocks are always behind an `Arc`, so the size difference is fine.)
 #[allow(clippy::large_enum_variant)]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -476,6 +497,14 @@ pub struct Settings {
     /// 2013 and later, which places a table's border at the margin rather than its text and lets
     /// justified lines shrink their spaces to fit more text.
     pub compat_mode: u32,
+    /// Fonts the document's font table classes as roman (serif, `w:family w:val="roman"`): Word
+    /// draws one that isn't installed in a serif face.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub roman_fonts: Vec<String>,
+    /// `w:doNotUseHTMLParagraphAutoSpacing`: the space between two paragraphs is the first's space
+    /// after plus the second's space before, not the larger of the two.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub sum_paragraph_spacing: bool,
     /// Keep contextual paragraph spacing inside legacy table cells (`allowSpaceOfSameStyleInTable`).
     /// Word ignores the layout override in compatibility mode 15, but the flag still round-trips.
     pub allow_space_of_same_style_in_table: bool,
@@ -610,6 +639,8 @@ impl Default for Settings {
             protect_formatting: false,
             protect_hash: Vec::new(),
             compat_mode: COMPAT_MODE_CURRENT,
+            roman_fonts: Vec::new(),
+            sum_paragraph_spacing: false,
             allow_space_of_same_style_in_table: false,
             grid_h: DEFAULT_GRID,
             grid_v: DEFAULT_GRID,
@@ -700,18 +731,19 @@ impl IdSpace {
         self.start > 0 && (self.start..self.start.saturating_add(Self::BLOCK)).contains(&id)
     }
 
-    /// A new id not in `taken`, at least `floor`; [`IdSpace::take`] it.
-    pub fn next(&self, taken: impl Iterator<Item = u32> + Clone, floor: u32) -> u32 {
+    /// A new id not in `taken`, at least `floor`; [`IdSpace::take`] it. Outside a live session (or
+    /// once its block is full) a [`free_id`]; `None` when every id from `floor` up is taken.
+    pub fn next(&self, taken: impl Iterator<Item = u32> + Clone, floor: u32) -> Option<u32> {
         if self.start > 0 {
             let end = self.start.saturating_add(Self::BLOCK);
             let lo = self.start.max(self.floor);
             let mine = taken.clone().filter(|id| (self.start..end).contains(id)).max().map(|m| m.saturating_add(1)).unwrap_or(lo).max(lo).max(floor);
             if mine < end {
-                return mine;
+                return Some(mine);
             }
             // The block is full: one past the highest.
         }
-        taken.max().map(|m| m.saturating_add(1)).unwrap_or(floor).max(floor)
+        free_id(taken.clone().max(), taken, floor)
     }
 
     /// Records that `id` was made, so it isn't made again.
@@ -935,19 +967,24 @@ impl Document {
 
     /// The whole text of a story, paragraphs separated by `\n` (tables: cells by `\t`).
     pub fn plain_text(&self, s: StoryRef) -> String {
-        self.story_text(s, false)
+        self.story_text(s, TextMode::Plain)
     }
 
     /// [`Self::plain_text`] as it reads on screen: symbol-font characters (Wingdings…) as their
     /// Unicode equivalents ([`Paragraph::shown_text`]).
     pub fn shown_text(&self, s: StoryRef) -> String {
-        self.story_text(s, true)
+        self.story_text(s, TextMode::Shown)
     }
 
-    fn story_text(&self, s: StoryRef, shown: bool) -> String {
+    /// [`Self::plain_text`] without tracked-deleted runs. A deleted paragraph mark still yields `\n`.
+    pub fn final_text(&self, s: StoryRef) -> String {
+        self.story_text(s, TextMode::Final)
+    }
+
+    fn story_text(&self, s: StoryRef, mode: TextMode) -> String {
         let mut out = String::new();
         if let Some(bl) = self.story(s) {
-            text_of(bl, &mut out, 0, shown);
+            text_of(bl, &mut out, 0, mode);
         }
         if out.ends_with('\n') {
             out.pop();
@@ -1014,23 +1051,30 @@ impl Document {
         &mut self.last_section
     }
 
-    /// Allocate a new part id and insert the part.
+    /// Allocate a new part id and insert the part. Part ids run out only past `u32::MAX` parts, more
+    /// than memory holds; then nothing is added and the id is 0, which [`free_id`] never gives a part.
     pub fn add_part(&mut self, kind: PartKind, blocks: Blocks) -> u32 {
-        let id = self.id_space.next(self.parts.keys().copied(), 1);
+        self.try_add_part(kind, blocks).unwrap_or(0)
+    }
+
+    /// [`Document::add_part`], or an error, adding nothing, when every part id is taken.
+    pub fn try_add_part(&mut self, kind: PartKind, blocks: Blocks) -> Result<u32> {
+        let id = self.id_space.next(self.parts.keys().copied(), 1).ok_or_else(|| DocError::Invalid("no free part id".into()))?;
         self.id_space.take(id);
         let mut part = Part { kind, blocks, body: TextBody::default() };
         if part.blocks.is_empty() {
             part.blocks.push(para_block(Paragraph::new()));
         }
         self.parts.insert(id, part);
-        id
+        Ok(id)
     }
 
-    /// A new comment id ([`Document::id_space`]), for a comment about to be added.
-    pub fn next_comment_id(&mut self) -> u32 {
-        let id = self.id_space.next(self.comments.keys().copied(), 0);
+    /// A new comment id ([`Document::id_space`]), for a comment about to be added: one past the
+    /// largest, or the lowest free one once a file used `u32::MAX`; an error when all are taken.
+    pub fn next_comment_id(&mut self) -> Result<u32> {
+        let id = self.id_space.next(self.comments.keys().copied(), 0).ok_or_else(|| DocError::Invalid("no free comment id".into()))?;
         self.id_space.take(id);
-        id
+        Ok(id)
     }
 
     /// Sets where new story, comment and list ids come from (a live session's block, or
@@ -1294,6 +1338,18 @@ impl Document {
         }
     }
 
+    /// Repair every paragraph's runs (see [`Paragraph::normalize`]); for models from untrusted
+    /// JSON, whose run lengths may overflow, fall short or split a character.
+    pub fn normalize_runs(&mut self) {
+        let mut stories: Vec<&mut Blocks> = vec![&mut self.body];
+        stories.extend(self.parts.values_mut().map(|p| &mut p.blocks));
+        for blocks in stories {
+            for b in blocks.iter_mut() {
+                edit::each_para_mut(Arc::make_mut(b), 0, &mut Paragraph::normalize);
+            }
+        }
+    }
+
     /// Number of paragraphs in the body (all depths).
     pub fn paragraph_count(&self) -> usize {
         self.para_paths(StoryRef::Body).len()
@@ -1443,14 +1499,29 @@ fn walk(bl: &Blocks, prefix: &mut Vec<u32>, out: &mut Vec<Path>, depth: usize) {
     }
 }
 
-fn text_of(bl: &Blocks, out: &mut String, depth: usize, shown: bool) {
+/// Which text of a paragraph [`text_of`] collects.
+#[derive(Clone, Copy)]
+enum TextMode {
+    /// Every run, tracked deletions included ([`Paragraph::plain_text`]).
+    Plain,
+    /// As shown on screen ([`Paragraph::shown_text`]).
+    Shown,
+    /// Without tracked deletions ([`Paragraph::final_text`]).
+    Final,
+}
+
+fn text_of(bl: &Blocks, out: &mut String, depth: usize, mode: TextMode) {
     if depth > 16 {
         return;
     }
     for b in bl {
         match &**b {
             Block::Para(p) => {
-                out.push_str(&if shown { p.shown_text() } else { p.plain_text() });
+                out.push_str(&match mode {
+                    TextMode::Plain => p.plain_text(),
+                    TextMode::Shown => p.shown_text(),
+                    TextMode::Final => p.final_text(),
+                });
                 out.push('\n');
             }
             Block::Table(t) => {
@@ -1458,7 +1529,7 @@ fn text_of(bl: &Blocks, out: &mut String, depth: usize, shown: bool) {
                     let mut cells = Vec::new();
                     for c in &row.cells {
                         let mut s = String::new();
-                        text_of(&c.blocks, &mut s, depth + 1, shown);
+                        text_of(&c.blocks, &mut s, depth + 1, mode);
                         cells.push(s.trim_end_matches('\n').replace('\n', " "));
                     }
                     out.push_str(&cells.join("\t"));
