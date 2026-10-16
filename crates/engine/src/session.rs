@@ -1165,6 +1165,10 @@ impl Session {
     /// control channel). Mutating commands are undoable; a failed command leaves the document as
     /// it was; a panic inside a command becomes an error.
     pub fn run(&mut self, id: &str, params: &Value) -> Result<Value, CmdError> {
+        // Check explicit replacements before command setup changes selection or tracking state.
+        if id == "edit.replaceText" {
+            crate::cmd::edit::replacement_target(self, params)?;
+        }
         let join = std::mem::take(&mut self.join_next);
         let reg = self.registry.clone();
         let Some(spec) = reg.get(id) else { return Err(CmdError::Unknown(id.to_string())) };
@@ -1173,9 +1177,6 @@ impl Session {
         }
         // Restrict Editing: refused outright, or allowed as long as it only edits the exceptions.
         let guard = if spec.mutates { crate::cmd::protect::check_before(self, id, params)? } else { false };
-        if spec.mutates && self.doc.settings.protection.as_deref() == Some("trackedChanges") {
-            self.doc.settings.track_changes = true;
-        }
         // Macro recording and Repeat.
         let record = !matches!(id, "tools.recordMacro" | "tools.macros" | "edit.undo" | "edit.redo" | "edit.repeat")
             && (spec.mutates || id.starts_with("caret.") || id.starts_with("select."));
@@ -1216,6 +1217,9 @@ impl Session {
         } else {
             None
         };
+        if spec.mutates && self.doc.settings.protection.as_deref() == Some("trackedChanges") {
+            self.doc.settings.track_changes = true;
+        }
         let typing = spec.id == "text.insert" || spec.id == "equation.type";
         if spec.mutates && !typing {
             self.typing_open = false;

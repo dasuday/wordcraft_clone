@@ -462,6 +462,8 @@ fn inspect(s: &mut Session, v: &Value) -> CmdResult {
     let parts: Vec<Value> =
         s.doc.parts.iter().map(|(id, p)| json!({"id": id, "kind": p.kind, "text": s.doc.plain_text(StoryRef::Part(*id))})).collect();
     Ok(json!({
+        "documentId": s.document_id(),
+        "revision": s.rev(),
         "blocks": blocks,
         "parts": parts,
         "selection": {"anchor": pos_json(&s.sel.anchor), "focus": pos_json(&s.sel.focus), "text": s.selected_text()},
@@ -481,7 +483,7 @@ fn paragraph(s: &mut Session, v: &Value) -> CmdResult {
     let story = super::story_param(s, v);
     let p = s.doc.para(story, &wordcraft_doc::Path(path)).ok_or_else(|| CmdError::Params("no paragraph there".into()))?;
     let resolved = s.doc.styles.resolve_para(&p.props);
-    Ok(json!({"paragraph": p, "resolved": resolved}))
+    Ok(json!({"paragraph": p, "resolved": resolved, "documentId": s.document_id(), "revision": s.rev()}))
 }
 
 fn layout_summary(s: &mut Session, _: &Value) -> CmdResult {

@@ -27,12 +27,73 @@ fn undo_to(s: &mut Session, v: &Value) -> CmdResult {
     Ok(r)
 }
 
+/// Resolve one literal replacement before any command setup or document mutation.
+/// A read token is session-local; offsets never come from the caller.
+pub(crate) fn replacement_target(s: &Session, v: &Value) -> Result<crate::Selection, CmdError> {
+    #[derive(serde::Deserialize)]
+    #[serde(rename_all = "camelCase", deny_unknown_fields)]
+    struct Request {
+        document_id: u64,
+        revision: u64,
+        story: wordcraft_doc::StoryRef,
+        path: wordcraft_doc::Path,
+        expected: String,
+        text: String,
+    }
+    let r: Request = serde_json::from_value(v.clone()).map_err(|e| CmdError::Params(e.to_string()))?;
+    let conflict = |why: &str| CmdError::Failed(format!("replacement_conflict: {why}; read the paragraph again"));
+    if r.document_id != s.document_id() || r.revision != s.rev() {
+        return Err(conflict("the document or revision changed"));
+    }
+    if r.path.0.is_empty() || !(r.path.0.len() - 1).is_multiple_of(3) {
+        return Err(CmdError::Params("path must name one paragraph".into()));
+    }
+    let literal =
+        |text: &str| !text.chars().any(|c| c == wordcraft_doc::para::OBJ || (c.is_control() && c != '\t') || matches!(c, '\u{2028}' | '\u{2029}'));
+    if r.expected.is_empty() || !literal(&r.expected) || !literal(&r.text) {
+        return Err(CmdError::Params("expected must be nonempty; replacement text cannot contain paragraph breaks or object markers".into()));
+    }
+    if s.math.is_some() || s.column_mode || s.column_segments().is_some() {
+        return Err(CmdError::Disabled("leave equation or rectangular selection editing before a checked replacement".into()));
+    }
+    let para = s.doc.para(r.story, &r.path).ok_or_else(|| conflict("the paragraph is missing"))?;
+    let start = para.text.find(&r.expected).ok_or_else(|| conflict("the expected text is missing"))?;
+    if para.text.rfind(&r.expected) != Some(start) {
+        return Err(conflict("the expected text is ambiguous"));
+    }
+    let end = start.checked_add(r.expected.len()).ok_or_else(|| CmdError::Params("replacement range overflow".into()))?;
+    if para.run_ranges().any(|(range, props)| range.start < end && range.end > start && props.del.is_some()) {
+        return Err(conflict("the expected text includes a tracked deletion"));
+    }
+    let anchor = wordcraft_doc::Pos { story: r.story, path: r.path, off: start };
+    if s.doc.control_at(&anchor).is_some_and(|c| c.control.showing_placeholder) {
+        return Err(conflict("replacing a control placeholder would expand the target"));
+    }
+    Ok(crate::Selection { focus: wordcraft_doc::Pos { off: end, ..anchor.clone() }, anchor })
+}
+
+fn replace_text(s: &mut Session, v: &Value) -> CmdResult {
+    let target = replacement_target(s, v)?;
+    let text = p::req_str(v, "text")?;
+    s.sel = target;
+    // An explicit target inherits its own formatting, not pending formatting at the old caret.
+    let pending = s.pending.take();
+    let result = super::type_text(s, text);
+    s.pending = pending;
+    result?;
+    let mut result = sel_result(s)?;
+    result["replaced"] = json!(1);
+    Ok(result)
+}
+
 fn has_sel(s: &Session) -> Option<&'static str> {
     if s.sel.is_collapsed() { Some("nothing is selected") } else { None }
 }
 
 pub fn specs() -> Vec<CommandSpec> {
     vec![
+        CommandSpec::new("edit.replaceText", "Replace", "Agents", replace_text)
+            .params(r#"{"documentId": n, "revision": n, "story": Story, "path": [n], "expected": string, "text": string} (one literal match in raw paragraph text; use document.paragraph tokens; no offset calculation)"#),
         CommandSpec::new("edit.undo", "Undo", "Quick Access Toolbar", |s, _| {
             if s.step_lifts_protection(false) {
                 return Err(CmdError::Disabled("edit.undo: use Stop Protection to lift the document's protection".into()));

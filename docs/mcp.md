@@ -101,6 +101,52 @@ Resources: `wordcraft://document` (inspect) and `wordcraft://commands`.
 
 The acceptance test `crates/mcp/src/tests.rs` writes a formatted document using MCP only.
 
+## Checked single-paragraph replacement
+
+Document positions use **UTF-8 byte offsets** in raw paragraph text. That text includes
+U+FFFC object markers for comments, fields and other inline objects. `get_text` is visible text:
+its character indexes are not document positions. Do not calculate an offset from it.
+
+For a literal edit, read `document.paragraph` through `execute`, then use `edit.replaceText`.
+The paragraph read and `document.inspect` include session-local `documentId` and `revision`
+tokens. For example, after reading body paragraph `[0]` containing
+`Prefix β text. Strategy views show selections. End.` with a comment on the middle sentence:
+
+```json
+{"command":"document.paragraph","params":{"story":"body","path":[0]}}
+```
+
+Copy both tokens from that response into the next request (the numbers below are examples):
+
+```json
+{"command":"edit.replaceText","params":{
+  "documentId":1,"revision":3,"story":"body","path":[0],
+  "expected":"End.","text":"Done 😀."
+}}
+```
+
+The engine finds the one literal occurrence in that paragraph, independent of the caret, and
+replaces it in one undoable command. The earlier comment anchors remain in place. The result
+contains `replaced: 1` and the new selection; read again for fresh tokens before the next edit.
+Tokens belong to the current in-process session/document, not to the saved file or another
+server process.
+
+All six parameters are required. `story` is `"body"` or `{"part": n}`; `path` names an existing
+paragraph, including one in a table. `expected` is nonempty and must occur exactly once,
+including overlapping occurrences; `text` may be empty to delete it. Matching is literal,
+case-sensitive raw text, without Unicode normalization. Neither string may contain object
+markers, paragraph breaks or control characters other than tabs.
+
+A stale token, missing or ambiguous match, tracked-deleted target, control placeholder, active
+equation editing or rectangular selection refuses the edit. Document protection, protected-range
+exceptions, locked controls and Track Changes still apply. A refusal preserves document,
+selection and undo history. Read again and reconsider the target after a conflict; do not
+blindly retry with changed tokens.
+
+This is one paragraph operation, not a batch transaction or a general comment-anchor mapper.
+It is available through the normal headless command API and authenticated desktop control
+dispatch; it does not grant a live agent any additional command permission.
+
 ## Character and paragraph properties
 
 `format.set {"props": CharProps}`, `para.set {"props": ParaProps}`,
