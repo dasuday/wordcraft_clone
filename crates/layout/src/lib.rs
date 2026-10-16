@@ -1013,8 +1013,9 @@ fn layout_box(
     let allow_same_style_space =
         in_cell && ctx.doc.settings.allow_space_of_same_style_in_table && matches!(ctx.doc.settings.compat_mode, 11 | 12 | 14);
     let mut items = Vec::new();
-    // Pictures behind the text go first; `behind` counts them.
+    // Pictures behind the text go first; `behind` counts them. Those in front of it go last.
     let mut behind = 0;
+    let mut on_top = Vec::new();
     // Wrap areas of the box's floating objects.
     let mut excl: Vec<WrapArea> = Vec::new();
     // Areas of the box's floating tables, which other floating tables may have to avoid.
@@ -1110,11 +1111,12 @@ fn layout_box(
                 // Pictures, shapes and text boxes: drawn, their areas and text boxes' text.
                 if !p.objects.is_empty() {
                     let at = ObjFrame { page: frame, col: (0.0, width), para_y: y, table_chr: table.map(|t| &t.chr) };
-                    let (back, front) = place_objects(ctx, story, &path, p, &pl, (0, pl.lines.len()), (0.0, y + lead), &at, &floats, depth);
+                    let (back, front, top) = place_objects(ctx, story, &path, p, &pl, (0, pl.lines.len()), (0.0, y + lead), &at, &floats, depth);
                     let at = behind.min(items.len());
                     behind += back.len();
                     items.splice(at..at, back);
                     items.extend(front);
+                    on_top.extend(top);
                 }
                 // Automatic space after: none after the last paragraph of a cell or box.
                 let after = if pl.rp.after_auto && i + 1 == blocks.len() { 0.0 } else { pl.rp.space_after };
@@ -1161,6 +1163,7 @@ fn layout_box(
     }
     let floats_bottom = float_tables.iter().map(|r| r.bottom()).fold(0.0, f32::max);
     ctx.hide_deleted = outer_hide;
+    items.extend(on_top);
     BoxLayout { items, height: y.max(0.0), floats_bottom, last_top: last_top.max(0.0) }
 }
 
@@ -1432,6 +1435,10 @@ struct PageBuilder<'a> {
     /// Per page: how many items were inserted at the front of its list (behind the text), so a
     /// [`Snap`] can take them out again.
     behind: Vec<usize>,
+    /// Per page: what goes on top of all its text (In Front of Text, #1993), each with where its
+    /// paragraph's items start (counted like `block_marks`). It joins the page's items when the
+    /// page is left, after vertical alignment has moved it with its block.
+    on_top: Vec<Vec<(usize, Placed)>>,
     /// The bottom of the tallest column on the current page before the current one.
     max_y: f32,
     /// The bottom of the lowest line or table row placed on the current page (without the space
@@ -1796,6 +1803,12 @@ impl PageBuilder<'_> {
                 it.translate(0.0, gap * k as f32);
             }
         }
+        for (at, it) in self.on_top.last_mut().into_iter().flatten() {
+            let k = cuts.partition_point(|&c| c <= *at);
+            if k > 0 {
+                it.translate(0.0, gap * k as f32);
+            }
+        }
     }
     /// Section vertical alignment: move the page's body down (centre/bottom), or spread its
     /// blocks out (justified).
@@ -1816,6 +1829,16 @@ impl PageBuilder<'_> {
                 it.translate(0.0, space);
             }
         }
+        for (_, it) in self.on_top.last_mut().into_iter().flatten() {
+            it.translate(0.0, space);
+        }
+    }
+    /// The page's In Front of Text objects go over all of its text: after its last item.
+    fn lift_on_top(&mut self) {
+        let top = self.on_top.last_mut().map(std::mem::take).unwrap_or_default();
+        if let Some(pg) = self.pages.last_mut() {
+            pg.items.extend(top.into_iter().map(|(_, it)| it));
+        }
     }
     /// Takes back the page a page break has just started while nothing is on it, so a page start
     /// that follows (a next-page section) doesn't leave it blank: Word keeps the break's mark on
@@ -1825,12 +1848,14 @@ impl PageBuilder<'_> {
             && self.at_top()
             && self.notes.is_empty()
             && self.pages.len() > 1
-            && self.pages.last().is_some_and(|p| p.items.len() == self.page_items_start);
+            && self.pages.last().is_some_and(|p| p.items.len() == self.page_items_start)
+            && self.on_top.last().is_none_or(Vec::is_empty);
         if !empty {
             return false;
         }
         self.pages.pop();
         self.behind.pop();
+        self.on_top.pop();
         self.number = self.number.saturating_sub(1);
         self.after_break_mark = false;
         // The page before was aligned when it was left: nothing on it moves again.
@@ -1839,6 +1864,7 @@ impl PageBuilder<'_> {
     }
     fn new_page(&mut self, first_block: usize, body_top: f32) {
         self.apply_valign();
+        self.lift_on_top();
         self.flush_notes();
         self.beneath = self.sect_beneath;
         self.excl.clear();
@@ -1874,6 +1900,7 @@ impl PageBuilder<'_> {
         self.page_valign = s.valign;
         self.pages.push(Page { w, h, section: self.sect_idx, number: self.number, body, first_block, items: decor, ..Default::default() });
         self.behind.push(0);
+        self.on_top.push(Vec::new());
         self.col = 0;
         self.cols = s.column_boxes();
         self.top = body_top;
@@ -2098,6 +2125,7 @@ fn layout_pass(
         page_valign: wordcraft_doc::section::PageVAlign::Top,
         seps: NoteSeps::default(),
         behind: Vec::new(),
+        on_top: Vec::new(),
         max_y: 0.0,
         content_bottom: 0.0,
         balance: None,
@@ -2264,6 +2292,7 @@ fn layout_pass(
     let rest: Vec<u32> = endnotes.into_iter().map(|(id, _)| id).collect();
     place_endnotes(&mut ctx, &mut pb, rest, block);
     pb.apply_valign();
+    pb.lift_on_top();
     pb.flush_notes();
     // Footnotes still continuing after the last page get pages of their own. Each page takes at
     // least a line of the first note, so this ends; the cap is a backstop.
@@ -2344,6 +2373,9 @@ struct Snap<'a> {
     pages: usize,
     items: usize,
     behind: usize,
+    /// The last page's In Front of Text objects: leaving the page moves them into its items,
+    /// which going back truncates.
+    on_top: Vec<(usize, Placed)>,
     counters: Counters,
     eq_count: u32,
     page_field: u32,
@@ -2353,14 +2385,15 @@ struct Snap<'a> {
 impl<'a> Snap<'a> {
     fn take(pb: &mut PageBuilder<'a>, ctx: &Ctx) -> Self {
         // The pages stay out of the copy: it would cost the whole document per block.
-        let (pages, behind) = (std::mem::take(&mut pb.pages), std::mem::take(&mut pb.behind));
+        let (pages, behind, on_top) = (std::mem::take(&mut pb.pages), std::mem::take(&mut pb.behind), std::mem::take(&mut pb.on_top));
         let copy = pb.clone();
-        (pb.pages, pb.behind) = (pages, behind);
+        (pb.pages, pb.behind, pb.on_top) = (pages, behind, on_top);
         Snap {
             pb: copy,
             pages: pb.pages.len(),
             items: pb.pages.last().map_or(0, |p| p.items.len()),
             behind: pb.behind.last().copied().unwrap_or(0),
+            on_top: pb.on_top.last().cloned().unwrap_or_default(),
             counters: ctx.counters.clone(),
             eq_count: ctx.eq_count,
             page_field: ctx.fields.page,
@@ -2371,9 +2404,13 @@ impl<'a> Snap<'a> {
     /// Go back to this state: drop the pages added since and what was added to the last one
     /// (appended, or inserted at the front behind the text).
     fn restore(&self, pb: &mut PageBuilder<'a>, ctx: &mut Ctx) {
-        let (mut pages, mut behind) = (std::mem::take(&mut pb.pages), std::mem::take(&mut pb.behind));
+        let (mut pages, mut behind, mut on_top) = (std::mem::take(&mut pb.pages), std::mem::take(&mut pb.behind), std::mem::take(&mut pb.on_top));
         pages.truncate(self.pages);
         behind.truncate(self.pages);
+        on_top.truncate(self.pages);
+        if let Some(t) = on_top.last_mut() {
+            t.clone_from(&self.on_top);
+        }
         if let Some(pg) = pages.last_mut() {
             let k = behind.last().copied().unwrap_or(0).saturating_sub(self.behind).min(pg.items.len());
             pg.items.drain(..k);
@@ -2383,7 +2420,7 @@ impl<'a> Snap<'a> {
             *b = self.behind;
         }
         *pb = self.pb.clone();
-        (pb.pages, pb.behind) = (pages, behind);
+        (pb.pages, pb.behind, pb.on_top) = (pages, behind, on_top);
         ctx.counters = self.counters.clone();
         ctx.eq_count = self.eq_count;
         ctx.fields.page = self.page_field;
@@ -2906,7 +2943,8 @@ struct ObjFrame<'a> {
 /// The pictures, shapes and text boxes in lines `l0..l1` of paragraph `p` (story `story`, at
 /// `path`), whose lines start at (x, y): floating ones drawn, every one's area (hit testing,
 /// selection) and text boxes' text. Floating rects come from `floats` (by object index) or are
-/// worked out from `at`. Returns what goes behind the text, and what goes in front.
+/// worked out from `at`. Returns what goes behind the text, what goes with it, and what goes on
+/// top of all of it (In Front of Text: the caller draws it after the rest of the page or box).
 #[allow(clippy::too_many_arguments)]
 fn place_objects(
     ctx: &mut Ctx,
@@ -2919,9 +2957,9 @@ fn place_objects(
     at: &ObjFrame,
     floats: &HashMap<usize, Rect>,
     depth: usize,
-) -> (Vec<Placed>, Vec<Placed>) {
-    let (mut behind, mut front) = (Vec::new(), Vec::new());
-    let Some(fl) = pl.lines.get(l0) else { return (behind, front) };
+) -> (Vec<Placed>, Vec<Placed>, Vec<Placed>) {
+    let (mut behind, mut front, mut top) = (Vec::new(), Vec::new(), Vec::new());
+    let Some(fl) = pl.lines.get(l0) else { return (behind, front, top) };
     // Objects left out of the layout (hidden, or deleted in the final text) aren't placed.
     let left_out = left_out_objects(ctx.doc, p, at.table_chr, ctx.opts.show_hidden, ctx.hide_deleted);
     // A floating object belongs to its paragraph, not to its line: Word puts it on the page the
@@ -2954,7 +2992,13 @@ fn place_objects(
                 let cx = x + line.cl_left(k).unwrap_or(0.0);
                 display::inline_rect(Some(obj), cx, y + (line.baseline - fl.top), c.adv, c.obj_h)
             };
-            let layer = if float.wrap == Wrap::BehindText { &mut behind } else { &mut front };
+            // In Front of Text goes over every line of the page, not only those before it (#1993):
+            // its picture, its frame for hit testing and its text box's text.
+            let layer = match float.wrap {
+                Wrap::BehindText => &mut behind,
+                Wrap::InFrontOfText => &mut top,
+                _ => &mut front,
+            };
             // Floating ones are drawn here; inline ones with their line.
             if floating {
                 layer.extend(float_items(obj, rect, (Spin::default(), Point::default()), story, path, c.start));
@@ -2967,7 +3011,8 @@ fn place_objects(
             };
             // A box linked from another shows (and edits) that box's story.
             let shown = text_box.map(|id| textbox::shown_story(ctx, id));
-            front.push(Placed::Object {
+            let frames = if float.wrap == Wrap::InFrontOfText { &mut top } else { &mut front };
+            frames.push(Placed::Object {
                 rect,
                 spin: float.spin(),
                 story,
@@ -2994,12 +3039,16 @@ fn place_objects(
             };
             for (id, rect) in boxes {
                 let items = textbox::box_items(ctx, id, rect, depth);
-                let layer = if float.wrap == Wrap::BehindText { &mut behind } else { &mut front };
+                let layer = match float.wrap {
+                    Wrap::BehindText => &mut behind,
+                    Wrap::InFrontOfText => &mut top,
+                    _ => &mut front,
+                };
                 layer.extend(items);
             }
         }
     }
-    (behind, front)
+    (behind, front, top)
 }
 
 /// Footnotes referenced in a paragraph laid out as `pl`: in its text, and inside its text boxes
@@ -3404,7 +3453,7 @@ fn place_para_in_flow(ctx: &mut Ctx, pb: &mut PageBuilder, p: &Paragraph, block:
             para_y: if pb.web { y } else { anchor_y },
             table_chr: None,
         };
-        let (behind, front) = place_objects(ctx, StoryRef::Body, &[block as u32], p, &pl, (l0, l1), (x, y), &at, &float_rects, 0);
+        let (behind, front, top) = place_objects(ctx, StoryRef::Body, &[block as u32], p, &pl, (l0, l1), (x, y), &at, &float_rects, 0);
         items.extend(front);
         // Line numbers in the left margin.
         if let Some(ln) = pb.sect.line_numbers.clone().filter(|_| !pb.web && pl.rp.style != "Header" && !pl.rp.suppress_line_numbers)
@@ -3438,7 +3487,13 @@ fn place_para_in_flow(ctx: &mut Ctx, pb: &mut PageBuilder, p: &Paragraph, block:
             for (i, it) in behind.into_iter().enumerate() {
                 pg.items.insert(i.min(pg.items.len()), it);
             }
+            // Where this piece's items start, counted after those behind the text (as
+            // `block_marks` are): justified alignment moves its on-top objects with it.
+            let at = pg.items.len().saturating_sub(pb.behind.last().copied().unwrap_or(0).saturating_add(n_behind));
             pg.items.extend(items);
+            if let Some(t) = pb.on_top.last_mut() {
+                t.extend(top.into_iter().map(|it| (at, it)));
+            }
         }
         if let Some(b) = pb.behind.last_mut() {
             *b += n_behind;
@@ -3545,8 +3600,9 @@ fn place_outline_para(ctx: &mut Ctx, pb: &mut PageBuilder, p: &Paragraph, block:
         para_y: y,
         table_chr: None,
     };
-    let (behind, front) = place_objects(ctx, StoryRef::Body, &[block as u32], &q, &pl, (0, l1), (x, y), &at, &HashMap::new(), 0);
+    let (behind, front, top) = place_objects(ctx, StoryRef::Body, &[block as u32], &q, &pl, (0, l1), (x, y), &at, &HashMap::new(), 0);
     items.extend(front);
+    items.extend(top);
     let children = level < outline::BODY && outline::has_children(&o.levels, block);
     // Collapsed, or with something under it hidden by Show Level: the wavy line says so.
     let collapsed = children && o.hidden.get(block + 1).copied().unwrap_or(false);

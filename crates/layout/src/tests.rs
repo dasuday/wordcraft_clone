@@ -3547,6 +3547,79 @@ fn floats_align_within_their_reference_area() {
     assert!((r[0].y - (792.0 - 72.0)).abs() < 0.01, "top of the bottom margin: {:?}", r[0]);
 }
 
+/// Indices of the body text lines and the first shape among `items`.
+fn lines_and_shape(items: &[Placed]) -> (Vec<usize>, usize) {
+    let lines = items.iter().enumerate().filter(|(_, i)| matches!(i, Placed::Lines { story: StoryRef::Body, .. })).map(|(k, _)| k).collect();
+    (lines, items.iter().position(|i| matches!(i, Placed::Shape { .. })).unwrap())
+}
+
+/// #1993: a picture In Front of Text was drawn over its own paragraph only. Later paragraphs on
+/// the page were drawn after it, so their text showed through. It now goes over every line of
+/// the page, its frame (for hit testing) with it; Behind Text stays under them all.
+#[test]
+fn in_front_of_text_is_drawn_over_the_paragraphs_after_it() {
+    use wordcraft_doc::para::{Anchor, Float, Wrap};
+    for wrap in [Wrap::InFrontOfText, Wrap::BehindText] {
+        let mut d = Document::from_text("Anchor paragraph\nSecond paragraph\nThird paragraph");
+        let f = Float { wrap, h_rel: Anchor::Column, v_rel: Anchor::Paragraph, ..Default::default() };
+        d.insert_object(&Pos::body(0, 0), rect_shape(300.0, 200.0, f), &Default::default()).unwrap();
+        let l = lay(&d);
+        let items = &l.pages[0].items;
+        let r = shapes(items)[0];
+        let c = l.caret(&Pos::body(2, 0)).unwrap();
+        assert!(r.contains(wordcraft_geom::Point::new(c.x + 2.0, c.top + 2.0)), "{wrap:?}: the shape covers the third paragraph");
+        let (lines, shape) = lines_and_shape(items);
+        assert_eq!(lines.len(), 3, "{wrap:?}");
+        if wrap == Wrap::InFrontOfText {
+            assert!(lines.iter().all(|&k| k < shape), "in front: drawn after every line {lines:?} {shape}");
+            let frame = items.iter().rposition(|i| matches!(i, Placed::Object { .. })).unwrap();
+            assert!(frame > shape, "its frame comes with it");
+        } else {
+            assert!(lines.iter().all(|&k| k > shape), "behind: drawn before every line {lines:?} {shape}");
+        }
+    }
+}
+
+/// #1993: the same in a table cell (laid out as a box): over the cell's later paragraphs.
+#[test]
+fn in_front_of_text_in_a_cell_is_drawn_over_the_cell_text() {
+    use wordcraft_doc::para::{Anchor, Float, Wrap};
+    let mut d = Document::from_text("Anchor paragraph\nSecond paragraph\nThird paragraph");
+    let f = Float { wrap: Wrap::InFrontOfText, h_rel: Anchor::Column, v_rel: Anchor::Paragraph, ..Default::default() };
+    d.insert_object(&Pos::body(0, 0), rect_shape(300.0, 200.0, f), &Default::default()).unwrap();
+    let mut table = Table::new(1, 1, 468.0);
+    table.rows[0].cells[0].blocks = std::mem::take(&mut d.body);
+    d.body = vec![std::sync::Arc::new(wordcraft_doc::Block::Table(table))];
+    let l = lay(&d);
+    let (lines, shape) = lines_and_shape(&l.pages[0].items);
+    assert_eq!(lines.len(), 3);
+    assert!(lines.iter().all(|&k| k < shape), "drawn after the cell's lines {lines:?} {shape}");
+}
+
+/// #1993: drawn last, an In Front of Text object still moves with its paragraph when the page is
+/// aligned vertically (centred, or justified with the blocks spread apart).
+#[test]
+fn in_front_of_text_moves_with_its_paragraph_under_vertical_alignment() {
+    use wordcraft_doc::para::{Anchor, Float, Wrap};
+    use wordcraft_doc::section::PageVAlign;
+    let laid = |va: PageVAlign| {
+        let mut d = Document::from_text("One\nTwo\nThree");
+        let f = Float { wrap: Wrap::InFrontOfText, h_rel: Anchor::Column, v_rel: Anchor::Paragraph, ..Default::default() };
+        // In the second paragraph: justified alignment moves it with that block, not the last.
+        d.insert_object(&Pos::body(1, 0), rect_shape(50.0, 20.0, f), &Default::default()).unwrap();
+        d.last_section.valign = va;
+        let l = lay(&d);
+        let line = l.caret(&Pos::body(1, 0)).unwrap().top;
+        (shapes(&l.pages[0].items)[0].y, line)
+    };
+    let (top_y, top_line) = laid(PageVAlign::Top);
+    for va in [PageVAlign::Center, PageVAlign::Justify] {
+        let (y, line) = laid(va);
+        assert!(line - top_line > 50.0, "{va:?}: the paragraph moved down");
+        assert!(((y - top_y) - (line - top_line)).abs() < 0.05, "{va:?}: the shape moved as far as its paragraph");
+    }
+}
+
 #[test]
 fn top_and_bottom_float_pushes_its_own_first_line_down() {
     use wordcraft_doc::para::{Anchor, Float, Wrap};
