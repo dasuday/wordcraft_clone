@@ -135,7 +135,7 @@ Ranked, to beta (detail and remaining milestones in [docs/roadmap.md](docs/roadm
 ## Progress log
 
 | Date | What landed |
-| 2026-10-15 | Date fields speak the document's language: a `DATE \@ "d 'de' MMMM 'de' yyyy"` field in a Portuguese document shows "15 de outubro de 2026" as in Word (it showed "15 '15e' October '15e' 2026"): text in single quotes is copied as it is, and month and weekday names follow the field's language |
+| 2026-10-15 | Date fields speak the document's language: a `DATE \@ "d 'de' MMMM 'de' yyyy"` field in a Portuguese document shows "15 de outubro de 2026" as in Word (it showed "15 '15e' October '15e' 2026"): text in single quotes is copied as it is, month and weekday names follow the field's language, and the date is the local one (late in the evening in Brazil it showed tomorrow's, the UTC date) |
 | 2026-10-14 | DOCX row table border exceptions render and survive saving. Explicit cell borders win; a row exception does not change other rows. |
 | 2026-10-14 | Tab stops edited on the ruler: the corner selector picks Left/Center/Right/Decimal/Bar, a click sets a stop (Alt skips the snap), dragging moves it with a guide line and position tooltip, dragging off the ruler clears it; markers draw per kind and mirror for RTL; one `para.tabs` call and one undo step per gesture |
 | 2026-10-12 | Fields keep `w:dirty` through DOCX saves (#877): a begin marker flagged by a generator that couldn't compute a result (pandoc-style TOC placeholders) keeps the flag on open/save — as a buffered field or a range field — so Word still refreshes it on open; computing a result (Update Field, Update Table) clears it, like Word's F9 |
