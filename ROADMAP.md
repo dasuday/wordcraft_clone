@@ -2,7 +2,7 @@
 
 **Stage: alpha** · next: beta, ~15 points (60% → 75% ready for real work) and ~150–230 h away
 
-> **Last reviewed:** 2026-10-16 · **Last updated:** 2026-10-16 · **Change:** minor (desktop Writing Assistant: draft, rewrite and summarize with reviewed acceptance; see [writing-assistant.md](docs/writing-assistant.md)) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4
+> **Last reviewed:** 2026-10-16 · **Last updated:** 2026-10-16 · **Change:** minor (desktop Writing Assistant: live streaming previews with reviewed acceptance; see [writing-assistant.md](docs/writing-assistant.md)) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4
 > **Printing update:** 2026-10-12 · direct desktop printing through craft-print; details below.
 
 WordCraft aims for complete parity with Microsoft Word, then goes further on speed, openness and
@@ -134,6 +134,7 @@ Ranked, to beta (detail and remaining milestones in [docs/roadmap.md](docs/roadm
 ## Progress log
 
 | Date | What landed |
+| 2026-10-16 | Writing Assistant now displays incoming text incrementally, with acceptance disabled until completion. |
 | 2026-10-16 | Desktop Writing Assistant: configurable model connection, draft/rewrite/summarize, editable previews, guarded acceptance and Undo. PR #178 reviewed for overlap; external-agent chat stays separate. |
 | 2026-10-14 | DOCX row table border exceptions render and survive saving. Explicit cell borders win; a row exception does not change other rows. |
 | 2026-10-14 | Tab stops edited on the ruler: the corner selector picks Left/Center/Right/Decimal/Bar, a click sets a stop (Alt skips the snap), dragging moves it with a guide line and position tooltip, dragging off the ruler clears it; markers draw per kind and mirror for RTL; one `para.tabs` call and one undo step per gesture |
@@ -403,6 +404,7 @@ Ranked, to beta (detail and remaining milestones in [docs/roadmap.md](docs/roadm
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-16 | minor | Live streaming assistant previews and guarded completion added; readiness estimates unchanged. |
 | 2026-10-16 | minor | Desktop Writing Assistant added; browser generation, streaming and saved credentials remain. Readiness estimates unchanged. |
 | 2026-10-14 | trivial | Progress log: row table border exceptions |
 | 2026-10-12 | minor | Czech proofing review: short-word splits rank after deletion, NOSUGGEST excludes suggestions while accepting typed forms, affix comments apply only to headers, ratios keep spaces and repeated-word messages use Czech quotes; synthetic engine end-to-end and latency checks |

@@ -3,6 +3,13 @@ use crate::WordApp;
 use serde_json::{Value, json};
 use zeroize::Zeroize;
 
+#[derive(Debug)]
+#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+enum Update {
+    Delta(String),
+    Finished(Result<(), String>),
+}
+
 pub struct State {
     pub open: bool,
     endpoint: String,
@@ -14,7 +21,7 @@ pub struct State {
     result: String,
     error: String,
     cancelled: bool,
-    pending: Option<std::sync::mpsc::Receiver<Result<String, String>>>,
+    pending: Option<std::sync::mpsc::Receiver<Update>>,
 }
 
 impl Default for State {
@@ -67,6 +74,9 @@ pub fn command(app: &mut WordApp, id: &str, v: &Value) -> Result<Value, String> 
             app.assistant.error.clear();
         }
         "ui.assistant.apply" => {
+            if app.assistant.pending.is_some() || !app.assistant.error.is_empty() {
+                return Err("Wait for a complete, successful suggestion before accepting".into());
+            }
             let r = app.assistant.request.clone().ok_or("Generate a suggestion first")?;
             app.run("assistant.apply", json!({"request":r,"text":app.assistant.result,"placement":v.get("placement")}))?;
             app.assistant.request = None;
@@ -79,7 +89,7 @@ pub fn command(app: &mut WordApp, id: &str, v: &Value) -> Result<Value, String> 
 }
 
 #[cfg(target_arch = "wasm32")]
-fn start(_: &State, _: &Value) -> Result<std::sync::mpsc::Receiver<Result<String, String>>, String> {
+fn start(_: &State, _: &Value) -> Result<std::sync::mpsc::Receiver<Update>, String> {
     Err("Model connections are available in the desktop app. The web editor can still use assistant.prepare and assistant.apply through an external host.".into())
 }
 
@@ -99,7 +109,7 @@ fn endpoint(value: &str) -> Result<reqwest::Url, String> {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-fn start(state: &State, request: &Value) -> Result<std::sync::mpsc::Receiver<Result<String, String>>, String> {
+fn start(state: &State, request: &Value) -> Result<std::sync::mpsc::Receiver<Update>, String> {
     let url = endpoint(&state.endpoint)?;
     if state.model.trim().is_empty() || state.model.len() > 256 {
         return Err("Enter a model name (up to 256 bytes)".into());
@@ -107,20 +117,26 @@ fn start(state: &State, request: &Value) -> Result<std::sync::mpsc::Receiver<Res
     if state.key.len() > 8192 {
         return Err("API key is too long".into());
     }
-    let body = json!({"model": state.model.trim(), "messages":request.get("messages"), "stream":false});
+    let body = json!({"model": state.model.trim(), "messages":request.get("messages"), "stream":true});
     let key = zeroize::Zeroizing::new(state.key.clone());
-    let (tx, rx) = std::sync::mpsc::sync_channel(1);
+    let (tx, rx) = std::sync::mpsc::sync_channel(32);
     std::thread::Builder::new()
         .name("writing-assistant".into())
         .spawn(move || {
-            let _ = tx.send(generate(url, key, body));
+            let result = generate(url, key, body, |text| tx.send(Update::Delta(text)).map_err(|_| "Assistant closed".into()));
+            let _ = tx.send(Update::Finished(result));
         })
         .map_err(|_| "Could not start the writing assistant")?;
     Ok(rx)
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-fn generate(url: reqwest::Url, key: zeroize::Zeroizing<String>, body: Value) -> Result<String, String> {
+fn generate(
+    url: reqwest::Url,
+    key: zeroize::Zeroizing<String>,
+    body: Value,
+    mut emit: impl FnMut(String) -> Result<(), String>,
+) -> Result<(), String> {
     use std::io::Read;
     let client = reqwest::blocking::Client::builder()
         .timeout(std::time::Duration::from_secs(90))
@@ -138,14 +154,93 @@ fn generate(url: reqwest::Url, key: zeroize::Zeroizing<String>, body: Value) -> 
     if !response.status().is_success() {
         return Err(format!("Model returned HTTP {}. Check your model name, API key and provider quota", response.status().as_u16()));
     }
-    // Bound the actual read, not just Content-Length. Never expose provider error bodies or keys.
-    const MAX_RESPONSE: u64 = 1024 * 1024;
+    if response
+        .headers()
+        .get(reqwest::header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .is_some_and(|v| v.split(';').next().is_some_and(|mime| mime.trim().eq_ignore_ascii_case("text/event-stream")))
+    {
+        return parse_stream(response, emit);
+    }
+    // Some compatible servers return JSON even when streaming is requested.
     let mut bytes = Vec::new();
     response.take(MAX_RESPONSE + 1).read_to_end(&mut bytes).map_err(|_| "Could not read the model response")?;
     if bytes.len() as u64 > MAX_RESPONSE {
         return Err("Model response is too large".into());
     }
-    parse_response(&bytes)
+    emit(parse_response(&bytes)?)
+}
+
+#[cfg(any(test, not(target_arch = "wasm32")))]
+const MAX_RESPONSE: u64 = 1024 * 1024;
+
+/// Parse SSE at event boundaries, not network chunk boundaries (which can split UTF-8).
+#[cfg(any(test, not(target_arch = "wasm32")))]
+fn parse_stream(reader: impl std::io::Read, mut emit: impl FnMut(String) -> Result<(), String>) -> Result<(), String> {
+    use std::io::BufRead;
+    let mut reader = std::io::BufReader::new(reader.take(MAX_RESPONSE + 1));
+    let mut total = 0u64;
+    let mut data = String::new();
+    let mut text_len = 0usize;
+    let mut nonempty = false;
+    let mut stopped = false;
+    loop {
+        let mut line = String::new();
+        let count = reader.read_line(&mut line).map_err(|_| "Could not read the model stream")?;
+        total = total.saturating_add(count as u64);
+        if total > MAX_RESPONSE {
+            return Err("Model response is too large".into());
+        }
+        if count == 0 {
+            return Err("Model stream ended before completion".into());
+        }
+        let line = line.trim_end_matches(['\r', '\n']);
+        if !line.is_empty() {
+            if let Some(value) = line.strip_prefix("data:") {
+                data.push_str(value.strip_prefix(' ').unwrap_or(value));
+                data.push('\n');
+            }
+            continue;
+        }
+        if data.is_empty() {
+            continue;
+        }
+        if data.trim() == "[DONE]" {
+            return if stopped && nonempty { Ok(()) } else { Err("Model returned empty or incomplete text".into()) };
+        }
+        let value: Value = serde_json::from_str(&data).map_err(|_| "Model returned invalid streaming JSON")?;
+        data.clear();
+        if value.get("error").is_some() {
+            return Err("Model reported a streaming error".into());
+        }
+        let choices = value.get("choices").and_then(Value::as_array).ok_or("Model returned no choices")?;
+        // Usage-only events may contain no choices.
+        for choice in choices {
+            if choice.get("index").and_then(Value::as_u64) != Some(0) {
+                continue;
+            }
+            if let Some(content) = choice.get("delta").and_then(|v| v.get("content")).filter(|v| !v.is_null()) {
+                let text = content.as_str().ok_or("Model returned invalid text")?;
+                if !text.is_empty() {
+                    if stopped {
+                        return Err("Model sent text after completion".into());
+                    }
+                    text_len = text_len.saturating_add(text.len());
+                    if text_len > wordcraft_engine::cmd::assistant::MAX_TEXT {
+                        return Err("Model exceeded the 64 KiB suggestion limit".into());
+                    }
+                    nonempty |= !text.trim().is_empty();
+                    emit(text.to_owned())?;
+                }
+            }
+            if let Some(reason) = choice.get("finish_reason").filter(|v| !v.is_null()) {
+                if reason.as_str() != Some("stop") {
+                    return Err("Model output was incomplete or filtered. Try a shorter request".into());
+                }
+                stopped = true;
+            }
+        }
+    }
 }
 
 #[cfg(any(test, not(target_arch = "wasm32")))]
@@ -164,18 +259,33 @@ fn parse_response(bytes: &[u8]) -> Result<String, String> {
 
 pub fn show(app: &mut WordApp, ctx: &egui::Context) {
     if let Some(rx) = &app.assistant.pending {
-        let result = match rx.try_recv() {
-            Ok(r) => Some(r),
-            Err(std::sync::mpsc::TryRecvError::Disconnected) => Some(Err("Model worker stopped before returning a result".into())),
-            Err(std::sync::mpsc::TryRecvError::Empty) => None,
-        };
-        if let Some(result) = result {
-            app.assistant.pending = None;
-            if !app.assistant.cancelled {
-                match result {
-                    Ok(text) => app.assistant.result = text,
-                    Err(error) => app.assistant.error = error,
+        let mut finished = None;
+        // Bound work per frame even when a provider produces many tiny deltas.
+        for _ in 0..128 {
+            match rx.try_recv() {
+                Ok(Update::Delta(text)) => {
+                    if !app.assistant.cancelled {
+                        app.assistant.result.push_str(&text);
+                    }
                 }
+                Ok(Update::Finished(result)) => {
+                    finished = Some(result);
+                    break;
+                }
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                    finished = Some(Err("Model worker stopped before returning a result".into()));
+                    break;
+                }
+                Err(std::sync::mpsc::TryRecvError::Empty) => break,
+            }
+        }
+        if let Some(result) = finished {
+            app.assistant.pending = None;
+            if !app.assistant.cancelled
+                && let Err(error) = result
+            {
+                app.assistant.error = error;
+                app.assistant.request = None;
             }
         } else {
             ctx.request_repaint_after(std::time::Duration::from_millis(100));
@@ -227,17 +337,24 @@ pub fn show(app: &mut WordApp, ctx: &egui::Context) {
         if !state.error.is_empty() {
             ui.label(&state.error);
         }
-        if !state.result.is_empty() {
+        if !state.result.is_empty() || (state.pending.is_some() && !state.cancelled) {
             ui.separator();
             ui.label(tl!("Preview — review and edit before accepting"));
-            egui::ScrollArea::vertical().max_height(240.0).show(ui, |ui| {
-                ui.add(egui::TextEdit::multiline(&mut state.result).desired_rows(8).desired_width(f32::INFINITY).char_limit(65536));
+            egui::ScrollArea::vertical().max_height(240.0).stick_to_bottom(state.pending.is_some()).show(ui, |ui| {
+                ui.add(
+                    egui::TextEdit::multiline(&mut state.result)
+                        .interactive(state.pending.is_none())
+                        .desired_rows(8)
+                        .desired_width(f32::INFINITY)
+                        .char_limit(65536),
+                );
             });
             ui.horizontal_wrapped(|ui| {
-                if ui.button(tl!("Insert after selection")).clicked() {
+                let ready = state.pending.is_none() && state.error.is_empty() && state.request.is_some();
+                if ui.add_enabled(ready, egui::Button::new(tl!("Insert after selection"))).clicked() {
                     action = Some(("ui.assistant.apply", json!({"placement":"after"})));
                 }
-                if ui.button(tl!("Replace selection")).clicked() {
+                if ui.add_enabled(ready, egui::Button::new(tl!("Replace selection"))).clicked() {
                     action = Some(("ui.assistant.apply", json!({"placement":"replace"})));
                 }
                 if ui.button(tl!("Copy")).clicked() {
@@ -258,6 +375,91 @@ pub fn show(app: &mut WordApp, ctx: &egui::Context) {
 mod tests {
     use super::*;
 
+    fn event(text: &str, reason: Value) -> String {
+        format!("data: {}\r\n\r\n", json!({"choices":[{"index":0,"delta":{"content":text},"finish_reason":reason}]}))
+    }
+
+    #[test]
+    fn streaming_preview_updates_before_completion_and_guards_acceptance() {
+        let mut app = WordApp::new(wordcraft_engine::Session::new(wordcraft_engine::doc::Document::new()), crate::Services::default());
+        let request = app.run("assistant.prepare", json!({"mode":"draft","prompt":"A greeting"})).unwrap();
+        app.assistant.request = Some(request);
+        let (tx, rx) = std::sync::mpsc::channel();
+        app.assistant.pending = Some(rx);
+        tx.send(Update::Delta("Hello".into())).unwrap();
+        show(&mut app, &egui::Context::default());
+        assert_eq!(app.assistant.result, "Hello");
+        assert!(app.assistant.pending.is_some());
+        assert!(command(&mut app, "ui.assistant.apply", &json!({"placement":"after"})).is_err());
+        assert!(!app.session.dirty);
+        tx.send(Update::Delta(" world".into())).unwrap();
+        tx.send(Update::Finished(Ok(()))).unwrap();
+        show(&mut app, &egui::Context::default());
+        assert_eq!(app.assistant.result, "Hello world");
+        command(&mut app, "ui.assistant.apply", &json!({"placement":"after"})).unwrap();
+    }
+
+    #[test]
+    fn interrupted_stream_keeps_preview_but_cannot_be_accepted() {
+        for explicit_error in [true, false] {
+            let mut app = WordApp::new(wordcraft_engine::Session::new(wordcraft_engine::doc::Document::new()), crate::Services::default());
+            app.assistant.request = Some(json!({}));
+            let (tx, rx) = std::sync::mpsc::channel();
+            app.assistant.pending = Some(rx);
+            tx.send(Update::Delta("Partial".into())).unwrap();
+            if explicit_error {
+                tx.send(Update::Finished(Err("Disconnected".into()))).unwrap();
+            }
+            drop(tx);
+            show(&mut app, &egui::Context::default());
+            assert_eq!(app.assistant.result, "Partial");
+            assert!(!app.assistant.error.is_empty());
+            assert!(app.assistant.request.is_none());
+            assert!(command(&mut app, "ui.assistant.apply", &json!({"placement":"after"})).is_err());
+        }
+    }
+
+    #[test]
+    fn stream_handles_fragmented_utf8_comments_multiline_and_usage_events() {
+        // A one-byte reader splits both JSON and multibyte text across reads.
+        struct Fragmented(std::io::Cursor<Vec<u8>>);
+        impl std::io::Read for Fragmented {
+            fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+                let len = buf.len().min(1);
+                std::io::Read::read(&mut self.0, &mut buf[..len])
+            }
+        }
+        let wire = format!(
+            ": keepalive\r\n\r\ndata: {{\ndata: \"choices\":[]}}\n\n{}{}data: {{\"choices\":[],\"usage\":{{}}}}\n\ndata: [DONE]\n\n",
+            event("Café \u{1f642}", Value::Null),
+            event("!", json!("stop"))
+        );
+        let mut chunks = Vec::new();
+        parse_stream(Fragmented(std::io::Cursor::new(wire.into_bytes())), |text| {
+            chunks.push(text);
+            Ok(())
+        })
+        .unwrap();
+        assert_eq!(chunks, ["Café \u{1f642}", "!"]);
+    }
+
+    #[test]
+    fn stream_rejects_incomplete_invalid_filtered_and_oversized_output() {
+        for wire in [
+            event("partial", Value::Null),
+            format!("{}data: [DONE]\n\n", event("partial", Value::Null)),
+            format!("{}data: [DONE]\n\n", event("", json!("stop"))),
+            event("partial", json!("length")),
+            event("partial", json!("content_filter")),
+            "data: not JSON\n\n".into(),
+            "data: {\"error\":{\"message\":\"secret\"}}\n\n".into(),
+            event(&"x".repeat(wordcraft_engine::cmd::assistant::MAX_TEXT + 1), Value::Null),
+            "x".repeat(MAX_RESPONSE as usize + 1),
+        ] {
+            assert!(parse_stream(wire.as_bytes(), |_| Ok(())).is_err());
+        }
+    }
+
     #[test]
     fn discard_ignores_late_results_and_does_not_allow_overlapping_requests() {
         let mut app = WordApp::new(wordcraft_engine::Session::new(wordcraft_engine::doc::Document::new()), crate::Services::default());
@@ -265,7 +467,8 @@ mod tests {
         app.assistant.pending = Some(rx);
         command(&mut app, "ui.assistant.discard", &json!({})).unwrap();
         assert!(command(&mut app, "ui.assistant.generate", &json!({})).is_err());
-        tx.send(Ok("Late result".into())).unwrap();
+        tx.send(Update::Delta("Late result".into())).unwrap();
+        tx.send(Update::Finished(Ok(()))).unwrap();
         show(&mut app, &egui::Context::default());
         assert!(app.assistant.pending.is_none());
         assert!(app.assistant.result.is_empty());
@@ -290,7 +493,19 @@ mod tests {
     #[cfg(not(target_arch = "wasm32"))]
     #[test]
     fn local_provider_receives_messages_and_returns_preview_without_editing() {
+        local_provider(false);
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn local_provider_stream_is_visible_before_server_finishes() {
+        local_provider(true);
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    fn local_provider(streaming: bool) {
         use std::io::{BufRead, Read, Write};
+        let (ack_tx, ack_rx) = std::sync::mpsc::channel();
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         listener.set_nonblocking(true).unwrap();
         let address = listener.local_addr().unwrap();
@@ -331,8 +546,21 @@ mod tests {
             reader.read_exact(&mut body).unwrap();
             let body: Value = serde_json::from_slice(&body).unwrap();
             assert_eq!(body["model"], "test-model");
-            assert_eq!(body["stream"], false);
+            assert_eq!(body["stream"], true);
             assert!(body["messages"].to_string().contains("A greeting"));
+            if streaming {
+                write!(
+                    reader.get_mut(),
+                    "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream; charset=utf-8\r\nConnection: close\r\n\r\n{}",
+                    event("Hello", Value::Null)
+                )
+                .unwrap();
+                reader.get_mut().flush().unwrap();
+                // The client must receive the first chunk while the response is still open.
+                ack_rx.recv_timeout(std::time::Duration::from_secs(5)).unwrap();
+                write!(reader.get_mut(), "{}data: [DONE]\n\n", event(" from the model", json!("stop"))).unwrap();
+                return;
+            }
             let response = r#"{"choices":[{"finish_reason":"stop","message":{"content":"Hello from the model"}}]}"#;
             write!(
                 reader.get_mut(),
@@ -349,7 +577,15 @@ mod tests {
         app.assistant.prompt = "A greeting".into();
         command(&mut app, "ui.assistant.generate", &json!({})).unwrap();
         let rx = app.assistant.pending.take().unwrap();
-        assert_eq!(rx.recv_timeout(std::time::Duration::from_secs(15)).unwrap().unwrap(), "Hello from the model");
+        let first = rx.recv_timeout(std::time::Duration::from_secs(15)).unwrap();
+        if streaming {
+            assert!(matches!(first, Update::Delta(text) if text == "Hello"));
+            ack_tx.send(()).unwrap();
+            assert!(matches!(rx.recv_timeout(std::time::Duration::from_secs(15)).unwrap(), Update::Delta(text) if text == " from the model"));
+        } else {
+            assert!(matches!(first, Update::Delta(text) if text == "Hello from the model"));
+        }
+        assert!(matches!(rx.recv_timeout(std::time::Duration::from_secs(15)).unwrap(), Update::Finished(Ok(()))));
         assert!(!app.session.dirty);
         server.join().unwrap();
     }

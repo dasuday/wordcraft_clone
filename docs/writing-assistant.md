@@ -1,6 +1,6 @@
 # Writing Assistant
 
-> **Last reviewed:** 2026-10-16 · **Last updated:** 2026-10-16 · **Change:** minor (initial desktop drafting, rewriting and summarization)
+> **Last reviewed:** 2026-10-16 · **Last updated:** 2026-10-16 · **Change:** minor (live streaming preview)
 
 ## Use
 
@@ -14,8 +14,9 @@ command search. Place the caret for a draft, or select the text to rewrite or su
    instructions; Rewrite and Summarize require selected text. For example: “Make this more
    concise while keeping the technical details” or “Summarize in three sentences.”
 3. Click **Generate**. Only the instructions and selected plain text go to the configured
-   endpoint. No surrounding text, files, images, history, or tool access is supplied.
-4. Review and optionally edit the preview. **Insert after selection** preserves the source and
+   endpoint. The preview fills as text arrives and follows new text while you stay at the bottom.
+   No surrounding text, files, images, history, or tool access is supplied.
+4. Once generation finishes successfully, review and optionally edit the preview. **Insert after selection** preserves the source and
    adds the result as a new paragraph (at a bare caret it inserts directly). **Replace selection**
    replaces it. Both create one Undo step and respect document protection and Track Changes.
    **Copy** copies the preview without editing. **Discard** clears it.
@@ -23,8 +24,11 @@ command search. Place the caret for a draft, or select the text to rewrite or su
 Use your external **OpenAI-compatible serving endpoint**, for example
 `https://models.example.com/v1/chat/completions`, and the model identifier advertised by that
 server. The URL starts empty: WordCraft chooses no provider for you, installs no model, and
-runs no local inference. The server must accept non-streaming chat completions with `model`,
-`messages`, and `stream: false`, and return text in `choices[0].message.content`. If supplied,
+runs no local inference. The server should accept chat completions with `model`,
+`messages`, and `stream: true`, returning server-sent events with `choices[0].delta.content`,
+`finish_reason: "stop"` and a final `[DONE]` event. See the
+[streaming format](https://developers.openai.com/api/reference/resources/chat/subresources/completions/streaming-events).
+Servers that respond with ordinary JSON still work through `choices[0].message.content`. If supplied,
 the API key is sent as a Bearer token. Hosted endpoints require HTTPS; HTTP is allowed only
 for loopback testing. Redirects are refused. Provider usage is billed by your provider.
 
@@ -45,7 +49,9 @@ Provider error bodies and credentials are not displayed in errors.
 
 The desktop app performs network generation on a worker thread. Web builds retain the portable
 engine commands but disable the model connection UI; browser transport and persistent secure
-credential storage are follow-up work. Streaming and conversation history are not included.
+credential storage and conversation history are follow-up work. While streaming, the preview is
+read-only and acceptance is disabled. Interrupted or filtered streams retain their partial preview
+for copying, but cannot be inserted or used to replace a selection.
 
 ## Design and implementation plan
 
@@ -89,8 +95,10 @@ preview of the current window. Network credentials never enter a recorded engine
 
 Verified on Windows ARM64 with an HTTP mock provider; no real hosted model or account was used.
 The 622 engine tests (including hostile command parameters and seven new assistant tests) pass.
-Five assistant UI/transport tests cover response parsing, endpoint validation, late-result
-discard, preview acceptance/Undo and the HTTP request/response contract. The interface was
+Ten assistant UI/transport tests cover response parsing, endpoint validation, late-result
+discard, preview acceptance/Undo, fragmented UTF-8, limits, incomplete streams and the HTTP contract.
+A mock streaming server waits for the client to receive its first chunk before sending the
+remainder, proving incremental delivery. The interface was
 rendered with `ui_shot` and visually inspected. Command names are catalogued in every supported
 language; complete catalogs also include the assistant's controls.
 All 72 localization tests pass after those additions.
@@ -101,6 +109,13 @@ colour-emoji renderer tests fail on this machine (also reproduced with the rende
 isolation), and a later run failed the PDF right-to-left glyph-position test. No renderer, font,
 layout or PDF code was changed. These failures remain outside this feature's scope.
 
+Streaming follow-up: all ten assistant tests pass, and the in-progress preview was rendered
+headlessly and visually checked. Formatting, workspace Clippy, assets, layers and all 16 WASM
+checks pass. Full CI stopped in the unchanged PDF test `right_to_left_text_extracts_in_logical_order`
+on one run and the existing renderer colour-emoji tests on the final run; the streaming change
+only modifies the UI crate and documentation.
+The complete UI library suite passes: 561 tests passed, two ignored.
+
 Network generation uses native TLS and the platform certificate store. Linux/BSD builds require
 the native TLS backend's system OpenSSL build/runtime dependencies; cross-platform packaging
 and a live connection to your particular hosted model have not been verified here.
@@ -109,4 +124,5 @@ and a live connection to your particular hosted model have not been verified her
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-16 | minor | Live streaming previews, completion guards and incremental transport tests |
 | 2026-10-16 | minor | Initial implementation and scoped comparison with PR #178 |

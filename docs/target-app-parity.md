@@ -1,6 +1,6 @@
 # WordCraft parity with Microsoft Word
 
-> **Last reviewed:** 2026-10-16 · **Last updated:** 2026-10-16 · **Change:** minor (desktop Writing Assistant: draft, rewrite and summarize with reviewed acceptance; see [writing-assistant.md](writing-assistant.md)) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4
+> **Last reviewed:** 2026-10-16 · **Last updated:** 2026-10-16 · **Change:** minor (desktop Writing Assistant: live streaming previews with reviewed acceptance; see [writing-assistant.md](writing-assistant.md)) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4
 
 The authoritative assessment of how close WordCraft is to Microsoft Word. [`ROADMAP.md`](../ROADMAP.md)
 summarizes it; [`gaps.md`](gaps.md) itemizes every shortfall; the deep checklists are
@@ -199,7 +199,7 @@ Word. Their weighted sum is the **full ready for real work** number.
 | Platforms | 3% | 95% | 5–10 | [ROADMAP.md](../ROADMAP.md) | macOS (universal, signed), Windows x64/x86/arm64, Linux (AppImage/deb/rpm/Flatpak), FreeBSD, web. Beyond Word on Linux, BSD and the web; Word's iPad/iPhone/Android apps are out of scope |
 | Hardware | 1% | 40% | 20–40 | [hardware-parity.md](hardware-parity.md) | No native printing on desktop, no pen/ink, no dictation; GPU drawing and HiDPI fine. Ink hours are in the Features row (Draw tab) |
 | Ecosystem and plugins | 2% | 15% | 40–80 | [gaps.md](gaps.md) | Zotero built in, macros record/play commands, `.docm` macros preserved (#172). No VBA execution, no Office add-ins, no EndNote/Mendeley plugins, no cloud storage or co-authoring |
-| AI features | 0% | not re-measured | not re-estimated | [writing-assistant.md](writing-assistant.md) | Desktop draft/rewrite/summarize with model endpoint, preview and guarded acceptance. Browser generation, streaming and saved credentials remain. External-agent chat PR #178 stays separate. Weight 0; readiness estimates unchanged |
+| AI features | 0% | not re-measured | not re-estimated | [writing-assistant.md](writing-assistant.md) | Desktop draft/rewrite/summarize with model endpoint, streaming preview and guarded acceptance. Browser generation and saved credentials remain. External-agent chat PR #178 stays separate. Weight 0; readiness estimates unchanged |
 
 **Ready for real work ≈ 0.30·68 + 0.20·60 + 0.15·55 + 0.10·65 + 0.10·50 + 0.05·75 + 0.04·25 +
 0.03·95 + 0.01·40 + 0.02·15 ≈ 60%.**
@@ -251,6 +251,7 @@ can be used without committing Word output.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-16 | minor | Live streaming assistant previews and guarded completion added; readiness estimates unchanged. |
 | 2026-10-16 | minor | Desktop Writing Assistant added; browser generation, streaming and saved credentials remain. Readiness estimates unchanged. |
 | 2026-10-12 | minor | Czech proofing review: short-word splits rank after deletion, NOSUGGEST excludes suggestions while accepting typed forms, affix comments apply only to headers, ratios keep spaces and repeated-word messages use Czech quotes; synthetic engine end-to-end and latency checks |
 | 2026-10-12 | minor | Czech spelling from the installed Hunspell dictionary, runtime-table suggestions and generic checks; Czech interface writes cs-CZ documents; no Czech hyphenation patterns bundled; estimates unchanged |
