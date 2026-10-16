@@ -2479,7 +2479,7 @@ fn split_row_rejects_a_hostile_cut() {
         height,
         items: vec![line(0.0), line(150.0)],
         bottom,
-        cells: vec![CellPart { items: 0..2, end: Some(170.0) }],
+        cells: vec![CellPart { bottom_band: 0.0, items: 0..2, end: Some(170.0) }],
     };
     for cut in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY, 0.0, -1.0, 200.0] {
         assert!(split_row(&row(200.0, 4.0), cut).is_none(), "{cut}");
@@ -2493,8 +2493,8 @@ fn split_row_rejects_a_hostile_cut() {
     }
     // Cell ranges past the items are ignored.
     let mut r = row(200.0, 4.0);
-    r.cells.push(CellPart { items: 5..9, end: None });
-    r.cells.push(CellPart { items: std::ops::Range { start: 2, end: 1 }, end: None });
+    r.cells.push(CellPart { bottom_band: 0.0, items: 5..9, end: None });
+    r.cells.push(CellPart { bottom_band: 0.0, items: std::ops::Range { start: 2, end: 1 }, end: None });
     assert!(split_row(&r, 100.0).is_some());
 }
 
@@ -4551,7 +4551,7 @@ fn a_split_row_moves_shading_below_the_cut_with_it() {
         height: 200.0,
         items: vec![line_row(0.0), line_row(150.0), fill(0.0, 200.0), fill(150.0, 50.0)],
         bottom: 0.0,
-        cells: vec![CellPart { items: 0..4, end: None }],
+        cells: vec![CellPart { bottom_band: 0.0, items: 0..4, end: None }],
     };
     let (a, b) = split_row(&row, 100.0).expect("splits");
     let fills = |r: &RowLayout| {
@@ -7262,4 +7262,53 @@ fn row_nil_overrides_style() {
     t.rows[0].cells[0].props.borders = Some(Borders { right: Some(Border::single(2.0)), ..Default::default() });
     d.insert_block(StoryRef::Body, &Path::top(1), wordcraft_doc::Block::Table(t)).unwrap();
     assert_eq!(rules_on_page0(&lay(&d)), vec![2.0]);
+}
+
+#[test]
+fn closing_stroke_stays_in_band() {
+    use wordcraft_doc::props::{HeightRule, LineSpacing};
+    for (count, height, pages) in [(1, None, 1), (1, Some(100.0), 1), (35, None, 2), (35, Some(100.0), 2), (65, None, 3)] {
+        for width in [0.5, 1.5, 2.0, 2.5] {
+            for margin in [0.0, 6.0] {
+                let mut d = Document::new();
+                d.last_section.page_h = 360.0;
+                d.last_section.margin_top = 36.0;
+                d.last_section.margin_bottom = 36.0;
+                let mut p = Paragraph::with_text(&vec!["Synthetic line"; count].join("\n"), CharProps { size: Some(9.0), ..Default::default() });
+                p.props.line_spacing = Some(LineSpacing::Exactly(10.0));
+                p.props.space_before = Some(0.0);
+                p.props.space_after = Some(0.0);
+                p.props.widow_control = Some(false);
+                let mut table = Table::new(1, 1, 300.0);
+                table.props.cell_margins = Some([margin, 0.0, margin, 0.0]);
+                let border = Some(Border { style: BorderStyle::Single, width, ..Default::default() });
+                table.props.borders = Some(Borders { top: border, bottom: border, ..Default::default() });
+                table.rows[0].props.height = height;
+                table.rows[0].props.height_rule = HeightRule::AtLeast;
+                table.rows[0].cells[0].blocks = vec![wordcraft_doc::para_block(p)];
+                d.body = vec![Arc::new(Block::Table(table))];
+                let l = lay(&d);
+                assert_eq!(l.pages.len(), pages);
+                for page in &l.pages {
+                    let cell = page
+                        .items
+                        .iter()
+                        .find_map(|item| match item {
+                            Placed::Cell { rect, .. } => Some(rect),
+                            _ => None,
+                        })
+                        .unwrap();
+                    let edge = page
+                        .items
+                        .iter()
+                        .filter_map(|item| match item {
+                            Placed::Rule { y0, y1, border, .. } if (y1 - y0).abs() < 0.01 => Some(y0 + border.width / 2.0),
+                            _ => None,
+                        })
+                        .fold(f32::NEG_INFINITY, f32::max);
+                    assert!((edge - cell.bottom()).abs() < 0.01, "width {width}, margin {margin}: stroke {edge}, cell {cell:?}");
+                }
+            }
+        }
+    }
 }

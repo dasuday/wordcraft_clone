@@ -27,6 +27,8 @@ pub struct RowLayout {
 
 /// A cell of a [`RowLayout`].
 pub struct CellPart {
+    /// Reserved closing band for an unmerged, non-exact final row.
+    pub(crate) bottom_band: f32,
     /// Its items in the row's `items` (its fill, text, borders and cell area).
     pub items: std::ops::Range<usize>,
     /// Where its content ends below the row's top, its last paragraph's space after included
@@ -652,6 +654,7 @@ pub fn layout_table(ctx: &mut Ctx, story: StoryRef, t: &Table, path: &[u32], ava
     for (ri, cells) in rows.into_iter().enumerate() {
         let rh = heights.get(ri).copied().unwrap_or(0.0);
         let exact = t.rows.get(ri).is_some_and(|r| r.props.height_rule == HeightRule::Exact && r.props.height.is_some_and(|h| h > 0.0));
+        let merged = cells.iter().any(|c| c.vmerge != VMerge::None);
         let mut items = Vec::new();
         let mut parts = Vec::with_capacity(cells.len());
         for (ci, c) in cells.into_iter().enumerate() {
@@ -722,13 +725,19 @@ pub fn layout_table(ctx: &mut Ctx, story: StoryRef, t: &Table, path: &[u32], ava
             // close the way Word draws them instead of leaving a notch at thick borders.
             let half = |o: Option<Border>| o.filter(Border::is_visible).map_or(0.0, |e| e.width / 2.0);
             let (hx0, hx1) = (x0 - half(b.left), x1 + half(b.right));
+            let bottom_band = if ri + 1 == nrows && !exact && !merged {
+                b.bottom.filter(Border::is_visible).map_or(0.0, |b| b.width.clamp(0.0, 12.0))
+            } else {
+                0.0
+            };
             let top_vis = c.vmerge != VMerge::Continue;
             if top_vis && let Some(e) = b.top.filter(Border::is_visible) {
                 items.push(Placed::Rule { x0: hx0, y0, x1: hx1, y1: y0, border: e });
             }
             let last_of_merge = c.vmerge == VMerge::None || !cont.get(ri + 1).is_some_and(|v| v.contains(&c.g));
             if last_of_merge && let Some(e) = b.bottom.filter(Border::is_visible) {
-                items.push(Placed::Rule { x0: hx0, y0: y1, x1: hx1, y1, border: e });
+                let bottom_y = y1 - bottom_band / 2.0;
+                items.push(Placed::Rule { x0: hx0, y0: bottom_y, x1: hx1, y1: bottom_y, border: e });
             }
             if let Some(e) = b.left.filter(Border::is_visible) {
                 items.push(Placed::Rule { x0, y0, x1: x0, y1, border: e });
@@ -745,7 +754,7 @@ pub fn layout_table(ctx: &mut Ctx, story: StoryRef, t: &Table, path: &[u32], ava
                 story,
                 clip: exact && c.h > span_h + 0.01,
             });
-            parts.push(CellPart { items: first..items.len(), end });
+            parts.push(CellPart { bottom_band, items: first..items.len(), end });
         }
         out.push(RowLayout { height: rh, items, bottom: bottoms.get(ri).copied().unwrap_or(0.0), cells: parts });
     }
@@ -934,9 +943,12 @@ pub fn split_row(row: &RowLayout, cut: f32) -> Option<(RowLayout, RowLayout)> {
                         if *y0 <= 0.01 {
                             a.push(it.clone());
                             b.push(Placed::Rule { x0: *x0, y0: 0.0, x1: *x1, y1: 0.0, border: *border });
-                        } else if *y0 >= row.height - 0.01 {
-                            a.push(Placed::Rule { x0: *x0, y0: cut, x1: *x1, y1: cut, border: *border });
-                            b.push(Placed::Rule { x0: *x0, y0: y0 - rest, x1: *x1, y1: y1 - rest, border: *border });
+                        } else if *y0 >= row.height - c.bottom_band / 2.0 - 0.01 {
+                            // Keep the entire closing stroke inside each physical fragment's band.
+                            let above = cut - c.bottom_band / 2.0;
+                            let below = if c.bottom_band > 0.0 { height - c.bottom_band / 2.0 } else { y0 - rest };
+                            a.push(Placed::Rule { x0: *x0, y0: above, x1: *x1, y1: above, border: *border });
+                            b.push(Placed::Rule { x0: *x0, y0: below, x1: *x1, y1: below, border: *border });
                         } else if *y0 <= cut {
                             a.push(it.clone());
                         } else {
@@ -955,7 +967,7 @@ pub fn split_row(row: &RowLayout, cut: f32) -> Option<(RowLayout, RowLayout)> {
                 }
             }
         }
-        parts.push(CellPart { items: start..b.len(), end: c.end.map(|e| e - shift) });
+        parts.push(CellPart { bottom_band: c.bottom_band, items: start..b.len(), end: c.end.map(|e| e - shift) });
     }
     // The part left on the page is placed and never split again.
     Some((
