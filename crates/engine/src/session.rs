@@ -5,6 +5,13 @@ use std::sync::{Arc, OnceLock};
 /// The system locale (BCP 47 tag) the shell found at startup, for Numeral › System.
 static SYSTEM_LOCALE: OnceLock<String> = OnceLock::new();
 
+/// The next document id ([`Session::document_id`]): one counter for the process, so ids never
+/// repeat across windows or documents while the app runs.
+fn next_document_id() -> u64 {
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+    NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+}
+
 /// Tell the engine the system locale (the shell calls this once at startup; layout never reads
 /// the environment). Headless sessions without it show Western digits for Numeral › System.
 pub fn set_system_locale(tag: &str) {
@@ -390,7 +397,8 @@ pub struct Session {
     join_next: bool,
     rev: u64,
     /// Which document this is: changes when [`Session::set_document`] replaces it (open, new,
-    /// mail merge, recover), never on an edit.
+    /// mail merge, recover), never on an edit. Unique in the process (every window draws from
+    /// [`next_document_id`]), so add-ins can tell documents apart by it (plugin protocol 2.2).
     document_id: u64,
     cache: LayoutCache,
     /// (revision, width, read height, view, read line spacing, layout, proofing, outline,
@@ -646,7 +654,7 @@ impl Session {
             typing_open: false,
             join_next: false,
             rev: 1,
-            document_id: 1,
+            document_id: next_document_id(),
             cache: LayoutCache::new(),
             layout: None,
             originals: Default::default(),
@@ -748,6 +756,12 @@ impl Session {
     /// Which document is open (see `document_id`): lets a caller tell an edit from a replacement.
     pub fn document_id(&self) -> u64 {
         self.document_id
+    }
+    /// The document's id as add-ins see it (plugin protocol 2.2: `id` in `context.document` and
+    /// the document events): opaque, the same while the document is open (saved, renamed or
+    /// not), never reused for another document while the app runs (`doc-3`).
+    pub fn plugin_document_id(&self) -> String {
+        format!("doc-{}", self.document_id)
     }
     pub fn touch(&mut self) {
         self.rev = self.rev.wrapping_add(1);
@@ -1075,7 +1089,7 @@ impl Session {
 
     /// Replace the document (open/new).
     pub fn set_document(&mut self, doc: Document) {
-        self.document_id = self.document_id.wrapping_add(1);
+        self.document_id = next_document_id();
         self.bib_style = doc_bib_style(&doc);
         self.doc = doc;
         self.doc.ensure_nonempty();

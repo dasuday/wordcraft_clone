@@ -10,7 +10,7 @@ use crate::{CmdError, CmdResult, CommandSpec, Selection, Session, p};
 
 pub fn specs() -> Vec<CommandSpec> {
     vec![
-        CommandSpec::new("text.insert", "Type Text", "Editing", insert).params(r#"{"text": string}"#),
+        CommandSpec::new("text.insert", "Type Text", "Editing", insert).params(r#"{"text": string, "raw"?: bool, "literal"?: bool}"#),
         CommandSpec::new("text.newParagraph", "New Paragraph", "Editing", new_paragraph).key("Enter"),
         CommandSpec::new("text.lineBreak", "Line Break", "Editing", |s, _| ins_char(s, '\n')).key("Shift+Enter"),
         CommandSpec::new("text.pageBreak", "Page Break", "Insert › Pages", |s, _| ins_char(s, PAGE_BREAK)).key("Mod+Enter"),
@@ -88,10 +88,20 @@ fn typing_options(s: &mut Session, text: &str) {
     }
 }
 
+/// `text.insert {text, raw?, literal?}`: types `text` as the keyboard does. `raw` skips the
+/// automatic changes (smart quotes, AutoCorrect, AutoFormat as you type). `literal` (plugin
+/// protocol 2.2's `literalValues`) is `raw`, and its line breaks separate paragraphs as pasted
+/// text does rather than as Enter presses (an empty list item doesn't end the list): the text
+/// goes in exactly as given.
 fn insert(s: &mut Session, v: &Value) -> CmdResult {
     let text = p::req_str(v, "text")?;
-    let raw = p::bool(v, "raw").unwrap_or(false);
+    let literal = p::bool(v, "literal").unwrap_or(false);
+    let raw = literal || p::bool(v, "raw").unwrap_or(false);
     typing_options(s, text);
+    if literal {
+        super::paste_text(s, text)?;
+        return sel_result(s);
+    }
     let t = if raw { None } else { autoformat(s, text) };
     type_text(s, t.as_deref().unwrap_or(text))?;
     let trigger = text.chars().count() == 1 && text.chars().all(|c| c == ' ' || ",.;:!?".contains(c));

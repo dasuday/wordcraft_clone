@@ -186,10 +186,11 @@ fn new(s: &mut Session, v: &Value) -> CmdResult {
         _ => normal_document(s),
     };
     let closed = s.path.take();
+    let closed_id = s.plugin_document_id();
     s.set_document(doc);
-    // The document that was open is closed (protocol 1.2's documentClosed).
+    // The document that was open is closed (protocol 1.2's documentClosed, with its own id).
     if let Some(old) = closed {
-        super::plugins::notify(wordcraft_plugin::DocumentEvent::Closed, &old);
+        super::plugins::notify(wordcraft_plugin::DocumentEvent::Closed, &old, &closed_id);
     }
     sel_result(s)
 }
@@ -233,6 +234,7 @@ fn open(s: &mut Session, v: &Value) -> CmdResult {
         doc.styles.default_chr.lang = Some(lang.clone());
     }
     let closed = s.path.take();
+    let closed_id = s.plugin_document_id();
     s.set_document(doc);
     if let Some(z) = s.doc.settings.zoom {
         super::view::restore_zoom(s, z);
@@ -242,10 +244,10 @@ fn open(s: &mut Session, v: &Value) -> CmdResult {
         p::str(v, "label").map(|l| wordcraft_plugin::dialog::cut(l.trim(), wordcraft_plugin::dialog::MAX_TITLE)).filter(|l| !l.is_empty());
     // Add-ins hear that the document that was open closed and this one opened from its file.
     if let Some(old) = closed {
-        super::plugins::notify(wordcraft_plugin::DocumentEvent::Closed, &old);
+        super::plugins::notify(wordcraft_plugin::DocumentEvent::Closed, &old, &closed_id);
     }
     if local {
-        super::plugins::notify(wordcraft_plugin::DocumentEvent::Opened, std::path::Path::new(path));
+        super::plugins::notify(wordcraft_plugin::DocumentEvent::Opened, std::path::Path::new(path), &s.plugin_document_id());
     }
     // Like Word, a document opened with a password is saved with it again.
     if encrypted {
@@ -332,7 +334,7 @@ fn save(s: &mut Session, v: &Value) -> CmdResult {
     }
     // Add-ins hear of the save (protocol 1.2), not of AutoSave's writes.
     if !p::bool(v, "autosave").unwrap_or(false) {
-        super::plugins::notify(wordcraft_plugin::DocumentEvent::Saved, &path);
+        super::plugins::notify(wordcraft_plugin::DocumentEvent::Saved, &path, &s.plugin_document_id());
     }
     Ok(json!({"saved": true, "path": path.to_string_lossy(), "encrypted": encrypted, "renamedFrom": renamed}))
 }

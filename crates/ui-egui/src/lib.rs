@@ -1224,7 +1224,7 @@ impl WordApp {
             return;
         }
         if let Some(path) = self.session.path.clone() {
-            wordcraft_engine::cmd::plugins::notify(wordcraft_plugin::DocumentEvent::Closed, &path);
+            wordcraft_engine::cmd::plugins::notify(wordcraft_plugin::DocumentEvent::Closed, &path, &self.session.plugin_document_id());
             wordcraft_plugin::wait_for_events(wordcraft_plugin::DocumentEvent::Closed.timeout());
         }
     }
