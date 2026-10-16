@@ -2269,3 +2269,10 @@
 	All Fonts	所有字体
 	Spike	图文场
 	Insert Spike	插入图文场
+# Drop Cap menu and Drop Cap Options (#2601)
+	Dropped	下沉
+	In margin	悬挂
+	Drop Cap Options…	首字下沉选项…
+	Lines to drop:	下沉行数：
+	Distance from text:	距正文：
+	Distance from text	距正文

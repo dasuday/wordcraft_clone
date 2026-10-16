@@ -2656,3 +2656,10 @@ preview	Title	Naslov
 	Moved to:	Premješteno u:
 	Spike	Skupljač
 	Insert Spike	Umetni iz skupljača
+# Drop Cap menu and Drop Cap Options (#2601)
+	Dropped	U tekstu
+	In margin	Na margini
+	Drop Cap Options…	Mogućnosti inicijala…
+	Lines to drop:	Broj redaka:
+	Distance from text:	Udaljenost od teksta:
+	Distance from text	Udaljenost od teksta

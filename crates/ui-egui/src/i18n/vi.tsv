@@ -2696,3 +2696,10 @@ template	Letter	Thư
 	All Fonts	Tất cả phông chữ
 	Spike	Bộ gom
 	Insert Spike	Chèn bộ gom
+# Drop Cap menu and Drop Cap Options (#2601)
+	Dropped	Trong văn bản
+	In margin	Trong lề
+	Drop Cap Options…	Tùy chọn chữ lớn đầu đoạn…
+	Lines to drop:	Số dòng chiếm:
+	Distance from text:	Khoảng cách tới văn bản:
+	Distance from text	Khoảng cách tới văn bản

@@ -2654,3 +2654,10 @@ preview	Title	Пример
 	All Fonts	Все шрифты
 	Spike	Копилка
 	Insert Spike	Вставить из копилки
+# Drop Cap menu and Drop Cap Options (#2601)
+	Dropped	В тексте
+	In margin	На поле
+	Drop Cap Options…	Параметры буквицы…
+	Lines to drop:	Высота в строках:
+	Distance from text:	Расстояние от текста:
+	Distance from text	Расстояние от текста

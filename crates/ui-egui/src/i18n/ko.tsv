@@ -2510,3 +2510,10 @@ preview	Title	제목
 	All Fonts	모든 글꼴
 	Spike	스파이크
 	Insert Spike	스파이크 삽입
+# Drop Cap menu and Drop Cap Options (#2601)
+	Dropped	본문 안
+	In margin	여백에
+	Drop Cap Options…	문단 첫 글자 장식 옵션…
+	Lines to drop:	장식할 줄 수:
+	Distance from text:	본문과의 간격:
+	Distance from text	본문과의 간격
