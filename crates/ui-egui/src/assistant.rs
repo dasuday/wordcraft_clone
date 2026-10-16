@@ -1,4 +1,4 @@
-//! In-app writing assistant. Only reviewed plain text enters the engine; models get no tools.
+//! In-app writing assistant. Reviewed Markdown enters the engine; models get no tools.
 use crate::WordApp;
 use serde_json::{Value, json};
 use zeroize::Zeroize;
@@ -238,7 +238,7 @@ pub fn command(app: &mut WordApp, id: &str, v: &Value) -> Result<Value, String> 
                 return Err("Wait for a complete, successful suggestion before accepting".into());
             }
             let r = app.assistant.request.clone().ok_or("Generate a suggestion first")?;
-            app.run("assistant.apply", json!({"request":r,"text":app.assistant.result,"placement":v.get("placement")}))?;
+            app.run("assistant.apply", json!({"request":r,"text":app.assistant.result,"placement":v.get("placement"),"format":"markdown"}))?;
             app.assistant.request = None;
             app.assistant.result.clear();
             app.assistant.error.clear();
@@ -796,8 +796,11 @@ mod tests {
         assert!(app.assistant.open);
         let request = app.run("assistant.prepare", json!({"mode":"draft","prompt":"A greeting"})).unwrap();
         app.assistant.request = Some(request);
-        app.assistant.result = "Hello".into();
+        app.assistant.result = "**Hello**".into();
         command(&mut app, "ui.assistant.apply", &json!({"placement":"after"})).unwrap();
+        let p = app.session.doc.para_at(&app.session.sel.focus).unwrap();
+        assert_eq!(p.text, "Hello");
+        assert!(p.runs.iter().any(|r| r.props.bold == Some(true)));
         assert!(app.assistant.result.is_empty());
         assert!(command(&mut app, "ui.assistant.apply", &json!({"placement":"after"})).is_err());
         app.run("edit.undo", json!({})).unwrap();

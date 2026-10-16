@@ -1,6 +1,6 @@
 # WordCraft roadmap: milestones and what's next
 
-> **Last reviewed:** 2026-10-16 · **Last updated:** 2026-10-16 · **Change:** minor (desktop Writing Assistant: multiple model profiles, default and session override; see [writing-assistant.md](writing-assistant.md)) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4
+> **Last reviewed:** 2026-10-16 · **Last updated:** 2026-10-16 · **Change:** minor (desktop Writing Assistant: Markdown formatting on suggestion acceptance; see [writing-assistant.md](writing-assistant.md)) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4
 
 Forward-looking plan. The summary is [`ROADMAP.md`](../ROADMAP.md); the ranked work list is
 [`gaps.md`](gaps.md); the numbers are in [`target-app-parity.md`](target-app-parity.md). Hours are
@@ -76,6 +76,7 @@ browser generation and encrypted credential storage remain.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-16 | minor | Assistant Insert/Replace converts Markdown to native rich text, headings and lists in one undoable edit. |
 | 2026-10-16 | minor | Multiple saved model profiles, a default and a collapsed session override; existing connection migrated. |
 | 2026-10-16 | minor | Assistant connection moved to Writing Assistant options; endpoint, model and plain-text key persist across restarts. |
 | 2026-10-16 | minor | Live streaming assistant previews and guarded completion added; readiness estimates unchanged. |

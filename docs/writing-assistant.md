@@ -1,6 +1,6 @@
 # Writing Assistant
 
-> **Last reviewed:** 2026-10-16 · **Last updated:** 2026-10-16 · **Change:** minor (saved model profiles, default and session override)
+> **Last reviewed:** 2026-10-16 · **Last updated:** 2026-10-16 · **Change:** minor (Markdown formatting on suggestion acceptance)
 
 ## Use
 
@@ -51,8 +51,13 @@ recall text already sent to a server. Only one request runs at a time, with a 90
 
 ## Scope and limits
 
-This is plain-text assistance. Inserted paragraphs inherit the insertion point's formatting;
-replacement does not reconstruct mixed formatting. Text spanning a table boundary, object
+The preview remains editable Markdown. **Insert** and **Replace** convert it through WordCraft's
+Markdown importer into native bold, italic, strikethrough, headings, bullet and numbered lists
+(including nesting), links, code and tables. Generated blocks are separated from surrounding
+prose so their list or heading formatting does not spill into existing text. Acceptance is one
+undoable edit and respects document protection and tracked changes. Copy keeps the Markdown source.
+Selected source text is still sent as plain text; replacement does not reconstruct its original
+mixed formatting. Text spanning a table boundary, object
 markers, equations, column selections and whole-cell selections is refused. A selection can
 cover ordinary paragraphs, including paragraphs within one table cell or header/footer story.
 Instructions are limited to 8 KiB, source and result to 64 KiB, and result paragraphs to 4096.
@@ -95,7 +100,8 @@ source text, selection, document identity and revision. It performs no network c
 not change the document. External hosts can send its `messages` to their chosen model.
 
 `assistant.apply` takes `{"request": <returned object>, "text":"Reviewed result",
-"placement":"replace"}` (or `"after"`). It checks the document revision and selection, then
+"placement":"replace", "format":"markdown"}` (or `"after"`). Omit `format` or use `"text"`
+for the original plain-text behavior. The assistant panel always uses Markdown. It checks the document revision and selection, then
 applies one undoable edit. These commands are available through the registry, CLI and MCP.
 The request object is a freshness guard, not an authentication credential.
 
@@ -142,6 +148,13 @@ profile editor and expanded selector were rendered with synthetic profiles and v
 Formatting, workspace Clippy, assets, layers and all 16 WASM checks pass. Full CI stops at the
 existing renderer colour-emoji tests on this machine.
 
+Markdown follow-up: all 12 assistant engine tests and 15 assistant UI tests pass. Coverage
+includes emphasis, single-item lists, headings, surrounding prose, Undo, document protection,
+and rejecting tracked replacements without leaving paragraph breaks. A headless document
+screenshot was visually checked for headings, bold/italic text, bullets and numbering.
+Formatting, Clippy, assets, layers and WASM checks pass; full CI still encounters the existing
+PDF right-to-left rendering test failure on this machine.
+
 Network generation uses native TLS and the platform certificate store. Linux/BSD builds require
 the native TLS backend's system OpenSSL build/runtime dependencies; cross-platform packaging
 and a live connection to your particular hosted model have not been verified here.
@@ -150,6 +163,7 @@ and a live connection to your particular hosted model have not been verified her
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-16 | minor | Assistant Insert/Replace converts Markdown to native rich text, headings and lists in one undoable edit. |
 | 2026-10-16 | minor | Multiple saved server/model profiles, default selection, collapsed session override and single-connection migration |
 | 2026-10-16 | minor | Connection settings moved to Writing Assistant options and retained through the normal preferences lifecycle; plain-text key storage |
 | 2026-10-16 | minor | Live streaming previews, completion guards and incremental transport tests |
