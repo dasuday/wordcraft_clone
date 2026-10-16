@@ -1,6 +1,6 @@
 # Localization parity with Microsoft Word
 
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-11 · **Change:** trivial (Turkish interface catalog completed, 2,325 entries, #774; previously minor: Turkish interface catalog completed, 2,325 entries, #774; previously minor: Hungarian interface added; previously trivial: sorting and table numbers follow the text's language, #836, #837; previously minor: Polish interface; Polish proofing — spelling, grammar, hyphenation — and a proofing language per run; previously minor: Turkish interface added; previously major: first version; catalogs measured from `crates/ui-egui/src/i18n`, Word's languages from its bundle listing) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4
+> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-15 · **Change:** minor (Font dialog coverage in all 18 catalogs; previously trivial: Turkish interface catalog completed, 2,325 entries, #774; previously minor: Turkish interface catalog completed, 2,325 entries, #774; previously minor: Hungarian interface added; previously trivial: sorting and table numbers follow the text's language, #836, #837; previously minor: Polish interface; Polish proofing — spelling, grammar, hyphenation — and a proofing language per run; previously minor: Turkish interface added; previously major: first version; catalogs measured from `crates/ui-egui/src/i18n`, Word's languages from its bundle listing) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4
 
 Interface languages, script support and proofing per language. How translation works (catalog
 format, adding a language, clean-room rule): `crates/ui-egui/src/i18n/mod.rs`.
@@ -8,6 +8,8 @@ format, adding a language, clean-room rule): `crates/ui-egui/src/i18n/mod.rs`.
 **Dimension: ~28% (estimated; 27% before Portuguese proofing, 25% before Polish and per-run proofing languages), 70–115 h to full
 for the twelve key languages** plus ~45 h for the other ~17 languages Word ships, plus
 native-speaker review (human).
+
+Font dialog completion adds 677 clean-room entries across all 18 non-English catalogs, covering Font/Advanced controls, defaults, effects, preview notes and validation. All 57 active localization tests pass (one existing test is ignored). French, German, Russian and Chinese Font/Advanced/effects captures were checked for readable labels and usable layout. Native-speaker review remains pending; headline estimates are unchanged.
 
 ## What Word ships (measured by listing the bundle)
 
@@ -158,6 +160,7 @@ WordCraft keeps 2,54 cm).
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-15 | minor | Font dialog completion: 677 translation entries across all 18 non-English catalogs; explicit invisible decoration overrides survive style inheritance and DOCX round trips; w14 alpha now uses opacity as specified. Focused tests, headless interaction/visual checks, assets, layers, Clippy and WASM pass. New regression tests, full CI and a fresh live Word comparison remain deferred. |
 | 2026-10-11 | minor | Turkish interface catalog completed (2,325 entries, the same keys as Russian): equation gallery, built-in style names, watermarks, paper sizes and preview tiles; the interface audit checks Turkish too (#774) |
 | 2026-10-12 | trivial | Region conventions: File › Options › Advanced › Region (saved) and an Automatic units entry; Unix `LC_PAPER`/`LC_MEASUREMENT`/`LC_NUMERIC` each decide their own convention; the web reads the browser's locale; `WORDCRAFT_NO_PREFS` runs stay en-US; where the decimal separator comes from (#838 review) |
 | 2026-10-12 | minor | New blank documents follow the system region: A4 outside the Letter territories, centimetres outside the US, the region's decimal separator in length fields; explicit Measurement units choice wins (#838) |

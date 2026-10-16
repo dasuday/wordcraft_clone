@@ -559,6 +559,9 @@ impl WordApp {
 
     /// Restore preferences saved by [`WordApp::prefs`].
     pub fn apply_prefs(&mut self, ui: UiState) {
+        let blank = !self.session.dirty
+            && self.session.path.is_none()
+            && (self.session.doc == wordcraft_doc::Document::new() || self.session.doc == wordcraft_engine::blank_document(&self.session.region()));
         self.ui = ui;
         self.ui.backstage = false;
         // A `ui.json` from before the theme setting: its dark-mode switch picks Dark or Light.
@@ -578,6 +581,9 @@ impl WordApp {
             }
         }
         self.session.prefs = std::mem::take(&mut self.ui.editing);
+        if blank {
+            self.session.set_document(self.session.blank_document());
+        }
         self.session.read_aloud.set_rate(self.ui.read_aloud_rate);
         self.session.read_aloud.skip_citations = self.ui.read_aloud_skip_citations;
         self.session.view.dark_mode = self.ui.dark_page;

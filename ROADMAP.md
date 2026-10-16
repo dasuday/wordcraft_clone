@@ -2,7 +2,7 @@
 
 **Stage: alpha** · next: beta, ~15 points (60% → 75% ready for real work) and ~150–230 h away
 
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-11 · **Change:** trivial (progress log: symbol fonts, #776; previously trivial: the save prompt answers from the keyboard, #861; previously trivial: table column and row markers on the rulers, #700; previously trivial: table borders and the resize handle drag on the page, #217; previously trivial: formatting revisions landed, #41; previously trivial: Draw tab ink, #307, and Draw Table and Eraser, #303, landed: catalog 402/434; previously minor: readiness table with hours per audience; full number back to the additive weighted sum, 60%; mainstream and essentials numbers added; alpha gate checked; previously major: full re-measure against Word for Mac 16.113.4; restructured to the craftrules progress-docs standard) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4
+> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-15 · **Change:** minor (Font preview point-size accuracy); previous: trivial (progress log: symbol fonts, #776; previously trivial: the save prompt answers from the keyboard, #861; previously trivial: table column and row markers on the rulers, #700; previously trivial: table borders and the resize handle drag on the page, #217; previously trivial: formatting revisions landed, #41; previously trivial: Draw tab ink, #307, and Draw Table and Eraser, #303, landed: catalog 402/434; previously minor: readiness table with hours per audience; full number back to the additive weighted sum, 60%; mainstream and essentials numbers added; alpha gate checked; previously major: full re-measure against Word for Mac 16.113.4; restructured to the craftrules progress-docs standard) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4
 
 > **Printing update:** 2026-10-12 · direct desktop printing through craft-print; details below.
 
@@ -135,6 +135,13 @@ Ranked, to beta (detail and remaining milestones in [docs/roadmap.md](docs/roadm
 
 | Date | What landed |
 |---|---|
+| 2026-10-15 | Font preview now matches document point sizes at 100% zoom. Overflow clips instead of reducing the chosen size. |
+| 2026-10-15 | Restored Font/size scrollbar hover/fade behavior while preserving edge alignment; removed the Set As Default explanatory note. |
+| 2026-10-15 | Font dialog polish: scrollbars stay at the font/size list edges, long font names do not wrap, and Hidden adds no explanatory message. |
+| 2026-10-15 | Font dialog implementation complete on `font-dialog-parity`: Font/Advanced controls, real-font preview, staged defaults and effects, all 18 translation catalogs, inherited decoration removal and correct DOCX opacity. Focused verification passes; new tests and full live Word qualification remain deferred. |
+| 2026-10-15 | In progress on `font-dialog-parity`: step 5 connects Set As Default and Text Effects through nested drafts, preserving Cancel and a single document undo step. Future blank-document defaults persist in preferences. Translations and full qualification remain pending. |
+| 2026-10-15 | In progress on `font-dialog-parity`: step 4 preview now uses the selected document font and page renderer, including superscript/subscript, Advanced options and distinct underline patterns; defaults, Text Effects and translations remain pending. |
+| 2026-10-15 | In progress on `font-dialog-parity`: Font dialog phase 1: Font/Advanced tabs, font/style/size lists, theme Body/Headings links, underline style/colour, exclusive effects, character spacing and OpenType controls. Document-font preview, defaults, Text Effects and new translations remain pending. |
 | 2026-10-12 | RTF import now uses the RTF spec's defaults where a file names none (#902): no space before or after paragraphs, single line spacing, and the `\deff` default font, instead of WordCraft's Normal style; RTF files that relied on the old defaults open tighter, like in Word |
 | 2026-10-11 | Right-clicking a table cell offers the table's commands, and as in Word they follow the selection: with the caret in a cell Insert, Delete Cells, Split Cells, Text Direction and Table Properties…; with several cells Merge Cells instead of Split; with whole columns or rows Delete Columns or Rows, Merge Cells and Distribute Rows and Columns; with the whole table Delete Table, Distribute, AutoFit and Insert Caption…. A right-click beside selected cells moves the caret there instead of keeping them |
 | 2026-10-11 | Drags, Shift+arrows and Shift+click over table cells select whole cells, as in Word: from one cell into another the rectangle between them (bold, alignment and Delete leave the other cells alone), into or out of a table whole rows; extending again goes on from where the selection started |
@@ -273,6 +280,13 @@ Ranked, to beta (detail and remaining milestones in [docs/roadmap.md](docs/roadm
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-15 | minor | Font preview uses the canvas 100% point conversion (96/72 screen units per document point). Text keeps the selected size; long or oversized samples clip at the tile bounds instead of shrinking. |
+| 2026-10-15 | trivial | Font/size scrollbars retain normal hover/fade behavior with fixed list widths. Removed the Set As Default explanatory note. |
+| 2026-10-15 | minor | Font and size lists keep fixed scroll-area widths with reserved scrollbar gutters; long font names remain single-row with tooltips. Hidden uses its preview marker without an explanatory message. |
+| 2026-10-15 | minor | Font dialog completion: 677 translation entries across all 18 non-English catalogs; explicit invisible decoration overrides survive style inheritance and DOCX round trips; w14 alpha now uses opacity as specified. Focused tests, headless interaction/visual checks, assets, layers, Clippy and WASM pass. New regression tests, full CI and a fresh live Word comparison remain deferred. |
+| 2026-10-15 | minor | Font dialog step 5 stages document/future blank-document defaults and Text Effects (fill, outline, shadow, glow, reflection). Nested Cancel keeps the parent draft; outer Cancel discards all drafts. Main OK uses one formatting command and one document undo step; future defaults persist in user preferences. New regression tests, translations and full Word qualification remain deferred. |
+| 2026-10-15 | minor | Font dialog preview uses document shaping and raster rendering with a fixed baseline for superscript/subscript, a bounded sample, one cached raster, and the same pending-property patch as OK. Dot-dash, dot-dot-dash and double-wave underlines are distinct on screen and in PDF. New regression tests and full Word qualification remain deferred. |
+| 2026-10-15 | minor | Font dialog phase 1: Font/Advanced tabs, font/style/size lists, theme Body/Headings links, underline style/colour, exclusive effects, character spacing and OpenType controls. Document-font preview, defaults, Text Effects and new translations remain pending. |
 | 2026-10-12 | trivial | Progress log: Accept All and Reject All keep the right paragraph marks (#864) |
 | 2026-10-11 | trivial | Progress log: Ctrl, Alt, left-edge and selected-cells table border drags (#711) |
 | 2026-10-11 | trivial | Progress log: table markers on the rulers (#700) |

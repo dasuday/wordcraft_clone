@@ -432,7 +432,7 @@ pub(crate) fn language_name(tag: Option<&str>) -> String {
 pub(crate) fn caret_language(app: &WordApp) -> String {
     let s = &app.session;
     let style = s.doc.para_at(&s.sel.focus).and_then(|p| p.props.style.clone());
-    let rc = s.doc.styles.resolve_char(style.as_deref(), &s.typing_props());
+    let rc = s.doc.resolve_char(style.as_deref(), &s.typing_props());
     tl!(&language_name(rc.lang.as_deref())).to_string()
 }
 

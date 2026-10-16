@@ -114,6 +114,13 @@ fn every_char_prop_round_trips() {
         ins: None,
         del: None,
         fmt_change: None,
+        font_theme: None,
+        underline_auto: Some(false),
+        ligatures: None,
+        number_spacing: None,
+        number_form: None,
+        stylistic_sets: None,
+        contextual_alternates: None,
     };
     let auto =
         CharProps { color: Some(TextColor::Auto), highlight: Some(Highlight::None), vert_align: Some(VertAlign::Subscript), ..Default::default() };

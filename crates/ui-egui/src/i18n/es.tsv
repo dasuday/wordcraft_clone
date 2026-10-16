@@ -2441,3 +2441,42 @@ preview	Title	Título
 	Start-up	Inicio de la aplicación
 	Show the Start screen when WordCraft starts	Mostrar la pantalla de inicio al abrir WordCraft
 	On: WordCraft opens on File › Home, with a blank document, the templates and your recent documents. Off: it opens a blank document.	Activado: WordCraft se abre en Archivo › Inicio, con un documento en blanco, las plantillas y tus documentos recientes. Desactivado: abre un documento en blanco.
+
+# Font dialog and pending defaults/effects. Clean-room translations.
+	pt and above	pt o más
+	All new blank documents	Todos los documentos nuevos en blanco
+	Bold Italic	Negrita cursiva
+	By:	En:
+	Clear Text Effects	Borrar efectos de texto
+	Condensed	Condensado
+	Default change pending	Cambio de valor predeterminado pendiente
+	Dot dot dash	Punto-punto-guion
+	Double wave	Onda doble
+	Expanded	Expandido
+	Font size must be between 1 and 1638 pt.	El tamaño de fuente debe estar entre 1 y 1638 pt.
+	Font style:	Estilo de fuente:
+	Historical and Discretionary	Históricas y discrecionales
+	Kerning for fonts:	Interletraje para fuentes:
+	Ligatures:	Ligaduras:
+	Lining	Cifras alineadas
+	Lowered	Bajado
+	Number forms:	Formas de números:
+	Number spacing:	Espaciado de números:
+	Old-style	Cifras antiguas
+	OpenType Features	Funciones OpenType
+	Proportional	Proporcional
+	Raised	Elevado
+	Regular	Normal
+	Scale:	Escala:
+	Standard and Contextual	Estándar y contextuales
+	Standard only	Solo estándar
+	Stylistic sets:	Conjuntos estilísticos:
+	Tabular	Tabular
+	Text Effects…	Efectos de texto…
+	Theme font	Fuente del tema
+	This document only	Solo este documento
+	Underline color:	Color del subrayado:
+	Underline style:	Estilo del subrayado:
+	Use Contextual Alternates	Usar alternativas contextuales
+	Use the pending font settings as the default for:	Usar los ajustes de fuente pendientes como predeterminados para:
+	Preview unavailable	Vista previa no disponible
