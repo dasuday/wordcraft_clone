@@ -39,6 +39,7 @@ const DOCUMENTS: &[&str] = &["docx", "docm", "dotx", "dotm", "doc", "dot", "odt"
 /// The host's system dialog and the built-in browser offer the same.
 pub fn open_filters(purpose: &str) -> &'static [(&'static str, &'static [&'static str])] {
     match purpose {
+        "template" => &[("Word templates", &["dotx", "dotm"])],
         "picture" => &[("Pictures", PICTURES)],
         "font" => &[("Fonts", wordcraft_fonts::FONT_FILE_EXTS)],
         "recipients" => &[("Recipient lists", wordcraft_engine::cmd::mailings::RECIPIENT_EXTENSIONS), ("All files", &["*"])],
@@ -50,12 +51,16 @@ pub fn open_filters(purpose: &str) -> &'static [(&'static str, &'static [&'stati
 pub(crate) enum AfterPick {
     /// Open the picked document.
     OpenDocument,
+    /// Create a document from a picked template.
+    NewFromTemplate,
     /// Insert the picked picture, or replace the pending Change Picture target.
     Picture,
     /// Save the document there, then carry on.
     SaveAs(AfterSave),
     /// Save a copy there in this format (`pdf`, `docx`, `png`…).
     Export { ext: String },
+    /// Save the current document as a template.
+    SaveTemplate,
     /// Write the PDF of these print settings there (File › Print › Save these pages as PDF).
     PrintPdf { settings: Value },
     /// Load the picked CSV/TSV/text file or spreadsheet as the mail-merge recipients (#240, #334).
@@ -187,6 +192,12 @@ impl WordApp {
                 self.ui.backstage = false;
                 r
             }
+            AfterPick::NewFromTemplate => {
+                let Some(path) = picked else { return Ok(json!({"cancelled": true})) };
+                let r = self.run("file.newFromTemplate", json!({"path": path}));
+                self.ui.backstage = false;
+                r
+            }
             AfterPick::Picture => {
                 let Some(path) = picked else {
                     self.change_picture_target = None;
@@ -226,6 +237,10 @@ impl WordApp {
                     self.status(crate::i18n::fmt(tl!("Exported {path}"), &[("path", &path)]));
                 }
                 r
+            }
+            AfterPick::SaveTemplate => {
+                let Some(path) = picked else { return Ok(json!({"cancelled": true})) };
+                self.run("file.saveTemplate", json!({"path": path}))
             }
             AfterPick::PrintPdf { settings } => {
                 let Some(path) = picked else { return Ok(json!({"cancelled": true})) };
@@ -270,6 +285,17 @@ impl WordApp {
     /// Ask where to save, then save there (File › Save As).
     pub fn save_as_dialog(&mut self) {
         let _ = self.save_as(AfterSave::Nothing);
+    }
+
+    /// Save the current document as a reusable Word template.
+    pub(crate) fn save_template_dialog(&mut self) {
+        let name = format!("{}.dotx", self.title_stem());
+        let _ = self.ask_file(FileDialogRequest::Save { name }, AfterPick::SaveTemplate);
+    }
+
+    /// Pick a Word template and create a new document from it.
+    pub(crate) fn new_from_template_dialog(&mut self) {
+        let _ = self.ask_file(FileDialogRequest::Open { purpose: "template".into() }, AfterPick::NewFromTemplate);
     }
 
     /// Ask where to save, save there, then do `after`.
@@ -337,6 +363,19 @@ mod tests {
     use super::*;
     use crate::Services;
     use wordcraft_engine::Session;
+
+    #[test]
+    fn saved_spacing_template_can_create_a_new_document() {
+        let root = std::env::temp_dir().join(format!("wordcraft-spacing-template-{}", std::process::id()));
+        let path = root.with_extension("dotx");
+        let mut app = WordApp::new(Session::new(wordcraft_doc::Document::new()), Services::default());
+        app.run("design.paragraphSpacing", json!({"value": "double"})).unwrap();
+        app.finish_pick(AfterPick::SaveTemplate, Some(path.to_string_lossy().into_owned())).unwrap();
+        app.run("file.new", json!({})).unwrap();
+        app.finish_pick(AfterPick::NewFromTemplate, Some(path.to_string_lossy().into_owned())).unwrap();
+        assert_eq!(app.session.doc.styles.default_para.line_spacing, Some(wordcraft_doc::props::LineSpacing::Multiple(2.0)));
+        let _ = std::fs::remove_file(path);
+    }
 
     const UNSAVED: &str = "My unsaved novel chapter";
 

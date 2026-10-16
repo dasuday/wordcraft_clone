@@ -250,6 +250,7 @@ can be used without committing Word output.
 ## Revision history
 
 | Date | Change | Summary |
+| 2026-10-16 | trivial | Template save and create-from-template UI for reusable paragraph spacing defaults (#1913); no percentage change |
 |---|---|---|
 | 2026-10-15 | trivial | Character and paragraph formatting: Design › Paragraph Spacing presets update built-in paragraph styles (#1913); no percentage change |
 | 2026-10-12 | minor | Czech proofing review: short-word splits rank after deletion, NOSUGGEST excludes suggestions while accepting typed forms, affix comments apply only to headers, ratios keep spaces and repeated-word messages use Czech quotes; synthetic engine end-to-end and latency checks |

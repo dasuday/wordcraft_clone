@@ -58,6 +58,7 @@ Document title opens Rename Document; the account badge opens Options › Genera
 ## Revision history
 
 | Date | Change | Summary |
+| 2026-10-16 | trivial | File › Save As exposes Save as Template and File › New can browse and create from a `.dotx`; spacing defaults survive the round trip (#1913) |
 |---|---|---|
 | 2026-10-15 | trivial | Design › Paragraph Spacing presets update built-in paragraph styles, so existing styled paragraphs follow the preset (#1913) |
 | 2026-10-13 | trivial | New/Modify Table Style: No Border on a part that inherits its lines hides them; emptying the font box makes the part's font inherited again (#1288) |
