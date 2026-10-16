@@ -1108,3 +1108,147 @@ fn many_unended_urls_scan_quickly() {
     let _ = parse(d.as_bytes());
     assert!(t.elapsed() < std::time::Duration::from_secs(5), "{:?}", t.elapsed());
 }
+
+/// Review 9 C-7: usvg copies a bounding-box gradient's stops for every shape it paints (the
+/// cached one is shared, so it can't be changed in place).
+#[test]
+fn gradient_stops_count_per_shape() {
+    let stops: String = (0..20_000).map(|i| format!(r#"<stop offset="{:.6}"/>"#, i as f64 / 20_000.0)).collect();
+    let users = r##"<rect width="1" height="1" fill="url(#g)"/>"##.repeat(1000);
+    let d = pic(&format!(r#"<linearGradient id="g">{stops}</linearGradient>{users}"#));
+    assert!(refused_as_elements(&d));
+}
+
+/// Review 9 C-7: an Illustrator export heavy in gradients (stops, `xlink:href` chains, classes)
+/// still opens.
+#[test]
+fn gradient_heavy_illustrator_file_is_accepted() {
+    let d = illustrator_export(120, 12_000, 6);
+    let r = parse(d.as_bytes());
+    assert!(r.is_ok(), "{:?}", r.err());
+}
+
+/// 250 groups with opacity, one inside the other, around a picture-sized rect.
+fn nested_layers(n: usize) -> String {
+    pic(&format!("{}<rect width=\"100\" height=\"100\" fill=\"red\"/>{}", "<g opacity=\"0.9\">".repeat(n), "</g>".repeat(n)))
+}
+
+/// Review 9 C-8: resvg holds a picture-sized layer for every group it draws apart, one inside the
+/// other: a large raster of many nested layers is drawn smaller and scaled up, within the budget.
+#[test]
+fn nested_layers_draw_within_the_budget() {
+    let svg = parse(nested_layers(250).as_bytes()).unwrap();
+    assert!(svg.layers >= 250, "{}", svg.layers);
+    let r = svg.render(2048, 2048, [20.48, 0.0, 0.0, 20.48, 0.0, 0.0]).unwrap();
+    assert_eq!((r.width, r.height), (2048, 2048));
+    // The middle is painted (red, at 0.9^250 opacity: faint but not empty is not required).
+    let few = parse(nested_layers(3).as_bytes()).unwrap();
+    assert_eq!(few.layers, 3);
+    let r = few.render(512, 512, [5.12, 0.0, 0.0, 5.12, 0.0, 0.0]).unwrap();
+    assert!(px(&r, 256, 256)[3] > 0);
+    // A deep `<use>` chain under nested groups, opacity on each.
+    let uses: String = (1..380).map(|i| format!(r##"<use id="u{i}" href="#u{}" opacity="0.9"/>"##, i - 1)).collect();
+    let d = pic(&format!(
+        r##"<defs><rect id="u0" width="100" height="100"/>{uses}</defs>{}<use href="#u379" opacity="0.9"/>{}"##,
+        "<g opacity=\"0.9\">".repeat(250),
+        "</g>".repeat(250)
+    ));
+    if let Ok(svg) = parse(d.as_bytes()) {
+        assert!(svg.render(2048, 2048, [20.48, 0.0, 0.0, 20.48, 0.0, 0.0]).is_some());
+    }
+}
+
+/// A group 250 deep holding 700 rects (for the selector tests).
+fn deep_group() -> String {
+    format!(r#"<g id="ch">{}{}{}</g>"#, "<g>".repeat(250), r#"<rect width="1" height="1"/>"#.repeat(700), "</g>".repeat(250))
+}
+
+/// Review 9 I-5: usvg matches the style sheets against every `<use>` copy.
+#[test]
+fn selector_work_counts_copies() {
+    let rules = ".zz * rect{fill:red}".repeat(8);
+    let d = pic(&format!(r##"<style>{rules}</style><defs>{}</defs>{}"##, deep_group(), r##"<use href="#ch"/>"##.repeat(5)));
+    let t = std::time::Instant::now();
+    let _ = parse(d.as_bytes());
+    assert!(t.elapsed() < std::time::Duration::from_secs(2), "copies: {:?}", t.elapsed());
+}
+
+/// Review 9 I-5: the check matches an element once, however many specials reach it.
+#[test]
+fn selector_work_counts_each_element_once() {
+    let rules: String = (0..8).map(|i| format!(".zz * rect{{fill:url(#f{i})}}")).collect();
+    let filters: String = (0..50).map(|i| format!(r##"<filter id="f{i}"><feImage href="#ch"/></filter>"##)).collect();
+    let d = pic(&format!("<style>{rules}</style><defs>{filters}</defs>{}", deep_group()));
+    let t = std::time::Instant::now();
+    let _ = parse(d.as_bytes());
+    assert!(t.elapsed() < std::time::Duration::from_secs(2), "specials: {:?}", t.elapsed());
+}
+
+/// Review 9 I-6: how deep usvg recurses is measured (`<use>` chains and what specials hold), so
+/// the web, without a large stack, can refuse what wouldn't fit.
+#[test]
+fn build_depth_is_measured() {
+    let chain = |p: &str, n: usize, last: &str| {
+        let mut s = format!(r#"<rect id="{p}0" width="100" height="100" fill="white" {last}/>"#);
+        s.extend((1..n).map(|i| format!(r##"<use id="{p}{i}" href="#{p}{}" opacity="0.9"/>"##, i - 1)));
+        s
+    };
+    let d = pic(&format!(
+        r##"<defs>{}<clipPath id="k"><use href="#a379"/></clipPath>{}</defs>{}<use href="#c379"/>{}"##,
+        chain("a", 380, ""),
+        chain("c", 380, r##"clip-path="url(#k)""##),
+        "<g opacity=\"0.9\">".repeat(250),
+        "</g>".repeat(250)
+    ));
+    let xml = usvg::roxmltree::Document::parse(&d).unwrap();
+    let deep = copies(&xml).unwrap().depth;
+    assert!(deep > 1000, "{deep}");
+    let ordinary = illustrator_export(8, 300, 4);
+    let xml = usvg::roxmltree::Document::parse(&ordinary).unwrap();
+    let shallow = copies(&xml).unwrap().depth;
+    assert!(shallow < WEB_MAX_BUILD_DEPTH / 4, "{shallow}");
+}
+
+/// Review 9 M-11: a Mermaid-style flowchart, 2,000 edges with an arrow at the end: usvg draws one
+/// end marker per edge, not one per byte of path data.
+#[test]
+fn mermaid_flowchart_is_accepted() {
+    let mut css = String::new();
+    for cls in ["label", "node rect", "node circle", "edgePath .path", "edgeLabel rect", "cluster rect", "flowchart-link", "arrowheadPath"] {
+        for v in 0..8 {
+            css.push_str(&format!("#mermaid-1 .{cls}{}{{fill:#{v}{v}{v};stroke:#333}}", if v > 0 { " " } else { "" }));
+        }
+    }
+    let edge = |i: usize| {
+        let mut d = format!("M{}.25,{}.5", i % 500, i / 4 % 500);
+        for k in 0..8 {
+            d.push_str(&format!("c{}.5,-{}.25 {}.75,{}.5 -{}.25,{}.75", k % 9, (k + i) % 9, (k * 3) % 9, k % 7, (i + 2) % 9, k % 5));
+        }
+        format!(r##"<path d="{d}z" id="L_{i}" class="edge-thickness-normal flowchart-link" style="" marker-end="url(#mermaid-1_pointEnd)"/>"##)
+    };
+    let edges: String = (0..2000).map(edge).collect();
+    let nodes: String = (0..2000)
+        .map(|i| format!(r#"<g class="node default" transform="translate({},{})"><rect x="-20" y="-10" width="40" height="20"/><g class="label"><text><tspan>N{i}</tspan></text></g></g>"#, i % 40 * 50, i / 40 * 50))
+        .collect();
+    let d = format!(
+        r##"<svg id="mermaid-1" width="100%" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2000 2000"><style>{css}</style><g><marker id="mermaid-1_pointEnd" class="marker" viewBox="0 0 10 10" refX="5" refY="5" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="8" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><g class="root"><g class="edgePaths">{edges}</g><g class="nodes">{nodes}</g></g></g></svg>"##
+    );
+    let r = parse(d.as_bytes());
+    assert!(r.is_ok(), "{:?}", r.err());
+}
+
+/// Review 9 M-12: a hyperlink in a pattern, and a `<use>` of a mask in a pattern, build nothing
+/// in usvg: no loop.
+#[test]
+fn links_that_build_nothing_are_no_loop() {
+    let d = pic(&format!(
+        r##"<defs><pattern id="p" {PAT}><a href="#r"><rect width="5" height="5"/></a></pattern></defs><g fill="url(#p)"><rect id="r" width="50" height="50"/></g>"##
+    ));
+    let r = parse(d.as_bytes());
+    assert!(r.is_ok(), "a: {:?}", r.err());
+    let d = pic(&format!(
+        r##"<defs><pattern id="p" {PAT}><use href="#m"/><mask id="m"><rect width="5" height="5" fill="url(#p)"/></mask></pattern></defs><rect width="50" height="50" fill="url(#p)"/>"##
+    ));
+    let r = parse(d.as_bytes());
+    assert!(r.is_ok(), "use of a mask: {:?}", r.err());
+}

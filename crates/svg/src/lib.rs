@@ -30,6 +30,9 @@ pub const MAX_DEPTH: usize = 256;
 pub const MAX_RASTER_PIXELS: u64 = 8 * 1024 * 1024;
 /// Longest side of a PNG fallback (pixels).
 pub const MAX_FALLBACK_SIDE: u32 = 2048;
+/// Most memory the layers of one raster may take (bytes); past it the picture is drawn smaller
+/// and scaled up.
+const MAX_LAYER_BYTES: u64 = 512 << 20;
 
 /// Why an SVG could not be read or drawn.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -63,6 +66,8 @@ impl std::error::Error for Error {}
 /// A parsed SVG picture.
 pub struct Svg {
     tree: usvg::Tree,
+    /// The most layers resvg holds at once to draw it ([`layers`]).
+    layers: u32,
 }
 
 /// A raster of an SVG: premultiplied RGBA8 rows, `width` × `height`.
@@ -166,6 +171,9 @@ struct Budget {
     elements: AtomicU64,
     /// Bytes of nested pictures read so far (usvg reads a nested picture once per copy of it).
     nested: AtomicU64,
+    /// How deep usvg recurses for the pictures read so far (a nested one is read deep inside the
+    /// one holding it).
+    depth: AtomicU64,
     /// Why a nested picture went past the caps: the whole picture is refused.
     over: std::sync::OnceLock<&'static str>,
 }
@@ -227,7 +235,78 @@ fn parse_nested(bytes: &[u8], level: u32, budget: &Budget) -> Result<Svg, Error>
     if let Some(why) = budget.over.get() {
         return refused(why);
     }
-    Ok(Svg { tree })
+    let layers = layers(tree.root());
+    Ok(Svg { tree, layers })
+}
+
+/// The most layers resvg holds at once while drawing `root` (review 9 C-8): a group it must draw
+/// apart (opacity, clip path, mask, filter, blend mode) gets a layer the size of the picture,
+/// which stays while what it holds is drawn; a clip path, mask, pattern, filter image or nested
+/// picture is drawn into one more. Walked with an explicit stack, each group once (they are
+/// shared).
+fn layers(root: &usvg::Group) -> u32 {
+    let key = |g: &usvg::Group| std::ptr::from_ref(g) as usize;
+    // What a group draws inside it: its child groups, and the pictures drawn for its children
+    // (each one layer more).
+    fn inside(g: &usvg::Group) -> Vec<(&usvg::Group, u32)> {
+        let mut v = Vec::new();
+        for c in g.children() {
+            match c {
+                usvg::Node::Group(cg) => {
+                    v.push((cg.as_ref(), 0));
+                    if let Some(clip) = cg.clip_path() {
+                        v.push((clip.root(), 1));
+                        if let Some(sub) = clip.clip_path() {
+                            v.push((sub.root(), 1));
+                        }
+                    }
+                    if let Some(mask) = cg.mask() {
+                        v.push((mask.root(), 1));
+                        if let Some(sub) = mask.mask() {
+                            v.push((sub.root(), 1));
+                        }
+                    }
+                    for f in cg.filters() {
+                        for p in f.primitives() {
+                            if let usvg::filter::Kind::Image(image) = p.kind() {
+                                v.push((image.root(), 1));
+                            }
+                        }
+                    }
+                }
+                usvg::Node::Path(path) => {
+                    for paint in [path.fill().map(|f| f.paint()), path.stroke().map(|s| s.paint())].into_iter().flatten() {
+                        if let usvg::Paint::Pattern(p) = paint {
+                            v.push((p.root(), 1));
+                        }
+                    }
+                }
+                usvg::Node::Image(image) => {
+                    if let usvg::ImageKind::SVG(tree) = image.kind() {
+                        v.push((tree.root(), 1));
+                    }
+                }
+                usvg::Node::Text(text) => v.push((text.flattened(), 0)),
+            }
+        }
+        v
+    }
+    let mut done: std::collections::HashMap<usize, u32> = std::collections::HashMap::new();
+    let mut stack: Vec<(&usvg::Group, bool)> = vec![(root, false)];
+    while let Some((g, worked)) = stack.pop() {
+        if done.contains_key(&key(g)) {
+            continue;
+        }
+        let held = inside(g);
+        if worked {
+            let deepest = held.iter().map(|(h, more)| done.get(&key(h)).copied().unwrap_or(0).saturating_add(*more)).max().unwrap_or(0);
+            done.insert(key(g), deepest.saturating_add(u32::from(g.should_isolate())));
+        } else {
+            stack.push((g, true));
+            stack.extend(held.into_iter().filter(|(h, _)| !done.contains_key(&key(h))).map(|(h, _)| (h, false)));
+        }
+    }
+    done.get(&key(root)).copied().unwrap_or(0)
 }
 
 /// Most entity declarations a file may have.
@@ -362,10 +441,11 @@ const TREFS_TOO_MANY: &str = "SVG with this many text references is not supporte
 /// cost more than [`MAX_TREF_WORK`] to find.
 fn check_copies(xml: &usvg::roxmltree::Document, budget: &Budget) -> Result<(), Error> {
     // Before anything matches a selector (usvg's matcher recurses along combinators).
-    if let Err(r) = refs::check_css(xml) {
-        return budget.refuse(refusal(r));
-    }
-    let c = match copies(xml) {
+    let per_depth = match refs::check_css(xml) {
+        Ok(w) => w,
+        Err(r) => return budget.refuse(refusal(r)),
+    };
+    let c = match copies_matching(xml, &per_depth) {
         Ok(c) => c,
         Err(why) => return budget.refuse(why),
     };
@@ -385,8 +465,24 @@ fn check_copies(xml: &usvg::roxmltree::Document, budget: &Budget) -> Result<(), 
     if c.trefs.saturating_mul(nodes) > MAX_TREF_WORK {
         return budget.refuse(TREFS_TOO_MANY);
     }
+    // usvg matches every selector against every element it builds, `<use>` copies included.
+    if c.matched > refs::MAX_MATCH_WORK {
+        return budget.refuse(SELECTORS_TOO_COMPLEX);
+    }
+    // On the web the reader has the browser's stack (about 1 MB); on desktop, [`READ_STACK`].
+    let depth = budget.depth.fetch_add(c.depth, Ordering::Relaxed).saturating_add(c.depth);
+    if cfg!(target_arch = "wasm32") && depth > WEB_MAX_BUILD_DEPTH {
+        return budget.refuse(BUILT_TOO_DEEP);
+    }
     Ok(())
 }
+
+/// How deep usvg may recurse building a picture on the web (levels: elements inside elements,
+/// `<use>` copies, what clip paths, masks, patterns, filters and markers hold, nested pictures).
+/// The browser's stack, about 1 MB, holds a few hundred (review 9 I-6). On desktop the reader
+/// has `READ_STACK` and the other checks bound the depth.
+const WEB_MAX_BUILD_DEPTH: u64 = 200;
+const BUILT_TOO_DEEP: &str = "SVG nested this deeply is not supported here";
 
 /// What usvg builds of a picture's text, `<use>` copies (and copies of copies) included, and the
 /// copies markers, clip paths, masks, patterns and filters may make of it.
@@ -407,10 +503,18 @@ struct Copies {
     /// Places a clip path, mask, filter or pattern may be drawn: a few per element (the paint it
     /// inherits, and each `url(` it or a style sheet names).
     slots: u64,
-    /// Places a marker may be drawn: three per vertex of each shape, when the file has markers.
-    marks: u64,
+    /// Places a start or end marker may be drawn: one per shape, when the file has markers.
+    ends: u64,
+    /// Places a middle marker may be drawn: one per vertex of each shape, when the file has
+    /// markers.
+    mids: u64,
     /// Something built names a `url(`.
     url: bool,
+    /// The work of matching the style sheets against every element usvg builds (only on the
+    /// total).
+    matched: u64,
+    /// How deep usvg recurses to build it (only on the total).
+    depth: u64,
 }
 
 impl Copies {
@@ -422,9 +526,17 @@ impl Copies {
         trefs: u64::MAX,
         endless: true,
         slots: u64::MAX,
-        marks: u64::MAX,
+        ends: u64::MAX,
+        mids: u64::MAX,
         url: true,
+        matched: u64::MAX,
+        depth: u64::MAX,
     };
+
+    /// Places any marker may be drawn.
+    fn marks(&self) -> u64 {
+        self.ends.saturating_mul(2).saturating_add(self.mids)
+    }
 
     fn add(self, o: Copies) -> Copies {
         Copies {
@@ -435,8 +547,11 @@ impl Copies {
             trefs: self.trefs.saturating_add(o.trefs),
             endless: self.endless || o.endless,
             slots: self.slots.saturating_add(o.slots),
-            marks: self.marks.saturating_add(o.marks),
+            ends: self.ends.saturating_add(o.ends),
+            mids: self.mids.saturating_add(o.mids),
             url: self.url || o.url,
+            matched: self.matched.saturating_add(o.matched),
+            depth: self.depth.max(o.depth),
         }
     }
 }
@@ -492,7 +607,14 @@ fn link<'a, 'i>(
 /// markers, clip paths, masks, patterns and filter images (usvg's converter builds them per
 /// use) is bounded from above rather than counted, along the references between them
 /// ([`refs`]); references that lead back to themselves are refused (usvg overflows its stack).
-fn copies<'a, 'i>(xml: &'a usvg::roxmltree::Document<'i>) -> Result<Copies, &'static str> {
+#[cfg(test)]
+fn copies(xml: &usvg::roxmltree::Document) -> Result<Copies, &'static str> {
+    copies_matching(xml, &[])
+}
+
+/// [`copies`], with the work of matching the style sheets against an element at each depth
+/// ([`refs::check_css`]).
+fn copies_matching<'a, 'i>(xml: &'a usvg::roxmltree::Document<'i>, per_depth: &[u64]) -> Result<Copies, &'static str> {
     type Node<'a, 'i> = usvg::roxmltree::Node<'a, 'i>;
     let all: Vec<Node> = xml.descendants().collect();
     let len = all.iter().map(|n| n.id().get_usize() + 1).max().unwrap_or(0);
@@ -508,17 +630,20 @@ fn copies<'a, 'i>(xml: &'a usvg::roxmltree::Document<'i>) -> Result<Copies, &'st
             ids.entry(id).or_insert(*n);
         }
     }
-    // Each node's last descendant (for "is inside"), and the text inside it.
+    // Each node's last descendant (for "is inside"), the text inside it, and how deep it goes.
     let mut last = vec![0usize; len];
     let mut text = vec![0u64; len];
+    let mut sub_depth = vec![0u64; len];
     for n in all.iter().rev() {
         let i = at(*n);
         let l = n.last_child().and_then(|c| last.get(at(c)).copied()).unwrap_or(i);
         let own = if n.is_text() { n.text().map_or(0, |t| t.len() as u64) } else { 0 };
         let t = n.children().fold(own, |a, c| a.saturating_add(text.get(at(c)).copied().unwrap_or(0)));
-        if let (Some(ls), Some(ts)) = (last.get_mut(i), text.get_mut(i)) {
+        let d = n.children().map(|c| sub_depth.get(at(c)).copied().unwrap_or(0)).max().unwrap_or(0).saturating_add(1);
+        if let (Some(ls), Some(ts), Some(ds)) = (last.get_mut(i), text.get_mut(i), sub_depth.get_mut(i)) {
             *ls = l;
             *ts = t;
+            *ds = d;
         }
     }
     // `url(`s: each names a clip path, mask, filter, paint or marker. Per element, and (for text
@@ -527,10 +652,10 @@ fn copies<'a, 'i>(xml: &'a usvg::roxmltree::Document<'i>) -> Result<Copies, &'st
     let mut urls = vec![0u64; len];
     let mut sub_slots = vec![0u64; len];
     let mut sub_url = vec![false; len];
-    // Only a `url(` that may name something other than a gradient is a place something is built:
-    // usvg keeps one paint server per gradient, however many elements it paints (review 8 I-4).
-    let built_ids: std::collections::HashSet<&str> =
-        all.iter().filter(|n| n.is_element() && !n.tag_name().name().ends_with("Gradient")).flat_map(|n| refs::ids(*n)).collect();
+    // A `url(` is a place something is built if it names an element. (Gradients too: usvg keeps
+    // one per id, but copies its stops for every shape it paints in bounding-box units; review 9
+    // C-7.)
+    let built_ids: std::collections::HashSet<&str> = all.iter().filter(|n| n.is_element()).flat_map(|n| refs::ids(*n)).collect();
     // The `url(`s each element names itself (attributes, `style`, matching style sheet rules).
     for n in all.iter().filter(|n| svg_element(**n)) {
         let mut k = 0u64;
@@ -569,19 +694,20 @@ fn copies<'a, 'i>(xml: &'a usvg::roxmltree::Document<'i>) -> Result<Copies, &'st
         }
     }
     let has_markers = all.iter().any(|n| svg_element(*n) && n.tag_name().name() == "marker");
-    // Marker places on a shape: a start, middle and end marker per vertex. A path or point list
-    // has at most one vertex per byte (arcs, split into curves, take more bytes than they make).
-    let marks = |n: Node| -> u64 {
+    // Marker places on a shape (review 9 M-11): usvg draws a start and an end marker once per
+    // shape, and a middle marker at every vertex. A path or point list has at most one vertex
+    // per number or command in its data (an arc's seven numbers make at most four curves).
+    let marks = |n: Node| -> (u64, u64) {
         if !has_markers {
-            return 0;
+            return (0, 0);
         }
         let vertices = match n.tag_name().name() {
-            "path" => n.attribute("d").map_or(0, |d| d.len() as u64),
-            "polyline" | "polygon" => n.attribute("points").map_or(0, |p| p.len() as u64),
+            "path" => n.attribute("d").map_or(0, data_items),
+            "polyline" | "polygon" => n.attribute("points").map_or(0, data_items),
             "line" | "rect" | "circle" | "ellipse" => 16,
-            _ => return 0,
+            _ => return (0, 0),
         };
-        vertices.saturating_add(2).saturating_mul(3)
+        (1, vertices.saturating_add(2))
     };
     // What building an element costs, in elements: one, and for a path or point list, its
     // segments or points (usvg parses the data again for every copy).
@@ -655,7 +781,8 @@ fn copies<'a, 'i>(xml: &'a usvg::roxmltree::Document<'i>) -> Result<Copies, &'st
         }
         Kind::Group | Kind::Use if n != xml.root() => {
             let u = urls.get(at(n)).copied().unwrap_or(0);
-            Copies { elements: weight(n), slots: own_slots(u), marks: marks(n), url: u > 0, ..Copies::default() }
+            let (ends, mids) = marks(n);
+            Copies { elements: weight(n), slots: own_slots(u), ends, mids, url: u > 0, ..Copies::default() }
         }
         _ => Copies::default(),
     };
@@ -674,6 +801,8 @@ fn copies<'a, 'i>(xml: &'a usvg::roxmltree::Document<'i>) -> Result<Copies, &'st
     // 0: not reached, 1: being worked out (on the walk's path), 2: worked out.
     let mut state = vec![0u8; len];
     let mut built = vec![Copies::default(); len];
+    // How deep usvg recurses to build each node where it stands.
+    let mut deep = vec![0u64; len];
     let mut finished: Vec<Node> = Vec::new();
     let mut stack = vec![xml.root()];
     while let Some(&n) = stack.last() {
@@ -690,9 +819,14 @@ fn copies<'a, 'i>(xml: &'a usvg::roxmltree::Document<'i>) -> Result<Copies, &'st
                 let c = from(n).into_iter().fold(own(n), |a, d| {
                     a.add(if state.get(at(d)) == Some(&2) { built.get(at(d)).copied().unwrap_or_default() } else { Copies::ENDLESS })
                 });
-                if let (Some(b), Some(s)) = (built.get_mut(i), state.get_mut(i)) {
+                let below = match kind(n) {
+                    Kind::Text => sub_depth.get(i).copied().unwrap_or(0),
+                    _ => from(n).into_iter().map(|d| deep.get(at(d)).copied().unwrap_or(0)).max().unwrap_or(0),
+                };
+                if let (Some(b), Some(s), Some(dp)) = (built.get_mut(i), state.get_mut(i), deep.get_mut(i)) {
                     *b = c;
                     *s = 2;
+                    *dp = below.saturating_add(1);
                 }
                 finished.push(n);
                 stack.pop();
@@ -732,6 +866,20 @@ fn copies<'a, 'i>(xml: &'a usvg::roxmltree::Document<'i>) -> Result<Copies, &'st
             *m = (*m).max(k);
         }
     }
+    // Every element usvg builds is matched against the style sheets once (copies included).
+    if !per_depth.is_empty() {
+        let mut depth = vec![0usize; len];
+        for n in &all {
+            let d = n.parent().and_then(|p| depth.get(at(p)).copied()).map_or(0, |d| d + 1);
+            if let Some(slot) = depth.get_mut(at(*n)) {
+                *slot = d;
+            }
+            if svg_element(*n) {
+                let work = per_depth.get(d).copied().unwrap_or(u64::MAX);
+                total.matched = total.matched.saturating_add(made.get(at(*n)).copied().unwrap_or(0).saturating_mul(work));
+            }
+        }
+    }
     // How often the picture itself builds each special: for each element that names it, once per
     // copy of the element; for paint (or anything that may pass down), once per element built
     // inside it too; for a marker, once per marker place inside it.
@@ -752,7 +900,11 @@ fn copies<'a, 'i>(xml: &'a usvg::roxmltree::Document<'i>) -> Result<Copies, &'st
             specials.dedup();
             for &s in &specials {
                 let places = if graph.marker.get(s as usize) == Some(&true) {
-                    b.marks
+                    match name {
+                        "marker-start" | "marker-end" => b.ends,
+                        "marker-mid" => b.mids,
+                        _ => b.marks(),
+                    }
                 } else if graph.passes_down(name) {
                     inside
                 } else {
@@ -782,23 +934,50 @@ fn copies<'a, 'i>(xml: &'a usvg::roxmltree::Document<'i>) -> Result<Copies, &'st
         let x = x as usize;
         let (b, k) = (held(x), times.get(x).copied().unwrap_or(0));
         for &t in st.edges.get(x).into_iter().flatten() {
-            let places = if is_marker(t as usize) { b.marks } else { b.slots };
+            let places = if is_marker(t as usize) { b.marks() } else { b.slots };
             if let Some(m) = times.get_mut(t as usize) {
                 *m = m.saturating_add(places.saturating_mul(k));
             }
         }
     }
     for (i, k) in times.iter().enumerate() {
-        // Built once, whatever it paints.
-        if graph.gradient.get(special(i)) == Some(&true) {
-            continue;
-        }
         let b = held(i);
         total.bytes = total.bytes.saturating_add(b.bytes.saturating_mul(*k));
         total.texts = total.texts.saturating_add(b.texts.saturating_mul(*k));
         total.elements = total.elements.saturating_add(b.elements.saturating_mul(*k));
     }
+    // How deep usvg recurses: the picture's own elements and `<use>` copies, and along the
+    // deepest chain of specials, what each holds.
+    let mut chain = vec![0u64; st.of.len()];
+    for &x in &st.order {
+        let x = x as usize;
+        let own = graph.nodes.get(special(x)).and_then(|id| deep.get(*id)).copied().unwrap_or(0);
+        let here = chain.get(x).copied().unwrap_or(0).max(own);
+        if let Some(c) = chain.get_mut(x) {
+            *c = here;
+        }
+        for &t in st.edges.get(x).into_iter().flatten() {
+            let t_own = graph.nodes.get(special(t as usize)).and_then(|id| deep.get(*id)).copied().unwrap_or(0);
+            if let Some(c) = chain.get_mut(t as usize) {
+                *c = (*c).max(here.saturating_add(t_own));
+            }
+        }
+    }
+    total.depth = deep.get(at(xml.root())).copied().unwrap_or(0).saturating_add(chain.iter().copied().max().unwrap_or(0));
     Ok(total)
+}
+
+/// An upper bound on the vertices path or point data makes: one per number or command letter.
+fn data_items(d: &str) -> u64 {
+    let (mut n, mut prev_digit) = (0u64, false);
+    for c in d.bytes() {
+        let digit = c.is_ascii_digit();
+        if (digit || c == b'.') && !prev_digit || c.is_ascii_alphabetic() {
+            n += 1;
+        }
+        prev_digit = digit;
+    }
+    n
 }
 
 /// The length of character data once its entity references are expanded.
@@ -913,7 +1092,22 @@ impl Svg {
         }
         let mut pm = resvg::tiny_skia::Pixmap::new(width, height)?;
         let [sx, ky, kx, sy, tx, ty] = transform;
-        resvg::render(&self.tree, resvg::tiny_skia::Transform::from_row(sx, ky, kx, sy, tx, ty), &mut pm.as_mut());
+        let ts = resvg::tiny_skia::Transform::from_row(sx, ky, kx, sy, tx, ty);
+        // Each layer resvg holds is about the raster's size: past the budget, draw smaller and
+        // scale up (review 9 C-8).
+        let layer = (width as u64).saturating_mul(height as u64).saturating_mul(4);
+        let need = layer.saturating_mul(u64::from(self.layers).saturating_add(1));
+        if need <= MAX_LAYER_BYTES {
+            resvg::render(&self.tree, ts, &mut pm.as_mut());
+            return Some(pm);
+        }
+        let k = (MAX_LAYER_BYTES as f64 / need as f64).sqrt() as f32;
+        let (w, h) = (((width as f32 * k) as u32).max(1), ((height as f32 * k) as u32).max(1));
+        let (kx_, ky_) = (w as f32 / width as f32, h as f32 / height as f32);
+        let mut small = resvg::tiny_skia::Pixmap::new(w, h)?;
+        resvg::render(&self.tree, ts.post_scale(kx_, ky_), &mut small.as_mut());
+        let paint = resvg::tiny_skia::PixmapPaint { quality: resvg::tiny_skia::FilterQuality::Bilinear, ..Default::default() };
+        pm.draw_pixmap(0, 0, small.as_ref(), &paint, resvg::tiny_skia::Transform::from_scale(1.0 / kx_, 1.0 / ky_), None);
         Some(pm)
     }
 }

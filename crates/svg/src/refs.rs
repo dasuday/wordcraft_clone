@@ -18,7 +18,10 @@
 //!   properties only unless the file says `inherit` anywhere, then all of them;
 //! - `href` (`<use>` copies, filter images, pattern, gradient and filter templates, text paths):
 //!   every `href` of every element built is followed, in any namespace, and the target's own
-//!   ancestors are read as above (a filter image builds its target where it stands);
+//!   ancestors are read as above (a filter image builds its target where it stands). Not
+//!   followed: a hyperlink (`<a>`), and a `<use>` or filter image of a clip path, mask, pattern,
+//!   filter, marker or gradient, which usvg doesn't draw (only a special's own `href`, its
+//!   template, leads to another);
 //! - an `id`: every attribute called `id`, in any namespace, names its element.
 //!
 //! The only edge left out is the one usvg itself removes: a special's own fill, stroke, clip
@@ -38,9 +41,9 @@ const MAX_EDGES: usize = 1 << 22;
 const MAX_STEPS: u64 = 1 << 25;
 /// Most combinators one selector may have (the matcher recurses along them).
 const MAX_COMBINATORS: usize = 32;
-/// Most matching work the style sheets may cost: for each selector, the elements times the
-/// ancestors it may try for each descendant combinator.
-const MAX_MATCH_WORK: u64 = 1 << 30;
+/// Most matching work the style sheets may cost: for each selector, the elements matched times
+/// the ancestors it may try for each descendant combinator (about a second of usvg's matching).
+pub(crate) const MAX_MATCH_WORK: u64 = 1 << 28;
 /// Most characters in the style sheets that could be combinators (white space runs, `+`, `>`), a
 /// backstop to the selectors measured: the matcher's recursion stays within the reader's stack.
 const MAX_COMBINATOR_CHARS: u64 = 1 << 20;
@@ -74,8 +77,6 @@ pub(crate) struct Graph<'a> {
     pub nodes: Vec<usize>,
     /// Whether each is a marker (drawn per vertex rather than per element).
     pub marker: Vec<bool>,
-    /// Whether each is a gradient (usvg keeps one paint server per id, not one per use).
-    pub gradient: Vec<bool>,
     /// The ways usvg may reach each one: a special with the markers of its loop that are being
     /// built around it. Every path through them is a way usvg may build it.
     pub states: States,
@@ -88,6 +89,9 @@ pub(crate) struct Graph<'a> {
     lengths: HashSet<usize>,
     /// The style sheet rules that name a `url(`.
     rules: Vec<Rule<'a>>,
+    /// What [`Graph::urls_of`] gives for each element that names a `url(`, by node id (matching
+    /// is done once per element, however many specials reach it; review 9 I-5).
+    urls: HashMap<usize, Vec<(&'a str, Vec<&'a str>)>>,
 }
 
 /// The states of [`Graph::states`]: a graph without loops.
@@ -227,6 +231,13 @@ impl<'a> Graph<'a> {
     /// text the tokenizer skips comes with no property name) and the style sheet rules that
     /// match it. `f` gets the property and the ids it may name.
     pub(crate) fn urls_of(&self, e: Node<'a, '_>, mut f: impl FnMut(&str, &[&'a str])) {
+        for (name, ids) in self.urls.get(&e.id().get_usize()).into_iter().flatten() {
+            f(name, ids);
+        }
+    }
+
+    /// [`Graph::urls_of`], read from the element.
+    fn read_urls(&self, e: Node<'a, '_>, mut f: impl FnMut(&'a str, &[&'a str])) {
         for a in e.attributes() {
             if a.name() == "href" {
                 continue;
@@ -325,44 +336,50 @@ fn combinators(selector: &simplecss::Selector<'_>) -> (usize, u32) {
 /// (it recurses once per combinator) or take forever on (it tries every ancestor for each
 /// descendant combinator). The selectors measured are the ones simplecss itself parses out of
 /// every `style` element, in any namespace (review 8: a hand-made cut of the text can disagree
-/// with it); a count of the characters that could be combinators is a backstop.
-pub(crate) fn check_css(xml: &usvg::roxmltree::Document<'_>) -> Result<(), Refusal> {
+/// with it); a count of the characters that could be combinators is a backstop. Returns the work
+/// of matching every selector against an element, by the element's depth: usvg matches each
+/// element it builds, `<use>` copies included, so the caller bounds it again once it knows how
+/// many (review 9 I-5).
+pub(crate) fn check_css(xml: &usvg::roxmltree::Document<'_>) -> Result<Vec<u64>, Refusal> {
     let texts = style_texts(xml);
     if texts.is_empty() {
-        return Ok(());
+        return Ok(Vec::new());
     }
     let raw = texts.iter().fold(0u64, |a, t| a.saturating_add(combinator_chars(t)));
     if raw > MAX_COMBINATOR_CHARS {
         return Err(Refusal::Selectors);
     }
-    let (mut depth, mut deepest, mut count) = (HashMap::<usize, u64>::new(), 0u64, 0u64);
-    for n in xml.descendants() {
-        count += 1;
-        if n.is_element() {
-            let d = n.parent().and_then(|p| depth.get(&p.id().get_usize()).copied()).map_or(1, |d| d + 1);
-            depth.insert(n.id().get_usize(), d);
-            deepest = deepest.max(d);
+    // Elements by depth: matching a selector against an element at depth d tries at most d
+    // ancestors for each descendant combinator.
+    let (mut depth, mut at_depth) = (HashMap::<usize, usize>::new(), Vec::<u64>::new());
+    for n in xml.descendants().filter(|n| n.is_element()) {
+        let d = n.parent().and_then(|p| depth.get(&p.id().get_usize()).copied()).map_or(1, |d| d + 1);
+        depth.insert(n.id().get_usize(), d);
+        if at_depth.len() <= d {
+            at_depth.resize(d + 1, 0);
+        }
+        if let Some(k) = at_depth.get_mut(d) {
+            *k += 1;
         }
     }
+    // The work of matching every selector against one element, by its depth.
+    let mut per_depth = vec![0u64; at_depth.len()];
     let mut work = 0u64;
     for rule in &sheet(&texts).rules {
         let (all, descendants) = combinators(&rule.selector);
         if all > MAX_COMBINATORS {
             return Err(Refusal::Selectors);
         }
-        let mut tries = count;
-        for _ in 0..descendants {
-            tries = tries.saturating_mul(deepest);
-            if tries > MAX_MATCH_WORK {
-                return Err(Refusal::Selectors);
-            }
+        for (d, (w, n)) in per_depth.iter_mut().zip(&at_depth).enumerate() {
+            let one = (d as u64).saturating_pow(descendants);
+            *w = w.saturating_add(one);
+            work = work.saturating_add(n.saturating_mul(one));
         }
-        work = work.saturating_add(tries);
         if work > MAX_MATCH_WORK {
             return Err(Refusal::Selectors);
         }
     }
-    Ok(())
+    Ok(per_depth)
 }
 
 /// A depth-first walk with an explicit stack over `edges` (leaving out nodes `skip` names).
@@ -592,7 +609,7 @@ pub(crate) fn graph<'a>(xml: &'a usvg::roxmltree::Document<'_>) -> Result<Graph<
     let all: Vec<Node> = xml.descendants().collect();
     let len = all.iter().map(|n| n.id().get_usize() + 1).max().unwrap_or(0);
     let mut special_at = vec![u32::MAX; len];
-    let (mut nodes, mut marker, mut gradient): (Vec<usize>, Vec<bool>, Vec<bool>) = (Vec::new(), Vec::new(), Vec::new());
+    let (mut nodes, mut marker): (Vec<usize>, Vec<bool>) = (Vec::new(), Vec::new());
     let mut specials: Vec<Node> = Vec::new();
     let mut by_id: HashMap<&str, Vec<Node>> = HashMap::new();
     let mut spec_by_id: HashMap<&str, Vec<u32>> = HashMap::new();
@@ -608,7 +625,6 @@ pub(crate) fn graph<'a>(xml: &'a usvg::roxmltree::Document<'_>) -> Result<Graph<
             }
             nodes.push(n.id().get_usize());
             marker.push(n.tag_name().name() == "marker");
-            gradient.push(n.tag_name().name().ends_with("Gradient"));
         }
         if n.is_element() {
             for id in ids(*n) {
@@ -627,11 +643,8 @@ pub(crate) fn graph<'a>(xml: &'a usvg::roxmltree::Document<'_>) -> Result<Graph<
     // `inherit` takes even a clip path, mask or filter from the parent: if the file says it
     // anywhere, every property passes down.
     let inherit = texts.iter().any(|t| says_inherit(t)) || all.iter().any(|e| e.attributes().any(|a| says_inherit(a.value())));
-    let mut g = Graph { nodes, marker, gradient, states: States::default(), inherit, by_id: spec_by_id, lengths, rules: Vec::new() };
+    let mut g = Graph { nodes, marker, states: States::default(), inherit, by_id: spec_by_id, lengths, rules: Vec::new(), urls: HashMap::new() };
     let n = specials.len();
-    if n == 0 {
-        return Ok(g);
-    }
     // Style sheet rules that name ids, read as usvg reads them (its matcher is simplecss).
     for r in &sheet(&texts).rules {
         let urls: Vec<(&str, Vec<Vec<&str>>)> = r
@@ -651,9 +664,25 @@ pub(crate) fn graph<'a>(xml: &'a usvg::roxmltree::Document<'_>) -> Result<Graph<
         }
         g.rules.push(Rule { selector: r.selector.clone(), urls });
     }
-    // Every element a `href` of `e` (in any namespace) links to.
+    let mut urls = HashMap::new();
+    for e in all.iter().filter(|e| e.is_element()) {
+        let mut v: Vec<(&str, Vec<&str>)> = Vec::new();
+        g.read_urls(*e, |name, ids| v.push((name, ids.to_vec())));
+        if !v.is_empty() {
+            urls.insert(e.id().get_usize(), v);
+        }
+    }
+    g.urls = urls;
+    if n == 0 {
+        return Ok(g);
+    }
+    // Every element a `href` of `e` (in any namespace) links to. A link (`<a>`) only names a
+    // place to go to; usvg builds nothing from it.
     let links = |e: Node| -> Vec<Node> {
         let mut v = Vec::new();
+        if e.tag_name().name() == "a" {
+            return v;
+        }
         for a in e.attributes().filter(|a| a.name() == "href") {
             if let Some(id) = svgtypes::IRI::from_str(a.value()).ok().map(|i| i.0) {
                 v.extend(by_id.get(id).into_iter().flatten().copied());
@@ -741,7 +770,10 @@ pub(crate) fn graph<'a>(xml: &'a usvg::roxmltree::Document<'_>) -> Result<Graph<
             let copies = e.tag_name().name() == "use" && matches!(e.tag_name().namespace(), None | Some(SVG_NS));
             for t in links(e) {
                 match special_at.get(t.id().get_usize()).copied().filter(|t| *t != u32::MAX) {
-                    Some(t) => out.push(t),
+                    // A template (a pattern's, gradient's or filter's own `href`). A `<use>` or
+                    // filter image of a special builds nothing: usvg only builds what is drawn.
+                    Some(t) if e == *s => out.push(t),
+                    Some(_) => {}
                     None => {
                         if !copies {
                             ancestors(t, &mut out, &mut steps)?;
