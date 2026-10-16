@@ -19,6 +19,7 @@ craft-ui = { git = "https://github.com/storytold/craft-libs", rev = "289d562cc6e
 craft-cloud = { git = "https://github.com/storytold/craft-libs", rev = "289d562cc6e8b567819aee51f759a78f41a65454" }
 wordcraft-geom = { workspace = true }
 wordcraft-doc = { workspace = true }
+unicode-bidi = { workspace = true }
 wordcraft-fonts = { workspace = true }
 wordcraft-layout = { workspace = true }
 wordcraft-render = { workspace = true }
