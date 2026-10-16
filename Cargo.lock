@@ -5555,6 +5555,7 @@ dependencies = [
 name = "wordcraft-svg"
 version = "0.7.0"
 dependencies = [
+ "imagesize",
  "resvg",
  "simplecss",
  "svgtypes",

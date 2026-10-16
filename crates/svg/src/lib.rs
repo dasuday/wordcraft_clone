@@ -12,6 +12,7 @@
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 #![forbid(unsafe_code)]
 
+mod cost;
 mod fonts;
 mod refs;
 #[cfg(test)]
@@ -30,9 +31,9 @@ pub const MAX_DEPTH: usize = 256;
 pub const MAX_RASTER_PIXELS: u64 = 8 * 1024 * 1024;
 /// Longest side of a PNG fallback (pixels).
 pub const MAX_FALLBACK_SIDE: u32 = 2048;
-/// Most memory the layers of one raster may take (bytes); past it the picture is drawn smaller
-/// and scaled up.
-const MAX_LAYER_BYTES: u64 = 512 << 20;
+/// Most memory resvg may take to draw one raster (bytes, an upper bound worked out from the tree,
+/// [`cost`]); past it the picture is drawn smaller and scaled up, or not at all.
+pub const MAX_DRAW_BYTES: u64 = 512 << 20;
 
 /// Why an SVG could not be read or drawn.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -66,8 +67,6 @@ impl std::error::Error for Error {}
 /// A parsed SVG picture.
 pub struct Svg {
     tree: usvg::Tree,
-    /// The most layers resvg holds at once to draw it ([`layers`]).
-    layers: u32,
 }
 
 /// A raster of an SVG: premultiplied RGBA8 rows, `width` × `height`.
@@ -128,7 +127,7 @@ pub fn is_svg(bytes: &[u8]) -> bool {
 pub fn parse(bytes: &[u8]) -> Result<Svg, Error> {
     on_own_stack(|| {
         let budget = Budget::default();
-        parse_nested(bytes, 0, &budget)
+        parse_nested(bytes, 0, 0, &budget)
     })
 }
 
@@ -171,15 +170,15 @@ struct Budget {
     elements: AtomicU64,
     /// Bytes of nested pictures read so far (usvg reads a nested picture once per copy of it).
     nested: AtomicU64,
-    /// How deep usvg recurses for the pictures read so far (a nested one is read deep inside the
-    /// one holding it).
-    depth: AtomicU64,
+    /// The deepest usvg is to recurse for any picture read so far (nested ones included).
+    deepest: AtomicU64,
     /// Why a nested picture went past the caps: the whole picture is refused.
     over: std::sync::OnceLock<&'static str>,
 }
 
-/// [`parse`] for a picture `level` SVG pictures deep, sharing `budget` with the whole picture.
-fn parse_nested(bytes: &[u8], level: u32, budget: &Budget) -> Result<Svg, Error> {
+/// [`parse`] for a picture `level` SVG pictures deep, sharing `budget` with the whole picture,
+/// read `base` levels deep in usvg's recursion (inside the pictures holding it).
+fn parse_nested(bytes: &[u8], level: u32, base: u64, budget: &Budget) -> Result<Svg, Error> {
     if bytes.len() > MAX_SVG_BYTES {
         return Err(Error::TooLarge);
     }
@@ -212,6 +211,10 @@ fn parse_nested(bytes: &[u8], level: u32, budget: &Budget) -> Result<Svg, Error>
             *slot = d;
         }
     }
+    // How deep usvg will be when it reads a picture nested in this one: at most this one's depth
+    // (known once checked). Pictures side by side don't add up (review 10 M-15).
+    let depth_cell = AtomicU64::new(base);
+    let depth = &depth_cell;
     let opts = usvg::Options {
         resources_dir: None,
         image_href_resolver: usvg::ImageHrefResolver {
@@ -221,7 +224,9 @@ fn parse_nested(bytes: &[u8], level: u32, budget: &Budget) -> Result<Svg, Error>
                 "image/gif" => Some(usvg::ImageKind::GIF(data)),
                 "image/webp" => Some(usvg::ImageKind::WEBP(data)),
                 // Our own reader, so a nested picture gets the same checks, and nesting is bounded.
-                "image/svg+xml" if level < MAX_NESTED => parse_nested(&data, level + 1, budget).ok().map(|s| usvg::ImageKind::SVG(s.tree)),
+                "image/svg+xml" if level < MAX_NESTED => {
+                    parse_nested(&data, level + 1, depth.load(Ordering::Relaxed), budget).ok().map(|s| usvg::ImageKind::SVG(s.tree))
+                }
                 _ => None,
             }),
             // Files and URLs are never read.
@@ -230,83 +235,51 @@ fn parse_nested(bytes: &[u8], level: u32, budget: &Budget) -> Result<Svg, Error>
         font_resolver: fonts::resolver(),
         ..usvg::Options::default()
     };
-    check_copies(&xml, budget)?;
+    depth.store(check_copies(&xml, base, budget)?, Ordering::Relaxed);
     let tree = usvg::Tree::from_xmltree(&xml, &opts).map_err(|e| Error::Parse(e.to_string()))?;
     if let Some(why) = budget.over.get() {
         return refused(why);
     }
-    let layers = layers(tree.root());
-    Ok(Svg { tree, layers })
+    Ok(Svg { tree })
 }
 
-/// The most layers resvg holds at once while drawing `root` (review 9 C-8): a group it must draw
-/// apart (opacity, clip path, mask, filter, blend mode) gets a layer the size of the picture,
-/// which stays while what it holds is drawn; a clip path, mask, pattern, filter image or nested
-/// picture is drawn into one more. Walked with an explicit stack, each group once (they are
-/// shared).
-fn layers(root: &usvg::Group) -> u32 {
-    let key = |g: &usvg::Group| std::ptr::from_ref(g) as usize;
-    // What a group draws inside it: its child groups, and the pictures drawn for its children
-    // (each one layer more).
-    fn inside(g: &usvg::Group) -> Vec<(&usvg::Group, u32)> {
-        let mut v = Vec::new();
-        for c in g.children() {
-            match c {
-                usvg::Node::Group(cg) => {
-                    v.push((cg.as_ref(), 0));
-                    if let Some(clip) = cg.clip_path() {
-                        v.push((clip.root(), 1));
-                        if let Some(sub) = clip.clip_path() {
-                            v.push((sub.root(), 1));
-                        }
-                    }
-                    if let Some(mask) = cg.mask() {
-                        v.push((mask.root(), 1));
-                        if let Some(sub) = mask.mask() {
-                            v.push((sub.root(), 1));
-                        }
-                    }
-                    for f in cg.filters() {
-                        for p in f.primitives() {
-                            if let usvg::filter::Kind::Image(image) = p.kind() {
-                                v.push((image.root(), 1));
-                            }
-                        }
+/// Pushes the groups drawn for `n` besides its children: clip paths and masks (with theirs),
+/// filter images, patterns, nested pictures, text outlines.
+fn push_subroots<'a>(n: &'a usvg::Node, stack: &mut Vec<&'a usvg::Group>) {
+    match n {
+        usvg::Node::Group(g) => {
+            let mut clip = g.clip_path();
+            while let Some(c) = clip {
+                stack.push(c.root());
+                clip = c.clip_path();
+            }
+            let mut mask = g.mask();
+            while let Some(m) = mask {
+                stack.push(m.root());
+                mask = m.mask();
+            }
+            for f in g.filters() {
+                for p in f.primitives() {
+                    if let usvg::filter::Kind::Image(img) = p.kind() {
+                        stack.push(img.root());
                     }
                 }
-                usvg::Node::Path(path) => {
-                    for paint in [path.fill().map(|f| f.paint()), path.stroke().map(|s| s.paint())].into_iter().flatten() {
-                        if let usvg::Paint::Pattern(p) = paint {
-                            v.push((p.root(), 1));
-                        }
-                    }
-                }
-                usvg::Node::Image(image) => {
-                    if let usvg::ImageKind::SVG(tree) = image.kind() {
-                        v.push((tree.root(), 1));
-                    }
-                }
-                usvg::Node::Text(text) => v.push((text.flattened(), 0)),
             }
         }
-        v
-    }
-    let mut done: std::collections::HashMap<usize, u32> = std::collections::HashMap::new();
-    let mut stack: Vec<(&usvg::Group, bool)> = vec![(root, false)];
-    while let Some((g, worked)) = stack.pop() {
-        if done.contains_key(&key(g)) {
-            continue;
+        usvg::Node::Path(p) => {
+            for paint in [p.fill().map(|f| f.paint()), p.stroke().map(|s| s.paint())].into_iter().flatten() {
+                if let usvg::Paint::Pattern(pat) = paint {
+                    stack.push(pat.root());
+                }
+            }
         }
-        let held = inside(g);
-        if worked {
-            let deepest = held.iter().map(|(h, more)| done.get(&key(h)).copied().unwrap_or(0).saturating_add(*more)).max().unwrap_or(0);
-            done.insert(key(g), deepest.saturating_add(u32::from(g.should_isolate())));
-        } else {
-            stack.push((g, true));
-            stack.extend(held.into_iter().filter(|(h, _)| !done.contains_key(&key(h))).map(|(h, _)| (h, false)));
+        usvg::Node::Image(img) => {
+            if let usvg::ImageKind::SVG(tree) = img.kind() {
+                stack.push(tree.root());
+            }
         }
+        usvg::Node::Text(t) => stack.push(t.flattened()),
     }
-    done.get(&key(root)).copied().unwrap_or(0)
 }
 
 /// Most entity declarations a file may have.
@@ -439,7 +412,8 @@ const TREFS_TOO_MANY: &str = "SVG with this many text references is not supporte
 /// ([`copies`]), counting what `budget` holds already (the pictures this one is nested in, and
 /// those nested before it); `<use>` links that copy without end; and `<tref>` links that would
 /// cost more than [`MAX_TREF_WORK`] to find.
-fn check_copies(xml: &usvg::roxmltree::Document, budget: &Budget) -> Result<(), Error> {
+/// Returns how deep usvg recurses to build it, `base` levels down.
+fn check_copies(xml: &usvg::roxmltree::Document, base: u64, budget: &Budget) -> Result<u64, Error> {
     // Before anything matches a selector (usvg's matcher recurses along combinators).
     let per_depth = match refs::check_css(xml) {
         Ok(w) => w,
@@ -470,11 +444,12 @@ fn check_copies(xml: &usvg::roxmltree::Document, budget: &Budget) -> Result<(), 
         return budget.refuse(SELECTORS_TOO_COMPLEX);
     }
     // On the web the reader has the browser's stack (about 1 MB); on desktop, [`READ_STACK`].
-    let depth = budget.depth.fetch_add(c.depth, Ordering::Relaxed).saturating_add(c.depth);
+    let depth = base.saturating_add(c.depth);
+    budget.deepest.fetch_max(depth, Ordering::Relaxed);
     if cfg!(target_arch = "wasm32") && depth > WEB_MAX_BUILD_DEPTH {
         return budget.refuse(BUILT_TOO_DEEP);
     }
-    Ok(())
+    Ok(depth)
 }
 
 /// How deep usvg may recurse building a picture on the web (levels: elements inside elements,
@@ -1086,28 +1061,97 @@ impl Svg {
         Some(Raster { width, height, rgba: pm.take() })
     }
 
+    /// An upper bound on the memory resvg takes to draw a `width` × `height` raster with
+    /// `transform` (as for [`Svg::render`]), the raster itself included. Past
+    /// [`MAX_DRAW_BYTES`], [`Svg::render`] draws smaller and scales up.
+    pub fn draw_bytes(&self, width: u32, height: u32, transform: [f32; 6]) -> u64 {
+        let [sx, ky, kx, sy, tx, ty] = transform;
+        let ts = resvg::tiny_skia::Transform::from_row(sx, ky, kx, sy, tx, ty);
+        cost::draw_bytes(self.tree.root(), ts, width, height).saturating_add(u64::from(width) * u64::from(height) * 4)
+    }
+
     fn pixmap(&self, width: u32, height: u32, transform: [f32; 6]) -> Option<resvg::tiny_skia::Pixmap> {
         if width == 0 || height == 0 || (width as u64) * (height as u64) > MAX_RASTER_PIXELS || !transform.iter().all(|v| v.is_finite()) {
             return None;
         }
-        let mut pm = resvg::tiny_skia::Pixmap::new(width, height)?;
         let [sx, ky, kx, sy, tx, ty] = transform;
         let ts = resvg::tiny_skia::Transform::from_row(sx, ky, kx, sy, tx, ty);
-        // Each layer resvg holds is about the raster's size: past the budget, draw smaller and
-        // scale up (review 9 C-8).
-        let layer = (width as u64).saturating_mul(height as u64).saturating_mul(4);
-        let need = layer.saturating_mul(u64::from(self.layers).saturating_add(1));
-        if need <= MAX_LAYER_BYTES {
+        // What resvg will hold to draw it (review 10): past the budget, draw it smaller and scale
+        // it up; if even a few pixels are past it, not at all (the caller draws a placeholder).
+        let need =
+            |w: u32, h: u32, k: f32| cost::draw_bytes(self.tree.root(), ts.post_scale(k, k), w, h).saturating_add(u64::from(w) * u64::from(h) * 4);
+        if need(width, height, 1.0) <= MAX_DRAW_BYTES {
+            let mut pm = resvg::tiny_skia::Pixmap::new(width, height)?;
             resvg::render(&self.tree, ts, &mut pm.as_mut());
             return Some(pm);
         }
-        let k = (MAX_LAYER_BYTES as f64 / need as f64).sqrt() as f32;
-        let (w, h) = (((width as f32 * k) as u32).max(1), ((height as f32 * k) as u32).max(1));
+        let mut k = 1.0f32;
+        let (w, h) = loop {
+            k *= 0.5;
+            let (w, h) = (((width as f32 * k) as u32).max(1), ((height as f32 * k) as u32).max(1));
+            if need(w, h, k) <= MAX_DRAW_BYTES {
+                break (w, h);
+            }
+            if w == 1 && h == 1 {
+                return None;
+            }
+        };
         let (kx_, ky_) = (w as f32 / width as f32, h as f32 / height as f32);
         let mut small = resvg::tiny_skia::Pixmap::new(w, h)?;
         resvg::render(&self.tree, ts.post_scale(kx_, ky_), &mut small.as_mut());
+        let mut pm = resvg::tiny_skia::Pixmap::new(width, height)?;
         let paint = resvg::tiny_skia::PixmapPaint { quality: resvg::tiny_skia::FilterQuality::Bilinear, ..Default::default() };
         pm.draw_pixmap(0, 0, small.as_ref(), &paint, resvg::tiny_skia::Transform::from_scale(1.0 / kx_, 1.0 / ky_), None);
         Some(pm)
+    }
+
+    /// Whether krilla-svg can draw it into a PDF as vectors within the memory budget, at `scale`
+    /// PDF units per SVG user unit where it is placed (review 10 C-11). krilla-svg draws
+    /// everything as vectors but a group with filters, which it rasterises with resvg at twice
+    /// that scale (at most 5,000 pixels a side), and resvg then holds what [`cost`] works out.
+    pub fn pdf_vectors_fit(&self, scale: f32) -> bool {
+        const FILTER_SCALE: f32 = 2.0;
+        const MAX_SIDE: f32 = 5000.0;
+        if !scale.is_finite() || scale <= 0.0 {
+            return false;
+        }
+        let mut stack: Vec<&usvg::Group> = vec![self.tree.root()];
+        let mut seen = 0u64;
+        while let Some(g) = stack.pop() {
+            seen += 1;
+            if seen > 1 << 22 {
+                return false;
+            }
+            for n in g.children() {
+                if let usvg::Node::Group(cg) = n {
+                    stack.push(cg);
+                }
+            }
+            for n in g.children() {
+                push_subroots(n, &mut stack);
+            }
+            if g.filters().is_empty() {
+                continue;
+            }
+            // krilla-svg's raster for it: the group's layer, at the page scale times its
+            // transforms, twice over, at most 5,000 pixels a side.
+            let Some(lb) = g.layer_bounding_box().transform(g.transform()) else { continue };
+            let (ax, ay) = g.abs_transform().get_scale();
+            let (ox, oy) = g.transform().get_scale();
+            let mut rs = scale * FILTER_SCALE * ax.max(ay).max(ax / ox.max(f32::MIN_POSITIVE)).max(ay / oy.max(f32::MIN_POSITIVE));
+            rs = rs.min(MAX_SIDE / lb.width()).min(MAX_SIDE / lb.height());
+            let (w, h) = ((lb.width() * rs).round(), (lb.height() * rs).round());
+            if !(w.is_finite() && h.is_finite() && rs.is_finite()) || w < 1.0 || h < 1.0 {
+                continue;
+            }
+            let (w, h) = (w as u32, h as u32);
+            let ts = resvg::tiny_skia::Transform::from_scale(rs, rs).pre_translate(-lb.x(), -lb.y());
+            // Its raster, a copy krilla makes of it, and resvg's work.
+            let raster = u64::from(w) * u64::from(h) * 4;
+            if cost::node_bytes(g, ts, w, h).saturating_add(raster.saturating_mul(3)) > MAX_DRAW_BYTES {
+                return false;
+            }
+        }
+        true
     }
 }

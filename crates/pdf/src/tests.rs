@@ -1502,7 +1502,7 @@ fn svg_pictures_are_drawn_as_vector_paths() {
     let bytes = export(&d, &PdfOptions { compress: false, tagged: false, ..Default::default() }).unwrap();
     let raw = String::from_utf8_lossy(&bytes);
     assert!(raw.contains("1 0 0 rg"), "the red rectangle is filled as a path");
-    assert!(!raw.contains("/Subtype /Image"), "no image XObject");
+    assert!(!has_image(&raw), "no image XObject");
     assert!(!raw.contains("0.8156"), "the grey placeholder box is not drawn");
 }
 
@@ -1517,4 +1517,41 @@ fn unreadable_svg_picture_is_the_grey_box() {
     d.body = vec![para_block(p)];
     let bytes = export(&d, &PdfOptions { compress: false, tagged: false, ..Default::default() }).unwrap();
     assert!(String::from_utf8_lossy(&bytes).contains("0.8156"), "the grey placeholder box is drawn");
+}
+
+/// Whether a PDF holds an image XObject (written with or without a space).
+fn has_image(raw: &str) -> bool {
+    raw.contains("/Subtype/Image") || raw.contains("/Subtype /Image")
+}
+
+/// A document holding one SVG picture, `w` points wide, exported to PDF.
+fn pdf_with_svg(svg: &[u8], w: f32) -> String {
+    let mut d = Document::new();
+    let media = d.add_media(svg.to_vec(), "svg");
+    let mut p = Paragraph::new();
+    let obj = InlineObject::Image { media, w, h: w, alt: String::new(), float: Default::default(), crop: [0.0; 4], ole: None };
+    p.insert_object(0, obj, &CharProps::default()).unwrap();
+    d.body = vec![para_block(p)];
+    let bytes = export(&d, &PdfOptions { compress: false, tagged: false, ..Default::default() }).unwrap();
+    String::from_utf8_lossy(&bytes).into_owned()
+}
+
+/// #1910 review 10 C-11: krilla-svg rasterises a filter with resvg; a filter inside it that
+/// floods a region a thousand times the picture would take terabytes. The picture goes in as a
+/// budgeted raster (or the grey box) instead, and the export finishes.
+#[test]
+fn svg_filters_past_the_budget_are_exported_as_a_raster() {
+    let svg = br##"<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><defs><filter id="o"><feGaussianBlur stdDeviation="1"/></filter><filter id="i" filterUnits="userSpaceOnUse" x="-50000" y="-50000" width="100000" height="100000"><feFlood flood-color="red"/></filter></defs><g filter="url(#o)"><rect width="100" height="100" filter="url(#i)"/></g></svg>"##;
+    let raw = pdf_with_svg(svg, 75.0);
+    // Our raster: twice the picture's 75 points.
+    assert!(raw.contains("/Width 150") || raw.contains("0.8156"), "a raster of the picture or the grey box");
+}
+
+/// An ordinary picture with a blur filter stays vectors (krilla rasterises only the blurred group).
+#[test]
+fn svg_with_an_ordinary_filter_stays_vectors() {
+    let svg = br##"<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><filter id="b"><feGaussianBlur stdDeviation="2"/></filter><rect width="100" height="40" fill="#ff0000"/><circle cx="50" cy="70" r="20" fill="#0000ff" filter="url(#b)"/></svg>"##;
+    let raw = pdf_with_svg(svg, 300.0);
+    assert!(raw.contains("1 0 0 rg"), "the red rectangle is a path (a raster of the picture has none)");
+    assert!(!raw.contains("0.8156"), "no grey box");
 }

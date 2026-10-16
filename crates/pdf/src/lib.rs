@@ -1713,13 +1713,48 @@ fn svg_picture(s: &mut Surface, svg: &wordcraft_svg::Svg, rect: &Rect, crop: &[f
     }
     s.push_clip_path(clip, &FillRule::NonZero);
     s.push_transform(&Transform::from_translate(rect.x - cl * fw, rect.y - ct * fh));
-    let drawn = s.draw_svg(svg.tree(), size, SvgSettings { embed_text: false, filter_scale: 2.0 });
+    // krilla-svg rasterises filters with resvg outside our drawing budget: a picture whose
+    // filters would take too much memory goes in as our own budgeted raster instead (#1910
+    // review 10).
+    let (sw, sh) = svg.size_px();
+    let t = s.cur_transform();
+    let page = t.sx().hypot(t.ky()).max(t.kx().hypot(t.sy()));
+    let scale = page * (size.width() / sw).max(size.height() / sh);
+    let drawn = if svg.pdf_vectors_fit(scale) {
+        s.draw_svg(svg.tree(), size, SvgSettings { embed_text: false, filter_scale: 2.0 })
+    } else {
+        svg_raster(svg, size, page).map(|img| s.draw_image(img, size))
+    };
     s.pop();
     s.pop();
     if fade {
         s.pop();
     }
     drawn
+}
+
+/// An SVG picture as an image `size` big at twice the page resolution (at most
+/// `wordcraft_svg::MAX_RASTER_PIXELS`), drawn within the SVG drawing budget.
+fn svg_raster(svg: &wordcraft_svg::Svg, size: Size, page: f32) -> Option<Image> {
+    let (sw, sh) = svg.size_px();
+    let k = 2.0 * if page.is_finite() && page > 0.0 { page } else { 1.0 };
+    let (mut w, mut h) = ((size.width() * k).max(1.0), (size.height() * k).max(1.0));
+    let cap = wordcraft_svg::MAX_RASTER_PIXELS as f32;
+    if w * h > cap {
+        let f = (cap / (w * h)).sqrt();
+        (w, h) = ((w * f).max(1.0), (h * f).max(1.0));
+    }
+    let (w, h) = (w as u32, h as u32);
+    let r = svg.render(w, h, [w as f32 / sw, 0.0, 0.0, h as f32 / sh, 0.0, 0.0])?;
+    // Premultiplied, as krilla wants it straight.
+    let mut px = r.rgba;
+    for [r, g, b, a] in px.as_chunks_mut::<4>().0 {
+        if *a > 0 && *a < 255 {
+            let un = |c: u8| ((u16::from(c) * 255 + u16::from(*a) / 2) / u16::from(*a)).min(255) as u8;
+            (*r, *g, *b) = (un(*r), un(*g), un(*b));
+        }
+    }
+    Some(Image::from_rgba8(px, r.width, r.height))
 }
 
 /// A kurbo path as a krilla path (None when empty).

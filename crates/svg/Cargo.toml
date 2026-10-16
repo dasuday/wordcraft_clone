@@ -14,3 +14,4 @@ usvg = { workspace = true }
 resvg = { workspace = true }
 svgtypes = { workspace = true }
 simplecss = { workspace = true }
+imagesize = { workspace = true }

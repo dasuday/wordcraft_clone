@@ -1137,13 +1137,21 @@ fn nested_layers(n: usize) -> String {
 /// other: a large raster of many nested layers is drawn smaller and scaled up, within the budget.
 #[test]
 fn nested_layers_draw_within_the_budget() {
+    // Picture-sized layers (the group's bounds and two pixels each way) held at once, as the
+    // drawing estimate counts them: what `layers` counted in round 9.
+    let layers = |svg: &Svg, side: u32| {
+        let k = side as f32 / 100.0;
+        let raster = u64::from(side) * u64::from(side) * 4;
+        let layer = u64::from(side + 4) * u64::from(side + 4) * 4;
+        (svg.draw_bytes(side, side, [k, 0.0, 0.0, k, 0.0, 0.0]) - raster) / layer
+    };
     let svg = parse(nested_layers(250).as_bytes()).unwrap();
-    assert!(svg.layers >= 250, "{}", svg.layers);
+    assert!(layers(&svg, 2048) >= 250, "{}", layers(&svg, 2048));
     let r = svg.render(2048, 2048, [20.48, 0.0, 0.0, 20.48, 0.0, 0.0]).unwrap();
     assert_eq!((r.width, r.height), (2048, 2048));
     // The middle is painted (red, at 0.9^250 opacity: faint but not empty is not required).
     let few = parse(nested_layers(3).as_bytes()).unwrap();
-    assert_eq!(few.layers, 3);
+    assert_eq!(layers(&few, 512), 3);
     let r = few.render(512, 512, [5.12, 0.0, 0.0, 5.12, 0.0, 0.0]).unwrap();
     assert!(px(&r, 256, 256)[3] > 0);
     // A deep `<use>` chain under nested groups, opacity on each.
@@ -1251,4 +1259,97 @@ fn links_that_build_nothing_are_no_loop() {
     ));
     let r = parse(d.as_bytes());
     assert!(r.is_ok(), "use of a mask: {:?}", r.err());
+}
+
+/// Review 10 C-9: resvg makes a raster of a filter's whole region for every step, and doesn't clip
+/// the region: a flood over 100,000 units drawn at any size would take gigabytes.
+#[test]
+fn filter_regions_draw_within_the_budget() {
+    let d = pic(
+        r##"<filter id="f" filterUnits="userSpaceOnUse" x="-50000" y="-50000" width="100000" height="100000"><feFlood flood-color="red"/></filter><rect width="50" height="50" filter="url(#f)"/>"##,
+    );
+    let svg = parse(d.as_bytes()).unwrap();
+    for side in [64u32, 2048] {
+        let k = side as f32 / 100.0;
+        assert!(svg.draw_bytes(side, side, [k, 0.0, 0.0, k, 0.0, 0.0]) > MAX_DRAW_BYTES);
+        let _ = svg.render(side, side, [k, 0.0, 0.0, k, 0.0, 0.0]);
+    }
+    let _ = fallback_png(d.as_bytes());
+    // Many steps over an ordinary region.
+    let floods = "<feFlood flood-color=\"red\"/>".repeat(400);
+    let d = pic(&format!(r##"<filter id="f">{floods}</filter><rect width="100" height="100" filter="url(#f)"/>"##));
+    let svg = parse(d.as_bytes()).unwrap();
+    assert!(svg.render(2048, 2048, [20.48, 0.0, 0.0, 20.48, 0.0, 0.0]).is_some());
+}
+
+/// Review 10 C-10: a layer is the group's bounds clipped to five times the raster each way, so up
+/// to 25 times the raster.
+#[test]
+fn wide_layers_draw_within_the_budget() {
+    let d = pic(&format!(r#"{}<rect x="-1500" y="-1500" width="3000" height="3000"/>{}"#, "<g opacity=\"0.9\">".repeat(6), "</g>".repeat(6)));
+    let svg = parse(d.as_bytes()).unwrap();
+    assert!(svg.draw_bytes(2048, 2048, [20.48, 0.0, 0.0, 20.48, 0.0, 0.0]) > 6 * 2048 * 2048 * 4);
+    assert!(svg.render(2048, 2048, [20.48, 0.0, 0.0, 20.48, 0.0, 0.0]).is_some());
+    // The same as an inserted picture's fallback.
+    let d = d.replace("width=\"100\" height=\"100\"", "width=\"1024\" height=\"1024\"");
+    assert!(fallback_png(d.as_bytes()).is_ok());
+}
+
+/// Review 10 C-12: stroking a path takes memory for every segment, more for a long curve drawn
+/// large: 250,000 stroked arcs are drawn small, or not at all, rather than abort.
+#[test]
+fn huge_stroked_paths_draw_within_the_budget() {
+    let d = pic(&format!(r#"<path d="M0 0{}" stroke="black" fill="none"/>"#, "a50,50 0 1,1 1,0".repeat(250_000)));
+    let svg = parse(d.as_bytes()).unwrap();
+    assert!(svg.draw_bytes(2048, 2048, [20.48, 0.0, 0.0, 20.48, 0.0, 0.0]) > MAX_DRAW_BYTES);
+    let _ = svg.render(2048, 2048, [20.48, 0.0, 0.0, 20.48, 0.0, 0.0]);
+}
+
+/// Review 10 M-15: pictures nested side by side don't add up their depth (only one is being read
+/// at a time).
+#[test]
+fn sibling_nested_pictures_are_as_deep_as_the_deepest() {
+    let inner = format!(
+        "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"10\" height=\"10\">{}<rect width=\"5\" height=\"5\"/>{}</svg>",
+        "<g>".repeat(50),
+        "</g>".repeat(50)
+    );
+    let b64 = base64_encode(inner.as_bytes());
+    let icons = format!(r#"<image href="data:image/svg+xml;base64,{b64}" width="10" height="10"/>"#).repeat(6);
+    let d = pic(&icons);
+    let budget = Budget::default();
+    assert!(parse_nested(d.as_bytes(), 0, 0, &budget).is_ok());
+    let deepest = budget.deepest.load(Ordering::Relaxed);
+    assert!(deepest > 50 && deepest < WEB_MAX_BUILD_DEPTH, "{deepest}");
+}
+
+/// Review 10 M-16: a clip path's clip path's clip path each take a raster of the layer.
+#[test]
+fn clip_path_chains_are_counted_whole() {
+    let one = pic(
+        r##"<clipPath id="a"><rect width="90" height="90"/></clipPath><g clip-path="url(#a)" opacity="0.5"><rect width="100" height="100"/></g>"##,
+    );
+    let three = pic(
+        r##"<clipPath id="c"><rect width="70" height="70"/></clipPath><clipPath id="b" clip-path="url(#c)"><rect width="80" height="80"/></clipPath><clipPath id="a" clip-path="url(#b)"><rect width="90" height="90"/></clipPath><g clip-path="url(#a)" opacity="0.5"><rect width="100" height="100"/></g>"##,
+    );
+    let at = |d: &str| parse(d.as_bytes()).unwrap().draw_bytes(1000, 1000, [10.0, 0.0, 0.0, 10.0, 0.0, 0.0]);
+    let layer = 1004u64 * 1004 * 4;
+    assert!(at(&three) >= at(&one) + 2 * layer, "{} {}", at(&three), at(&one));
+}
+
+/// Review 10: ordinary pictures draw at full size (the budget only bites on hostile ones).
+#[test]
+fn ordinary_pictures_draw_at_full_size() {
+    for d in [illustrator_export(40, 3000, 5), illustrator_export(8, 300, 4)] {
+        let svg = parse(d.as_bytes()).unwrap();
+        for side in [1024u32, 2048] {
+            let k = side as f32 / 1000.0;
+            let need = svg.draw_bytes(side, side, [k, 0.0, 0.0, k, 0.0, 0.0]);
+            assert!(need <= MAX_DRAW_BYTES, "{need}");
+        }
+    }
+    let blur = pic(r##"<filter id="b"><feGaussianBlur stdDeviation="2"/></filter><circle cx="50" cy="50" r="30" filter="url(#b)" opacity="0.5"/>"##);
+    let svg = parse(blur.as_bytes()).unwrap();
+    assert!(svg.draw_bytes(2048, 2048, [20.48, 0.0, 0.0, 20.48, 0.0, 0.0]) <= MAX_DRAW_BYTES);
+    assert!(svg.pdf_vectors_fit(4.0));
 }
