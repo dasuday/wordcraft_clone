@@ -1774,6 +1774,8 @@ template	Letter	Pismo
 	Repeat	Ponovi
 	Repeat Header Rows	Ponovi retke zaglavlja
 	Repeat as header row on each page	Ponovi kao redak zaglavlja na svakoj stranici
+	Row {n}:	Redak {n}:
+	Column {n}:	Stupac {n}:
 	Repeating Section Content Control	Kontrola sadržaja s ponavljajućim odjeljkom
 	Replace	Zamijeni
 	Replace All	Zamijeni sve

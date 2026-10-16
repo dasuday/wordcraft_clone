@@ -1213,6 +1213,8 @@
 	At least	最小值
 	Allow row to break across pages	允许跨页断行
 	Repeat as header row on each page	在各页重复作为标题行
+	Row {n}:	第 {n} 行：
+	Column {n}:	第 {n} 列：
 	Vertical alignment:	垂直对齐方式：
 	Top	顶端
 	Bottom	底端

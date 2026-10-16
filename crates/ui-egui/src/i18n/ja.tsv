@@ -1201,6 +1201,8 @@
 	At least	最小値
 	Allow row to break across pages	ページ間で行を分割する
 	Repeat as header row on each page	各ページに見出し行として繰り返す
+	Row {n}:	{n} 行目:
+	Column {n}:	{n} 列目:
 	Vertical alignment:	垂直方向の配置:
 	Top	上
 	Bottom	下

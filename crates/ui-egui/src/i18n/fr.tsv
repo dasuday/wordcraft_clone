@@ -1140,6 +1140,8 @@
 	At least	Au moins
 	Allow row to break across pages	Autoriser le fractionnement des lignes sur plusieurs pages
 	Repeat as header row on each page	Répéter en tant que ligne d’en-tête sur chaque page
+	Row {n}:	Ligne {n} :
+	Column {n}:	Colonne {n} :
 	Vertical alignment:	Alignement vertical :
 	Top	Haut
 	Bottom	Bas

@@ -1078,6 +1078,8 @@
 	At least	Legalább
 	Allow row to break across pages	A sor átnyúlhat a következő oldalra
 	Repeat as header row on each page	Ismétlés fejlécsorként minden oldalon
+	Row {n}:	{n}. sor:
+	Column {n}:	{n}. oszlop:
 	Vertical alignment:	Függőleges igazítás:
 	Top	Fent
 	Bottom	Lent

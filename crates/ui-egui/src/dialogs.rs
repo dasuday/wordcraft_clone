@@ -538,6 +538,13 @@ pub enum Dialog {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TableForm {
+    /// 0 Table, 1 Row, 2 Column, 3 Cell, 4 Alt Text.
+    pub tab: u8,
+    /// The caret's row and grid column, counted from 1, as the Row and Column tabs name them.
+    pub row: usize,
+    pub column: usize,
+    /// Every row above the caret's repeats as a header row, so this one can too.
+    pub header_allowed: bool,
     pub width_on: bool,
     pub width: f32,
     /// `left`, `center` or `right`.
@@ -555,6 +562,9 @@ pub struct TableForm {
     pub cell_width: f32,
     /// `top`, `center` or `bottom`.
     pub valign: String,
+    /// Alt Text: the table's title and description.
+    pub alt_title: String,
+    pub alt_text: String,
 }
 
 impl TableForm {
@@ -571,6 +581,10 @@ impl TableForm {
         let width = t.props.width_pct.filter(|p| *p > 0.0).map(|p| tw * p.min(100.0) / 100.0).or(t.props.width.filter(|w| *w > 0.0));
         let fin = |v: f32| if v.is_finite() { v } else { 0.0 };
         Some(TableForm {
+            tab: 0,
+            row: r.saturating_add(1),
+            column: t.grid_col(r, c).saturating_add(1),
+            header_allowed: t.rows.iter().take(r).all(|x| x.props.header),
             width_on: width.is_some(),
             width: fin(width.unwrap_or(tw)) / k,
             align: match t.props.align {
@@ -595,7 +609,40 @@ impl TableForm {
                 _ => "top",
             }
             .into(),
+            alt_title: t.props.caption.clone().unwrap_or_default(),
+            alt_text: t.props.description.clone().unwrap_or_default(),
         })
+    }
+
+    /// The commands OK runs, as one undo step: `table.properties` with what differs from
+    /// `basis`, then `table.altText` if the title or description changed.
+    pub fn commands(&self, basis: &TableForm) -> Vec<(&'static str, Value)> {
+        let mut out = Vec::new();
+        let changes = self.changes(basis);
+        if changes.as_object().is_some_and(|m| !m.is_empty()) {
+            out.push(("table.properties", changes));
+        }
+        let mut alt = serde_json::Map::new();
+        if self.alt_title != basis.alt_title {
+            alt.insert("title".into(), json!(self.alt_title));
+        }
+        if self.alt_text != basis.alt_text {
+            alt.insert("text".into(), json!(self.alt_text));
+        }
+        if !alt.is_empty() {
+            out.push(("table.altText", Value::Object(alt)));
+        }
+        out
+    }
+
+    /// Run [`TableForm::commands`] as one undo step.
+    pub fn apply(&self, basis: &TableForm, app: &mut WordApp) {
+        for (i, (id, params)) in self.commands(basis).into_iter().enumerate() {
+            if i > 0 {
+                app.session.join_next_undo();
+            }
+            let _ = app.run(id, params);
+        }
     }
 
     /// `table.properties` parameters for what differs from `basis` (empty when nothing does).
@@ -1902,13 +1949,14 @@ fn body(app: &mut WordApp, ui: &mut Ui, d: &mut Dialog) -> bool {
             ok || cancel
         }
         Dialog::TableProperties { form, basis } => {
-            table_properties(ui, form);
+            // Every tab as tall as the tallest (Row), so OK and Cancel stay put, as in Word.
+            ui.vertical(|ui| {
+                ui.set_min_height(185.0);
+                table_properties(ui, form);
+            });
             let (ok, cancel) = buttons(ui, tl!("OK"));
             if ok {
-                let changes = form.changes(basis);
-                if changes.as_object().is_some_and(|m| !m.is_empty()) {
-                    let _ = app.run("table.properties", changes);
-                }
+                form.apply(basis, app);
             }
             ok || cancel
         }
@@ -2955,8 +3003,16 @@ fn recipient_filter(ui: &mut Ui, fields: &[String], filter: &mut RecipientFilter
     });
 }
 
-/// The Table Properties dialog's fields: Table, Row, Column and Cell sections.
+/// The Table Properties dialog's tabs: Table, Row, Column, Cell and Alt Text, as in Word.
 fn table_properties(ui: &mut Ui, f: &mut TableForm) {
+    ui.horizontal(|ui| {
+        for (i, l) in ["Table", "Row", "Column", "Cell", "Alt Text"].into_iter().enumerate() {
+            if ui.selectable_label(f.tab == i as u8, tl!(l)).clicked() {
+                f.tab = i as u8;
+            }
+        }
+    });
+    ui.separator();
     let unit = crate::options::unit();
     fn len(v: &mut f32, lo: f32, unit: wordcraft_geom::Unit) -> egui::DragValue<'_> {
         egui::DragValue::new(v).speed(0.01).range(lo..=22.0).measure(unit).max_decimals(2)
@@ -2965,51 +3021,86 @@ fn table_properties(ui: &mut Ui, f: &mut TableForm) {
         ui.add_space(4.0);
         ui.label(egui::RichText::new(tl!(s)).font(semibold(12.5)));
     };
-    heading(ui, "Table");
-    egui::Grid::new("tp_table").num_columns(2).spacing(vec2(10.0, 6.0)).show(ui, |ui| {
-        ui.checkbox(&mut f.width_on, tl!("Preferred width:"));
-        ui.add_enabled(f.width_on, len(&mut f.width, 0.1, unit));
-        ui.end_row();
-        ui.label(tl!("Alignment:"));
-        ui.horizontal(|ui| {
-            for (v, l) in [("left", "Left"), ("center", "Center"), ("right", "Right")] {
-                ui.radio_value(&mut f.align, v.to_string(), tl!(l));
-            }
-        });
-        ui.end_row();
-        ui.label(tl!("Indent from left:"));
-        ui.add_enabled(f.align == "left", egui::DragValue::new(&mut f.indent).speed(0.01).range(-11.0..=22.0).measure(unit).max_decimals(2));
-        ui.end_row();
-        ui.label(tl!("Table direction:"));
-        ui.horizontal(|ui| {
-            ui.radio_value(&mut f.rtl, false, tl!("Left-to-right"));
-            ui.radio_value(&mut f.rtl, true, tl!("Right-to-left"));
-        });
-        ui.end_row();
-    });
-    heading(ui, "Row");
-    egui::Grid::new("tp_row").num_columns(2).spacing(vec2(10.0, 6.0)).show(ui, |ui| {
-        ui.checkbox(&mut f.row_height_on, tl!("Specify height:"));
-        ui.horizontal(|ui| {
-            ui.add_enabled(f.row_height_on, len(&mut f.row_height, 0.02, unit));
-            ui.add_enabled_ui(f.row_height_on, |ui| {
-                egui::ComboBox::from_id_salt("tp_rule").selected_text(tl!(if f.row_exact { "Exactly" } else { "At least" })).show_ui(ui, |ui| {
-                    ui.selectable_value(&mut f.row_exact, false, tl!("At least"));
-                    ui.selectable_value(&mut f.row_exact, true, tl!("Exactly"));
-                });
+    // "Row 3:", "Column 2:" over the Row and Column tabs.
+    let numbered = |s: &str, k: usize| crate::i18n::fmt(tl!(s), &[("n", &k.to_string())]);
+    match f.tab {
+        0 => {
+            heading(ui, "Size");
+            egui::Grid::new("tp_table").num_columns(2).spacing(vec2(10.0, 6.0)).show(ui, |ui| {
+                ui.checkbox(&mut f.width_on, tl!("Preferred width:"));
+                ui.add_enabled(f.width_on, len(&mut f.width, 0.1, unit));
+                ui.end_row();
             });
-        });
-        ui.end_row();
-    });
-    ui.checkbox(&mut f.allow_break, tl!("Allow row to break across pages"));
-    ui.checkbox(&mut f.header_row, tl!("Repeat as header row on each page"));
-    heading(ui, "Column");
-    egui::Grid::new("tp_col").num_columns(2).spacing(vec2(10.0, 6.0)).show(ui, |ui| {
-        ui.label(tl!("Preferred width:"));
-        ui.add(len(&mut f.column_width, 0.1, unit));
-        ui.end_row();
-    });
-    heading(ui, "Cell");
+            heading(ui, "Alignment");
+            egui::Grid::new("tp_align").num_columns(2).spacing(vec2(10.0, 6.0)).show(ui, |ui| {
+                ui.label(tl!("Alignment:"));
+                ui.horizontal(|ui| {
+                    for (v, l) in [("left", "Left"), ("center", "Center"), ("right", "Right")] {
+                        ui.radio_value(&mut f.align, v.to_string(), tl!(l));
+                    }
+                });
+                ui.end_row();
+                ui.label(tl!("Indent from left:"));
+                ui.add_enabled(f.align == "left", egui::DragValue::new(&mut f.indent).speed(0.01).range(-11.0..=22.0).measure(unit).max_decimals(2));
+                ui.end_row();
+                ui.label(tl!("Table direction:"));
+                ui.horizontal(|ui| {
+                    ui.radio_value(&mut f.rtl, false, tl!("Left-to-right"));
+                    ui.radio_value(&mut f.rtl, true, tl!("Right-to-left"));
+                });
+                ui.end_row();
+            });
+        }
+        1 => {
+            ui.label(numbered("Row {n}:", f.row));
+            heading(ui, "Size");
+            egui::Grid::new("tp_row").num_columns(2).spacing(vec2(10.0, 6.0)).show(ui, |ui| {
+                ui.checkbox(&mut f.row_height_on, tl!("Specify height:"));
+                ui.horizontal(|ui| {
+                    ui.add_enabled(f.row_height_on, len(&mut f.row_height, 0.02, unit));
+                    ui.add_enabled_ui(f.row_height_on, |ui| {
+                        egui::ComboBox::from_id_salt("tp_rule").selected_text(tl!(if f.row_exact { "Exactly" } else { "At least" })).show_ui(
+                            ui,
+                            |ui| {
+                                ui.selectable_value(&mut f.row_exact, false, tl!("At least"));
+                                ui.selectable_value(&mut f.row_exact, true, tl!("Exactly"));
+                            },
+                        );
+                    });
+                });
+                ui.end_row();
+            });
+            heading(ui, "Options");
+            ui.checkbox(&mut f.allow_break, tl!("Allow row to break across pages"));
+            // Header rows run down from the table's top: a row below a non-header row can't
+            // repeat (Word greys the box there); one that already does can still be cleared.
+            ui.add_enabled(f.header_allowed || f.header_row, egui::Checkbox::new(&mut f.header_row, tl!("Repeat as header row on each page")));
+        }
+        2 => {
+            ui.label(numbered("Column {n}:", f.column));
+            heading(ui, "Size");
+            egui::Grid::new("tp_col").num_columns(2).spacing(vec2(10.0, 6.0)).show(ui, |ui| {
+                ui.label(tl!("Preferred width:"));
+                ui.add(len(&mut f.column_width, 0.1, unit));
+                ui.end_row();
+            });
+        }
+        4 => {
+            egui::Grid::new("tp_alt").num_columns(2).spacing(vec2(10.0, 6.0)).show(ui, |ui| {
+                ui.label(tl!("Title:"));
+                ui.add(egui::TextEdit::singleline(&mut f.alt_title).desired_width(280.0));
+                ui.end_row();
+                ui.label(tl!("Description:"));
+                ui.add(egui::TextEdit::multiline(&mut f.alt_text).desired_width(280.0).desired_rows(4));
+                ui.end_row();
+            });
+        }
+        _ => {}
+    }
+    if f.tab != 3 {
+        return;
+    }
+    heading(ui, "Size");
     egui::Grid::new("tp_cell").num_columns(2).spacing(vec2(10.0, 6.0)).show(ui, |ui| {
         ui.checkbox(&mut f.cell_width_on, tl!("Preferred width:"));
         ui.add_enabled(f.cell_width_on, len(&mut f.cell_width, 0.1, unit));

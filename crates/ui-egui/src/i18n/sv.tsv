@@ -1229,6 +1229,8 @@
 	At least	Minst
 	Allow row to break across pages	Tillåt att raden bryts över sidor
 	Repeat as header row on each page	Upprepa som rubrikrad på varje sida
+	Row {n}:	Rad {n}:
+	Column {n}:	Kolumn {n}:
 	Vertical alignment:	Lodrät justering:
 	Top	Upptill
 	Bottom	Nedtill

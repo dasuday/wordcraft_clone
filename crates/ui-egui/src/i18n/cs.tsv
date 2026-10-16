@@ -944,6 +944,8 @@
 	Reopen	Znovu otevřít
 	Repeat	Opakovat
 	Repeat as header row on each page	Opakovat jako řádek záhlaví na každé stránce
+	Row {n}:	Řádek {n}:
+	Column {n}:	Sloupec {n}:
 	Repeat Header Rows	Opakovat řádky záhlaví
 	Replace	Nahradit
 	Replace All	Nahradit vše

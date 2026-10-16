@@ -1267,6 +1267,8 @@
 	At least	Najmanje
 	Allow row to break across pages	Dozvoli prelom reda između stranica
 	Repeat as header row on each page	Ponovi kao red zaglavlja na svakoj stranici
+	Row {n}:	Red {n}:
+	Column {n}:	Kolona {n}:
 	Vertical alignment:	Vertikalno poravnanje:
 	Top	Gore
 	Bottom	Dole

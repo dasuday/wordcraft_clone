@@ -1195,6 +1195,8 @@
 	At least	최소
 	Allow row to break across pages	행이 여러 페이지에 걸쳐 나뉘도록 허용
 	Repeat as header row on each page	각 페이지에서 머리글 행으로 반복
+	Row {n}:	{n}행:
+	Column {n}:	{n}열:
 	Vertical alignment:	세로 맞춤:
 	Top	위쪽
 	Bottom	아래쪽

@@ -1202,6 +1202,8 @@
 	At least	最小
 	Allow row to break across pages	允許列跨頁中斷
 	Repeat as header row on each page	在每頁重複作為標題列
+	Row {n}:	第 {n} 列：
+	Column {n}:	第 {n} 欄：
 	Vertical alignment:	垂直對齊方式：
 	Top	上
 	Bottom	下

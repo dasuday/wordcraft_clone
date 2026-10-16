@@ -1088,6 +1088,8 @@ preview	Title	Örnek
 	At least	En az
 	Allow row to break across pages	Satırın sayfalar arasında bölünmesine izin ver
 	Repeat as header row on each page	Her sayfada başlık satırı olarak tekrarla
+	Row {n}:	Satır {n}:
+	Column {n}:	Sütun {n}:
 	Vertical alignment:	Dikey hizalama:
 	Top	Üst
 	Bottom	Alt

@@ -1213,6 +1213,8 @@
 	At least	Принаймні
 	Allow row to break across pages	Дозволити розрив рядка між сторінками
 	Repeat as header row on each page	Повторювати як рядок заголовка на кожній сторінці
+	Row {n}:	Рядок {n}:
+	Column {n}:	Стовпець {n}:
 	Vertical alignment:	Вертикальне вирівнювання:
 	Top	Угорі
 	Bottom	Унизу

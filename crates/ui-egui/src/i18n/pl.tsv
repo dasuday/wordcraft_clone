@@ -1039,6 +1039,8 @@
 	At least	Co najmniej
 	Allow row to break across pages	Zezwalaj na dzielenie wiersza między stronami
 	Repeat as header row on each page	Powtarzaj jako wiersz nagłówka na każdej stronie
+	Row {n}:	Wiersz {n}:
+	Column {n}:	Kolumna {n}:
 	Vertical alignment:	Wyrównanie w pionie:
 	Top	Do góry
 	Bottom	Do dołu

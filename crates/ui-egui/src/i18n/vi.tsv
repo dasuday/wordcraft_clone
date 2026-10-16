@@ -1137,6 +1137,8 @@
 	At least	Tối thiểu
 	Allow row to break across pages	Cho phép ngắt hàng sang trang sau
 	Repeat as header row on each page	Lặp lại làm hàng tiêu đề trên mỗi trang
+	Row {n}:	Hàng {n}:
+	Column {n}:	Cột {n}:
 	Vertical alignment:	Căn chỉnh dọc:
 	Top	Trên
 	Bottom	Dưới

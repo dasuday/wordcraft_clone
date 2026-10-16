@@ -1239,6 +1239,8 @@
 	At least	Al menos
 	Allow row to break across pages	Permitir dividir la fila entre páginas
 	Repeat as header row on each page	Repetir como fila de encabezado en cada página
+	Row {n}:	Fila {n}:
+	Column {n}:	Columna {n}:
 	Vertical alignment:	Alineación vertical:
 	Top	Arriba
 	Bottom	Abajo

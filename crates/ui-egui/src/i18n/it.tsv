@@ -1130,6 +1130,8 @@
 	At least	Almeno
 	Allow row to break across pages	Consenti la divisione della riga tra le pagine
 	Repeat as header row on each page	Ripeti come riga di intestazione in ogni pagina
+	Row {n}:	Riga {n}:
+	Column {n}:	Colonna {n}:
 	Vertical alignment:	Allineamento verticale:
 	Top	In alto
 	Bottom	In basso

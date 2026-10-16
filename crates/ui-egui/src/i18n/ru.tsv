@@ -1088,6 +1088,8 @@ preview	Title	Пример
 	At least	Минимум
 	Allow row to break across pages	Разрешить перенос строки на следующую страницу
 	Repeat as header row on each page	Повторять как заголовок на каждой странице
+	Row {n}:	Строка {n}:
+	Column {n}:	Столбец {n}:
 	Vertical alignment:	Вертикальное выравнивание:
 	Top	Сверху
 	Bottom	Снизу

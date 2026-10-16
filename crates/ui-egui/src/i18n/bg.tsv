@@ -1145,6 +1145,8 @@
 	At least	Най-малко
 	Allow row to break across pages	Разрешаване на разделяне на реда между страници
 	Repeat as header row on each page	Повтаряне като заглавен ред на всяка страница
+	Row {n}:	Ред {n}:
+	Column {n}:	Колона {n}:
 	Vertical alignment:	Вертикално подравняване:
 	Top	Горе
 	Bottom	Долу

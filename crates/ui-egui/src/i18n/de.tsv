@@ -1124,6 +1124,8 @@
 	At least	Mindestens
 	Allow row to break across pages	Zeilenumbruch über Seiten zulassen
 	Repeat as header row on each page	Auf jeder Seite als Kopfzeile wiederholen
+	Row {n}:	Zeile {n}:
+	Column {n}:	Spalte {n}:
 	Vertical alignment:	Vertikale Ausrichtung:
 	Top	Oben
 	Bottom	Unten

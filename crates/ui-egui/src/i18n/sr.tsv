@@ -1271,6 +1271,8 @@
 	At least	Најмање
 	Allow row to break across pages	Дозволи прелом реда између страница
 	Repeat as header row on each page	Понови као ред заглавља на свакој страници
+	Row {n}:	Ред {n}:
+	Column {n}:	Колона {n}:
 	Vertical alignment:	Вертикално поравнање:
 	Top	Горе
 	Bottom	Доле

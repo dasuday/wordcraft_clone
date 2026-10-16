@@ -1213,6 +1213,8 @@
 	At least	Pelo menos
 	Allow row to break across pages	Permitir quebra de linha entre páginas
 	Repeat as header row on each page	Repetir como linha de cabeçalho em cada página
+	Row {n}:	Linha {n}:
+	Column {n}:	Coluna {n}:
 	Vertical alignment:	Alinhamento vertical:
 	Top	Superior
 	Bottom	Inferior

@@ -1123,6 +1123,8 @@
 	Height:	Kõrgus:
 	Left Margin	Vasak veeris
 	Repeat as header row on each page	Korda päisereana igal lehel
+	Row {n}:	Rida {n}:
+	Column {n}:	Veerg {n}:
 	Insert a new equation (Alt+=)	Lisa uus võrrand (Alt+=)
 	getartcraft.com/apps/wordcraft	getartcraft.com/apps/wordcraft
 	Bottom Margin	Alumine veeris
