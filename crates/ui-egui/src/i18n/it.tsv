@@ -2638,6 +2638,7 @@ preview	Title	Esempio
 	Nothing to show.	Niente da mostrare.
 	{label} must be a number.	{label} deve essere un numero.
 	The add-in {name} reported an error: {error}	Il componente aggiuntivo {name} ha segnalato un errore: {error}
+	The add-in {name} didn't finish its command.	Il componente aggiuntivo {name} non ha completato il comando.
 	Start Live Session	Avvia sessione dal vivo
 	Join Live Session	Partecipa a sessione dal vivo
 	Leave Live Session	Esci dalla sessione dal vivo

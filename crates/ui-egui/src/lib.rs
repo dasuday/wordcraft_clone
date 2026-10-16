@@ -1245,7 +1245,7 @@ impl WordApp {
         }
         if let Some(p) = req.get("officeFunction") {
             let s = |k: &str| p.get(k).and_then(Value::as_str).unwrap_or("").to_string();
-            office_pane::run_function(self, &s("plugin"), &s("url"), &s("function"));
+            office_pane::run_function(self, &s("plugin"), &s("url"), &s("function"), &s("control"));
         }
         // A word from a command for the status bar (Save turning a .docx with macros into a .docm).
         if let Some(text) = req.get("status").and_then(Value::as_str) {
@@ -1948,7 +1948,7 @@ impl WordApp {
         // Keytips are read before layout so the frame paints the new state; badges paint after
         // the ribbon so they sit on top of it.
         crate::keytips::logic(self, &ctx);
-        office_pane::pump(self);
+        office_pane::pump(self, ctx.input(|i| i.time));
         // Focus (View › Immersive, the status bar) keeps only the title bar and the page; Escape
         // brings the rest back, as in Word.
         if self.session.view.focus_mode && self.dialog.is_none() && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {

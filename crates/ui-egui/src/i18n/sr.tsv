@@ -2270,6 +2270,7 @@
 	Nothing to show.	Нема ничега за приказ.
 	{label} must be a number.	{label} мора бити број.
 	The add-in {name} reported an error: {error}	Додатак {name} је пријавио грешку: {error}
+	The add-in {name} didn't finish its command.	Додатак {name} није завршио своју команду.
 	Start Live Session	Започни сесију уживо
 	Join Live Session	Придружи се сесији уживо
 	Leave Live Session	Напусти сесију уживо

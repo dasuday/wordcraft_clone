@@ -2652,6 +2652,7 @@ preview	Title	Örnek
 	Nothing to show.	Gösterilecek bir şey yok.
 	{label} must be a number.	{label} bir sayı olmalıdır.
 	The add-in {name} reported an error: {error}	{name} eklentisi bir hata bildirdi: {error}
+	The add-in {name} didn't finish its command.	{name} eklentisi komutunu tamamlamadı.
 	Start Live Session	Canlı oturum başlat
 	Join Live Session	Canlı oturuma katıl
 	Leave Live Session	Canlı oturumdan ayrıl

@@ -2268,6 +2268,7 @@
 	Nothing to show.	Нічого показати.
 	{label} must be a number.	{label}: потрібне число.
 	The add-in {name} reported an error: {error}	Надбудова {name} повідомила про помилку: {error}
+	The add-in {name} didn't finish its command.	Надбудова {name} не завершила свою команду.
 	Start Live Session	Почати сеанс спільної роботи
 	Join Live Session	Приєднатися до сеансу спільної роботи
 	Leave Live Session	Вийти із сеансу спільної роботи

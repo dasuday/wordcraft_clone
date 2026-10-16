@@ -2255,6 +2255,7 @@
 	Nothing to show.	Nichts anzuzeigen.
 	{label} must be a number.	{label} muss eine Zahl sein.
 	The add-in {name} reported an error: {error}	Das Add-In {name} hat einen Fehler gemeldet: {error}
+	The add-in {name} didn't finish its command.	Das Add-In {name} hat seinen Befehl nicht abgeschlossen.
 	Start Live Session	Live-Sitzung starten
 	Join Live Session	An Live-Sitzung teilnehmen
 	Leave Live Session	Live-Sitzung verlassen

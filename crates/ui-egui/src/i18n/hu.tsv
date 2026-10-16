@@ -2651,6 +2651,7 @@
 	Nothing to show.	Nincs mit megjeleníteni.
 	{label} must be a number.	{label}: számot kell megadni.
 	The add-in {name} reported an error: {error}	A(z) {name} bővítmény hibát jelzett: {error}
+	The add-in {name} didn't finish its command.	A(z) {name} bővítmény nem fejezte be a parancsát.
 	Start Live Session	Élő munkamenet indítása
 	Join Live Session	Csatlakozás élő munkamenethez
 	Leave Live Session	Kilépés az élő munkamenetből

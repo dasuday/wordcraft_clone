@@ -2266,6 +2266,7 @@
 	Nothing to show.	Nema ničega za prikaz.
 	{label} must be a number.	{label} mora biti broj.
 	The add-in {name} reported an error: {error}	Dodatak {name} je prijavio grešku: {error}
+	The add-in {name} didn't finish its command.	Dodatak {name} nije završio svoju komandu.
 	Start Live Session	Započni sesiju uživo
 	Join Live Session	Pridruži se sesiji uživo
 	Leave Live Session	Napusti sesiju uživo

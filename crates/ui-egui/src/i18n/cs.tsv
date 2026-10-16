@@ -2647,6 +2647,7 @@ preview	Title	Ukázka
 	Nothing to show.	Není co zobrazit.
 	{label} must be a number.	{label} musí být číslo.
 	The add-in {name} reported an error: {error}	Doplněk {name} ohlásil chybu: {error}
+	The add-in {name} didn't finish its command.	Doplněk {name} nedokončil svůj příkaz.
 	Start Live Session	Zahájit živou relaci
 	Join Live Session	Připojit se k živé relaci
 	Leave Live Session	Opustit živou relaci

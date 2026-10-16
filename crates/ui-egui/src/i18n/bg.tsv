@@ -2643,6 +2643,7 @@
 	Nothing to show.	Няма нищо за показване.
 	{label} must be a number.	{label} трябва да е число.
 	The add-in {name} reported an error: {error}	Добавката {name} съобщи за грешка: {error}
+	The add-in {name} didn't finish its command.	Добавката {name} не завърши командата си.
 	Start Live Session	Започване на сесия на живо
 	Join Live Session	Присъединяване към сесия на живо
 	Leave Live Session	Напускане на сесията на живо

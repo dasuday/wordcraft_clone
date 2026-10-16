@@ -2645,6 +2645,7 @@ preview	Title	Tytuł
 	Nothing to show.	Brak elementów do wyświetlenia.
 	{label} must be a number.	{label} musi być liczbą.
 	The add-in {name} reported an error: {error}	Dodatek {name} zgłosił błąd: {error}
+	The add-in {name} didn't finish its command.	Dodatek {name} nie ukończył swojego polecenia.
 	Start Live Session	Rozpocznij sesję na żywo
 	Join Live Session	Dołącz do sesji na żywo
 	Leave Live Session	Opuść sesję na żywo

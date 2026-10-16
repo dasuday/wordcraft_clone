@@ -2268,6 +2268,7 @@
 	Nothing to show.	没有可显示的内容。
 	{label} must be a number.	{label} 必须是数字。
 	The add-in {name} reported an error: {error}	加载项 {name} 报告了错误：{error}
+	The add-in {name} didn't finish its command.	加载项 {name} 未完成其命令。
 	Start Live Session	开始实时会话
 	Join Live Session	加入实时会话
 	Leave Live Session	离开实时会话

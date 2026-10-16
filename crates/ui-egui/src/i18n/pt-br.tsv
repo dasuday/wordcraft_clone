@@ -2268,6 +2268,7 @@
 	Nothing to show.	Nada para mostrar.
 	{label} must be a number.	{label} deve ser um número.
 	The add-in {name} reported an error: {error}	O suplemento {name} relatou um erro: {error}
+	The add-in {name} didn't finish its command.	O suplemento {name} não concluiu o comando.
 	Start Live Session	Iniciar sessão ao vivo
 	Join Live Session	Entrar em sessão ao vivo
 	Leave Live Session	Sair da sessão ao vivo

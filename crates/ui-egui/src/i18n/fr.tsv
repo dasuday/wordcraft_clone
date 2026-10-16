@@ -2263,6 +2263,7 @@
 	Nothing to show.	Rien à afficher.
 	{label} must be a number.	{label} doit être un nombre.
 	The add-in {name} reported an error: {error}	Le complément {name} a signalé une erreur : {error}
+	The add-in {name} didn't finish its command.	Le complément {name} n’a pas terminé sa commande.
 	Start Live Session	Démarrer une session en direct
 	Join Live Session	Rejoindre une session en direct
 	Leave Live Session	Quitter la session en direct

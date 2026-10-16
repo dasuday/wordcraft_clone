@@ -2622,6 +2622,7 @@ preview	Title	Título
 	Nothing to show.	No hay nada que mostrar.
 	{label} must be a number.	{label} debe ser un número.
 	The add-in {name} reported an error: {error}	El complemento {name} informó de un error: {error}
+	The add-in {name} didn't finish its command.	El complemento {name} no terminó su comando.
 	Start Live Session	Iniciar sesión en directo
 	Join Live Session	Unirse a una sesión en directo
 	Leave Live Session	Salir de la sesión en directo

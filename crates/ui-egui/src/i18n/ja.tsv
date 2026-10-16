@@ -2256,6 +2256,7 @@
 	Nothing to show.	表示する項目はありません。
 	{label} must be a number.	{label} には数値を入力してください。
 	The add-in {name} reported an error: {error}	アドイン {name} がエラーを報告しました: {error}
+	The add-in {name} didn't finish its command.	アドイン {name} のコマンドが完了しませんでした。
 	Start Live Session	ライブ セッションを開始
 	Join Live Session	ライブ セッションに参加
 	Leave Live Session	ライブ セッションから退出

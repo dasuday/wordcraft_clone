@@ -2681,6 +2681,7 @@
 	Nothing to show.	Không có gì để hiển thị.
 	{label} must be a number.	{label} phải là một số.
 	The add-in {name} reported an error: {error}	Phần bổ trợ {name} đã báo lỗi: {error}
+	The add-in {name} didn't finish its command.	Phần bổ trợ {name} chưa hoàn tất lệnh của nó.
 	Start Live Session	Bắt đầu phiên trực tiếp
 	Join Live Session	Tham gia phiên trực tiếp
 	Leave Live Session	Rời phiên trực tiếp

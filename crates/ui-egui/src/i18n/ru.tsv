@@ -2653,6 +2653,7 @@ preview	Title	Пример
 	Nothing to show.	Нечего показать.
 	{label} must be a number.	{label}: требуется число.
 	The add-in {name} reported an error: {error}	Надстройка {name} сообщила об ошибке: {error}
+	The add-in {name} didn't finish its command.	Надстройка {name} не завершила свою команду.
 	Start Live Session	Начать сеанс совместной работы
 	Join Live Session	Присоединиться к сеансу совместной работы
 	Leave Live Session	Покинуть сеанс совместной работы

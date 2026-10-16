@@ -2290,6 +2290,7 @@
 	Nothing to show.	Pole midagi näidata.
 	{label} must be a number.	{label} peab olema arv.
 	The add-in {name} reported an error: {error}	Lisandmoodul {name} teatas veast: {error}
+	The add-in {name} didn't finish its command.	Lisandmoodul {name} ei lõpetanud oma käsku.
 	Start Live Session	Alusta reaalajas seanssi
 	Join Live Session	Liitu reaalajas seansiga
 	Leave Live Session	Lahku reaalajas seansist
