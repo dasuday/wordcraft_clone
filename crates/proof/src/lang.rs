@@ -32,6 +32,15 @@ pub enum ProofLang {
     DeAt,
     /// Swiss Standard German (`de-CH`), with its own dictionary and `ss` instead of `ß`.
     DeCh,
+    /// Turkish (`tr`, `tr-TR`, `tr-CY`): the installed Hunspell dictionary (when there is one),
+    /// Turkish grammar rules, spelling suggestions and Turkish syllable hyphenation rules.
+    Tr,
+    /// Russian (`ru`, `ru-RU`): the installed Hunspell dictionary (when there is one), the Russian
+    /// grammar rules and the Russian word-division rules.
+    Ru,
+    /// Czech (`cs`, `cs-CZ`): the installed Hunspell dictionary, dictionary-driven suggestions
+    /// and generic punctuation checks. Hyphenation keeps the fallback English patterns.
+    Cs,
     /// A language without proofing tools here (`fr-FR`, `ja-JP`, `x-none`…). Like Word without
     /// the language's proofing tools: no spelling or grammar marks, so its words are never
     /// flagged as English misspellings. Hyphenation keeps using the English patterns, as before
@@ -41,8 +50,19 @@ pub enum ProofLang {
 
 impl ProofLang {
     /// Every language with a spelling dictionary, in display order.
-    pub const PROOFED: [ProofLang; 8] =
-        [ProofLang::En, ProofLang::Pl, ProofLang::Pt, ProofLang::It, ProofLang::Hr, ProofLang::De, ProofLang::DeAt, ProofLang::DeCh];
+    pub const PROOFED: [ProofLang; 11] = [
+        ProofLang::En,
+        ProofLang::Pl,
+        ProofLang::Pt,
+        ProofLang::It,
+        ProofLang::Hr,
+        ProofLang::Tr,
+        ProofLang::Ru,
+        ProofLang::Cs,
+        ProofLang::De,
+        ProofLang::DeAt,
+        ProofLang::DeCh,
+    ];
 
     /// The proofing language of a BCP 47 tag (`pl-PL`, `en_GB`, `PL`…). Only the primary subtag
     /// counts, except German retains its Austrian or Swiss region. No tag (or an empty one)
@@ -70,6 +90,12 @@ impl ProofLang {
                 Some(r) if r.eq_ignore_ascii_case("AT") => ProofLang::DeAt,
                 _ => ProofLang::De,
             }
+        } else if primary.eq_ignore_ascii_case("tr") || primary.eq_ignore_ascii_case("tur") {
+            ProofLang::Tr
+        } else if primary.eq_ignore_ascii_case("ru") || primary.eq_ignore_ascii_case("rus") {
+            ProofLang::Ru
+        } else if primary.eq_ignore_ascii_case("cs") || primary.eq_ignore_ascii_case("ces") || primary.eq_ignore_ascii_case("cze") {
+            ProofLang::Cs
         } else {
             ProofLang::Other
         }
@@ -87,6 +113,9 @@ impl ProofLang {
             ProofLang::De => "de",
             ProofLang::DeAt => "de-AT",
             ProofLang::DeCh => "de-CH",
+            ProofLang::Tr => "tr",
+            ProofLang::Ru => "ru",
+            ProofLang::Cs => "cs",
             ProofLang::Other => "",
         }
     }
@@ -166,6 +195,11 @@ mod tests {
         for t in ["it", "it-IT", "IT_it", "it-CH", "it-CH.UTF-8", " it-IT ", "ita"] {
             assert_eq!(ProofLang::from_tag(Some(t)), ProofLang::It, "{t}");
         }
+        for t in ["cs", "cs-CZ", "CS-cz", "cs_CZ", " ces ", "CES", "cze", "CZE"] {
+            assert_eq!(ProofLang::from_tag(Some(t)), ProofLang::Cs, "{t}");
+        }
+        assert_eq!(ProofLang::Cs.code(), "cs");
+        assert!(ProofLang::Cs.is_proofed() && ProofLang::PROOFED.contains(&ProofLang::Cs));
         for t in ["en", "en-US", "en-GB", "EN_au", "en-Latn-US"] {
             assert_eq!(ProofLang::from_tag(Some(t)), ProofLang::En, "{t}");
         }
@@ -181,7 +215,10 @@ mod tests {
         for t in ["de-AT", "DE_at", "de_AT.UTF-8", "de-Latn-AT"] {
             assert_eq!(ProofLang::from_tag(Some(t)), ProofLang::DeAt, "{t}");
         }
-        for t in ["fr-FR", "x-none", "ja-JP", "plx", "bgx", "e", "-"] {
+        for t in ["tr", "tr-TR", "tr-CY", "TR_tr", "tur"] {
+            assert_eq!(ProofLang::from_tag(Some(t)), ProofLang::Tr, "{t}");
+        }
+        for t in ["fr-FR", "x-none", "ja-JP", "plx", "bgx", "trx", "csx", "e", "-"] {
             assert_eq!(ProofLang::from_tag(Some(t)), ProofLang::Other, "{t}");
         }
         assert_eq!(ProofLang::from_tag(None), ProofLang::En);
@@ -192,10 +229,20 @@ mod tests {
         assert!(!ProofLang::Bg.is_proofed());
         assert_eq!(ProofLang::Bg.code(), "bg");
         assert!(ProofLang::Pt.is_proofed() && !ProofLang::Other.is_proofed());
+        assert!(ProofLang::Tr.is_proofed());
+        for t in ["ru", "ru-RU", "RU-ru", "ru_RU", "ru_RU.UTF-8", " ru-RU ", "rus"] {
+            assert_eq!(ProofLang::from_tag(Some(t)), ProofLang::Ru, "{t}");
+        }
+        assert!(ProofLang::Ru.is_proofed());
+        assert_eq!(ProofLang::Ru.code(), "ru");
+        assert!(ProofLang::PROOFED.contains(&ProofLang::Ru));
         assert_eq!(ProofLang::Pl.code(), "pl");
         assert_eq!(ProofLang::Pt.code(), "pt");
         assert!(ProofLang::It.is_proofed());
         assert_eq!(ProofLang::It.code(), "it");
+        assert!(ProofLang::Hr.is_proofed());
+        assert_eq!(ProofLang::Hr.code(), "hr");
+        assert_eq!(ProofLang::Tr.code(), "tr");
         assert!(ProofLang::PROOFED.contains(&ProofLang::Pt), "every proofed language is listed");
     }
 }
