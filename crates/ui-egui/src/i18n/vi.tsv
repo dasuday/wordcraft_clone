@@ -2672,3 +2672,28 @@ template	Letter	Thư
 # Reading Mode column widths (#1040)
 	Narrow	Hẹp
 	Medium	Trung bình
+
+# Writing Assistant
+	Writing Assistant	Trợ lý viết
+	Prepare Writing Request	Chuẩn bị yêu cầu viết
+	Accept Writing Suggestion	Chấp nhận đề xuất văn bản
+	Assistant	Trợ lý
+	Writing\nAssistant	Trợ lý\nviết
+	Draft new text, rewrite a selection, or summarize it.	Soạn văn bản mới, viết lại phần đã chọn hoặc tóm tắt nội dung đó.
+	Model connection	Kết nối mô hình
+	OpenAI-compatible chat completions URL	URL hoàn thành hội thoại tương thích OpenAI
+	Model name	Tên mô hình
+	API key (if required by your server; kept only in memory)	Khóa API (nếu máy chủ yêu cầu; chỉ lưu trong bộ nhớ)
+	Rewrite	Viết lại
+	Summarize	Tóm tắt
+	Instructions	Hướng dẫn
+	Generate sends your instructions and selected text to the endpoint above. No other document content is sent.	Tạo sẽ gửi hướng dẫn và văn bản đã chọn đến máy chủ ở trên. Không gửi nội dung khác của tài liệu.
+	Generate	Tạo
+	Discard	Loại bỏ
+	Discarded; waiting for request to finish…	Đã loại bỏ; đang chờ yêu cầu hoàn tất…
+	Generating…	Đang tạo…
+	Preview — review and edit before accepting	Xem trước — kiểm tra và chỉnh sửa trước khi chấp nhận
+	Insert after selection	Chèn sau phần đã chọn
+	Replace selection	Thay thế phần đã chọn
+	Model connections require the desktop app.	Kết nối mô hình yêu cầu ứng dụng máy tính.
+	https://your-server/v1/chat/completions	https://your-server/v1/chat/completions

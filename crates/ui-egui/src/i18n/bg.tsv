@@ -2621,3 +2621,28 @@
 # Reading Mode column widths (#1040)
 	Narrow	Тясна
 	Medium	Средна
+
+# Writing Assistant
+	Writing Assistant	Асистент за писане
+	Prepare Writing Request	Подготовка на заявка за писане
+	Accept Writing Suggestion	Приемане на предложение за текст
+	Assistant	Асистент
+	Writing\nAssistant	Асистент\nза писане
+	Draft new text, rewrite a selection, or summarize it.	Създайте нов текст, пренапишете избрания текст или го обобщете.
+	Model connection	Връзка с модела
+	OpenAI-compatible chat completions URL	URL за допълване на чат, съвместим с OpenAI
+	Model name	Име на модела
+	API key (if required by your server; kept only in memory)	API ключ (ако се изисква от сървъра; пази се само в паметта)
+	Rewrite	Пренаписване
+	Summarize	Обобщаване
+	Instructions	Указания
+	Generate sends your instructions and selected text to the endpoint above. No other document content is sent.	Генерирането изпраща указанията и избрания текст към сървъра по-горе. Друго съдържание на документа не се изпраща.
+	Generate	Генериране
+	Discard	Отхвърляне
+	Discarded; waiting for request to finish…	Отхвърлено; изчакване на края на заявката…
+	Generating…	Генериране…
+	Preview — review and edit before accepting	Преглед — проверете и редактирайте преди приемане
+	Insert after selection	Вмъкване след избрания текст
+	Replace selection	Замяна на избрания текст
+	Model connections require the desktop app.	Връзката с модели изисква настолното приложение.
+	https://your-server/v1/chat/completions	https://your-server/v1/chat/completions

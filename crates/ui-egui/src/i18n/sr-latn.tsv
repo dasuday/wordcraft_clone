@@ -2243,3 +2243,9 @@
 # Reading Mode column widths (#1040)
 	Narrow	Uska
 	Medium	Srednja
+
+# Writing Assistant
+	Writing Assistant	Pomoćnik za pisanje
+	Prepare Writing Request	Pripremi zahtev za pisanje
+	Accept Writing Suggestion	Prihvati predlog teksta
+	Assistant	Pomoćnik

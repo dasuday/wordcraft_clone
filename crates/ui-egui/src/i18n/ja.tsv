@@ -2233,3 +2233,9 @@
 # Reading Mode column widths (#1040)
 	Narrow	狭い
 	Medium	中
+
+# Writing Assistant
+	Writing Assistant	文章作成アシスタント
+	Prepare Writing Request	文章作成リクエストを準備
+	Accept Writing Suggestion	文章の提案を採用
+	Assistant	アシスタント

@@ -22,6 +22,7 @@ macro_rules! tl {
 
 pub mod a11y;
 pub mod a11y_pane;
+pub mod assistant;
 pub mod async_saves;
 pub mod autoscroll;
 pub mod backstage;
@@ -418,6 +419,7 @@ fn migrate_units(v: &mut Value) {
 
 /// The application.
 pub struct WordApp {
+    pub assistant: assistant::State,
     pub session: Session,
     pub ui: UiState,
     pub services: Services,
@@ -571,6 +573,7 @@ impl WordApp {
             wordcraft_engine::set_system_locale(&tag);
         }
         WordApp {
+            assistant: assistant::State::default(),
             session,
             ui: UiState::default(),
             services,
@@ -1190,6 +1193,9 @@ impl WordApp {
             self.canvas.scroll_to_caret = true;
         }
         for req in std::mem::take(&mut self.session.ui_requests) {
+            if req.get("assistant").and_then(Value::as_bool) == Some(true) {
+                self.assistant.open = true;
+            }
             self.handle_request(&req);
         }
         if let Some(p) = self.session.path.as_ref().map(|p| p.to_string_lossy().to_string())
@@ -1278,6 +1284,9 @@ impl WordApp {
 
     /// Commands that live in the UI layer.
     fn ui_command(&mut self, id: &str, p: &Value) -> Option<Result<Value, String>> {
+        if id.starts_with("ui.assistant.") {
+            return Some(assistant::command(self, id, p));
+        }
         let s = |k: &str| p.get(k).and_then(Value::as_str);
         Some(Ok(match id {
             "ui.tab" => {
@@ -2027,6 +2036,7 @@ impl WordApp {
         colors::show(self, &ctx);
         zotero::show_alert(self, &ctx);
         read_aloud::show(self, &ctx);
+        assistant::show(self, &ctx);
         crate::keytips::show(self, &ctx, ui);
         keys::global_shortcuts(self, &ctx);
         self.refocus_after_chrome_click(&ctx);

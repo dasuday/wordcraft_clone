@@ -2234,3 +2234,9 @@
 # Reading Mode column widths (#1040)
 	Narrow	窄
 	Medium	中等
+
+# Writing Assistant
+	Writing Assistant	寫作助手
+	Prepare Writing Request	準備寫作請求
+	Accept Writing Suggestion	接受文字建議
+	Assistant	助手

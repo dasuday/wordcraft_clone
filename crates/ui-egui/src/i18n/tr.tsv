@@ -2629,3 +2629,28 @@ preview	Title	Örnek
 # Reading Mode column widths (#1040)
 	Narrow	Dar
 	Medium	Orta
+
+# Writing Assistant
+	Writing Assistant	Yazım Asistanı
+	Prepare Writing Request	Yazım İsteği Hazırla
+	Accept Writing Suggestion	Metin Önerisini Kabul Et
+	Assistant	Asistan
+	Writing\nAssistant	Yazım\nAsistanı
+	Draft new text, rewrite a selection, or summarize it.	Yeni metin oluşturun, seçimi yeniden yazın veya özetleyin.
+	Model connection	Model bağlantısı
+	OpenAI-compatible chat completions URL	OpenAI uyumlu sohbet tamamlama URL'si
+	Model name	Model adı
+	API key (if required by your server; kept only in memory)	API anahtarı (sunucunuz gerektiriyorsa; yalnızca bellekte tutulur)
+	Rewrite	Yeniden yaz
+	Summarize	Özetle
+	Instructions	Talimatlar
+	Generate sends your instructions and selected text to the endpoint above. No other document content is sent.	Oluştur düğmesi, talimatlarınızı ve seçili metni yukarıdaki sunucuya gönderir. Belgenin başka içeriği gönderilmez.
+	Generate	Oluştur
+	Discard	Vazgeç
+	Discarded; waiting for request to finish…	Vazgeçildi; isteğin tamamlanması bekleniyor…
+	Generating…	Oluşturuluyor…
+	Preview — review and edit before accepting	Önizleme — kabul etmeden önce inceleyip düzenleyin
+	Insert after selection	Seçimden sonra ekle
+	Replace selection	Seçimi değiştir
+	Model connections require the desktop app.	Model bağlantıları için masaüstü uygulaması gerekir.
+	https://your-server/v1/chat/completions	https://your-server/v1/chat/completions

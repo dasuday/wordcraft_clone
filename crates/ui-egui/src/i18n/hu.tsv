@@ -2628,3 +2628,28 @@
 # Reading Mode column widths (#1040)
 	Narrow	Keskeny
 	Medium	Közepes
+
+# Writing Assistant
+	Writing Assistant	Írássegéd
+	Prepare Writing Request	Írási kérés előkészítése
+	Accept Writing Suggestion	Szövegjavaslat elfogadása
+	Assistant	Segéd
+	Writing\nAssistant	Írássegéd
+	Draft new text, rewrite a selection, or summarize it.	Írjon új szöveget, fogalmazza át vagy foglalja össze a kijelölést.
+	Model connection	Kapcsolódás a modellhez
+	OpenAI-compatible chat completions URL	OpenAI-kompatibilis csevegéskiegészítési URL
+	Model name	Modell neve
+	API key (if required by your server; kept only in memory)	API-kulcs (ha a kiszolgáló kéri; csak a memóriában tárolva)
+	Rewrite	Átfogalmazás
+	Summarize	Összefoglalás
+	Instructions	Utasítások
+	Generate sends your instructions and selected text to the endpoint above. No other document content is sent.	A létrehozás elküldi az utasításokat és a kijelölt szöveget a fenti kiszolgálónak. A dokumentum más tartalma nem kerül elküldésre.
+	Generate	Létrehozás
+	Discard	Elvetés
+	Discarded; waiting for request to finish…	Elvetve; várakozás a kérés befejezésére…
+	Generating…	Létrehozás…
+	Preview — review and edit before accepting	Előnézet — elfogadás előtt ellenőrizze és szerkessze
+	Insert after selection	Beszúrás a kijelölés után
+	Replace selection	Kijelölés cseréje
+	Model connections require the desktop app.	A modellekhez kapcsolódáshoz az asztali alkalmazás szükséges.
+	https://your-server/v1/chat/completions	https://your-server/v1/chat/completions
