@@ -76,9 +76,11 @@ with an error (shown in the status bar and in `ui.zotero.status`'s `last`) when:
 | Messages in one command | 200,000 | a peer that calls forever |
 | One message | 32 MiB | |
 
-`ui.zotero.cancel` ends a command at any time. A command's result keeps its first 20 failed calls
-(each cut to 500 bytes) and counts the rest (`moreErrors`); the app's log names the first 200
-calls and counts the rest. These are the fields of `client::Options` for the CLI and tests.
+While a command runs the status bar says "Waiting for Zotero…" with a **Cancel** link
+(`ui.zotero.cancel`), which ends it at any time, even with no document open. A command's result
+keeps its first 20 failed calls (each cut to 500 bytes) and counts the rest (`moreErrors`); the
+app's log names the first 200 calls (each name cut to 128 bytes) and the first 20 failures, and
+counts the rest. A question from Zotero is shown up to 2,000 bytes. These are the fields of `client::Options` for the CLI and tests.
 
 ## How it works
 

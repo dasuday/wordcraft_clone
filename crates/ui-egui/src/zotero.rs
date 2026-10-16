@@ -13,6 +13,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{Receiver, Sender, TryRecvError};
 
 use serde_json::{Value, json};
+use wordcraft_zotero::client::{MAX_METHOD_LEN, clip};
 use wordcraft_zotero::{Bridge, Call, Command, Host};
 
 use crate::WordApp;
@@ -55,12 +56,15 @@ pub struct ZoteroLink {
 
 /// Calls named in the log line of one command.
 const MAX_METHODS: usize = 200;
+/// Longest question from Zotero shown, in bytes.
+const MAX_ALERT_LEN: usize = 2000;
 
 impl ZoteroLink {
     /// Remember a call for the log.
     fn note(&mut self, method: &str) {
         if self.methods.len() < MAX_METHODS {
-            self.methods.push(method.to_string());
+            // The name comes from Zotero's side of the socket: keep a short piece of it.
+            self.methods.push(clip(method, MAX_METHOD_LEN).into_owned());
         } else {
             self.more_methods = self.more_methods.saturating_add(1);
         }
@@ -167,8 +171,8 @@ fn start(app: &mut WordApp, cmd: Command, ctx: Option<egui::Context>) -> Result<
     z.document = document;
     z.methods.clear();
     z.more_methods = 0;
+    // The status bar says "Waiting for Zotero…" with a Cancel link while it runs.
     log::info!("Zotero: {} started", cmd.wire_name());
-    app.status(tl!("Waiting for Zotero…"));
     Ok(json!({"started": cmd.wire_name()}))
 }
 
@@ -213,7 +217,7 @@ pub fn poll(app: &mut WordApp, ctx: &egui::Context) {
     while app.zotero.alert.is_none() {
         let Some(p) = app.zotero.calls.as_ref().and_then(|rx| rx.try_recv().ok()) else { break };
         if p.call.method == "Document_displayAlert" && app.session.document_id() == app.zotero.document {
-            let text = p.call.args.get(1).and_then(Value::as_str).unwrap_or("").to_string();
+            let text = clip(p.call.args.get(1).and_then(Value::as_str).unwrap_or(""), MAX_ALERT_LEN).into_owned();
             let buttons = p.call.args.get(3).and_then(Value::as_i64).unwrap_or(0);
             app.zotero.note(&p.call.method);
             app.zotero.alert = Some(Alert { text, buttons, reply: p.reply });
@@ -450,6 +454,68 @@ mod tests {
         let (tx, rx) = std::sync::mpsc::channel();
         std::thread::spawn(move || tx.send(peer.join().is_ok()));
         assert_eq!(rx.recv_timeout(std::time::Duration::from_secs(5)), Ok(true), "the socket was closed");
+    }
+
+    #[test]
+    fn a_thread_that_ends_without_reporting_still_clears_busy() {
+        let mut app = WordApp::new(Session::new(Document::new()), Services::default());
+        let (done_tx, done_rx) = std::sync::mpsc::channel();
+        app.zotero.busy = Some(wordcraft_zotero::Command::Refresh);
+        app.zotero.done = Some(done_rx);
+        drop(done_tx);
+        super::poll(&mut app, &egui::Context::default());
+        assert!(app.zotero.busy.is_none(), "the buttons work again");
+        let last = app.run("ui.zotero.status", json!({})).unwrap()["last"].clone();
+        assert!(last["error"].as_str().unwrap().contains("ended unexpectedly"), "{last}");
+    }
+
+    #[test]
+    fn the_call_history_is_bounded_in_count_and_bytes() {
+        let mut z = super::ZoteroLink::default();
+        let huge = "é".repeat(1 << 16);
+        for _ in 0..250 {
+            z.note(&huge);
+        }
+        assert_eq!(z.methods.len(), super::MAX_METHODS);
+        assert_eq!(z.more_methods, 250 - super::MAX_METHODS);
+        let bytes: usize = z.methods.iter().map(String::len).sum();
+        assert!(bytes <= super::MAX_METHODS * (wordcraft_zotero::client::MAX_METHOD_LEN + 3), "{bytes} bytes kept");
+    }
+
+    #[test]
+    fn the_status_bar_cancels_a_running_command() {
+        use egui_kittest::kittest::Queryable;
+        let l = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = l.local_addr().unwrap();
+        let peer = std::thread::spawn(move || {
+            let (mut s, _) = l.accept().unwrap();
+            while let Ok(Some(_)) = wire::read_frame(&mut s) {}
+        });
+        let mut app = WordApp::new(Session::new(Document::new()), Services::default());
+        app.zotero.options.addr = addr;
+        let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(1440.0, 900.0)).build_ui_state(
+            |ui, app: &mut WordApp| {
+                let ctx = ui.ctx().clone();
+                app.logic(&ctx);
+                app.ui(ui);
+            },
+            app,
+        );
+        h.run_steps(4);
+        assert!(h.query_by_label("Waiting for Zotero…").is_none(), "nothing to cancel, no link");
+        h.state_mut().run("ui.zotero.refresh", json!({})).unwrap();
+        h.run_steps(4);
+        assert!(h.query_by_label("Waiting for Zotero…").is_some());
+        h.get_by_label("Cancel").click();
+        h.run_steps(4);
+        assert!(h.state().zotero.busy.is_none(), "the link cancelled the command");
+        assert_eq!(h.state_mut().run("ui.zotero.status", json!({})).unwrap()["last"]["cancelled"], true);
+        assert!(h.query_by_label("Cancel").is_none());
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || tx.send(peer.join().is_ok()));
+        assert_eq!(rx.recv_timeout(std::time::Duration::from_secs(5)), Ok(true), "the socket was closed");
+        // With no document open (closed mid-command), Cancel still works.
+        assert!(crate::works_without_document("ui.zotero.cancel"));
     }
 
     #[test]

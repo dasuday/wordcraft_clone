@@ -113,6 +113,8 @@ pub struct Outcome {
 pub const MAX_ERRORS: usize = 20;
 /// Longest error text kept, in bytes.
 pub const MAX_ERROR_LEN: usize = 500;
+/// Longest method name logged, in bytes.
+pub const MAX_METHOD_LEN: usize = 128;
 /// How often a blocked read or write wakes to check the limits and [`Options::cancel`].
 const TICK: Duration = Duration::from_millis(100);
 
@@ -144,26 +146,29 @@ fn serve(link: &mut Link<'_>, opts: &Options, answer: &mut dyn FnMut(&Call) -> R
             // Not a call; nothing to answer.
             continue;
         }
-        out.calls += 1;
+        out.calls = out.calls.saturating_add(1);
         let (reply, done) = match Call::parse(&frame.payload) {
             Ok(call) => {
-                log::debug!("Zotero → {}", call.method);
+                log::debug!("Zotero → {}", clip(&call.method, MAX_METHOD_LEN));
                 let r = answer(&call);
                 (r, call.method == "Document_complete")
             }
             Err(e) => (Err(e), false),
         };
         if let Err(e) = &reply {
-            let e = clip(e);
-            log::warn!("Zotero call failed: {e}");
+            let e = clip(e, MAX_ERROR_LEN);
+            // The first few go to the log; the command's summary counts the rest.
             if out.errors.len() < MAX_ERRORS {
+                log::warn!("Zotero call failed: {e}");
                 out.errors.push(e.to_string());
             } else {
                 out.more_errors = out.more_errors.saturating_add(1);
             }
         }
+        let reply = wire::encode_reply(&reply);
+        // The send deadline starts once the reply is ready: it measures Zotero, not us.
         link.start_write();
-        wire::write_frame(link, frame.txid, &wire::encode_reply(&reply))?;
+        wire::write_frame(link, frame.txid, &reply)?;
         if done {
             out.completed = true;
             break;
@@ -172,12 +177,13 @@ fn serve(link: &mut Link<'_>, opts: &Options, answer: &mut dyn FnMut(&Call) -> R
     Ok(out)
 }
 
-/// `text` cut to at most [`MAX_ERROR_LEN`] bytes, at a character boundary.
-fn clip(text: &str) -> std::borrow::Cow<'_, str> {
-    if text.len() <= MAX_ERROR_LEN {
+/// `text` cut to at most `max` bytes, at a character boundary (with "…" when cut). For keeping
+/// or logging text that came from Zotero.
+pub fn clip(text: &str, max: usize) -> std::borrow::Cow<'_, str> {
+    if text.len() <= max {
         return text.into();
     }
-    let mut end = MAX_ERROR_LEN;
+    let mut end = max;
     while !text.is_char_boundary(end) {
         end = end.saturating_sub(1);
     }
