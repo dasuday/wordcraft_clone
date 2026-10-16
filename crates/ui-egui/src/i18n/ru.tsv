@@ -1461,6 +1461,7 @@ preview	Title	Пример
 
 # Labels added on main and in this stack after the first Russian catalog (#300 integration)
 	Add Object to Selection	Добавить объект к выделению
+	Add to Selection	Добавить к выделению
 	Add space between Asian and Latin text	Добавлять пробел между азиатским и латинским текстом
 	Add space between Asian text and numbers	Добавлять пробел между азиатским текстом и числами
 	Allow hanging punctuation	Разрешить висячую пунктуацию

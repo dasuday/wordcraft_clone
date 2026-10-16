@@ -1138,6 +1138,7 @@
 
 # Labels added on main and in this stack after the first Estonian catalog (#294 integration)
 	Add Object to Selection	Lisa objekt valikusse
+	Add to Selection	Lisa valikusse
 	Add space between Asian and Latin text	Lisa vahe Aasia ja ladina teksti vahele
 	Add space between Asian text and numbers	Lisa vahe Aasia teksti ja numbrite vahele
 	Allow hanging punctuation	Luba rippuvad kirjavahemärgid

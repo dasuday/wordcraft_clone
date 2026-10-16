@@ -1460,6 +1460,7 @@ preview	Title	Örnek
 
 # Labels added on main and in this stack after the first Russian catalog (#300 integration)
 	Add Object to Selection	Nesneyi Seçime Ekle
+	Add to Selection	Seçime Ekle
 	Add space between Asian and Latin text	Asya ve Latin metni arasına boşluk ekle
 	Add space between Asian text and numbers	Asya metni ile sayılar arasına boşluk ekle
 	Allow hanging punctuation	Asılı noktalamaya izin ver
