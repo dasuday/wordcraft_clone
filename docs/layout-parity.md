@@ -159,7 +159,7 @@ No overall parity estimate changes from these probes.
 
 | Date | Change | Summary |
 |---|---|---|
-| 2026-10-16 | trivial | Foreground floats cover later inline content; relativeHeight survives DOCX import/export and orders complete frame/text groups. Synthetic regressions cover behind-text and header placement. |
+| 2026-10-16 | trivial | Foreground floats cover later inline content; relativeHeight survives DOCX import/export and orders complete frame/text groups. Synthetic regressions cover behind-text, header placement and cross-cell stacking through row splits. |
 | 2026-10-14 | trivial | Row table border exceptions draw without leaking into other rows |
 | 2026-10-14 | trivial | Consistent cell widths override a stale table grid |
 | 2026-10-14 | trivial | Paragraphs inside complex-field instructions take no flow height; empty result paragraphs keep their line. |

@@ -2479,6 +2479,7 @@ fn split_row_rejects_a_hostile_cut() {
         height,
         items: vec![line(0.0), line(150.0)],
         bottom,
+        foreground: Vec::new(),
         cells: vec![CellPart { items: 0..2, end: Some(170.0) }],
     };
     for cut in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY, 0.0, -1.0, 200.0] {
@@ -4551,6 +4552,7 @@ fn a_split_row_moves_shading_below_the_cut_with_it() {
         height: 200.0,
         items: vec![line_row(0.0), line_row(150.0), fill(0.0, 200.0), fill(150.0, 50.0)],
         bottom: 0.0,
+        foreground: Vec::new(),
         cells: vec![CellPart { items: 0..4, end: None }],
     };
     let (a, b) = split_row(&row, 100.0).expect("splits");
@@ -7402,4 +7404,53 @@ fn foreground_respects_stories() {
     let logo = draws.iter().position(|it| matches!(it, display::Draw::Shape { fill: Some(Rgb(200, 30, 30)), .. })).unwrap();
     let mask = draws.iter().position(|it| matches!(it, display::Draw::Image { media, .. } if media == "original-body-mask")).unwrap();
     assert!(logo < mask, "header foreground remains below body masks, even at maximum relativeHeight");
+}
+
+#[test]
+fn foreground_across_cells() {
+    use wordcraft_doc::para::{Anchor, Float};
+    let mut d = Document::from_text("Cell high anchor\nCell mid anchor\nBody anchor");
+    let at = |z, x| Float { wrap: Wrap::InFrontOfText, z_order: z, h_rel: Anchor::Page, v_rel: Anchor::Page, x, y: 0.0, ..Default::default() };
+    let high = text_box_at(&mut d, &Pos::body(0, 0), "Cell high", 100.0, 80.0, at(7, 0.0));
+    let mid = text_box_at(&mut d, &Pos::body(1, 0), "Cell mid", 100.0, 80.0, at(3, -200.0));
+    let low = text_box_at(&mut d, &Pos::body(2, 0), "Body low", 100.0, 80.0, Float { y: 72.0, ..at(1, 72.0) });
+    let cells: Vec<_> = d.body.drain(..2).collect();
+    let mut table = Table::new(1, 2, 400.0);
+    table.rows[0].cells[0].blocks = vec![cells[0].clone()];
+    table.rows[0].cells[1].blocks = vec![cells[1].clone()];
+    d.body.insert(0, Arc::new(Block::Table(table)));
+    let l = lay(&d);
+    let layers: Vec<_> = l.pages[0]
+        .items
+        .iter()
+        .filter_map(|it| match it {
+            Placed::Object { text_box: Some(id), .. } => Some(*id),
+            _ => None,
+        })
+        .collect();
+    assert!(box_rect(&l, high).intersects(&box_rect(&l, low)));
+    assert!(box_rect(&l, high).intersects(&box_rect(&l, mid)));
+    assert_eq!(layers, [low, mid, high], "table cells share their owning body's foreground stack");
+}
+
+#[test]
+fn split_row_keeps_foreground() {
+    use crate::table::{CellPart, RowLayout, split_row};
+    let l = lay(&Document::from_text("Line"));
+    let mut line = l.pages[0].items.iter().find(|it| matches!(it, Placed::Lines { .. })).unwrap().clone();
+    let Placed::Lines { y, .. } = &line else { panic!("line") };
+    line.translate(0.0, -*y);
+    let mut second = line.clone();
+    second.translate(0.0, 150.0);
+    let row = RowLayout {
+        height: 200.0,
+        items: vec![line, second, Placed::Fill { rect: Rect::new(0.0, 150.0, 100.0, 20.0), color: Rgb(200, 0, 0) }],
+        foreground: vec![Foreground { range: 1..3, z: 7 }],
+        bottom: 0.0,
+        cells: vec![CellPart { items: 0..3, end: Some(170.0) }],
+    };
+    let (a, b) = split_row(&row, 100.0).unwrap();
+    assert!(a.foreground.is_empty());
+    assert_eq!(b.foreground.len(), 1);
+    assert_eq!((b.foreground[0].range.clone(), b.foreground[0].z), (0..2, 7));
 }

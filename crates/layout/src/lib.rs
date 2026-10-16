@@ -1147,6 +1147,7 @@ fn layout_box(
                 };
                 let mut row_y = ty;
                 for row in &tl.rows {
+                    extend_foreground(&mut foreground, &row.foreground, items.len().saturating_sub(behind));
                     for it in &row.items {
                         let mut it = it.clone();
                         it.translate(tx, row_y);
@@ -1164,8 +1165,15 @@ fn layout_box(
     }
     let floats_bottom = float_tables.iter().map(|r| r.bottom()).fold(0.0, f32::max);
     ctx.hide_deleted = outer_hide;
-    order_foreground(&mut items, &foreground, behind);
-    BoxLayout { items, height: y.max(0.0), floats_bottom, last_top: last_top.max(0.0) }
+    if in_cell {
+        for group in &mut foreground {
+            group.range = group.range.start.saturating_add(behind)..group.range.end.saturating_add(behind);
+        }
+    } else {
+        order_foreground(&mut items, &foreground, behind);
+        foreground.clear();
+    }
+    BoxLayout { items, foreground, height: y.max(0.0), floats_bottom, last_top: last_top.max(0.0) }
 }
 
 /// The width a text frame without one takes: its widest line, with the paragraph's indents.
@@ -1220,6 +1228,7 @@ fn frame_float(fr: &wordcraft_doc::props::TextFrame) -> Float {
 /// height without it).
 struct BoxLayout {
     items: Vec<Placed>,
+    foreground: Vec<Foreground>,
     height: f32,
     floats_bottom: f32,
     last_top: f32,
@@ -3059,6 +3068,22 @@ fn append_foreground(items: &mut Vec<Placed>, ranges: &mut Vec<Foreground>, behi
     }
 }
 
+/// Carry table-cell groups into their owning story without changing item order.
+fn extend_foreground(out: &mut Vec<Foreground>, groups: &[Foreground], offset: usize) {
+    out.extend(groups.iter().map(|g| Foreground { range: g.range.start.saturating_add(offset)..g.range.end.saturating_add(offset), z: g.z }));
+}
+
+fn remap_foreground(groups: &[Foreground], map: &[std::ops::Range<usize>]) -> Vec<Foreground> {
+    groups
+        .iter()
+        .filter_map(|g| {
+            let mut kept = map.get(g.range.clone())?.iter().filter(|r| !r.is_empty());
+            let first = kept.next()?;
+            Some(Foreground { range: first.start..kept.next_back().unwrap_or(first).end, z: g.z })
+        })
+        .collect()
+}
+
 /// Foreground floats cover later inline content. Defer sorting until placement and vertical
 /// alignment finish, keeping their indices valid for pagination and column balancing.
 fn order_foreground(items: &mut Vec<Placed>, ranges: &[Foreground], behind: usize) {
@@ -3773,7 +3798,9 @@ fn place_table(ctx: &mut Ctx, pb: &mut PageBuilder, t: &wordcraft_doc::Table, bl
     let mut header_repeats = 0usize;
     let place = |pb: &mut PageBuilder, row: &table::RowLayout| {
         let (x, y) = (pb.col_x() + tl.x, pb.y);
-        if let Some(pg) = pb.page() {
+        let behind = pb.behind.last().copied().unwrap_or(0);
+        if let (Some(pg), Some(ranges)) = (pb.pages.last_mut(), pb.foreground.last_mut()) {
+            extend_foreground(ranges, &row.foreground, pg.items.len().saturating_sub(behind));
             for it in &row.items {
                 let mut it = it.clone();
                 it.translate(x, y);
@@ -3910,9 +3937,11 @@ fn place_floating_table(pb: &mut PageBuilder, tl: &table::TableLayout, f: &Table
             pb.advance(block, body_top);
             continue;
         }
-        if let Some(pg) = pb.page() {
+        let behind = pb.behind.last().copied().unwrap_or(0);
+        if let (Some(pg), Some(ranges)) = (pb.pages.last_mut(), pb.foreground.last_mut()) {
             let mut y = r.y;
             for row in &tl.rows {
+                extend_foreground(ranges, &row.foreground, pg.items.len().saturating_sub(behind));
                 for it in &row.items {
                     let mut it = it.clone();
                     it.translate(r.x, y);
