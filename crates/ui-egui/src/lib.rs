@@ -79,6 +79,7 @@ pub mod table_pen;
 pub mod table_resize;
 pub mod table_ruler;
 pub mod theme;
+pub mod tiling;
 pub mod widgets;
 pub mod window_geometry;
 pub mod wordart_menus;
@@ -2017,7 +2018,7 @@ impl WordApp {
                 panes::show(self, ui);
             }
             egui::CentralPanel::default().frame(egui::Frame::NONE.fill(t.canvas)).show(ui, |ui| {
-                canvas::show(self, ui);
+                tiling::show(self, ui);
             });
         }
         content_controls::popup(self, &ctx);

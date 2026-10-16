@@ -81,7 +81,6 @@ sync_github_name = false
 real_name = "Manuel Carmona"
 display_name = "manucarcor"
 [people.odedigo]
-
 [people.neupaneprashant]
 real_name = "Prashant Neupane"
 [people.cyril265]
@@ -135,3 +134,5 @@ sync_github_name = false
 real_name = "Andrej Škvorc"
 display_name = "Andrej Škvorc"
 sync_github_name = false
+[people.marcot3ssar1]
+sync_github_name = true

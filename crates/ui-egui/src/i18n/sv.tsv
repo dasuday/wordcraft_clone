@@ -60,6 +60,7 @@
 	Apply Character Style	Använd teckenstil
 	Apply Style	Använd stil
 	Arrange	Ordna
+	Arrange All	Arrange All
 	Arrange\nAll	Ordna\nalla
 	Arrow	Pil
 	Artistic Effects	Konstnärliga effekter
@@ -841,6 +842,8 @@
 	Show/Hide ¶	Visa/dölj ¶
 	Show\nComments	Visa\nkommentarer
 	Shrink Font 1 Point	Minska teckenstorleken 1 punkt
+	Side by Side	Side by Side
+	Side by\nSide	Side by\nSide
 	Side to Side	Sida vid sida
 	Side\nto Side	Sida vid\nsida
 	Signature Line	Signaturrad
@@ -892,8 +895,12 @@
 	Superscript	Upphöjd
 	Switch Modes	Byt läge
 	Switch\nModes	Byt\nläge
+	Switch Windows	Switch Windows
+	Switch\nWindows	Switch\nWindows
 	Symbol	Symbol
 	Symbols	Symboler
+	Sync\nScrolling	Sync\nScrolling
+	Synchronous Scrolling	Synchronous Scrolling
 	Synonyms	Synonymer
 	Tab	Tabb
 	Tab character	Tabbtecken
@@ -981,6 +988,7 @@
 	Vertical Alignment	Lodrät justering
 	View	Visa
 	View Gridlines	Visa stödlinjer
+	View Side by Side	View Side by Side
 	View State	Visningstillstånd
 	Views	Vyer
 	Voice	Röst

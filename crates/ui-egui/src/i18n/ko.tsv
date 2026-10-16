@@ -46,6 +46,7 @@
 	Apply Character Style	문자 스타일 적용
 	Apply Style	스타일 적용
 	Arrange	정렬
+	Arrange All	Arrange All
 	Arrange\nAll	모두\n정렬
 	Arrow	화살표
 	Artistic Effects	예술 효과
@@ -818,6 +819,8 @@
 	Show/Hide ¶	¶ 표시/숨기기
 	Show\nComments	메모\n표시
 	Shrink Font 1 Point	글꼴 크기 1포인트 줄이기
+	Side by Side	Side by Side
+	Side by\nSide	Side by\nSide
 	Side to Side	페이지 나란히
 	Side\nto Side	페이지\n나란히
 	Signature Line	서명란
@@ -864,8 +867,12 @@
 	Superscript	위 첨자
 	Switch Modes	모드 전환
 	Switch\nModes	모드\n전환
+	Switch Windows	Switch Windows
+	Switch\nWindows	Switch\nWindows
 	Symbol	기호
 	Symbols	기호
+	Sync\nScrolling	Sync\nScrolling
+	Synchronous Scrolling	Synchronous Scrolling
 	Synonyms	유의어
 	Tab	탭
 	Tab character	탭 문자
@@ -950,6 +957,7 @@
 	Vertical Alignment	세로 맞춤
 	View	보기
 	View Gridlines	눈금선 표시
+	View Side by Side	View Side by Side
 	View State	보기 상태
 	Views	보기
 	Voice	음성
