@@ -2245,3 +2245,9 @@
 # Reading Mode column widths (#1040)
 	Narrow	Вузька
 	Medium	Середня
+
+# Writing Assistant
+	Writing Assistant	Помічник із написання тексту
+	Prepare Writing Request	Підготувати запит на написання тексту
+	Accept Writing Suggestion	Прийняти запропонований текст
+	Assistant	Помічник

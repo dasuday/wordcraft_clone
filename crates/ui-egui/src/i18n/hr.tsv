@@ -2632,3 +2632,28 @@ preview	Title	Naslov
 	Bottom Right Cell	Donja desna ćelija
 	Inside Horizontal Border	Unutarnji vodoravni obrub
 	Inside Vertical Border	Unutarnji okomiti obrub
+
+# Writing Assistant
+	Writing Assistant	Pomoćnik za pisanje
+	Prepare Writing Request	Pripremi zahtjev za pisanje
+	Accept Writing Suggestion	Prihvati prijedlog teksta
+	Assistant	Pomoćnik
+	Writing\nAssistant	Pomoćnik\nza pisanje
+	Draft new text, rewrite a selection, or summarize it.	Stvorite novi tekst, prepišite odabir ili ga sažmite.
+	Model connection	Povezivanje s modelom
+	OpenAI-compatible chat completions URL	URL za dovršavanje razgovora kompatibilan s OpenAI-jem
+	Model name	Naziv modela
+	API key (saved unencrypted with local preferences)	API ključ (sprema se nešifriran u lokalnim postavkama)
+	Rewrite	Prepiši
+	Summarize	Sažmi
+	Instructions	Upute
+	Generate sends your instructions and selected text to the configured endpoint. No other document content is sent.	Generiranje šalje upute i odabrani tekst na postavljenu krajnju točku. Ostali sadržaj dokumenta ne šalje se.
+	Generate	Generiraj
+	Discard	Odbaci
+	Discarded; waiting for request to finish…	Odbačeno; čeka se završetak zahtjeva…
+	Generating…	Generiranje…
+	Preview — review and edit before accepting	Pretpregled — provjerite i uredite prije prihvaćanja
+	Insert after selection	Umetni nakon odabira
+	Replace selection	Zamijeni odabir
+	Model connections require the desktop app.	Povezivanje s modelima zahtijeva aplikaciju za računalo.
+	https://your-server/v1/chat/completions	https://your-server/v1/chat/completions

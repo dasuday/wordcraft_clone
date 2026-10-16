@@ -22,6 +22,7 @@ macro_rules! tl {
 
 pub mod a11y;
 pub mod a11y_pane;
+pub mod assistant;
 pub mod async_saves;
 pub mod autoscroll;
 pub mod backstage;
@@ -265,6 +266,8 @@ pub struct UiState {
     pub language: String,
     /// Editing preferences; the session owns them while running (see [`WordApp::prefs`]).
     pub editing: wordcraft_engine::Prefs,
+    /// File > Options > Writing Assistant: external writing model, saved with other local preferences.
+    pub assistant_profiles: assistant::Profiles,
     /// Read Aloud speed (1 = normal) and whether it skips citations and bibliographies.
     pub read_aloud_rate: f32,
     pub read_aloud_skip_citations: bool,
@@ -356,6 +359,7 @@ impl Default for UiState {
             window: None,
             language: i18n::AUTO.into(),
             editing: wordcraft_engine::Prefs::default(),
+            assistant_profiles: assistant::Profiles::default(),
             read_aloud_rate: 1.0,
             read_aloud_skip_citations: true,
             keytips_enabled: true,
@@ -391,6 +395,7 @@ impl UiState {
         if !v.is_object() {
             return None;
         }
+        assistant::migrate_preferences(&mut v);
         migrate_units(&mut v);
         Some(options::lenient(&v))
     }
@@ -418,6 +423,7 @@ fn migrate_units(v: &mut Value) {
 
 /// The application.
 pub struct WordApp {
+    pub assistant: assistant::State,
     pub session: Session,
     pub ui: UiState,
     pub services: Services,
@@ -571,6 +577,7 @@ impl WordApp {
             wordcraft_engine::set_system_locale(&tag);
         }
         WordApp {
+            assistant: assistant::State::default(),
             session,
             ui: UiState::default(),
             services,
@@ -689,6 +696,7 @@ impl WordApp {
     /// Restore preferences saved by [`WordApp::prefs`].
     pub fn apply_prefs(&mut self, ui: UiState) {
         self.ui = ui;
+        self.ui.assistant_profiles.sanitize();
         self.ui.backstage = false;
         // Word opens on Home every launch, so the tab `ui.json` holds is not restored. Going File
         // and back to the editor within the run still returns to the tab that was showing.
@@ -1190,6 +1198,9 @@ impl WordApp {
             self.canvas.scroll_to_caret = true;
         }
         for req in std::mem::take(&mut self.session.ui_requests) {
+            if req.get("assistant").and_then(Value::as_bool) == Some(true) {
+                self.assistant.open = true;
+            }
             self.handle_request(&req);
         }
         if let Some(p) = self.session.path.as_ref().map(|p| p.to_string_lossy().to_string())
@@ -1278,6 +1289,9 @@ impl WordApp {
 
     /// Commands that live in the UI layer.
     fn ui_command(&mut self, id: &str, p: &Value) -> Option<Result<Value, String>> {
+        if id.starts_with("ui.assistant.") {
+            return Some(assistant::command(self, id, p));
+        }
         let s = |k: &str| p.get(k).and_then(Value::as_str);
         Some(Ok(match id {
             "ui.tab" => {
@@ -2027,6 +2041,7 @@ impl WordApp {
         colors::show(self, &ctx);
         zotero::show_alert(self, &ctx);
         read_aloud::show(self, &ctx);
+        assistant::show(self, &ctx);
         crate::keytips::show(self, &ctx, ui);
         keys::global_shortcuts(self, &ctx);
         self.refocus_after_chrome_click(&ctx);

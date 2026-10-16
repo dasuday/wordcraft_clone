@@ -2,8 +2,7 @@
 
 **Stage: alpha** · next: beta, ~15 points (60% → 75% ready for real work) and ~150–230 h away
 
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-14 · **Change:** trivial (table style editor formats every part, #714); previously trivial: VML freeforms read and kept on save; previously trivial: progress log: consistent preferred cell widths; previously trivial: multi-paragraph field instructions no longer add blank lines; previously trivial: page-break-only list paragraphs hide their labels; previously trivial: progress log: grouped `flowChartOr` shapes draw their circle and crossing spokes; previously trivial: progress log: copies keep their formatting in other programs, #1523; previously trivial: progress log: privacy options on save, #1062; previously trivial: progress log: equation pictures in theme colours on Windows, #1002; previously trivial: symbol fonts, #776; previously trivial: the save prompt answers from the keyboard, #861; previously trivial: table column and row markers on the rulers, #700; previously trivial: table borders and the resize handle drag on the page, #217; previously trivial: formatting revisions landed, #41; previously trivial: Draw tab ink, #307, and Draw Table and Eraser, #303, landed: catalog 402/434; previously minor: readiness table with hours per audience; full number back to the additive weighted sum, 60%; mainstream and essentials numbers added; alpha gate checked; previously major: full re-measure against Word for Mac 16.113.4; restructured to the craftrules progress-docs standard) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-14 · **Change:** trivial (progress log: print-area strings translated in every catalog; previously trivial: progress log: ODT sections, #1379; previously trivial: progress log: table deletes, Change Case and Unlink Fields respect Track Changes and locked content controls, #1329; previously trivial: progress log: rounded rectangle corners, #1476; previously trivial: progress log: Save As type list, #1399; previously trivial: progress log: privacy options on save, #1062; previously trivial: progress log: equation pictures in theme colours on Windows, #1002; previously trivial: symbol fonts, #776; previously trivial: the save prompt answers from the keyboard, #861; previously trivial: table column and row markers on the rulers, #700; previously trivial: table borders and the resize handle drag on the page, #217; previously trivial: formatting revisions landed, #41; previously trivial: Draw tab ink, #307, and Draw Table and Eraser, #303, landed: catalog 402/434; previously minor: readiness table with hours per audience; full number back to the additive weighted sum, 60%; mainstream and essentials numbers added; alpha gate checked; previously major: full re-measure against Word for Mac 16.113.4; restructured to the craftrules progress-docs standard) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4
+> **Last reviewed:** 2026-10-16 · **Last updated:** 2026-10-16 · **Change:** minor (desktop Writing Assistant: Markdown formatting on suggestion acceptance; see [writing-assistant.md](docs/writing-assistant.md)) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4
 > **Printing update:** 2026-10-12 · direct desktop printing through craft-print; details below.
 
 WordCraft aims for complete parity with Microsoft Word, then goes further on speed, openness and
@@ -65,7 +64,7 @@ the two partial ones (real-world .docx, printing) complete, roughly.
 | Stability | 50% | 25–45 | [gaps.md](docs/gaps.md) (#3) |
 | Platforms | 95% (beyond Word on Linux, BSD, web) | 5–10 | this page |
 | Ecosystem and plugins | 15% | 40–80 + owner decisions | [gaps.md](docs/gaps.md) (#22) |
-| AI features | 40% (beyond Word for external agents; no in-app assistant) | 15–30 | [gaps.md](docs/gaps.md) (#25) |
+| AI features | Desktop draft/rewrite/summarize implemented; breadth not re-measured | not re-estimated | [Writing Assistant](docs/writing-assistant.md), [gaps.md](docs/gaps.md) (#25) |
 
 ## Features
 
@@ -135,6 +134,11 @@ Ranked, to beta (detail and remaining milestones in [docs/roadmap.md](docs/roadm
 ## Progress log
 
 | Date | What landed |
+| 2026-10-16 | Writing Assistant renders accepted Markdown as native formatting, headings and lists. |
+| 2026-10-16 | Writing Assistant supports saved server/model profiles, default selection and a collapsed model override. |
+| 2026-10-16 | Writing Assistant connection settings now live in Writing Assistant options and persist with other preferences. |
+| 2026-10-16 | Writing Assistant now displays incoming text incrementally, with acceptance disabled until completion. |
+| 2026-10-16 | Desktop Writing Assistant: configurable model connection, draft/rewrite/summarize, editable previews, guarded acceptance and Undo. PR #178 reviewed for overlap; external-agent chat stays separate. |
 | 2026-10-14 | DOCX row table border exceptions render and survive saving. Explicit cell borders win; a row exception does not change other rows. |
 | 2026-10-14 | Tab stops edited on the ruler: the corner selector picks Left/Center/Right/Decimal/Bar, a click sets a stop (Alt skips the snap), dragging moves it with a guide line and position tooltip, dragging off the ruler clears it; markers draw per kind and mirror for RTL; one `para.tabs` call and one undo step per gesture |
 | 2026-10-12 | Fields keep `w:dirty` through DOCX saves (#877): a begin marker flagged by a generator that couldn't compute a result (pandoc-style TOC placeholders) keeps the flag on open/save — as a buffered field or a range field — so Word still refreshes it on open; computing a result (Update Field, Update Table) clears it, like Word's F9 |
@@ -403,6 +407,11 @@ Ranked, to beta (detail and remaining milestones in [docs/roadmap.md](docs/roadm
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-16 | minor | Assistant Insert/Replace converts Markdown to native rich text, headings and lists in one undoable edit. |
+| 2026-10-16 | minor | Multiple saved model profiles, a default and a collapsed session override; existing connection migrated. |
+| 2026-10-16 | minor | Assistant connection moved to Writing Assistant options; endpoint, model and plain-text key persist across restarts. |
+| 2026-10-16 | minor | Live streaming assistant previews and guarded completion added; readiness estimates unchanged. |
+| 2026-10-16 | minor | Desktop Writing Assistant added; browser generation, streaming and saved credentials remain. Readiness estimates unchanged. |
 | 2026-10-14 | trivial | Progress log: row table border exceptions |
 | 2026-10-12 | minor | Czech proofing review: short-word splits rank after deletion, NOSUGGEST excludes suggestions while accepting typed forms, affix comments apply only to headers, ratios keep spaces and repeated-word messages use Czech quotes; synthetic engine end-to-end and latency checks |
 | 2026-10-12 | minor | Czech spelling from the installed Hunspell dictionary, runtime-table suggestions and generic checks; Czech interface writes cs-CZ documents; no Czech hyphenation patterns bundled; estimates unchanged |

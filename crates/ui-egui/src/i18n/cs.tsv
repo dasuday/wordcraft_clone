@@ -2624,3 +2624,28 @@ preview	Title	Ukázka
 # Reading Mode column widths (#1040)
 	Narrow	Úzká
 	Medium	Střední
+
+# Writing Assistant
+	Writing Assistant	Asistent psaní
+	Prepare Writing Request	Připravit požadavek na psaní
+	Accept Writing Suggestion	Přijmout návrh textu
+	Assistant	Asistent
+	Writing\nAssistant	Asistent\npsaní
+	Draft new text, rewrite a selection, or summarize it.	Vytvořte nový text, přeformulujte výběr nebo jej shrňte.
+	Model connection	Připojení k modelu
+	OpenAI-compatible chat completions URL	URL dokončování chatu kompatibilní s OpenAI
+	Model name	Název modelu
+	API key (saved unencrypted with local preferences)	Klíč API (uložen nešifrovaně v místních předvolbách)
+	Rewrite	Přeformulovat
+	Summarize	Shrnout
+	Instructions	Pokyny
+	Generate sends your instructions and selected text to the configured endpoint. No other document content is sent.	Generovat odešle pokyny a vybraný text na nastavený server. Žádný další obsah dokumentu se neodesílá.
+	Generate	Generovat
+	Discard	Zahodit
+	Discarded; waiting for request to finish…	Zahozeno; čeká se na dokončení požadavku…
+	Generating…	Generování…
+	Preview — review and edit before accepting	Náhled — před přijetím zkontrolujte a upravte
+	Insert after selection	Vložit za výběr
+	Replace selection	Nahradit výběr
+	Model connections require the desktop app.	Připojení k modelům vyžaduje desktopovou aplikaci.
+	https://your-server/v1/chat/completions	https://your-server/v1/chat/completions

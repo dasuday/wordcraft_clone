@@ -1,5 +1,5 @@
 //! File › Options (#485): a list of panes on the left (General, Display, Proofing, Save,
-//! Language, Accessibility, Advanced, Agents), the chosen pane's settings on the right. Only
+//! Language, Accessibility, Advanced, Writing Assistant, Agents), the chosen pane's settings on the right. Only
 //! settings WordCraft carries out are shown. Each pane is one function below, so a new setting
 //! goes into its pane's function. Settings agents can change too go through `file.options`; the
 //! rest live in [`crate::UiState`] (saved in `ui.json`).
@@ -101,6 +101,7 @@ fn pane_label(id: &str) -> &'static str {
         "accessibility" => "Accessibility",
         "advanced" => "Advanced",
         "agents" => "Agents",
+        "assistant" => "Writing Assistant",
         _ => "General",
     }
 }
@@ -146,6 +147,10 @@ pub fn page(app: &mut WordApp, ui: &mut Ui) {
                 "accessibility" => accessibility(app, ui),
                 "advanced" => advanced(app, ui),
                 "agents" => agents(ui),
+                "assistant" => {
+                    section(ui, "Writing Assistant");
+                    crate::assistant::settings(&mut app.ui.assistant_profiles, &mut app.assistant, ui);
+                }
                 _ => general(app, ui),
             }
         });
@@ -733,6 +738,33 @@ mod tests {
 
     fn app() -> WordApp {
         WordApp::new(wordcraft_engine::Session::new(wordcraft_doc::Document::new()), Services::default())
+    }
+
+    #[test]
+    fn assistant_connection_opens_its_own_options_pane() {
+        let mut a = app();
+        a.run("assistant.open", json!({})).unwrap();
+        let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(1440.0, 900.0)).build_ui_state(
+            |ui, app: &mut WordApp| {
+                let ctx = ui.ctx().clone();
+                app.logic(&ctx);
+                app.ui(ui);
+            },
+            a,
+        );
+        h.run_steps(4);
+        assert!(h.query_by_label("Model name").is_none());
+        h.get_by_label("Model connection").click();
+        h.run_steps(4);
+        assert!(!h.state().assistant.open);
+        assert!(h.state().ui.backstage);
+        assert_eq!(h.state().ui.options_pane, "assistant");
+        assert!(h.query_by_label("Model name").is_some());
+        assert!(h.query_by_label("API key (saved unencrypted with local preferences)").is_some());
+        h.get_by_label("General").click();
+        h.run_steps(4);
+        assert!(h.query_by_label("Model name").is_none());
+        assert!(!h.state().session.dirty);
     }
 
     fn nav_harness(language: &str, percent: u16) -> egui_kittest::Harness<'static, WordApp> {

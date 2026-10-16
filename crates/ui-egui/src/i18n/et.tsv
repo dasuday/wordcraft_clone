@@ -2267,3 +2267,9 @@
 # Reading Mode column widths (#1040)
 	Narrow	Kitsas
 	Medium	Keskmine
+
+# Writing Assistant
+	Writing Assistant	Kirjutamisabiline
+	Prepare Writing Request	Valmista kirjutamistaotlus ette
+	Accept Writing Suggestion	Nõustu tekstisoovitusega
+	Assistant	Abiline

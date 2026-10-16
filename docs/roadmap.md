@@ -1,6 +1,6 @@
 # WordCraft roadmap: milestones and what's next
 
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-12 · **Change:** minor (Czech proofing review fixes; previously minor: Portuguese proofing; previously minor: Polish interface and Polish proofing; previously trivial: M7: formatting revisions landed, #41; previously trivial: M5: Draw Table and Eraser landed, #303; previously minor: beta distance restated: ~15 points, ~150–230 h; previously: alpha gate checked: six core workflows pass; previously major: milestones moved here from ROADMAP.md; Current focus set from the re-measured gaps) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4
+> **Last reviewed:** 2026-10-16 · **Last updated:** 2026-10-16 · **Change:** minor (desktop Writing Assistant: Markdown formatting on suggestion acceptance; see [writing-assistant.md](writing-assistant.md)) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4
 
 Forward-looking plan. The summary is [`ROADMAP.md`](../ROADMAP.md); the ranked work list is
 [`gaps.md`](gaps.md); the numbers are in [`target-app-parity.md`](target-app-parity.md). Hours are
@@ -68,12 +68,19 @@ partial rows are fidelity gaps (beta work), not broken workflows. WordCraft stay
 ## Next after beta
 
 Charts and SmartArt editing, the Draw tab, `.doc` writing, PDF Reflow, the remaining interface
-languages, screen-reader access, ecosystem decisions (VBA, add-ins, cloud), an in-app assistant.
+languages, screen-reader access, ecosystem decisions (VBA, add-ins, cloud). The desktop
+[Writing Assistant](writing-assistant.md) now covers draft/rewrite/summarize with streaming previews;
+browser generation and encrypted credential storage remain.
 
 ## Revision history
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-16 | minor | Assistant Insert/Replace converts Markdown to native rich text, headings and lists in one undoable edit. |
+| 2026-10-16 | minor | Multiple saved model profiles, a default and a collapsed session override; existing connection migrated. |
+| 2026-10-16 | minor | Assistant connection moved to Writing Assistant options; endpoint, model and plain-text key persist across restarts. |
+| 2026-10-16 | minor | Live streaming assistant previews and guarded completion added; readiness estimates unchanged. |
+| 2026-10-16 | minor | Desktop Writing Assistant added; browser generation, streaming and saved credentials remain. Readiness estimates unchanged. |
 | 2026-10-12 | minor | Czech proofing review: short-word splits rank after deletion, NOSUGGEST excludes suggestions while accepting typed forms, affix comments apply only to headers, ratios keep spaces and repeated-word messages use Czech quotes; synthetic engine end-to-end and latency checks |
 | 2026-10-12 | minor | Czech spelling from the installed Hunspell dictionary, runtime-table suggestions and generic checks; Czech interface writes cs-CZ documents; no Czech hyphenation patterns bundled; estimates unchanged |
 | 2026-10-12 | minor | M15: Portuguese proofing (pt-BR spelling from the installed VERO dictionary, suggestions, grammar, hyphenation; Review › Language gains Português (Brasil)) |

@@ -2630,3 +2630,28 @@ preview	Title	Пример
 # Reading Mode column widths (#1040)
 	Narrow	Узкая
 	Medium	Средняя
+
+# Writing Assistant
+	Writing Assistant	Помощник по написанию текста
+	Prepare Writing Request	Подготовить запрос на написание текста
+	Accept Writing Suggestion	Принять предложенный текст
+	Assistant	Помощник
+	Writing\nAssistant	Помощник\nпо письму
+	Draft new text, rewrite a selection, or summarize it.	Создайте текст, перепишите выделение или составьте краткое изложение.
+	Model connection	Подключение к модели
+	OpenAI-compatible chat completions URL	URL завершений чата, совместимый с OpenAI
+	Model name	Название модели
+	API key (saved unencrypted with local preferences)	Ключ API (сохраняется без шифрования в локальных настройках)
+	Rewrite	Переписать
+	Summarize	Кратко изложить
+	Instructions	Инструкции
+	Generate sends your instructions and selected text to the configured endpoint. No other document content is sent.	Генерация отправляет инструкции и выделенный текст настроенному серверу. Остальное содержимое документа не отправляется.
+	Generate	Создать
+	Discard	Отбросить
+	Discarded; waiting for request to finish…	Отброшено; ожидание завершения запроса…
+	Generating…	Создание…
+	Preview — review and edit before accepting	Предпросмотр — проверьте и исправьте перед принятием
+	Insert after selection	Вставить после выделения
+	Replace selection	Заменить выделение
+	Model connections require the desktop app.	Для подключения к моделям нужно настольное приложение.
+	https://your-server/v1/chat/completions	https://your-server/v1/chat/completions

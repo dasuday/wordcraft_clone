@@ -2232,3 +2232,9 @@
 # Reading Mode column widths (#1040)
 	Narrow	Schmal
 	Medium	Mittel
+
+# Writing Assistant
+	Writing Assistant	Schreibassistent
+	Prepare Writing Request	Schreibanfrage vorbereiten
+	Accept Writing Suggestion	Textvorschlag übernehmen
+	Assistant	Assistent

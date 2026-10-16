@@ -2641,3 +2641,28 @@ preview	Title	Esempio
 # Reading Mode column widths (#1040)
 	Narrow	Stretta
 	Medium	Media
+
+# Writing Assistant
+	Writing Assistant	Assistente di scrittura
+	Prepare Writing Request	Prepara richiesta di scrittura
+	Accept Writing Suggestion	Accetta suggerimento di testo
+	Assistant	Assistente
+	API key (saved unencrypted with local preferences)	Chiave API (salvata in chiaro nelle preferenze locali)
+	Discard	Scarta
+	Discarded; waiting for request to finish…	Scartato; in attesa che la richiesta termini…
+	Draft new text, rewrite a selection, or summarize it.	Crea nuovo testo, riscrivi una selezione o riassumila.
+	Generate	Genera
+	Generate sends your instructions and selected text to the configured endpoint. No other document content is sent.	Genera invia le istruzioni e il testo selezionato al servizio configurato. Non invia altro contenuto del documento.
+	Generating…	Generazione in corso…
+	Insert after selection	Inserisci dopo la selezione
+	Instructions	Istruzioni
+	Model connection	Connessione al modello
+	Model connections require the desktop app.	La connessione ai modelli richiede l'app desktop.
+	Model name	Nome del modello
+	OpenAI-compatible chat completions URL	URL del servizio di completamento chat compatibile con OpenAI
+	Preview — review and edit before accepting	Anteprima — verifica e modifica prima di accettare
+	Replace selection	Sostituisci selezione
+	Rewrite	Riscrivi
+	Summarize	Riassumi
+	Writing\nAssistant	Assistente\ndi scrittura
+	https://your-server/v1/chat/completions	https://your-server/v1/chat/completions

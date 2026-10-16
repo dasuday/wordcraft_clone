@@ -2647,3 +2647,28 @@ preview	Title	Titel
 	Bottom Right Cell	Nedre högra cellen
 	Inside Horizontal Border	Inre vågrät kantlinje
 	Inside Vertical Border	Inre lodrät kantlinje
+
+# Writing Assistant
+	Writing Assistant	Skrivassistent
+	Prepare Writing Request	Förbered skrivförfrågan
+	Accept Writing Suggestion	Godkänn textförslag
+	Assistant	Assistent
+	Writing\nAssistant	Skrivassistent
+	Draft new text, rewrite a selection, or summarize it.	Skapa ny text, skriv om markeringen eller sammanfatta den.
+	Model connection	Modellanslutning
+	OpenAI-compatible chat completions URL	URL för OpenAI-kompatibla chattkompletteringar
+	Model name	Modellnamn
+	API key (saved unencrypted with local preferences)	API-nyckel (sparas okrypterad i lokala inställningar)
+	Rewrite	Skriv om
+	Summarize	Sammanfatta
+	Instructions	Instruktioner
+	Generate sends your instructions and selected text to the configured endpoint. No other document content is sent.	Generera skickar instruktionerna och den markerade texten till den konfigurerade slutpunkten. Inget annat dokumentinnehåll skickas.
+	Generate	Skapa
+	Discard	Förkasta
+	Discarded; waiting for request to finish…	Förkastat; väntar på att begäran ska slutföras…
+	Generating…	Skapar…
+	Preview — review and edit before accepting	Förhandsvisning — granska och redigera innan du godkänner
+	Insert after selection	Infoga efter markering
+	Replace selection	Ersätt markering
+	Model connections require the desktop app.	Modellanslutningar kräver skrivbordsappen.
+	https://your-server/v1/chat/completions	https://your-server/v1/chat/completions

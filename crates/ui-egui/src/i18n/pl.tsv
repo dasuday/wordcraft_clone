@@ -2622,3 +2622,28 @@ preview	Title	Tytuł
 # Reading Mode column widths (#1040)
 	Narrow	Wąska
 	Medium	Średnia
+
+# Writing Assistant
+	Writing Assistant	Asystent pisania
+	Prepare Writing Request	Przygotuj prośbę o napisanie tekstu
+	Accept Writing Suggestion	Zaakceptuj propozycję tekstu
+	Assistant	Asystent
+	Writing\nAssistant	Asystent\npisania
+	Draft new text, rewrite a selection, or summarize it.	Utwórz nowy tekst, przeredaguj zaznaczenie lub je podsumuj.
+	Model connection	Połączenie z modelem
+	OpenAI-compatible chat completions URL	Adres URL uzupełniania czatu zgodny z OpenAI
+	Model name	Nazwa modelu
+	API key (saved unencrypted with local preferences)	Klucz API (zapisywany bez szyfrowania w lokalnych preferencjach)
+	Rewrite	Przeredaguj
+	Summarize	Podsumuj
+	Instructions	Instrukcje
+	Generate sends your instructions and selected text to the configured endpoint. No other document content is sent.	Generowanie wysyła instrukcje i zaznaczony tekst do skonfigurowanej usługi. Pozostała treść dokumentu nie jest wysyłana.
+	Generate	Generuj
+	Discard	Odrzuć
+	Discarded; waiting for request to finish…	Odrzucono; oczekiwanie na zakończenie żądania…
+	Generating…	Generowanie…
+	Preview — review and edit before accepting	Podgląd — sprawdź i edytuj przed zaakceptowaniem
+	Insert after selection	Wstaw po zaznaczeniu
+	Replace selection	Zastąp zaznaczenie
+	Model connections require the desktop app.	Połączenia z modelami wymagają aplikacji komputerowej.
+	https://your-server/v1/chat/completions	https://your-server/v1/chat/completions
