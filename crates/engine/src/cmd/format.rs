@@ -95,7 +95,7 @@ pub fn specs() -> Vec<CommandSpec> {
         CommandSpec::new("format.shadow", "Shadow", "Home › Font › Text Effects", |s, v| toggle(s, v, |r| r.shadow, |c, on| c.shadow = Some(on))),
         CommandSpec::new("format.emboss", "Emboss", "Home › Font › Font", |s, v| toggle(s, v, |r| r.emboss, |c, on| c.emboss = Some(on))),
         CommandSpec::new("format.engrave", "Engrave", "Home › Font › Font", |s, v| toggle(s, v, |r| r.engrave, |c, on| c.engrave = Some(on))),
-        CommandSpec::new("format.font", "Font", "Home › Font", font).key("Mod+Shift+F").params(r#"{"name"?: string, "eastAsia"?: string}"#),
+        CommandSpec::new("format.font", "Font", "Home › Font", font).key("Mod+Shift+F").params(r#"{"name"?: string, "eastAsia"?: string} (in East Asian text, `name` alone sets only the East Asian font; use format.set props.font for the Latin font)"#),
         CommandSpec::new("format.size", "Font Size", "Home › Font", size).key("Mod+Shift+P").params(r#"{"size": number}"#),
         CommandSpec::new("format.growFont", "Increase Font Size", "Home › Font", |s, _| step_size(s, 1)).key("Mod+Shift+. / Mod+Shift+>"),
         CommandSpec::new("format.shrinkFont", "Decrease Font Size", "Home › Font", |s, _| step_size(s, -1)).key("Mod+Shift+, / Mod+Shift+<"),
@@ -297,11 +297,14 @@ impl Script {
             Script::Complex => "complex",
         }
     }
-    /// `None` for neutral characters (spaces, digits, punctuation).
-    fn of(c: char) -> Option<Script> {
-        if wordcraft_layout::para::is_east_asian(c) {
+    /// How layout picks the font for `c`; `cs_run`: the run is formatted complex-script
+    /// (`rtl`/`cs`). `None` for neutral characters (spaces, digits, punctuation).
+    fn of(c: char, cs_run: bool) -> Option<Script> {
+        if c.is_whitespace() {
+            None
+        } else if wordcraft_layout::para::east_asian(c) {
             Some(Script::EastAsia)
-        } else if wordcraft_doc::bidi::is_complex_script(c) {
+        } else if cs_run || wordcraft_doc::bidi::is_complex_script(c) {
             Some(Script::Complex)
         } else if c.is_alphabetic() {
             Some(Script::Latin)
@@ -315,19 +318,34 @@ impl Script {
 /// character before it (else after it). Anything else is Latin.
 fn script_at(s: &Session) -> Script {
     let (a, b) = s.sel.ordered();
+    let cs_run = |p: &wordcraft_doc::Paragraph, off: usize| {
+        let c = p.props_of_char(off);
+        c.rtl.unwrap_or(false) || c.cs.unwrap_or(false)
+    };
     if a == b {
         let Some(p) = s.doc.para_at(&a) else { return Script::Latin };
-        let before = p.text.get(..a.off).and_then(|t| t.chars().next_back());
-        let after = p.text.get(a.off..).and_then(|t| t.chars().next());
-        return before.and_then(Script::of).or_else(|| after.and_then(Script::of)).unwrap_or(Script::Latin);
+        let before = p.text.get(..a.off).and_then(|t| t.chars().next_back().map(|c| (c, a.off - c.len_utf8())));
+        let after = p.text.get(a.off..).and_then(|t| t.chars().next().map(|c| (c, a.off)));
+        let of = |x: Option<(char, usize)>| x.and_then(|(c, off)| Script::of(c, cs_run(p, off)));
+        return of(before).or_else(|| of(after)).unwrap_or(Script::Latin);
     }
     let mut found: Option<Script> = None;
-    for path in s.doc.paths_between(&a, &b).into_iter().take(1000) {
+    let mut budget = 20_000usize;
+    for path in s.doc.paths_between(&a, &b) {
+        budget = budget.saturating_sub(1);
+        if budget == 0 {
+            return found.unwrap_or(Script::Latin);
+        }
         let Some(p) = s.doc.para(a.story, &path) else { continue };
         let from = if path == a.path { a.off } else { 0 };
         let to = if path == b.path { b.off } else { p.len() };
         let Some(text) = p.text.get(from..to) else { continue };
-        for sc in text.chars().take(10_000).filter_map(Script::of) {
+        for (i, c) in text.char_indices() {
+            budget = budget.saturating_sub(1);
+            if budget == 0 {
+                return found.unwrap_or(Script::Latin);
+            }
+            let Some(sc) = Script::of(c, cs_run(p, from + i)) else { continue };
             match found {
                 None => found = Some(sc),
                 Some(f) if f != sc => return Script::Latin,
@@ -341,7 +359,7 @@ fn script_at(s: &Session) -> Script {
 fn toggle(s: &mut Session, v: &Value, get: fn(&ResolvedChar) -> bool, set: fn(&mut CharProps, bool)) -> CmdResult {
     let on = match p::bool(v, "value") {
         Some(b) => b,
-        None => !resolved(s).iter().all(get),
+        None => !shown(s).iter().all(get),
     };
     apply(s, &|c| set(c, on))
 }
@@ -351,7 +369,7 @@ fn underline(s: &mut Session, v: &Value) -> CmdResult {
     let on = match (p::bool(v, "value"), style) {
         (Some(b), _) => b,
         (None, Some(_)) => true,
-        (None, None) => !resolved(s).iter().all(|r| r.underline != Underline::None),
+        (None, None) => !shown(s).iter().all(|r| r.underline != Underline::None),
     };
     let u = if on { style.unwrap_or(Underline::Single) } else { Underline::None };
     apply(s, &|c| c.underline = Some(u))

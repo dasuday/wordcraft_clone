@@ -53,7 +53,6 @@ formatting use the existing editing primitives. Tests: `sample_text_formulas_exp
 | Keys | Word's result | Test |
 |---|---|---|
 | type, select some of it, type over it | two undo steps: the first ⌘Z brings the selected text back (still selected), the second removes the typing. Uninterrupted typing stays one step | `typing_then_selecting_then_typing_are_two_undo_steps` |
-| ⌘B / Font / Size with the caret inside a word | the whole word takes it (Word's default "Select entire word"); at a word start, just after a word or between spaces only typed text does. The Font, Size and Bold… controls show the character before the caret, not blank when the word is mixed | `collapsed_caret_inside_a_word_still_formats_the_whole_word`, `collapsed_caret_state_is_the_run_at_the_caret_not_the_whole_word` |
 | ⌘B with nothing selected, ⌘Z, type | the text isn't bold (Undo takes the waiting caret formatting back too); ⌘Y brings it back | `undoing_bold_at_the_caret_turns_bold_typing_off_again` |
 
 ## Paste
@@ -289,6 +288,14 @@ Word.
   paragraphs, export PDF). Keystroke runs steal focus and race the person at the keyboard: keep
   them short, read the document back to verify, and ask first. Screenshots of Word's window only,
   under `plan/word/screenshots/`.
+
+## Formatting at the caret
+
+Tests are in `crates/engine/src/tests.rs`.
+
+| Keys | Word's result | Test |
+|---|---|---|
+| ⌘B / Font / Size with the caret inside a word | the whole word takes it (Word's default "Select entire word"); at a word start, just after a word or between spaces only typed text does. The Font, Size and Bold… controls show the character before the caret, not blank when the word is mixed | `tests::collapsed_caret_inside_a_word_still_formats_the_whole_word`, `tests::collapsed_caret_state_is_the_run_at_the_caret_not_the_whole_word` |
 
 ## Revision history
 
