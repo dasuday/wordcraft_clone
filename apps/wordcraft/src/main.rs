@@ -459,7 +459,7 @@ fn main() -> eframe::Result {
             if let Some(backend) = cloud::service(cc.egui_ctx.clone()) {
                 app.cloud.connect(backend);
             }
-            app.share.connect(collabcraft_share::CollabCraft::from_fn(cloud::client));
+            app.share.connect(collabcraft_share::CollabCraft::from_fn(cloud::client).for_app("wordcraft"));
             app.watch_desktop_theme(&cc.egui_ctx);
             if prefs_enabled()
                 && let Some(dir) = wordcraft_control_key::settings_dir()

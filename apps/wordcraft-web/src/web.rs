@@ -66,7 +66,7 @@ pub fn start() {
                     app.autosave = false;
                     app.cloud.connect(crate::cloud::Service::new(cc.egui_ctx.clone()));
                     if let Some(share) = collabcraft_share::CollabCraft::from_env() {
-                        app.share.connect(share);
+                        app.share.connect(share.for_app("wordcraft"));
                     }
                     wordcraft_ui_egui::cloud::start(&mut app);
                     // No document to show: start on File › Home, as the desktop app does (#766).
