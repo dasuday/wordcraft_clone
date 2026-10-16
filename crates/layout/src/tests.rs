@@ -7316,3 +7316,34 @@ fn invalid_grid_keeps_fallback() {
         assert_eq!(widths, [150.0, 150.0], "grid {width}");
     }
 }
+
+#[test]
+fn tiny_grid_scales_to_width() {
+    for unit in [0.05, 0.25, 0.5, f32::MIN_POSITIVE, f32::from_bits(1)] {
+        for ratio in [1.0, 3.0] {
+            let mut d = Document::new();
+            let mut table = Table::new(1, 2, 300.0);
+            table.props.fixed = true;
+            table.props.width = Some(300.0);
+            table.grid = vec![unit, unit * ratio];
+            for cell in &mut table.rows[0].cells {
+                cell.props.width = None;
+            }
+            d.body = vec![Arc::new(Block::Table(table))];
+            let l = lay(&d);
+            let widths: Vec<_> = l.pages[0]
+                .items
+                .iter()
+                .filter_map(|item| match item {
+                    Placed::Cell { rect, .. } => Some(rect.w),
+                    _ => None,
+                })
+                .collect();
+            let first = 300.0 / (1.0 + ratio);
+            assert_eq!(widths.len(), 2);
+            for (width, want) in widths.iter().zip([first, 300.0 - first]) {
+                assert!(width.is_finite() && (width - want).abs() < 0.001, "unit {unit}, ratio {ratio}: {widths:?}");
+            }
+        }
+    }
+}
