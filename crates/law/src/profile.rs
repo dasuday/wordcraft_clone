@@ -202,6 +202,10 @@ pub struct SectionSpec {
     /// The style these paragraphs use; one of this document type's styles.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub style: Option<String>,
+    /// How the checks find this section: its first paragraph in this style (one of this document
+    /// type's styles). Without it, a paragraph whose whole text is the section's `name`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub match_style: Option<String>,
     /// Caption fields this section holds (the caption section only): `court`, `county`,
     /// `partyNames`, `partyRoles`, `partyAddresses`, `caseNumber`, `attorneyName`, `barNumber`,
     /// `attorneyAddress`, `telephone`, `email`, `signature`.
@@ -442,10 +446,12 @@ fn check_doc(out: &mut Vec<String>, at: &str, d: &DocSpec) {
             out.push(format!("{at}.id `{}` is listed twice", sec.id));
         }
         ids.push(&sec.id);
-        if let Some(style) = &sec.style
-            && !names.iter().any(|n| n.eq_ignore_ascii_case(style))
-        {
-            out.push(format!("{at}.style `{style}` is not a style of this document type"));
+        for (key, style) in [("style", &sec.style), ("matchStyle", &sec.match_style)] {
+            if let Some(style) = style
+                && !names.iter().any(|n| n.eq_ignore_ascii_case(style))
+            {
+                out.push(format!("{at}.{key} `{style}` is not a style of this document type"));
+            }
         }
         for f in &sec.fields {
             check_id(out, &format!("{at}.fields"), f);

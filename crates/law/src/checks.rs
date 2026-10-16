@@ -87,7 +87,8 @@ struct LocatedSection {
     path: Path,
 }
 
-/// Section headings found in document order (by matching profile section names).
+/// Section headings found in document order (by matching profile section names, or the
+/// paragraph style for a section with `matchStyle`).
 fn locate_sections(doc: &Document, spec: &DocSpec) -> Vec<LocatedSection> {
     let mut found = Vec::new();
     for path in doc.para_paths(StoryRef::Body) {
@@ -101,8 +102,11 @@ fn locate_sections(doc: &Document, spec: &DocSpec) -> Vec<LocatedSection> {
     found
 }
 
-fn section_heading_matches(_doc: &Document, para: &Paragraph, sec: &SectionSpec) -> bool {
-    para.plain_text().trim().eq_ignore_ascii_case(sec.name.trim())
+fn section_heading_matches(doc: &Document, para: &Paragraph, sec: &SectionSpec) -> bool {
+    match &sec.match_style {
+        Some(style) => para_style_name(doc, para).is_some_and(|n| n.eq_ignore_ascii_case(style)),
+        None => para.plain_text().trim().eq_ignore_ascii_case(sec.name.trim()),
+    }
 }
 
 fn para_style_name(doc: &Document, para: &Paragraph) -> Option<String> {

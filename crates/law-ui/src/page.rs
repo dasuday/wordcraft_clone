@@ -1,4 +1,5 @@
-//! File › Options › LawCraft: court profiles (list, edit, import, export, approve). English only:
+//! File › Options › LawCraft: court profiles (list, edit, import, export, approve) and firm
+//! details ([`crate::pleading::firm_section`]). English only:
 //! the add-in's own words aren't in WordCraft's interface catalogs.
 
 use std::collections::BTreeMap;
@@ -38,6 +39,14 @@ pub struct LawUi {
     /// Check font name being edited (`profile_id` + document type + check index). The same
     /// draft-until-commit rule as [`Self::style_font_drafts`].
     pub check_font_drafts: BTreeMap<String, String>,
+    /// The New Pleading window, while it is open.
+    pub pleading: Option<crate::pleading::PleadingForm>,
+    /// Firm details as shown on the options page (`None`: read the saved ones again).
+    pub firm_draft: Option<crate::pleading::Firm>,
+    /// The options page's firm details have changes not saved yet.
+    pub firm_dirty: bool,
+    /// Why the options page's firm details couldn't be saved.
+    pub firm_message: Option<String>,
 }
 
 /// After selecting or importing a profile, keep `doc_type` on a key that exists in `docs`.
@@ -286,6 +295,8 @@ pub fn page(app: &mut Ctx<'_>, ui: &mut Ui) {
             }
         });
     });
+    ui.add_space(16.0);
+    crate::pleading::firm_section(app, ui);
 }
 
 fn profile_editor(app: &mut Ctx<'_>, ui: &mut Ui, id: &str, list: &[Value]) {

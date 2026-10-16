@@ -1,11 +1,13 @@
 //! LawCraft's interface: the add-in the desktop app hands WordCraft's interface
 //! ([`wordcraft_ui_egui::addins::AddIn`]). File › Options › Add-ins turns it on or off; while it is
 //! on it installs the `law.*` commands and the Law ribbon tab, and brings its own File › Options
-//! page for court profiles. WordCraft's interface code never names it.
+//! page for court profiles and firm details, and the New Pleading window. WordCraft's interface
+//! code never names it.
 
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 
 mod page;
+pub mod pleading;
 
 use std::ops::{Deref, DerefMut};
 
@@ -70,7 +72,8 @@ impl AddIn for LawAddIn {
     }
 
     fn leave_page(&mut self, app: &mut WordApp) -> bool {
-        let saved = page::commit_pending_drafts(&mut Ctx { app, law: &mut self.state });
+        let mut cx = Ctx { app, law: &mut self.state };
+        let saved = page::commit_pending_drafts(&mut cx) && pleading::save_firm(&mut cx);
         if saved {
             // Nothing is pending any more: an error from an earlier attempt is stale.
             self.state.validation = None;
@@ -80,6 +83,18 @@ impl AddIn for LawAddIn {
 
     fn file_picked(&mut self, app: &mut WordApp, tag: &str, picked: Option<String>) -> Result<Value, String> {
         page::finish_pick(&mut Ctx { app, law: &mut self.state }, tag, picked)
+    }
+
+    fn open(&mut self, what: &str) {
+        pleading::open(&mut self.state, what);
+    }
+
+    fn input_dialog(&self, id: &str, params: &Value) -> Option<&'static str> {
+        (id == "law.pleadings.new" && params.as_object().is_none_or(|p| p.is_empty())).then_some("newPleading")
+    }
+
+    fn dialog(&mut self, app: &mut WordApp, ctx: &egui::Context) {
+        pleading::show(&mut Ctx { app, law: &mut self.state }, ctx);
     }
 
     fn as_any(&self) -> &dyn std::any::Any {

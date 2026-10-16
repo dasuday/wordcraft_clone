@@ -1,4 +1,4 @@
-//! The LawCraft commands: `law.profiles.*`.
+//! The LawCraft commands: `law.profiles.*`, `law.checks.*`, `law.pleadings.new` and `law.firm.*`.
 //!
 //! Everything a person or an agent can do with court profiles is a command, so the ribbon, the
 //! command palette, shortcuts, the CLI, the JSON control channel and the MCP server all reach
@@ -16,12 +16,14 @@ use wordcraft_engine::{CmdError, CommandSpec, p};
 
 use crate::apply;
 use crate::checks;
+use crate::pleadings;
 use crate::profile::{Patch, Profile};
 use crate::store::{LawError, Store};
 
 /// Where the profile commands live in the ribbon.
 const LOC: &str = "Law › Court Profiles";
 const CHECKS_LOC: &str = "Law › Court Checks";
+const PLEADINGS_LOC: &str = "Law";
 
 /// The profiles WordCraft knows: the ones it ships and the user's own.
 static STORE: OnceLock<Mutex<Store>> = OnceLock::new();
@@ -188,6 +190,15 @@ pub fn specs() -> Vec<CommandSpec> {
         .pure(),
         // The court-check findings last stored for this document. LawCraft's own command, so
         // core's Review menu and its interface catalogs carry no court-specific entry.
+        CommandSpec::new("law.pleadings.new", "New Pleading", PLEADINGS_LOC, pleadings::new_pleading).params(
+            r#"{} opens the New Pleading dialog; or {"type": "motion|notice|answer|petition", "title": string, "courtType"?: string (default "CIRCUIT"), "county": string, "caseNumber": string (may be empty for a petition), "firstSide": {"names": [string], "role": string}, "secondSide": {"names": [string], "role": string}, "weRepresent": "first|second", "service": "efileCounsel|efileUsps" (not for a petition), "servedParty"?: string, "servedAddress"?: string (both required for efileUsps), "filingDate"?: "YYYY-MM-DD" (default today, UTC), "verified"?: bool (petition only), "firm"?: Firm (default: law.firm.get)} → {"profile", "type", "sections": [section id]}; writes into a blank document only"#,
+        ),
+        CommandSpec::new("law.firm.get", "Firm Details", PLEADINGS_LOC, pleadings::firm_get)
+            .params(r#"{} → the saved firm details {"firmName", "address1", "address2"?, "city", "state", "zip", "phone", "fax"?, "email", "attorneyName", "barNumber"}, or {}"#)
+            .pure(),
+        CommandSpec::new("law.firm.set", "Save Firm Details", PLEADINGS_LOC, pleadings::firm_set)
+            .params(r#"{"firmName"?, "address1"?, "address2"?, "city"?, "state"?, "zip"?, "phone"?, "fax"?, "email"?, "attorneyName"?, "barNumber"?} (strings of at most 200 characters; they replace the saved details) → the saved details"#)
+            .pure(),
         CommandSpec::new("law.checks.findings", "Court Check Findings", CHECKS_LOC, |s, _| Ok(serde_json::Value::Array(s.lint_findings_of(checks::FINDINGS_SOURCE).to_vec())))
             .params(r#"{} → [{checkId, severity, message, start?, end?}] (the findings the last law.checks.run stored)"#)
             .pure(),

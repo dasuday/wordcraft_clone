@@ -2,7 +2,8 @@
 //!
 //! A profile is a file, `<id>.json` in the profiles folder, so a person can hand one around and
 //! an agent can write one. The store keeps the bundled profiles (Missouri and federal appellate
-//! briefs) and the user's; a user's own profile wins over a bundled one of the same id.
+//! briefs, Missouri circuit court pleadings) and the user's; a user's own profile wins over a
+//! bundled one of the same id. The firm details pleadings use (`firm.json`) live in the same folder.
 //!
 //! Saving always clears the verified flag: only a person's `law.profiles.approve` sets it.
 
@@ -49,18 +50,20 @@ pub struct Store {
     dir: Option<PathBuf>,
     /// The user's profiles, by id (a folder file or one saved in this run).
     user: BTreeMap<String, Profile>,
+    /// The saved firm details for pleadings (`firm.json` in the same folder), by field.
+    firm: BTreeMap<String, String>,
 }
 
 impl Default for Store {
     fn default() -> Self {
-        Store { bundled: bundled(), dir: None, user: BTreeMap::new() }
+        Store { bundled: bundled(), dir: None, user: BTreeMap::new(), firm: BTreeMap::new() }
     }
 }
 
 impl Store {
     /// A store over `dir` (the user's profiles folder), or one that keeps profiles in memory only.
     pub fn new(dir: Option<PathBuf>) -> Self {
-        let mut store = Store { bundled: bundled(), dir, user: BTreeMap::new() };
+        let mut store = Store { bundled: bundled(), dir, user: BTreeMap::new(), firm: BTreeMap::new() };
         store.load_dir();
         store
     }
@@ -72,6 +75,7 @@ impl Store {
         }
         self.dir = dir;
         self.user.clear();
+        self.firm.clear();
         self.load_dir();
     }
 
@@ -156,6 +160,11 @@ impl Store {
         let Ok(entries) = std::fs::read_dir(&dir) else { return };
         let mut paths: Vec<PathBuf> = entries.flatten().map(|e| e.path()).filter(|p| p.extension().is_some_and(|x| x == "json")).collect();
         paths.sort();
+        // The firm details live beside the profiles but aren't one.
+        if let Some(i) = paths.iter().position(|p| p.file_name().is_some_and(|n| n == FIRM_FILE)) {
+            let firm = paths.remove(i);
+            self.load_firm(&firm);
+        }
         for path in paths {
             if let Ok(p) = Self::read_file(&path) {
                 self.user.insert(p.id.clone(), p);
@@ -166,20 +175,57 @@ impl Store {
     }
 }
 
+/// The firm details file in the profiles folder.
+const FIRM_FILE: &str = "firm.json";
+
+impl Store {
+    /// The saved firm details (empty when none are saved).
+    pub fn firm(&self) -> &BTreeMap<String, String> {
+        &self.firm
+    }
+
+    /// Replace the saved firm details. Writes `firm.json` when the store has a folder; they stay
+    /// in memory either way. The caller has checked the fields ([`crate::pleadings`]).
+    pub fn set_firm(&mut self, firm: BTreeMap<String, String>) -> Result<(), LawError> {
+        if let Some(dir) = &self.dir {
+            let text = serde_json::to_string_pretty(&serde_json::json!({"schema": 1, "firm": firm})).map_err(|e| LawError::Io(e.to_string()))?;
+            write_file(&dir.join(FIRM_FILE), &text)?;
+        }
+        self.firm = firm;
+        Ok(())
+    }
+
+    fn load_firm(&mut self, path: &Path) {
+        let firm = read_file(path)
+            .ok()
+            .and_then(|text| serde_json::from_str::<serde_json::Value>(&text).ok())
+            .and_then(|v| crate::pleadings::firm_fields(v.get("firm")?).ok());
+        match firm {
+            Some(f) => self.firm = f,
+            None => log::warn!("firm details: ignoring {} (not valid firm details)", path.display()),
+        }
+    }
+}
+
 /// The profiles this crate ships, each one verified: a Missouri appellate brief (Rules 84.03,
-/// 84.04 and 84.06) and a federal one (FRAP 32). A bundled file that doesn't parse is logged and
-/// left out, never fatal — `bundled_profiles_are_valid_and_verified` keeps them honest.
+/// 84.04 and 84.06), a federal one (FRAP 32) and Missouri circuit court pleadings. A bundled
+/// file that doesn't parse is logged and left out, never fatal —
+/// `bundled_profiles_are_valid_and_verified` keeps them honest.
 pub fn bundled() -> Vec<Profile> {
-    [include_str!("../profiles/missouri-appellate-brief.json"), include_str!("../profiles/federal-appellate-brief.json")]
-        .iter()
-        .filter_map(|text| match Profile::from_json(text) {
-            Ok(p) => Some(p),
-            Err(problems) => {
-                log::error!("bundled court profile is not valid: {}", problems.join("; "));
-                None
-            }
-        })
-        .collect()
+    [
+        include_str!("../profiles/missouri-appellate-brief.json"),
+        include_str!("../profiles/federal-appellate-brief.json"),
+        include_str!("../profiles/missouri-circuit-court.json"),
+    ]
+    .iter()
+    .filter_map(|text| match Profile::from_json(text) {
+        Ok(p) => Some(p),
+        Err(problems) => {
+            log::error!("bundled court profile is not valid: {}", problems.join("; "));
+            None
+        }
+    })
+    .collect()
 }
 
 fn path_str(path: &Path) -> Result<String, LawError> {
@@ -241,7 +287,7 @@ mod tests {
     #[test]
     fn bundled_profiles_are_valid_and_verified() {
         let all = bundled();
-        assert_eq!(all.len(), 2, "Missouri and federal");
+        assert_eq!(all.len(), 3, "Missouri appellate, federal and Missouri circuit court");
         for p in &all {
             assert!(p.verified, "{} ships verified", p.id);
             assert!(crate::profile::problems(p).is_empty(), "{}: {:?}", p.id, crate::profile::problems(p));

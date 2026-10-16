@@ -8,7 +8,8 @@ the command palette, the CLI, the control channel and the MCP server can do — 
 and the same Restrict Editing checks.
 
 Nothing here knows any court's rules except the profile files that ship with it. Bundled:
-**missouri-appellate-brief** and **federal-appellate-brief**. Other courts are entered by users or
+**missouri-appellate-brief**, **federal-appellate-brief** and **missouri-circuit-court** (motions,
+notices, answers and petitions; see [Pleadings](#pleadings)). Other courts are entered by users or
 their agents.
 
 ## Turning it on
@@ -46,6 +47,9 @@ dictionary lives beside), one file per profile.
 | `law.profiles.apply` | `{"id", "doc"?}`: apply a document type's styles, page setup and line numbers to the open document |
 | `law.checks.run` | `{"id"?, "doc"?, "forExport"?, "format"?, "store"?}`: run the profile's checks for a document type and return `{"profile", "doc", "findings": [{checkId, severity, message, start?, end?}]}`; it never edits the document |
 | `law.checks.findings` | `{}`: the findings the last `law.checks.run` stored for the document (the same entries `review.issues` lists as `kind: "lint"`) |
+| `law.pleadings.new` | `{}` opens the New Pleading dialog; with params, writes a Missouri circuit court filing skeleton into a blank document (see [Pleadings](#pleadings)) |
+| `law.firm.get` | `{}`: the saved firm details, or `{}` |
+| `law.firm.set` | The firm details (see [Pleadings](#pleadings)): checked and saved, replacing what was saved |
 
 Applying a profile runs WordCraft's own commands (`layout.size`, `layout.margins`,
 `layout.lineNumbers`, `insert.pageNumber`, `layout.pageNumberFormat`, `styles.create`,
@@ -110,7 +114,9 @@ The three parts per document type, as in [`LAWCRAFT.md`](../.lawcraft/LAWCRAFT.m
 - **sections** — the skeleton in order. Each has an id, the heading to write, the style its
   paragraphs use and, for the caption, the fields it holds (`court`, `county`, `partyNames`,
   `partyRoles`, `partyAddresses`, `caseNumber`, `attorneyName`, `barNumber`, `attorneyAddress`,
-  `telephone`, `email`, `signature`).
+  `telephone`, `email`, `signature`). The checks find a section by a paragraph whose whole text is
+  its `name`; a section with `matchStyle` (a style of the same document type) is found instead at
+  its first paragraph in that style, for sections with no fixed heading (a caption, a title).
 - **styles** — page size and margins, line numbers (exactly the arguments `layout.lineNumbers`
   takes, plus `enabled` for "none"), page numbering, and the named styles. A style is a standard
   WordCraft style object: `chr` and `para` are the same `CharProps` / `ParaProps` the `styles.*`
@@ -151,10 +157,62 @@ findings are reported, not blocking.
   warning even when the document has no other text at all. A PDF with no picture and no text layer
   is reported as not searchable. It runs only when the output being written is a PDF.
 
+## Pleadings
+
+`law.pleadings.new` writes a complete Missouri circuit court filing skeleton — caption, title,
+body, signature block and certificate of service — the way the firm's own templates lay it out.
+With no params it asks the interface for the New Pleading dialog (a `ui_requests` entry
+`{"addin": "law", "open": "newPleading"}`; headless callers get `{"pending": "newPleading"}` and
+nothing else happens). With params it writes:
+
+```json
+{
+  "type": "motion",
+  "title": "Motion for Withdrawal of Attorney",
+  "courtType": "CIRCUIT",
+  "county": "ADAIR",
+  "caseNumber": "26AR-DR00001",
+  "firstSide": {"names": ["JANE DOE"], "role": "Petitioner"},
+  "secondSide": {"names": ["JOHN DOE"], "role": "Respondent"},
+  "weRepresent": "first",
+  "service": "efileCounsel",
+  "filingDate": "2026-10-15"
+}
+```
+
+- `type`: `motion`, `notice`, `answer` or `petition` — the four document types of the bundled
+  **missouri-circuit-court** profile (Letter, 1-inch margins, Times New Roman 12 double spaced,
+  page numbers bottom centre, and the styles `Body`, `Numbered`, `Title`, `Court`, `Court State`,
+  `Caption`, `Signature`, `Certificate Heading`, `Certificate`).
+- `courtType` defaults to `CIRCUIT`; `caseNumber` may be empty for a petition (`Case No.
+  ____________`). `weRepresent` picks the client side the body and signature speak for.
+- `service` (not for a petition): `efileCounsel`, or `efileUsps` with `servedParty` and
+  `servedAddress` for the mailed copy. `filingDate` (the certificate's date, written as `15th day
+  of October, 2026`) defaults to today's date in UTC.
+- `verified: true` (petition only) adds the verification and notary jurat.
+- `firm`: `firmName`, `address1`, `address2`?, `city`, `state`, `zip`, `phone`, `fax`?, `email`,
+  `attorneyName`, `barNumber`; left out, the saved firm details are used.
+
+Missing params fail naming the param. The document must be blank (no text in the body, headers,
+footers, notes or comments); otherwise it fails with "New Pleading writes into a blank document.
+Open one with File › New first." and changes nothing. It applies the profile first and then types
+the skeleton through WordCraft's own commands (`text.insert`, `para.style`, `insert.table`,
+`table.borders`, `table.cellMargins`, `para.numbering`…), all **one undo step**; with Track Changes
+on, the typing is tracked. It records the profile and type as `law.profiles.apply` does, so
+`law.checks.run` needs no params afterwards. Placeholders are in square brackets
+(`[Grounds.]`), so a search for `[` finds any left. The result is
+`{"profile", "type", "sections": [section ids written]}`.
+
+**Firm details** are saved by `law.firm.set` as `firm.json` (`{"schema": 1, "firm": {…}}`) in the
+court profiles folder; that file is not a profile and the profile loader skips it. Unknown fields
+and values over 200 characters are refused. They are never written into a document's properties
+and never sent anywhere.
+
 ## Revision history
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-15 | minor | Pleadings: bundled `missouri-circuit-court` profile (motion, notice, answer, petition), `law.pleadings.new` writes the filing skeleton, `law.firm.get`/`law.firm.set` keep the firm details, and a section may be found by its style (`matchStyle`) |
 | 2026-10-14 | patch | `textSearchablePdf` now names the page for a picture-dominated page even when the document has no substantive text: an image-only scan and a scan with only a caption or page-number footer are a page-specific warning, not a document-wide "not searchable" error |
 | 2026-10-13 | minor | Court-profile checks engine: `law.checks.run`, pre-export checks through the engine's export-check hook, text-box-aware line spacing, and a PDF searchability verdict that no longer passes a scan with a caption |
 

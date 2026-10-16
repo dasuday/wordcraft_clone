@@ -766,6 +766,9 @@ impl WordApp {
             self.dialog = dialogs::Dialog::open(name, self);
             return Ok(json!({"pending": name}));
         }
+        if let Some(what) = self.addin_input_dialog(id, &params) {
+            return Ok(json!({"pending": what}));
+        }
         if (self.session.dirty || self.save_unconfirmed()) && discards_document(id, &params) {
             let name = self.prompt_name();
             self.dialog = Some(dialogs::Dialog::SaveChanges {
@@ -1227,6 +1230,12 @@ impl WordApp {
         // Ctrl+F: type straight into the Navigation pane's search box (#712).
         if req.get("focus").and_then(Value::as_str) == Some("navSearch") {
             self.nav_search_focus = true;
+        }
+        // An add-in's own window: the add-in opens it (`{"addin": id, "open": what}`).
+        if let Some(id) = req.get("addin").and_then(Value::as_str) {
+            let what = req.get("open").and_then(Value::as_str).unwrap_or("");
+            self.with_addin(id, |a, _| a.open(what));
+            return;
         }
         if let Some(what) = req.get("open").and_then(Value::as_str) {
             match what {
@@ -2044,6 +2053,7 @@ impl WordApp {
         }
         content_controls::popup(self, &ctx);
         dialogs::show(self, &ctx);
+        self.addin_dialogs(&ctx);
         #[cfg(not(target_arch = "wasm32"))]
         file_browser::show(self, &ctx);
         colors::show(self, &ctx);

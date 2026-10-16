@@ -158,7 +158,8 @@ fn law_options_lists_bundled_profiles_with_verification_badges() {
     h.run_steps(6);
     assert!(h.query_by_label("Missouri appellate brief").is_some());
     assert!(h.query_by_label("Federal appellate brief").is_some());
-    assert!(h.query_by_label("Missouri").is_some());
+    assert!(h.query_by_label("Missouri circuit court").is_some());
+    assert!(h.query_all_by_label("Missouri").count() >= 2, "both Missouri profiles show their jurisdiction");
     assert!(h.query_all_by_label("Verified").next().is_some());
     assert!(h.query_by_label("missouri-appellate-brief").is_some());
 }

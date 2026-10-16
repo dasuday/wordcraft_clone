@@ -4,7 +4,9 @@
 //! what any of them does. Each one is a module id in the editing preferences (`modules.<id>`, so
 //! `file.options {"modules": {"<id>": true}}` turns it on from a script too), installs itself into
 //! the session when its state changes, and may bring its own File › Options page, listed under its
-//! name while it is on.
+//! name while it is on. A command of its own can ask for one of its windows by pushing
+//! `{"addin": "<id>", "open": "<what>"}` onto the session's `ui_requests` ([`AddIn::open`]); while it
+//! is on it draws its windows once a frame ([`AddIn::dialog`]).
 
 use egui::{RichText, Ui};
 use serde_json::{Value, json};
@@ -45,6 +47,17 @@ pub trait AddIn {
     fn file_picked(&mut self, _app: &mut WordApp, _tag: &str, _picked: Option<String>) -> Result<Value, String> {
         Ok(json!({"cancelled": true}))
     }
+    /// The session asked it to open something (`{"addin": "<id>", "open": "<what>"}`).
+    fn open(&mut self, _what: &str) {}
+    /// A command of its own the person ran (ribbon, palette, shortcut) that needs input first:
+    /// what to [`AddIn::open`] instead of running it, as the app's own "no params opens the
+    /// dialog" commands do. The command then doesn't run, so it leaves no undo step and doesn't
+    /// mark the document changed.
+    fn input_dialog(&self, _id: &str, _params: &Value) -> Option<&'static str> {
+        None
+    }
+    /// Called once a frame while it is on, so it can draw its own windows.
+    fn dialog(&mut self, _app: &mut WordApp, _ctx: &egui::Context) {}
     /// For tests and hosts that need the concrete add-in.
     fn as_any(&self) -> &dyn std::any::Any;
     /// For tests and hosts that need the concrete add-in.
@@ -133,6 +146,22 @@ impl WordApp {
         }
     }
 
+    /// An add-in that is on opens its window for `id` instead of running it ([`AddIn::input_dialog`]).
+    pub(crate) fn addin_input_dialog(&mut self, id: &str, params: &Value) -> Option<&'static str> {
+        let (addin, what) =
+            self.addins.iter().filter(|a| self.session.module_enabled(a.id())).find_map(|a| a.input_dialog(id, params).map(|w| (a.id(), w)))?;
+        self.with_addin(addin, |a, _| a.open(what));
+        Some(what)
+    }
+
+    /// Let each add-in that is on draw its windows (once a frame).
+    pub(crate) fn addin_dialogs(&mut self, ctx: &egui::Context) {
+        let on: Vec<&'static str> = self.addins.iter().map(|a| a.id()).filter(|id| self.session.module_enabled(id)).collect();
+        for id in on {
+            self.with_addin(id, |a, app| a.dialog(app, ctx));
+        }
+    }
+
     /// The options panes the add-ins bring, (pane id, name), for those that are on.
     pub(crate) fn addin_panes(&self) -> Vec<(String, String)> {
         self.addins
@@ -200,6 +229,8 @@ mod tests {
         pages: usize,
         refuse_leave: bool,
         picked: Option<(String, Option<String>)>,
+        opened: Vec<String>,
+        frames: usize,
     }
 
     impl AddIn for Probe {
@@ -227,6 +258,15 @@ mod tests {
         fn file_picked(&mut self, _app: &mut WordApp, tag: &str, picked: Option<String>) -> Result<Value, String> {
             self.picked = Some((tag.to_string(), picked));
             Ok(json!({"done": true}))
+        }
+        fn open(&mut self, what: &str) {
+            self.opened.push(what.to_string());
+        }
+        fn dialog(&mut self, _app: &mut WordApp, _ctx: &egui::Context) {
+            self.frames += 1;
+        }
+        fn input_dialog(&self, id: &str, params: &Value) -> Option<&'static str> {
+            (id == "select.all" && params.get("go").is_none()).then_some("picker")
         }
         fn as_any(&self) -> &dyn std::any::Any {
             self
@@ -308,5 +348,49 @@ mod tests {
         assert!(h.state().session.module_enabled("probe"));
         assert_eq!(h.state().ui.options_pane, "addin:probe", "turning it on opens its page");
         assert!(h.state_mut().addin_mut::<Probe>("probe").unwrap().pages > 0, "and draws it");
+    }
+
+    #[test]
+    fn a_request_naming_it_opens_what_it_asks_for() {
+        let mut a = app();
+        a.session.ui_requests.push(json!({"addin": "probe", "open": "thing"}));
+        a.session.ui_requests.push(json!({"addin": "nobody", "open": "find"}));
+        a.run("select.all", json!({})).unwrap();
+        assert_eq!(probe(&mut a).opened, ["thing"]);
+        assert!(a.dialog.is_none(), "an add-in's request never opens one of the app's own dialogs");
+        assert!(a.session.ui_requests.is_empty());
+    }
+
+    #[test]
+    fn it_draws_its_windows_each_frame_only_while_it_is_on() {
+        let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(1024.0, 700.0)).build_ui_state(
+            |ui, app: &mut WordApp| {
+                let ctx = ui.ctx().clone();
+                app.logic(&ctx);
+                app.ui(ui);
+            },
+            app(),
+        );
+        h.run_steps(4);
+        assert_eq!(h.state_mut().addin_mut::<Probe>("probe").unwrap().frames, 0, "off: never asked");
+        h.state_mut().run("file.options", json!({"modules": {"probe": true}})).unwrap();
+        h.run_steps(4);
+        let frames = h.state_mut().addin_mut::<Probe>("probe").unwrap().frames;
+        assert!(frames >= 2, "on: asked every frame ({frames})");
+        h.state_mut().run("file.options", json!({"modules": {"probe": false}})).unwrap();
+        h.run_steps(4);
+        assert_eq!(h.state_mut().addin_mut::<Probe>("probe").unwrap().frames, frames, "off again: no more calls");
+    }
+
+    #[test]
+    fn a_command_that_needs_its_input_opens_its_window_instead_while_it_is_on() {
+        let mut a = app();
+        a.run("select.all", json!({})).unwrap();
+        assert!(probe(&mut a).opened.is_empty(), "off: the command runs as usual");
+        a.run("file.options", json!({"modules": {"probe": true}})).unwrap();
+        assert_eq!(a.run("select.all", json!({})).unwrap(), json!({"pending": "picker"}));
+        assert_eq!(probe(&mut a).opened, ["picker"]);
+        a.run("select.all", json!({"go": true})).unwrap();
+        assert_eq!(probe(&mut a).opened.len(), 1, "with its input it runs");
     }
 }
