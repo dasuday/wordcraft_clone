@@ -114,16 +114,18 @@ pub fn find_in(dir: &Path, names: &[&str]) -> Option<(PathBuf, PathBuf)> {
     })
 }
 
+/// Read a dictionary file, refusing ones larger than any real dictionary.
+pub(crate) fn read_capped(p: &Path) -> Result<Vec<u8>, String> {
+    let len = std::fs::metadata(p).map_err(|e| format!("{}: {e}", p.display()))?.len();
+    if len > MAX_FILE {
+        return Err(format!("{}: too large ({len} bytes)", p.display()));
+    }
+    std::fs::read(p).map_err(|e| format!("{}: {e}", p.display()))
+}
+
 /// Read a Hunspell pair from disk (size-capped), decoded per the `.aff`'s `SET` line.
 pub fn load(aff: &Path, dic: &Path) -> Result<AffixDict, String> {
-    let read = |p: &Path| -> Result<Vec<u8>, String> {
-        let len = std::fs::metadata(p).map_err(|e| format!("{}: {e}", p.display()))?.len();
-        if len > MAX_FILE {
-            return Err(format!("{}: too large ({len} bytes)", p.display()));
-        }
-        std::fs::read(p).map_err(|e| format!("{}: {e}", p.display()))
-    };
-    let (aff_text, dic_text) = decode(&read(aff)?, &read(dic)?)?;
+    let (aff_text, dic_text) = decode(&read_capped(aff)?, &read_capped(dic)?)?;
     let source = format!("Hunspell dictionary {}", dic.display());
     AffixDict::from_hunspell(&aff_text, &dic_text, &[source.as_str()])
 }
