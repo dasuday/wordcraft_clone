@@ -138,7 +138,7 @@ fn theme_fonts(s: &mut Session, v: &Value) -> CmdResult {
 fn theme_colors(s: &mut Session, v: &Value) -> CmdResult {
     let name = p::req_str(v, "name")?;
     if let Some(t) = THEMES.iter().find(|t| t.0.eq_ignore_ascii_case(name)) {
-        set_accent(s, t.3[0]);
+        super::themes::apply_colors(s, &builtin_colors(&t.3));
     } else {
         let c = s.custom_themes.find_colors(name).ok_or_else(|| CmdError::Params(format!("unknown colours `{name}`")))?.colors;
         super::themes::apply_colors(s, &c);
@@ -154,16 +154,19 @@ fn theme(s: &mut Session, v: &Value) -> CmdResult {
         return sel_result(s);
     };
     set_fonts(s, t.1, t.2);
-    set_accent(s, t.3[0]);
+    super::themes::apply_colors(s, &builtin_colors(&t.3));
     s.doc.settings.theme_name = t.0.into();
-    let mut colors = s.doc.settings.theme_colors.clone();
-    for (i, c) in t.3.iter().enumerate() {
-        if let Some(x) = colors.get_mut(4 + i) {
-            *x = *c;
-        }
-    }
-    s.doc.settings.theme_colors = colors;
     sel_result(s)
+}
+
+/// A built-in theme's 12 colours: our default dark, light and hyperlink colours with its six
+/// accents. All 12 are replaced, so a custom set's colours don't linger (#1869).
+pub(crate) fn builtin_colors(accents: &[Rgb; 6]) -> [Rgb; 12] {
+    let mut colors = wordcraft_doc::THEME_COLORS;
+    for (slot, c) in colors.iter_mut().skip(4).zip(accents) {
+        *slot = *c;
+    }
+    colors
 }
 
 fn style_set(s: &mut Session, v: &Value) -> CmdResult {

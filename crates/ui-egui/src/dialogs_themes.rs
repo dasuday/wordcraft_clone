@@ -69,9 +69,12 @@ pub fn body(app: &mut WordApp, ui: &mut Ui, d: &mut ThemeDialog) -> bool {
     }
 }
 
-/// "Custom 1", "Custom 2"…: the first free one.
+/// "Custom 1", "Custom 2"… (translated): the first free one.
 fn free_name(taken: impl Fn(&str) -> bool) -> String {
-    (1..1000).map(|n| format!("Custom {n}")).find(|n| !taken(n)).unwrap_or_else(|| "Custom".into())
+    (1..1000u32)
+        .map(|n| crate::i18n::fmt(tl!("Custom {n}"), &[("n", &n.to_string())]))
+        .find(|n| !taken(n))
+        .unwrap_or_else(|| tl!("Custom").to_string())
 }
 
 /// Save: create (or, editing, update) the set, then drop the old one when it was renamed.

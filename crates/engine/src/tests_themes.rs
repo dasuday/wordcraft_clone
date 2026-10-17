@@ -90,6 +90,25 @@ fn theme_colors_and_fonts_apply_custom_sets_by_name() {
     assert!(s.run("design.themeFonts", &json!({"name": "Nope"})).is_err());
 }
 
+/// A built-in theme or colour set after a custom one replaces all 12 colours, not only accent 1:
+/// otherwise the custom set's other 11 colours would linger in the saved theme part.
+#[test]
+fn built_in_colors_after_custom_ones_replace_all_twelve() {
+    let studio = crate::cmd::design::THEMES.iter().find(|t| t.0 == "Studio").unwrap().3;
+    let gallery = crate::cmd::design::THEMES.iter().find(|t| t.0 == "Gallery").unwrap().3;
+    let mut s = s();
+    run(&mut s, "design.customColors", json!({"name": "Harbour", "colors": twelve(0x66)}));
+    run(&mut s, "design.theme", json!({"name": "Studio"}));
+    let mut want = wordcraft_doc::THEME_COLORS.to_vec();
+    want.splice(4..10, studio);
+    assert_eq!(s.doc.settings.theme_colors, want);
+    run(&mut s, "design.themeColors", json!({"name": "Harbour"}));
+    run(&mut s, "design.themeColors", json!({"name": "Gallery"}));
+    want.splice(4..10, gallery);
+    assert_eq!(s.doc.settings.theme_colors, want);
+    assert_eq!(heading1_color(&s), Some(TextColor::Rgb(gallery[0])));
+}
+
 #[test]
 fn delete_custom_removes_and_unknown_is_an_error() {
     let mut s = s();

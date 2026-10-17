@@ -162,8 +162,11 @@ impl Exempt {
         let theme_fonts = plain.strip_prefix(": ").is_some_and(|f| f.split(" / ").count() == 2);
         let icon_lettering = matches!(plain, "Aa" | "ab" | "abc" | "ac" | "cd" | "ab-" | "fx" | "ABC");
         let initials = plain.chars().count() == 2 && plain.chars().all(|c| c.is_ascii_uppercase());
+        // A colour's hex code (`0F9ED5`) in a colour field (Customize Colors, #1869).
+        let hex_colour = plain.len() == 6 && plain.chars().all(|c| c.is_ascii_hexdigit());
         icon_lettering // drawn inside icons
             || initials // the account button
+            || hex_colour
             || status
             || theme_fonts
             || is_shortcut()
@@ -240,6 +243,8 @@ fn untranslated_interface_text() {
         "toc",
         "sourceManager",
         "createSource",
+        "customizeColors",
+        "customizeFonts",
     ];
     for name in dialogs {
         let _ = app.run("ui.dialog", json!({"name": name}));
