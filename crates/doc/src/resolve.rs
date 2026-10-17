@@ -250,7 +250,12 @@ impl ResolvedPara {
             borders: p.borders.filter(Borders::any_visible),
             bidi: p.bidi.unwrap_or(false),
             drop_cap: p.drop_cap.unwrap_or(0).min(10),
-            frame: p.frame.clone().filter(|_| p.drop_cap.unwrap_or(0) == 0),
+            // Explicit zero dimensions cancel a frame; omitted dimensions still fit its text.
+            frame: p.frame.clone().filter(|f| p.drop_cap.unwrap_or(0) == 0 && (f.w != Some(0.0) || f.h != Some(0.0))).map(|mut f| {
+                f.w = f.w.filter(|v| *v != 0.0);
+                f.h = f.h.filter(|v| *v != 0.0);
+                f
+            }),
             suppress_hyphens: p.suppress_hyphens.unwrap_or(false),
             suppress_line_numbers: p.suppress_line_numbers.unwrap_or(false),
             kinsoku: p.kinsoku.unwrap_or(true),
