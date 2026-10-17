@@ -2287,3 +2287,7 @@
 	Type a size in any unit, such as 5 cm or 300 px. The other side follows, so the picture keeps its proportions.	Geben Sie eine Größe in einer beliebigen Einheit ein, z. B. 5 cm oder 300 px. Die andere Seite passt sich an, sodass das Bild seine Proportionen behält.
 
 	Import…	Importieren…
+	Clear all	Alle löschen
+	Remove from list	Aus Liste entfernen
+	Removed {name} from the recent list	{name} wurde aus der Liste der zuletzt verwendeten Dokumente entfernt
+	Removed {count} documents from the recent list	Aus der Liste der zuletzt verwendeten Dokumente entfernt: {count}
