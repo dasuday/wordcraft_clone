@@ -87,7 +87,7 @@ The same gaps grouped the way the parity documents are, for agents working in on
 
 | Date | Change | Summary |
 |---|---|---|
-| 2026-10-14 | trivial | Gap 19: RTF export writes sections; ODT section export remains |
+| 2026-10-14 | trivial | Gap 19: RTF export writes sections (ODT export landed too) |
 | 2026-10-14 | trivial | #19 narrowed: ODT export done (master page and page layout per section, columned `text:section`s) |
 | 2026-10-14 | trivial | Row table border exceptions fixed; other row table exceptions remain unsupported |
 | 2026-10-12 | minor | Czech proofing review: short-word splits rank after deletion, NOSUGGEST excludes suggestions while accepting typed forms, affix comments apply only to headers, ratios keep spaces and repeated-word messages use Czech quotes; synthetic engine end-to-end and latency checks |
