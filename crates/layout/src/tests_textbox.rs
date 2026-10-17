@@ -266,3 +266,256 @@ fn auto_fit_includes_outline() {
         assert!((frame_of(&lay(&d), id).h - expected).abs() < 0.01);
     }
 }
+
+const LEGACY_BOX_MODE: u32 = 12;
+const LAST_LEGACY_BOX_MODE: u32 = 14;
+const MODERN_BOX_MODE: u32 = 15;
+const BOUNDARY_PAGE_H: f32 = 841.9;
+const BOUNDARY_MARGIN: f32 = 72.0;
+const BOUNDARY_BOX_H: f32 = 169.15;
+
+fn body_box_model(mode: u32, y: f32, h: f32) -> (Document, u32) {
+    use wordcraft_doc::para::{Anchor, Float, Wrap};
+    use wordcraft_doc::props::LineSpacing;
+    let mut doc = Document::from_text("Original spacer\n");
+    doc.settings.compat_mode = mode;
+    doc.last_section.page_h = BOUNDARY_PAGE_H;
+    doc.last_section.margin_top = 94.5;
+    doc.last_section.margin_bottom = BOUNDARY_MARGIN;
+    for index in 0..2 {
+        let p = doc.para_mut(StoryRef::Body, &Path::top(index)).unwrap();
+        p.props.space_before = Some(0.0);
+        p.props.space_after = Some(0.0);
+        if index == 0 {
+            p.props.line_spacing = Some(LineSpacing::Exactly(80.0));
+        }
+    }
+    let id = text_box(&mut doc, 1, "Original boundary box", 400.0, h, TextBody { inset: Some([0; 4]), ..Default::default() });
+    let p = doc.para_mut(StoryRef::Body, &Path::top(1)).unwrap();
+    *p.objects[0].float_mut().unwrap() = Float { wrap: Wrap::Square, h_rel: Anchor::Column, v_rel: Anchor::Paragraph, y, ..Default::default() };
+    (doc, id)
+}
+
+fn body_box_probe(mode: u32, y: f32, h: f32) -> (DocLayout, u32) {
+    let (doc, id) = body_box_model(mode, y, h);
+    (lay(&doc), id)
+}
+
+#[test]
+fn body_box_fits() {
+    for mode in [LEGACY_BOX_MODE, LAST_LEGACY_BOX_MODE, MODERN_BOX_MODE] {
+        let (laid, id) = body_box_probe(mode, 300.0, 150.0);
+        let r = frame_of(&laid, id);
+        assert_eq!(laid.pages.len(), 1);
+        assert!((r.y - 474.5).abs() < 0.01, "mode {mode}: {r:?}");
+        assert!((r.h - 150.0).abs() < 0.01);
+        assert_eq!(lines(&laid, id).len(), 1);
+    }
+}
+
+#[test]
+fn body_box_legacy_bottom() {
+    // Native modes12/14 keep paragraph-relative frames inside the physical page edge.
+    for mode in [LEGACY_BOX_MODE, LAST_LEGACY_BOX_MODE] {
+        for offset in [528.0, 650.0] {
+            let (laid, id) = body_box_probe(mode, offset, BOUNDARY_BOX_H);
+            let r = frame_of(&laid, id);
+            assert_eq!(laid.pages.len(), 1);
+            assert!((r.bottom() - BOUNDARY_PAGE_H).abs() < 0.01, "mode {mode}, offset {offset}: {r:?}");
+            assert!((r.h - BOUNDARY_BOX_H).abs() < 0.01);
+            assert_eq!(lines(&laid, id).len(), 1);
+        }
+    }
+}
+
+#[test]
+fn body_box_modern_bottom() {
+    // Native mode15 keeps the same frame above the body's bottom margin.
+    for offset in [528.0, 650.0] {
+        let (laid, id) = body_box_probe(MODERN_BOX_MODE, offset, BOUNDARY_BOX_H);
+        let r = frame_of(&laid, id);
+        assert_eq!(laid.pages.len(), 1);
+        assert!((r.bottom() - (BOUNDARY_PAGE_H - BOUNDARY_MARGIN)).abs() < 0.01, "offset {offset}: {r:?}");
+        assert!((r.h - BOUNDARY_BOX_H).abs() < 0.01);
+        assert_eq!(lines(&laid, id).len(), 1);
+    }
+}
+
+#[test]
+fn body_box_modern_tall() {
+    use wordcraft_doc::props::LineSpacing;
+    // Native700 exceeds the body, but fits the page. Both frames follow the anchor line.
+    for height in [700.0, 900.0] {
+        let (mut doc, id) = body_box_model(MODERN_BOX_MODE, 100.0, height);
+        doc.para_mut(StoryRef::Body, &Path::top(0)).unwrap().text = "Prior".into();
+        doc.para_mut(StoryRef::Body, &Path::top(1)).unwrap().props.line_spacing = Some(LineSpacing::Exactly(20.0));
+        let laid = lay(&doc);
+        assert_eq!(laid.pages.len(), 2, "height {height}");
+        let object = laid.find_object(0, |o| o.text_box == Some(id)).unwrap();
+        assert_eq!(object.page, 1);
+        let r = object.rect;
+        assert!((r.y - 114.5).abs() < 0.01, "{r:?}");
+        assert!((r.h - height).abs() < 0.01, "{r:?}");
+    }
+}
+
+#[test]
+fn body_anchor_scope() {
+    use wordcraft_doc::para::{Anchor, Wrap};
+    for (mode, anchor, wrap, offset, top) in [
+        (12, Anchor::Line, Wrap::Square, 528.0, 672.75),
+        (15, Anchor::Line, Wrap::Square, 528.0, 600.75),
+        (12, Anchor::Page, Wrap::Square, 800.0, 672.75),
+        (15, Anchor::Page, Wrap::Square, 800.0, 800.0),
+        (12, Anchor::Margin, Wrap::Square, 650.0, 672.75),
+        (15, Anchor::Margin, Wrap::Square, 650.0, 744.5),
+        (12, Anchor::BottomMargin, Wrap::Square, 0.0, 672.75),
+        (15, Anchor::BottomMargin, Wrap::Square, 0.0, 769.9),
+        (12, Anchor::Paragraph, Wrap::InFrontOfText, 528.0, 702.5),
+        (15, Anchor::Paragraph, Wrap::InFrontOfText, 528.0, 702.5),
+        (12, Anchor::Paragraph, Wrap::BehindText, 528.0, 702.5),
+        (15, Anchor::Paragraph, Wrap::BehindText, 528.0, 702.5),
+        (15, Anchor::Page, Wrap::InFrontOfText, 800.0, 800.0),
+        (12, Anchor::Paragraph, Wrap::Square, -300.0, 0.0),
+        (15, Anchor::Paragraph, Wrap::Square, -300.0, 94.5),
+    ] {
+        let (mut doc, id) = body_box_model(mode, offset, BOUNDARY_BOX_H);
+        let float = doc.para_mut(StoryRef::Body, &Path::top(1)).unwrap().objects[0].float_mut().unwrap();
+        float.v_rel = anchor;
+        float.wrap = wrap;
+        let laid = lay(&doc);
+        let r = frame_of(&laid, id);
+        assert_eq!(laid.pages.len(), 1, "{mode} {anchor:?} {wrap:?}");
+        assert!((r.y - top).abs() < 0.01, "{mode} {anchor:?} {wrap:?}: {r:?}");
+        assert!((r.h - BOUNDARY_BOX_H).abs() < 0.01);
+    }
+}
+
+#[test]
+fn body_box_backward_wrap() {
+    for (mode, offset, height) in
+        [(LEGACY_BOX_MODE, -300.0, BOUNDARY_BOX_H), (MODERN_BOX_MODE, -300.0, BOUNDARY_BOX_H), (LEGACY_BOX_MODE, 100.0, 900.0)]
+    {
+        let (laid, _) = body_box_probe(mode, offset, height);
+        let count: usize = laid
+            .pages
+            .iter()
+            .flat_map(|page| &page.items)
+            .filter_map(|item| match item {
+                Placed::Lines { story: StoryRef::Body, path, l0, l1, .. } if *path == Path::top(0) => Some(l1 - l0),
+                _ => None,
+            })
+            .sum();
+        assert_eq!(count, 2, "{mode} {offset} {height}");
+    }
+}
+
+#[test]
+fn legacy_tall_spacer_wrap() {
+    let (mut doc, _) = body_box_model(LEGACY_BOX_MODE, 100.0, 900.0);
+    doc.last_section.page_w = 595.3;
+    let p = doc.para_mut(StoryRef::Body, &Path::top(0)).unwrap();
+    p.text = "10 paragraph-square-tall anchor".into();
+    p.runs = vec![wordcraft_doc::Run { len: p.text.len(), props: CharProps { font: Some("Arial".into()), size: Some(10.0), ..Default::default() } }];
+    doc.para_mut(StoryRef::Body, &Path::top(1)).unwrap().objects[0].float_mut().unwrap().dist = 9.0;
+    let laid = lay(&doc);
+    let counts: Vec<_> = laid
+        .pages
+        .iter()
+        .flat_map(|page| &page.items)
+        .filter_map(|item| match item {
+            Placed::Lines { story: StoryRef::Body, path, l0, l1, .. } if *path == Path::top(0) => Some(l1 - l0),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(laid.pages.len(), 1);
+    assert!(counts.iter().sum::<usize>() > 1, "{counts:?}");
+}
+
+#[test]
+fn body_read_view_unchanged() {
+    for mode in [LEGACY_BOX_MODE, MODERN_BOX_MODE] {
+        for (offset, height) in [(528.0, BOUNDARY_BOX_H), (100.0, 900.0)] {
+            let (doc, id) = body_box_model(mode, offset, height);
+            let options = LayoutOptions { view: ViewMode::Read, read_height: 500.0, ..Default::default() };
+            let laid = layout(&doc, &mut LayoutCache::new(), &options);
+            let object = laid.find_object(0, |o| o.text_box == Some(id)).unwrap();
+            assert_eq!(object.page, 0);
+            assert!((object.rect.y - (18.0 + 80.0 + offset)).abs() < 0.01, "{mode} {offset}: {:?}", object.rect);
+        }
+    }
+}
+
+#[test]
+fn oversized_absolute_overflow() {
+    use wordcraft_doc::para::{Anchor, Wrap};
+    for (anchor, wrap) in [(Anchor::Page, Wrap::Square), (Anchor::Paragraph, Wrap::InFrontOfText), (Anchor::Paragraph, Wrap::BehindText)] {
+        let (mut doc, id) = body_box_model(MODERN_BOX_MODE, 800.0, 900.0);
+        let float = doc.para_mut(StoryRef::Body, &Path::top(1)).unwrap().objects[0].float_mut().unwrap();
+        float.v_rel = anchor;
+        float.wrap = wrap;
+        let laid = lay(&doc);
+        let object = laid.find_object(0, |o| o.text_box == Some(id)).unwrap();
+        assert_eq!(object.page, 0);
+        assert_eq!(laid.pages.len(), 1);
+        let expected = if anchor == Anchor::Page { 800.0 } else { 974.5 };
+        assert!((object.rect.y - expected).abs() < 0.01, "{anchor:?} {wrap:?}: {:?}", object.rect);
+        assert!((object.rect.h - 900.0).abs() < 0.01);
+    }
+}
+
+#[test]
+fn oversized_flow_is_bounded() {
+    for height in [900.0, 4000.0, f32::MAX] {
+        let (doc, id) = body_box_model(MODERN_BOX_MODE, f32::MAX, height);
+        let mut cache = LayoutCache::new();
+        let first = layout(&doc, &mut cache, &LayoutOptions::default());
+        let second = layout(&doc, &mut cache, &LayoutOptions::default());
+        assert_eq!(first.pages.len(), 2);
+        assert_eq!(second.pages.len(), first.pages.len());
+        let a = first.find_object(0, |o| o.text_box == Some(id)).unwrap();
+        let b = second.find_object(0, |o| o.text_box == Some(id)).unwrap();
+        assert_eq!(a.page, 1);
+        assert_eq!(a.rect, b.rect);
+        assert!(a.rect.y.is_finite() && a.rect.h <= 4000.0);
+    }
+}
+
+#[test]
+fn nontext_float_is_unchanged() {
+    for mode in [LEGACY_BOX_MODE, MODERN_BOX_MODE] {
+        let (mut doc, _) = body_box_model(mode, 528.0, BOUNDARY_BOX_H);
+        if let InlineObject::Shape { kind, story, .. } = &mut doc.para_mut(StoryRef::Body, &Path::top(1)).unwrap().objects[0] {
+            *kind = wordcraft_doc::para::ShapeKind::Rectangle;
+            *story = None;
+        }
+        let laid = lay(&doc);
+        let object = laid.find_object(0, |o| o.path == Path::top(1)).unwrap();
+        assert!((object.rect.y - 702.5).abs() < 0.01, "{mode}: {:?}", object.rect);
+    }
+}
+
+#[test]
+fn turned_textbox_is_unchanged() {
+    for mode in [LEGACY_BOX_MODE, MODERN_BOX_MODE] {
+        for offset in [528.0, -149.5] {
+            let (mut doc, id) = body_box_model(mode, offset, BOUNDARY_BOX_H);
+            doc.para_mut(StoryRef::Body, &Path::top(1)).unwrap().objects[0].float_mut().unwrap().rot = 90.0;
+            let laid = lay(&doc);
+            let object = laid.find_object(0, |o| o.text_box == Some(id)).unwrap();
+            assert!((object.rect.y - (174.5 + offset)).abs() < 0.01, "{mode} {offset}: {:?}", object.rect);
+        }
+    }
+}
+
+#[test]
+fn auto_fit_uses_fitted_bounds() {
+    let (mut doc, id) = body_box_model(MODERN_BOX_MODE, 300.0, 900.0);
+    doc.parts.get_mut(&id).unwrap().body.auto_fit = true;
+    let laid = lay(&doc);
+    let object = laid.find_object(0, |o| o.text_box == Some(id)).unwrap();
+    assert_eq!(laid.pages.len(), 1);
+    assert_eq!(object.page, 0);
+    assert!((object.rect.y - 474.5).abs() < 0.01, "{:?}", object.rect);
+    assert!(object.rect.h < 100.0);
+}
