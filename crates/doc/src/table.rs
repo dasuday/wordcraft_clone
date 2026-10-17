@@ -89,18 +89,22 @@ impl Table {
         self.grid.len().max(self.rows.iter().map(|r| r.cells.iter().map(Cell::span).sum::<usize>()).max().unwrap_or(0))
     }
 
-    /// Grid column where cell `c` of row `r` starts.
+    /// Grid column where cell `c` of row `r` starts. A row that skips grid columns
+    /// (`w:gridBefore`) starts at the column after them.
     pub fn grid_col(&self, r: usize, c: usize) -> usize {
-        self.rows.get(r).map(|row| row.cells.iter().take(c).map(Cell::span).sum()).unwrap_or(0)
+        let row = self.rows.get(r);
+        let before = row.map(|row| row.props.grid_before as usize).unwrap_or(0);
+        row.map(|row| before + row.cells.iter().take(c).map(Cell::span).sum::<usize>()).unwrap_or(0)
     }
 
-    /// Cell index in row `r` that covers grid column `g`.
+    /// Cell index in row `r` that covers grid column `g`. A row that skips leading columns
+    /// (`w:gridBefore`) has no cell before them, so those columns give `None`.
     pub fn cell_at_grid(&self, r: usize, g: usize) -> Option<usize> {
         let row = self.rows.get(r)?;
-        let mut x = 0;
+        let mut x = row.props.grid_before as usize;
         for (i, c) in row.cells.iter().enumerate() {
             if g < x + c.span() {
-                return Some(i);
+                return (g >= x).then_some(i);
             }
             x += c.span();
         }
@@ -417,5 +421,20 @@ mod tests {
         v.merge(0, 2, 0, 0);
         assert_eq!(v.rows[0].cells[0].props.vmerge, VMerge::Restart);
         assert_eq!(v.rows[2].cells[0].props.vmerge, VMerge::Continue);
+    }
+
+    #[test]
+    fn grid_before_offsets_a_rows_columns() {
+        let mut t = Table::new(2, 3, 300.0);
+        t.rows[0].props.grid_before = 1;
+        t.rows[0].props.grid_after = 1;
+        t.rows[0].cells.truncate(1);
+        // The row's first cell sits in column 1; column 0 holds no cell of this row.
+        assert_eq!(t.grid_col(0, 0), 1);
+        assert_eq!(t.cell_at_grid(0, 0), None);
+        assert_eq!(t.cell_at_grid(0, 1), Some(0));
+        // A row with no skipped columns is unchanged.
+        assert_eq!(t.grid_col(1, 0), 0);
+        assert_eq!(t.cell_at_grid(1, 2), Some(2));
     }
 }

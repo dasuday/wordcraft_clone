@@ -1091,6 +1091,29 @@ fn tables_lay_out_cells() {
     assert!(l.cell_at(0, c.x, c.top + 2.0).is_some());
 }
 
+/// A row that skips leading grid columns (`w:gridBefore`) starts its first cell after them: a
+/// narrow skipped column doesn't squeeze the row's text to one character per line (a real
+/// `w:gridBefore` form header did, font size per line).
+#[test]
+fn a_row_skipping_grid_columns_starts_after_them() {
+    let mut d = Document::from_text("x");
+    let mut t = Table::new(1, 3, 300.0);
+    t.props.fixed = true;
+    // Column 0 is a 2pt sliver; the row skips it (and the last column).
+    t.grid = vec![2.0, 200.0, 98.0];
+    t.rows[0].props.grid_before = 1;
+    t.rows[0].props.grid_after = 1;
+    t.rows[0].cells.truncate(1);
+    t.rows[0].cells[0].blocks = vec![wordcraft_doc::para_block(wordcraft_doc::Paragraph::with_text("label text", Default::default()))];
+    d.insert_block(StoryRef::Body, &Path::top(0), wordcraft_doc::Block::Table(t)).unwrap();
+    let l = lay(&d);
+    let width = l.pages[0].items.iter().find_map(|i| if let Placed::Cell { rect, cell: 0, .. } = i { Some(rect.w) } else { None });
+    assert!(width.is_some_and(|w| w > 100.0), "the first cell is {width:?} wide, not the skipped column's");
+    let [(x, _, lines)] = para_at(&l, &[0, 0, 0, 0])[..] else { panic!("cell text missing") };
+    assert!(x > 72.0 + 2.0, "the cell text starts at {x}, inside the skipped column");
+    assert_eq!(lines, 1, "the label wrapped over {lines} lines");
+}
+
 /// A vertical merge is one cell: its box spans the rows, a click anywhere in it finds it, and the
 /// continuation row's box is `covered` (no gridline, not a hit).
 #[test]
@@ -3823,6 +3846,33 @@ fn floating_tables_take_no_room_and_text_wraps_beside_them() {
     // The paragraph doesn't wait below them: it runs beside the narrow table, level with it.
     assert!((by - ny).abs() < 2.0, "body at {by}, narrow table text at {ny}");
     assert!(bx + bleft > nx + 200.0, "body text at {}, right of the narrow table", bx + bleft);
+}
+
+/// A table in the text flow that comes right after a floating table must start below it, not
+/// over it (Word and LibreOffice both clear the float). `w:tblpPr w:vertAnchor="text" w:tblpY="1"`
+/// puts the float a hair below the flow's own `y`, which must not let the flow table overlap it.
+#[test]
+fn a_flow_table_starts_below_a_floating_table() {
+    use wordcraft_doc::para::Anchor;
+    use wordcraft_doc::props::TableFloat;
+    let mut floated = Table::new(1, 1, 300.0);
+    floated.rows[0].cells[0].blocks = vec![wordcraft_doc::para_block(wordcraft_doc::Paragraph::with_text("Floated", Default::default()))];
+    floated.props.float = Some(TableFloat { h_rel: Anchor::Margin, v_rel: Anchor::Paragraph, y: 0.05, ..Default::default() });
+    let mut flow = Table::new(1, 1, 300.0);
+    flow.rows[0].cells[0].blocks = vec![wordcraft_doc::para_block(wordcraft_doc::Paragraph::with_text("Flow", Default::default()))];
+    let mut d = Document::new();
+    d.body = vec![std::sync::Arc::new(wordcraft_doc::Block::Table(floated)), std::sync::Arc::new(wordcraft_doc::Block::Table(flow))];
+    let l = lay(&d);
+    let rows: Vec<f32> = l.pages[0]
+        .items
+        .iter()
+        .filter_map(|i| match i {
+            Placed::Lines { y, path, .. } if path.0.len() > 1 => Some(*y),
+            _ => None,
+        })
+        .collect();
+    let [floated_y, flow_y] = rows.as_slice() else { panic!("{rows:?}") };
+    assert!(*flow_y > *floated_y, "flow table at {flow_y} overlaps the floating table at {floated_y}");
 }
 
 #[test]
