@@ -75,6 +75,19 @@ fn settle_text(doc: &mut Document, budget: &mut usize) -> Result<(), String> {
 
 fn refresh(doc: &mut Document, pass: RefPass<'_>, budget: &mut usize) -> Result<bool, String> {
     let bookmarks: std::collections::HashMap<_, _> = doc.bookmarks().into_iter().collect();
+    // These targets exist, but body-only evaluators cannot refresh their results.
+    let mut nonbody_targets = std::collections::HashSet::new();
+    for part in doc.parts.keys().copied() {
+        let story = StoryRef::Part(part);
+        for path in doc.para_paths(story) {
+            let Some(para) = doc.para(story, &path) else { continue };
+            for object in &para.objects {
+                if let InlineObject::BookmarkStart { name } = object {
+                    nonbody_targets.insert(name.clone());
+                }
+            }
+        }
+    }
     let sections = doc.sections();
     let pages: std::collections::HashMap<_, _> = match pass {
         RefPass::Text => Default::default(),
@@ -139,7 +152,13 @@ fn refresh(doc: &mut Document, pass: RefPass<'_>, budget: &mut usize) -> Result<
                     continue;
                 }
                 let Some(target) = code.args.first() else { continue };
+                // The shared parser does not split adjacent targets or switches. Hold
+                // the complete cache rather than lose a target or an unsupported flag.
+                if target.contains('\\') || instr.split_whitespace().any(|word| word.matches('\\').count() > 1) {
+                    continue;
+                }
                 let text = match bookmarks.get(target) {
+                    None if nonbody_targets.contains(target) => None,
                     None => Some(MISSING_TARGET.to_string()),
                     Some(start) if wanted == REF_NAME => inline_bookmark(doc, target, start, *budget)?,
                     Some(_) => {
@@ -325,6 +344,83 @@ mod tests {
                 ex.0
             })
             .collect()
+    }
+
+    #[test]
+    fn compact_refs_keep_cache() {
+        let mut doc = control();
+        let props = CharProps::default();
+        let cases = [
+            (r"REF PublicTarget\h", FieldFlags::Dirty),
+            (r"PAGEREF PublicTarget\h", FieldFlags::Dirty),
+            (r"PAGEREF PublicTarget\p\h", FieldFlags::Dirty),
+            (r"REF PublicTarget\h", FieldFlags::LockedDirty),
+            (r"PAGEREF PublicTarget \p\h", FieldFlags::Dirty),
+            (r"REF PublicTarget \h\p", FieldFlags::Dirty),
+            (r"PAGEREF PublicTarget \h\p", FieldFlags::Dirty),
+        ];
+        let first = doc.body.len();
+        for (instr, flags) in cases {
+            let mut p = Paragraph::new();
+            p.insert_object(0, field(instr, "Complete saved cache", flags), &props).unwrap();
+            doc.body.push(para_block(p));
+        }
+        let before = serde_json::to_value(&doc).unwrap();
+        let print = super::prepare(&doc, &Default::default()).unwrap();
+        for index in first..doc.body.len() {
+            assert_eq!(print.doc.para(StoryRef::Body, &Path::top(index)), doc.para(StoryRef::Body, &Path::top(index)));
+        }
+        assert_eq!(serde_json::to_value(&doc).unwrap(), before);
+        let text = pdf_text(&crate::io::save_bytes("out.pdf", &doc).unwrap()).join("");
+        assert_eq!(text.matches("Complete saved cache").count(), doc.body.len() - first);
+        assert!(!text.contains(super::MISSING_TARGET));
+    }
+
+    #[test]
+    fn nonbody_refs_keep_cache() {
+        use wordcraft_doc::PartKind;
+        for kind in [PartKind::Header, PartKind::Footer, PartKind::TextBox, PartKind::Footnote, PartKind::Endnote, PartKind::Comment] {
+            let mut doc = control();
+            let props = CharProps::default();
+            let mut target = Paragraph::with_text("Original nonbody target", props.clone());
+            target.insert_object(0, InlineObject::BookmarkStart { name: "OtherTarget".into() }, &props).unwrap();
+            target.insert_object(target.len(), InlineObject::BookmarkEnd { name: "OtherTarget".into() }, &props).unwrap();
+            let part = doc.add_part(kind, vec![para_block(target)]);
+            let first = doc.body.len();
+            for instr in ["REF OtherTarget", "PAGEREF OtherTarget"] {
+                let mut p = Paragraph::new();
+                p.insert_object(0, field(instr, "Complete nonbody cache", FieldFlags::Dirty), &props).unwrap();
+                doc.body.push(para_block(p));
+            }
+            let print = super::prepare(&doc, &Default::default()).unwrap();
+            for index in first..doc.body.len() {
+                assert_eq!(print.doc.para(StoryRef::Body, &Path::top(index)), doc.para(StoryRef::Body, &Path::top(index)), "{kind:?}");
+            }
+            let text = pdf_text(&crate::io::save_bytes("out.pdf", &doc).unwrap()).join("");
+            assert_eq!(text.matches("Complete nonbody cache").count(), 2, "{kind:?}");
+            // A same-named nonbody target must not shadow the supported body target.
+            for object in &mut doc.para_mut(StoryRef::Part(part), &Path::top(0)).unwrap().objects {
+                if let InlineObject::BookmarkStart { name } | InlineObject::BookmarkEnd { name } = object {
+                    *name = "PublicTarget".into();
+                }
+            }
+            let print = super::prepare(&doc, &Default::default()).unwrap();
+            assert_eq!(shown(&print.layout, 1), ["Current target heading"]);
+        }
+    }
+
+    #[test]
+    fn absent_refs_keep_error_policy() {
+        let mut doc = control();
+        for instr in ["REF AbsentTarget", "PAGEREF AbsentTarget"] {
+            let mut p = Paragraph::new();
+            p.insert_object(0, field(instr, "Old cache", FieldFlags::Dirty), &CharProps::default()).unwrap();
+            doc.body.push(para_block(p));
+        }
+        let print = super::prepare(&doc, &Default::default()).unwrap();
+        for index in doc.body.len() - 2..doc.body.len() {
+            assert_eq!(print.doc.para(StoryRef::Body, &Path::top(index)).unwrap().plain_text(), super::MISSING_TARGET);
+        }
     }
 
     #[test]
