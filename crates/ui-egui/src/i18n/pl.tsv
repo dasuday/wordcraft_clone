@@ -2622,3 +2622,7 @@ preview	Title	Tytuł
 # Reading Mode column widths (#1040)
 	Narrow	Wąska
 	Medium	Średnia
+	Interface font:	Czcionka interfejsu:
+	Inter (default)	Inter (domyślna)
+	System default	Domyślna systemowa
+	Draws the ribbon, menus and dialogs in Inter (the default), your desktop's interface font, or an installed family. Document text is unchanged.	Rysuje wstążkę, menu i okna dialogowe czcionką Inter (domyślną), czcionką interfejsu pulpitu lub zainstalowaną rodziną. Tekst dokumentu się nie zmienia.

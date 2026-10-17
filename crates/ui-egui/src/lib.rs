@@ -245,6 +245,9 @@ pub struct UiState {
     /// size in percent. Junk saved values read as Auto; out-of-range ones are clamped to 50–300 %.
     #[serde(rename = "uiScale")]
     pub interface_size: theme::InterfaceSize,
+    /// Interface font (#1375): the embedded Inter (default), the desktop's default sans-serif, or
+    /// an installed family. Ribbon, menus and dialogs only; document fonts are separate.
+    pub interface_font: theme::InterfaceFont,
     /// The interface size `ui.json` held before #822, on top of the display scale: read once to
     /// migrate ([`theme::legacy_interface_percent`]), never written. A valid `uiScale` wins.
     #[serde(rename = "interfaceSize", skip_serializing)]
@@ -347,6 +350,7 @@ impl Default for UiState {
             recent_colors: Vec::new(),
             theme: theme::Appearance::default(),
             interface_size: theme::InterfaceSize::default(),
+            interface_font: theme::InterfaceFont::default(),
             legacy_interface_size: None,
             animations: theme::Animations::default(),
             legacy_dark: None,
@@ -460,6 +464,12 @@ pub struct WordApp {
     /// The Navigation pane's search box takes the keyboard on its next frame (Ctrl+F, #712).
     pub(crate) nav_search_focus: bool,
     styled: bool,
+    /// The chosen interface faces (#1375), resolved when the setting changes; `None` is Inter.
+    interface_faces: Option<theme::InterfaceFaces>,
+    /// The interface font setting [`WordApp::interface_faces`] was resolved for.
+    interface_font: Option<theme::InterfaceFont>,
+    /// The interface fonts need installing on the next frame (the setting changed).
+    fonts_dirty: bool,
     /// The CJK face order the installed UI fonts use (Chinese first, or Japanese first).
     fonts_hans: bool,
     /// Whether the installed UI fonts use the Korean CJK face order.
@@ -594,6 +604,9 @@ impl WordApp {
             keytip_rects: Vec::new(),
             nav_search_focus: false,
             styled: false,
+            interface_faces: None,
+            interface_font: None,
+            fonts_dirty: false,
             fonts_hans: false,
             fonts_korean: false,
             fonts_system_cjk: false,
@@ -1399,6 +1412,43 @@ impl WordApp {
                 let size = self.ui.interface_size;
                 json!({"auto": size.is_auto(), "percent": size.drawn_percent(self.native_scale)})
             }
+            "ui.interfaceFont" => {
+                // `inter` (the default), `system` (fontconfig's sans-serif on Linux), or an
+                // installed family; no value reads it. The faces apply from the next frame; the
+                // document's own fonts are unchanged.
+                if let Some(v) = p.get("value") {
+                    let Some(value) = v.as_str() else {
+                        return Some(Err("`value` must be \"inter\", \"system\", or an installed font family".into()));
+                    };
+                    let Some(font) = theme::InterfaceFont::from_value(value) else {
+                        return Some(Err("`value` must be \"inter\", \"system\", or an installed font family".into()));
+                    };
+                    if let Some(family) = font.family()
+                        && !wordcraft_fonts::FontDb::global().has_family(family)
+                    {
+                        return Some(Err(format!("unknown font family {family:?}; use an installed family, \"inter\" or \"system\"")));
+                    }
+                    // Resolve now so the result reports what will be drawn; the next frame
+                    // installs the faces.
+                    self.interface_faces = theme::resolve_interface_faces(&font);
+                    self.interface_font = Some(font.clone());
+                    self.ui.interface_font = font;
+                    self.fonts_dirty = true;
+                }
+                let setting = &self.ui.interface_font;
+                let family = match (setting, &self.interface_faces) {
+                    (theme::InterfaceFont::Inter, _) => "Inter".to_string(),
+                    (theme::InterfaceFont::System, Some(f)) | (theme::InterfaceFont::Family(_), Some(f)) => f.label.clone(),
+                    (theme::InterfaceFont::System, None) => "System default".to_string(),
+                    (theme::InterfaceFont::Family(family), None) => family.clone(),
+                };
+                json!({
+                    "value": setting.value(),
+                    "family": family,
+                    "system": matches!(setting, theme::InterfaceFont::System),
+                    "available": matches!(setting, theme::InterfaceFont::Inter) || self.interface_faces.is_some(),
+                })
+            }
             "ui.animations" => {
                 // `system` (follow the system's animation setting), `on` or `off`; no value reads
                 // it. `enabled` is what that comes to now, `system` what the system reports.
@@ -1876,9 +1926,27 @@ impl WordApp {
     /// face has changed since the last install.
     fn install_ui_fonts(&mut self, ctx: &egui::Context, lang: i18n::Lang) {
         let system_cjk = self.fonts_system_cjk || self.want_system_cjk || lang.uses_cjk();
-        if !self.styled || lang.prefers_hans() != self.fonts_hans || lang.prefers_korean() != self.fonts_korean || system_cjk != self.fonts_system_cjk
+        let font = self.ui.interface_font.clone();
+        let font_changed = self.interface_font.as_ref() != Some(&font);
+        if font_changed {
+            self.interface_faces = theme::resolve_interface_faces(&font);
+            self.interface_font = Some(font);
+        }
+        if !self.styled
+            || font_changed
+            || self.fonts_dirty
+            || lang.prefers_hans() != self.fonts_hans
+            || lang.prefers_korean() != self.fonts_korean
+            || system_cjk != self.fonts_system_cjk
         {
-            theme::install_fonts_language_extra(ctx, lang.prefers_hans(), lang.prefers_korean(), system_cjk, &self.canvas.ime_faces);
+            theme::install_fonts_language_extra_with(
+                ctx,
+                lang.prefers_hans(),
+                lang.prefers_korean(),
+                system_cjk,
+                &self.canvas.ime_faces,
+                self.interface_faces.as_ref(),
+            );
             self.fonts_hans = lang.prefers_hans();
             self.fonts_korean = lang.prefers_korean();
             self.fonts_system_cjk = system_cjk;
@@ -1891,6 +1959,7 @@ impl WordApp {
                 o.quit_shortcuts = vec![egui::KeyboardShortcut::new(egui::Modifiers::MAC_CMD, egui::Key::Q)];
             });
             self.styled = true;
+            self.fonts_dirty = false;
         }
     }
 
@@ -2384,6 +2453,7 @@ pub(crate) fn works_without_document(id: &str) -> bool {
             | "ui.dark"
             | "ui.theme"
             | "ui.interfaceSize"
+            | "ui.interfaceFont"
             | "ui.animations"
             | "ui.language"
             | "ui.saveChanges"
@@ -2714,6 +2784,7 @@ mod tests {
         let refused = a.run("ui.zotero.status", json!({})).unwrap_err();
         assert!(refused.contains("No document is open"), "refused before it runs: {refused}");
         assert!(works_without_document("font.add"), "a font file dropped on the empty window is added");
+        assert!(works_without_document("ui.interfaceFont"), "the interface font setting works with no document");
         // Neither keys nor commands reach the hidden placeholder.
         assert!(a.run("text.insert", json!({"text": "Hello"})).is_err());
         assert!(a.execute("format.bold", json!({})).is_err());
@@ -5747,6 +5818,46 @@ mod tests {
         assert_eq!(a.run("ui.interfaceSize", json!({"value": "Auto"})).unwrap()["auto"], true);
         let saved = serde_json::to_string(&a.prefs()).unwrap();
         assert!(saved.contains(r#""uiScale":"auto""#), "{saved}");
+    }
+
+    /// #1375: the interface font setting is kept between runs, and junk saved values read as
+    /// Inter without losing the other preferences. `ui.interfaceFont` rejects unknown families
+    /// and leaves the setting alone.
+    #[test]
+    fn interface_font_survives_a_restart_and_rejects_unknown_families() {
+        let mut a = app();
+        let doc_before = serde_json::to_value(&a.session.doc).unwrap();
+        assert_eq!(a.run("ui.interfaceFont", json!({})).unwrap()["value"], "inter");
+        a.run("ui.interfaceFont", json!({"value": "Source Sans 3"})).unwrap();
+        let read = a.run("ui.interfaceFont", json!({})).unwrap();
+        assert_eq!(
+            (read["value"].as_str(), read["family"].as_str(), read["available"].as_bool()),
+            (Some("Source Sans 3"), Some("Source Sans 3"), Some(true))
+        );
+        assert!(a.run("ui.interfaceFont", json!({"value": "No Such Interface Family"})).is_err());
+        assert_eq!(a.ui.interface_font, theme::InterfaceFont::Family("Source Sans 3".into()), "a rejected value keeps the setting");
+        assert!(a.run("ui.interfaceFont", json!({"value": 42})).is_err());
+        assert!(a.run("ui.interfaceFont", json!({"value": ""})).is_err());
+        // A frame resolves and installs the faces.
+        let ctx = egui::Context::default();
+        ctx.run_ui(egui::RawInput::default(), |ui| a.logic(ui.ctx())).drop_without_applying_deltas();
+        assert!(a.interface_faces.is_some());
+        assert_eq!(serde_json::to_value(&a.session.doc).unwrap(), doc_before, "the document is unchanged");
+        let read = a.run("ui.interfaceFont", json!({})).unwrap();
+        assert_eq!((read["value"].as_str(), read["family"].as_str()), (Some("Source Sans 3"), Some("Source Sans 3")));
+        assert_eq!(read["available"], true);
+        let saved = serde_json::to_string(&a.prefs()).unwrap();
+        assert!(saved.contains(r#""interfaceFont":"Source Sans 3""#), "{saved}");
+        let mut b = app();
+        b.apply_prefs(UiState::from_json(saved.as_bytes()).unwrap());
+        assert_eq!(b.ui.interface_font, theme::InterfaceFont::Family("Source Sans 3".into()));
+
+        assert_eq!(a.run("ui.interfaceFont", json!({"value": "system"})).unwrap()["value"], "system");
+        assert_eq!(a.run("ui.interfaceFont", json!({"value": "inter"})).unwrap()["value"], "inter");
+        for raw in [r#""interfaceFont": "" "#, r#""interfaceFont": 42"#, r#""interfaceFont": null"#] {
+            let ui = UiState::from_json(format!(r#"{{{raw}, "tab": "Insert"}}"#).as_bytes()).unwrap();
+            assert_eq!((ui.interface_font, ui.tab.as_str()), (theme::InterfaceFont::Inter, "Insert"), "{raw}");
+        }
     }
 
     /// #822: a `ui.json` from before saved `interfaceSize` on top of the display scale. Its

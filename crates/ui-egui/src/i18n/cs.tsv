@@ -2624,3 +2624,7 @@ preview	Title	Ukázka
 # Reading Mode column widths (#1040)
 	Narrow	Úzká
 	Medium	Střední
+	Interface font:	Písmo rozhraní:
+	Inter (default)	Inter (výchozí)
+	System default	Výchozí systémové
+	Draws the ribbon, menus and dialogs in Inter (the default), your desktop's interface font, or an installed family. Document text is unchanged.	Vykresluje pás karet, nabídky a dialogová okna písmem Inter (výchozí), písmem rozhraní pracovní plochy nebo nainstalovanou rodinou. Text dokumentu se nemění.

@@ -2621,3 +2621,7 @@
 # Reading Mode column widths (#1040)
 	Narrow	Тясна
 	Medium	Средна
+	Interface font:	Шрифт на интерфейса:
+	Inter (default)	Inter (по подразбиране)
+	System default	Системен по подразбиране
+	Draws the ribbon, menus and dialogs in Inter (the default), your desktop's interface font, or an installed family. Document text is unchanged.	Лентата, менютата и диалоговите прозорци се изчертават с Inter (по подразбиране), шрифта на интерфейса на работния плот или инсталирано семейство. Текстът на документа не се променя.

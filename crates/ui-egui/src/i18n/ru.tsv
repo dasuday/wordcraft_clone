@@ -2630,3 +2630,7 @@ preview	Title	Пример
 # Reading Mode column widths (#1040)
 	Narrow	Узкая
 	Medium	Средняя
+	Interface font:	Шрифт интерфейса:
+	Inter (default)	Inter (по умолчанию)
+	System default	Системный шрифт
+	Draws the ribbon, menus and dialogs in Inter (the default), your desktop's interface font, or an installed family. Document text is unchanged.	Рисует ленту, меню и диалоговые окна шрифтом Inter (по умолчанию), шрифтом интерфейса рабочего стола или установленным семейством. Текст документа не меняется.
