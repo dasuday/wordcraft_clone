@@ -449,13 +449,27 @@ fn deleted_soft_hyphen_is_no_hyphenation_point_without_markup() {
     assert_eq!(hyphens(true), 0);
 }
 
+/// The right indent that leaves a column where "xx ab-" and "abcdef" fit but "xx abcdef" does not.
+/// Measured from a layout, halfway between the two, as a fixed width does that with some fonts only.
+fn xx_abcdef_indent() -> f32 {
+    let width = |text: &str| {
+        let l = lay(&Document::from_text(text));
+        let Some(Placed::Lines { para, .. }) = l.pages[0].items.iter().find(|i| matches!(i, Placed::Lines { .. })) else { panic!() };
+        let xs = &para.lines[0].xs;
+        xs.last().unwrap() - xs.first().unwrap()
+    };
+    let (fits, too_wide) = (width("xx ab-").max(width("abcdef")), width("xx abcdef"));
+    assert!(fits < too_wide, "{fits} {too_wide}");
+    468.0 - (fits + too_wide) / 2.0
+}
+
 #[test]
 fn deleted_text_adds_no_line_break_opportunity_without_markup() {
     // "xx ab\u{ad}cdef" in a column where "xx ab-" and "abcdef" fit but "xx abcdef" does not; only
     // the soft hyphen (5..7) is track-deleted.
     let mut d = Document::from_text("xx ab\u{ad}cdef");
     d.format_range(&Pos::body(0, 5), &Pos::body(0, 7), &|c| c.del = Some(0)).unwrap();
-    d.format_paragraphs(&Pos::body(0, 0), &Pos::body(0, 0), &|p| p.indent_right = Some(468.0 - 40.0)).unwrap();
+    d.format_paragraphs(&Pos::body(0, 0), &Pos::body(0, 0), &|p| p.indent_right = Some(xx_abcdef_indent())).unwrap();
     let line_starts = |hide_deleted: bool| {
         let l = layout(&d, &mut LayoutCache::new(), &LayoutOptions { hide_deleted, ..Default::default() });
         let Some(Placed::Lines { para, .. }) = l.pages[0].items.iter().find(|i| matches!(i, Placed::Lines { .. })) else { panic!() };
@@ -488,11 +502,12 @@ fn hidden_soft_hyphen_is_no_hyphenation_point_when_hidden_text_is_not_shown() {
 fn hidden_text_adds_no_line_break_opportunity_when_not_shown() {
     // "xx ab" + hidden soft hyphen or space + "cdef", in a column where "xx ab-" and "abcdef" fit
     // but "xx abcdef" does not. Measured in Word (hidden text not printed): "xx" / "abcdef" both times.
+    let indent = xx_abcdef_indent();
     for hidden in ["\u{ad}", " "] {
         let mut d = Document::from_text(&format!("xx ab{hidden}cdef"));
         let end = 5 + hidden.len();
         d.format_range(&Pos::body(0, 5), &Pos::body(0, end), &|c| c.hidden = Some(true)).unwrap();
-        d.format_paragraphs(&Pos::body(0, 0), &Pos::body(0, 0), &|p| p.indent_right = Some(468.0 - 40.0)).unwrap();
+        d.format_paragraphs(&Pos::body(0, 0), &Pos::body(0, 0), &|p| p.indent_right = Some(indent)).unwrap();
         let line_starts = |show_hidden: bool| {
             let l = layout(&d, &mut LayoutCache::new(), &LayoutOptions { show_hidden, ..Default::default() });
             let Some(Placed::Lines { para, .. }) = l.pages[0].items.iter().find(|i| matches!(i, Placed::Lines { .. })) else { panic!() };
@@ -4971,14 +4986,14 @@ fn tight_wrap_follows_an_ellipse() {
         assert!(right <= a + 1.5 || left >= b - 1.5, "line {top}..{bottom} at {left}..{right} runs into {a}..{b}: {tight:?}");
     }
     // Lines near the ellipse's top and bottom start at the curve, well inside its frame; beside
-    // the middle they don't. Measured against each line's own contour edge, so the check holds
-    // whatever line height the test machine's fonts give.
-    let line = |pred: &dyn Fn(f32) -> bool| *tight.iter().find(|l| pred(l.0) && l.2 > 60.0).unwrap();
-    for (what, l) in [("first line", line(&|top| top < 1.0)), ("near the bottom", line(&|top| top > 140.0 && top < 160.0))] {
+    // the middle they don't. Measured against each line's own contour edge, and on the line across
+    // a given height, so the check holds whatever line height the test machine's fonts give.
+    let line = |y: f32| *tight.iter().find(|l| l.0 <= y && y < l.1 && l.2 > 60.0).unwrap_or_else(|| panic!("no line across {y} in {tight:?}"));
+    for (what, l) in [("first line", line(1.0)), ("near the bottom", line(150.0))] {
         let edge = contour(l.0, l.1).1;
         assert!(l.2 <= edge + 3.0 && l.2 < 169.0 - 10.0, "{what} hugs the curve at {edge}: {l:?} in {tight:?}");
     }
-    assert!(line(&|top| top > 65.0 && top < 80.0).2 >= 160.0, "beside the widest part: {tight:?}");
+    assert!(line(80.0).2 >= 160.0, "beside the widest part: {tight:?}");
     // A convex shape has no gaps for Through to use: it wraps as Tight.
     assert_eq!(through, tight);
 }
