@@ -989,7 +989,7 @@ fn polish_covers_every_key_of_every_other_catalog() {
     let polish = keys(lang("pl").0.source);
     // Italian and Hungarian still carry "Style: APA", which the interface no longer shows;
     // Hungarian and Bulgarian also name the citation styles, and Bulgarian has a few one-line
-    for other in Lang::all().filter(|l| *l != Lang::EN && !matches!(l.code(), "pl" | "it" | "hu" | "bg" | "vi" | "sv" | "hr")) {
+    for other in Lang::all().filter(|l| *l != Lang::EN && !matches!(l.code(), "pl" | "it" | "hu" | "bg" | "vi" | "sv" | "hr" | "lt")) {
         let mut missing: Vec<String> = keys(other.0.source).difference(&polish).cloned().collect();
         missing.sort();
         assert!(missing.is_empty(), "pl lacks {}'s {missing:?}", other.code());
@@ -1550,4 +1550,90 @@ fn bundled_interface_fonts_cover_vietnamese_letters() {
         }
     }
     assert!(!lang("vi").uses_cjk());
+}
+
+#[test]
+fn lithuanian_locales_and_saved_preference_work_without_changing_the_document() {
+    let lt = lang("lt");
+    for tag in ["lt", "lt-LT", "lt_LT.UTF-8", "LT-lt", "lt_LT.UTF-8@euro", "lt-Latn-LT"] {
+        assert_eq!(lang_from_tag(tag), Some(lt), "{tag}");
+    }
+    assert_eq!(first_supported([UNSUPPORTED, "lt-LT", "en-US"]), Some(lt));
+    assert_eq!(first_supported(["en-US", "lt-LT"]), Some(Lang::EN));
+    assert_eq!(normalize_pref("LT"), Some("lt"));
+    assert_eq!(lt.name(), "Lietuvių");
+    assert_eq!(lt.editing_lang(), None, "interface-only translation must not enable proofing");
+    let mut app = crate::WordApp::new(wordcraft_engine::Session::new(wordcraft_engine::sample::sample_document()), Default::default());
+    let before = serde_json::to_value(&app.session.doc).unwrap();
+    let result = app.run("ui.language", serde_json::json!({"value": "LT"})).unwrap();
+    assert_eq!(result["effective"], "lt");
+    assert_eq!(app.ui.language, "lt");
+    assert!(result["available"].as_array().unwrap().iter().any(|l| l["code"] == "lt" && l["name"] == "Lietuvių"));
+    assert_eq!(serde_json::to_value(&app.session.doc).unwrap(), before);
+    let saved = serde_json::to_string(&app.ui).unwrap();
+    let restored: crate::UiState = serde_json::from_str(&saved).unwrap();
+    assert_eq!(Lang::from_pref(&restored.language), lt);
+    assert!(app.run("ui.language", serde_json::json!({"value": "lt-unknown"})).is_err());
+    assert_eq!(app.ui.language, "lt");
+}
+
+#[test]
+fn lithuanian_covers_existing_contexts_and_preserves_count_templates() {
+    use std::collections::HashSet;
+    let lt = lang("lt");
+    let (entries, errors) = parse_entries(lt.0.source);
+    assert!(errors.is_empty(), "{errors:?}");
+    let keys: HashSet<_> = entries.into_iter().map(|e| (e.context, e.source)).collect();
+    for other in Lang::all().filter(|l| *l != Lang::EN && l.code() != "lt") {
+        let other_keys: HashSet<_> = parse_entries(other.0.source).0.into_iter().map(|e| (e.context, e.source)).collect();
+        let mut missing: Vec<_> = other_keys.difference(&keys).cloned().collect();
+        missing.sort();
+        assert!(missing.is_empty(), "lt lacks {}'s {missing:?}", other.code());
+    }
+    assert_eq!(tr(lt, "File"), "Failas");
+    assert_eq!(tr(lt, "Save"), "Įrašyti");
+    assert_eq!(tr(lt, "Review"), "Recenzavimas");
+    assert_eq!(tr(lt, "unknown future label"), "unknown future label");
+    assert_eq!(tr(lt, "WordCraft"), "WordCraft");
+    assert_eq!(tr(lt, "Letter"), "Letter", "paper size keeps its name");
+    assert_eq!(trc(lt, "template", "Letter"), "Laiškas");
+    assert_eq!(trc(lt, "preview", "Title"), "Pavadinimas");
+    assert!(tr(lt, "Type a command, e.g. \"insert table\"").contains(&tr(lt, "Insert Table").to_lowercase()));
+    assert_eq!(fmt(tr(lt, "Page {page} of {pages}"), &[("page", "3"), ("pages", "9")]), "Puslapis 3 iš 9");
+    assert_eq!(fmt(tr(lt, "Exported {path}"), &[("path", "draft-{words}.docx")]), "Eksportuota: draft-{words}.docx");
+    // Neutral labels avoid incorrect noun endings for 1, 2, 10, 11, 21 and other Lithuanian counts.
+    for count in [0, 1, 2, 9, 10, 11, 19, 21, 22, 101, 111, 1000] {
+        let words = count.to_string();
+        assert_eq!(fmt(tr(lt, "{words} words"), &[("words", &words)]), format!("Žodžių skaičius: {count}"));
+        assert_eq!(fmt(tr(lt, "{selected} of {words} words"), &[("selected", "1"), ("words", &words)]), format!("Pažymėta žodžių: 1 iš {count}"));
+    }
+    set_current(lt);
+    assert_eq!(builtin_style_name("Heading 2"), "Antraštė 2");
+    assert_eq!(builtin_style_name("TOC 3"), "Turinys 3");
+    assert_eq!(builtin_style_name("My Own Style"), "My Own Style");
+    assert_eq!(location("Home › Font"), "Pradžia › Šriftas");
+    assert_eq!(prefixed("Undo", "Bold"), "Anuliuoti: Pusjuodis");
+    set_current(Lang::EN);
+}
+
+#[test]
+fn bundled_interface_fonts_cover_lithuanian_letters() {
+    let db = wordcraft_fonts::FontDb::with_font_dirs(Vec::new());
+    let (entries, errors) = parse_entries(lang("lt").0.source);
+    assert!(errors.is_empty(), "{errors:?}");
+    let extra = "ĄąČčĘęĖėĮįŠšŲųŪūŽž„“–";
+    let chars: std::collections::HashSet<char> = entries
+        .iter()
+        .flat_map(|e| e.translation.chars())
+        .filter(|c| ('\u{00C0}'..='\u{024F}').contains(c) || ('\u{0300}'..='\u{036F}').contains(c) || extra.contains(*c))
+        .chain(extra.chars())
+        .collect();
+    for (family, style) in [("Inter", "Regular"), ("Inter", "Medium"), ("Inter", "SemiBold"), ("JetBrains Mono", "Regular")] {
+        let face = db.face(family, style);
+        assert_eq!(face.family, family, "must use the bundled interface face");
+        for ch in &chars {
+            assert_ne!(face.glyph_for(*ch), 0, "{family} {style} lacks {ch:?}");
+        }
+    }
+    assert!(!lang("lt").uses_cjk());
 }
