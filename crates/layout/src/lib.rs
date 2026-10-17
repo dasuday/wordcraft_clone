@@ -1140,7 +1140,10 @@ fn layout_box(
                         (r.x, r.y)
                     }
                     // A table in the text flow starts below the floating objects in its way.
-                    None => (tl.x, below(&excl, y, tl.x, tl.x + tl.width)),
+                    None => {
+                        let h = tl.rows.iter().map(|r| r.height).sum::<f32>();
+                        (tl.x, below(&excl, y, tl.x, tl.x + tl.width, h))
+                    }
                 };
                 let mut row_y = ty;
                 for row in &tl.rows {
@@ -3653,12 +3656,12 @@ fn place_table(ctx: &mut Ctx, pb: &mut PageBuilder, t: &wordcraft_doc::Table, bl
     pb.prev = None;
     let width = pb.col_w();
     let mut tl = table::layout_table(ctx, StoryRef::Body, t, &[block as u32], width, 1);
+    let table_h: f32 = tl.rows.iter().map(|r| r.height).sum();
     if let Some(f) = t.props.float.filter(|_| !pb.web) {
         // Before Word 2013 layout (compatibility mode 15) an offset places the first cell's text,
         // so the edge sits a cell margin further out.
         let legacy = if ctx.doc.settings.compat_mode < 15 { table::first_cell_left_margin(ctx, t) } else { 0.0 };
-        let h: f32 = tl.rows.iter().map(|r| r.height).sum();
-        if h <= pb.uncapped_bottom() - pb.top + 0.01 {
+        if table_h <= pb.uncapped_bottom() - pb.top + 0.01 {
             place_floating_table(pb, &tl, &f, legacy, ctx.mirror, block, body_top);
             return;
         }
@@ -3667,7 +3670,7 @@ fn place_table(ctx: &mut Ctx, pb: &mut PageBuilder, t: &wordcraft_doc::Table, bl
         tl.x = float_table_x(pb, tl.width, &f, legacy, ctx.mirror) - pb.col_x();
     }
     // A table in the text flow starts below the floating objects in its way.
-    below_floats(pb, pb.col_x() + tl.x, pb.col_x() + tl.x + tl.width);
+    below_floats(pb, pb.col_x() + tl.x, pb.col_x() + tl.x + tl.width, table_h);
     let header_rows: Vec<usize> = (0..t.rows.len()).take_while(|r| t.rows.get(*r).is_some_and(|row| row.props.header)).collect();
     // Header rows are re-placed on every page a table spills onto, so a table with many header
     // rows that each spill onto their own page is O(header rows × pages) placed items — a few KB
@@ -3894,15 +3897,16 @@ fn float_table_x(pb: &PageBuilder, w: f32, f: &TableFloat, legacy: f32, mirror: 
 
 /// Move `pb.y` below the floating objects in the way of something spanning `x0..x1` that
 /// starts there (a table in the text flow doesn't wrap around them).
-fn below_floats(pb: &mut PageBuilder, x0: f32, x1: f32) {
-    pb.y = below(&pb.excl, pb.y, x0, x1);
+fn below_floats(pb: &mut PageBuilder, x0: f32, x1: f32, height: f32) {
+    pb.y = below(&pb.excl, pb.y, x0, x1, height);
 }
 
-/// `y`, moved below the wrap areas in `excl` in the way of something spanning `x0..x1` that
-/// starts there.
-fn below(excl: &[WrapArea], mut y: f32, x0: f32, x1: f32) -> f32 {
+/// `y`, moved below the wrap areas in `excl` in the way of something spanning `x0..x1`, `height`
+/// tall, that starts there. A float that only reaches into the block (its top is a hair below `y`,
+/// as `w:tblpY` leaves it) still counts: the block would run into it.
+fn below(excl: &[WrapArea], mut y: f32, x0: f32, x1: f32, height: f32) -> f32 {
     for _ in 0..64 {
-        let in_the_way = excl.iter().filter(|(r, ..)| r.y <= y + 0.01 && r.bottom() > y && r.x < x1 && r.right() > x0);
+        let in_the_way = excl.iter().filter(|(r, ..)| r.y < y + height && r.bottom() > y && r.x < x1 && r.right() > x0);
         let Some(bottom) = in_the_way.map(|(r, ..)| r.bottom()).reduce(f32::max) else { break };
         y = bottom;
     }

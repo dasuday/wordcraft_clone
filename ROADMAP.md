@@ -590,3 +590,4 @@ Ranked, to beta (detail and remaining milestones in [docs/roadmap.md](docs/roadm
 | 2026-10-09 | minor | Recently landed: RTL, Ukrainian and Brazilian Portuguese |
 | 2026-10-06 | major | First honest estimate: 88% catalog, ~62% real parity, alpha ~85% of the way |
 | 2026-10-12 | trivial | Progress log: recipient filter and sort, .xls and legacy-encoding recipient lists (#778) |
+| 2026-10-17 | trivial | Table layout: rows that skip leading grid columns (`w:gridBefore`/`w:gridAfter`) place their cells in the correct columns; a table in the text flow starts below a floating table in its way, even if the float is left a hair below the flow by `w:tblpY` (`layout::tests::a_row_skipping_grid_columns_starts_after_them`, `wordcraft_doc::table::tests::grid_before_offsets_a_rows_columns`, `layout::tests::a_flow_table_starts_below_a_floating_table`) |
