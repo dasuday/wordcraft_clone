@@ -2246,3 +2246,7 @@
 # Reading Mode column widths (#1040)
 	Narrow	狭い
 	Medium	中
+	Not protected by recovery: {reason}	回復で保護されていません: {reason}
+	pictures too large to keep ({count})	画像が大きすぎて保持できません ({count})
+	Save the document to keep everything. The recovery copy keeps the text but not: {names}	すべてを保持するには文書を保存してください。回復用コピーにはテキストは含まれますが、次は含まれません: {names}
+	no copy could be written	コピーを書き込めませんでした

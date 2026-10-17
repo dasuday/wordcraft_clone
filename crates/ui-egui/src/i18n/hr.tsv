@@ -2645,3 +2645,7 @@ preview	Title	Naslov
 	Bottom Right Cell	Donja desna ćelija
 	Inside Horizontal Border	Unutarnji vodoravni obrub
 	Inside Vertical Border	Unutarnji okomiti obrub
+	Not protected by recovery: {reason}	Nije zaštićeno oporavkom: {reason}
+	pictures too large to keep ({count})	slike prevelike za čuvanje ({count})
+	Save the document to keep everything. The recovery copy keeps the text but not: {names}	Spremite dokument da biste sačuvali sve. Kopija za oporavak čuva tekst, ali ne i: {names}
+	no copy could be written	kopija se nije mogla zapisati

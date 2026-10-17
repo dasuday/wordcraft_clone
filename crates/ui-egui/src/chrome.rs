@@ -394,6 +394,21 @@ pub fn title_bar(app: &mut WordApp, ui: &mut Ui) {
         });
 }
 
+/// The status bar's reason that recovery doesn't cover the document, and the detail its tooltip
+/// gives.
+fn recovery_gap_text(gap: &wordcraft_engine::recovery::RecoveryGap) -> (String, String) {
+    match gap {
+        wordcraft_engine::recovery::RecoveryGap::Omitted(parts) => (
+            crate::i18n::fmt(tl!("pictures too large to keep ({count})"), &[("count", &parts.len().to_string())]),
+            crate::i18n::fmt(
+                tl!("Save the document to keep everything. The recovery copy keeps the text but not: {names}"),
+                &[("names", &parts.join(", "))],
+            ),
+        ),
+        wordcraft_engine::recovery::RecoveryGap::Failed(error) => (tl!("no copy could be written").to_string(), error.clone()),
+    }
+}
+
 pub fn status_bar(app: &mut WordApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
     egui::Panel::bottom("status")
@@ -467,6 +482,20 @@ pub fn status_bar(app: &mut WordApp, ui: &mut Ui) {
                 }
                 if app.session.prefs.overtype && st(ui, tl!("Overtype")).on_hover_text(tl!("Click to switch back to inserting")).clicked() {
                     let _ = app.run("text.overtype", json!({"value": false}));
+                }
+                // Unsaved changes recovery doesn't fully keep, for as long as that lasts (`docs/recovery.md`).
+                if let Some(gap) = app.session.recovery_gap() {
+                    let (reason, detail) = recovery_gap_text(&gap);
+                    let text = crate::i18n::fmt(tl!("Not protected by recovery: {reason}"), &[("reason", &reason)]);
+                    let font = TypeRung::Caption.regular();
+                    let track = TypeRung::Caption.tracking();
+                    let w = text_width(ui.painter(), &text, &font, track, t.red);
+                    let (r, resp) = ui.allocate_exact_size(vec2(w + 1.0, TypeRung::Caption.line_height()), Sense::click());
+                    paint_text(ui.painter(), pos2(r.min.x, r.min.y), Align2::LEFT_TOP, &text, &font, track, t.red);
+                    resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Label, true, &text));
+                    if resp.on_hover_text(detail).clicked() {
+                        let _ = app.run("file.recover", json!({}));
+                    }
                 }
                 if let Some((msg, at)) = &app.status_msg
                     && crate::now_ms() - at < 6000.0

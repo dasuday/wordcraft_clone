@@ -2256,3 +2256,7 @@
 # Reading Mode column widths (#1040)
 	Narrow	Uska
 	Medium	Srednja
+	Not protected by recovery: {reason}	Nije zaštićeno oporavkom: {reason}
+	pictures too large to keep ({count})	slike su prevelike za čuvanje ({count})
+	Save the document to keep everything. The recovery copy keeps the text but not: {names}	Sačuvajte dokument da biste zadržali sve. Kopija za oporavak čuva tekst, ali ne i: {names}
+	no copy could be written	kopija nije mogla da se zapiše

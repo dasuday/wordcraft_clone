@@ -626,6 +626,34 @@ mod tests {
         let _ = std::fs::remove_dir_all(root);
     }
 
+    /// When recovery can't keep all of the unsaved document, the status bar says so for as long
+    /// as that lasts, and the warning goes once the document is saved (#2624).
+    #[test]
+    #[cfg(not(target_arch = "wasm32"))]
+    fn the_status_bar_says_when_recovery_does_not_cover_the_document() {
+        let (app, root) = recovery_app();
+        let mut h = recovery_harness(app);
+        settle_recovery(&mut h);
+        h.state_mut().ui.backstage = false;
+        h.state_mut().session.set_recovery_record_budget(256 << 10);
+        h.state_mut().session.doc.media.insert("media/huge.png".into(), std::sync::Arc::new(vec![1u8; 1 << 20]));
+        h.state_mut().execute("text.insert", json!({"text": "Unsaved synthetic work"})).unwrap();
+        assert!(h.state().session.recovery_gap().is_none());
+        h.state_mut().session.recovery_snapshot_due_now();
+        h.run_steps(2);
+        settle_recovery(&mut h);
+        let warning = "Not protected by recovery: pictures too large to keep (1)";
+        h.get_by_label(warning);
+        h.run_steps(4);
+        h.get_by_label(warning);
+        let saved = root.join("saved.json");
+        h.state_mut().execute("file.save", json!({"path": saved})).unwrap();
+        h.run_steps(4);
+        assert!(h.query_by_label(warning).is_none());
+        drop(h);
+        let _ = std::fs::remove_dir_all(root);
+    }
+
     #[test]
     fn template_search_matches_labels_case_insensitively() {
         let ids = |q: &str| matching_templates(q).into_iter().map(|(_, id)| id).collect::<Vec<_>>();

@@ -2258,3 +2258,7 @@
 # Reading Mode column widths (#1040)
 	Narrow	窄
 	Medium	中等
+	Not protected by recovery: {reason}	未受恢复保护：{reason}
+	pictures too large to keep ({count})	图片太大，无法保留 ({count})
+	Save the document to keep everything. The recovery copy keeps the text but not: {names}	保存文档即可保留全部内容。恢复副本保留了文本，但未保留：{names}
+	no copy could be written	无法写入副本

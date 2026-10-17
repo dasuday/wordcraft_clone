@@ -2642,3 +2642,7 @@ preview	Title	Örnek
 # Reading Mode column widths (#1040)
 	Narrow	Dar
 	Medium	Orta
+	Not protected by recovery: {reason}	Kurtarma tarafından korunmuyor: {reason}
+	pictures too large to keep ({count})	saklanamayacak kadar büyük resimler ({count})
+	Save the document to keep everything. The recovery copy keeps the text but not: {names}	Her şeyi saklamak için belgeyi kaydedin. Kurtarma kopyası metni saklar ama bunları saklamaz: {names}
+	no copy could be written	kopya yazılamadı

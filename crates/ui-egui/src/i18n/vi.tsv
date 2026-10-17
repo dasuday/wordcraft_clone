@@ -2685,3 +2685,7 @@ template	Letter	Thư
 # Reading Mode column widths (#1040)
 	Narrow	Hẹp
 	Medium	Trung bình
+	Not protected by recovery: {reason}	Không được khôi phục bảo vệ: {reason}
+	pictures too large to keep ({count})	ảnh quá lớn để giữ lại ({count})
+	Save the document to keep everything. The recovery copy keeps the text but not: {names}	Hãy lưu tài liệu để giữ mọi thứ. Bản sao khôi phục giữ văn bản nhưng không giữ: {names}
+	no copy could be written	không thể ghi bản sao

@@ -2654,3 +2654,7 @@ preview	Title	Esempio
 # Reading Mode column widths (#1040)
 	Narrow	Stretta
 	Medium	Media
+	Not protected by recovery: {reason}	Non protetto dal ripristino: {reason}
+	pictures too large to keep ({count})	immagini troppo grandi da conservare ({count})
+	Save the document to keep everything. The recovery copy keeps the text but not: {names}	Salva il documento per conservare tutto. La copia di ripristino conserva il testo, ma non: {names}
+	no copy could be written	impossibile scrivere una copia

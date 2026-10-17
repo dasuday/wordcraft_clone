@@ -2641,3 +2641,7 @@
 # Reading Mode column widths (#1040)
 	Narrow	Keskeny
 	Medium	Közepes
+	Not protected by recovery: {reason}	A helyreállítás nem védi: {reason}
+	pictures too large to keep ({count})	a képek túl nagyok a megőrzéshez ({count})
+	Save the document to keep everything. The recovery copy keeps the text but not: {names}	Mentse a dokumentumot, hogy minden megmaradjon. A helyreállítási másolat megőrzi a szöveget, de ezeket nem: {names}
+	no copy could be written	nem sikerült másolatot írni

@@ -2635,3 +2635,7 @@ preview	Title	Tytuł
 # Reading Mode column widths (#1040)
 	Narrow	Wąska
 	Medium	Średnia
+	Not protected by recovery: {reason}	Niechronione przez odzyskiwanie: {reason}
+	pictures too large to keep ({count})	obrazy zbyt duże, by je zachować ({count})
+	Save the document to keep everything. The recovery copy keeps the text but not: {names}	Zapisz dokument, aby zachować wszystko. Kopia odzyskiwania zachowuje tekst, ale nie: {names}
+	no copy could be written	nie udało się zapisać kopii

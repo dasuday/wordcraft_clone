@@ -2253,3 +2253,7 @@
 # Reading Mode column widths (#1040)
 	Narrow	Étroite
 	Medium	Moyenne
+	Not protected by recovery: {reason}	Non protégé par la récupération : {reason}
+	pictures too large to keep ({count})	images trop volumineuses pour être conservées ({count})
+	Save the document to keep everything. The recovery copy keeps the text but not: {names}	Enregistrez le document pour tout conserver. La copie de récupération conserve le texte, mais pas : {names}
+	no copy could be written	aucune copie n’a pu être écrite

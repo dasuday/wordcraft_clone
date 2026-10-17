@@ -2258,3 +2258,7 @@
 # Reading Mode column widths (#1040)
 	Narrow	Вузька
 	Medium	Середня
+	Not protected by recovery: {reason}	Не захищено відновленням: {reason}
+	pictures too large to keep ({count})	зображення завеликі для збереження ({count})
+	Save the document to keep everything. The recovery copy keeps the text but not: {names}	Збережіть документ, щоб зберегти все. Копія для відновлення зберігає текст, але не: {names}
+	no copy could be written	не вдалося записати копію

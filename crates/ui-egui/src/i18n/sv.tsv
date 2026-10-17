@@ -2660,3 +2660,7 @@ preview	Title	Titel
 	Bottom Right Cell	Nedre högra cellen
 	Inside Horizontal Border	Inre vågrät kantlinje
 	Inside Vertical Border	Inre lodrät kantlinje
+	Not protected by recovery: {reason}	Inte skyddat av återställning: {reason}
+	pictures too large to keep ({count})	bilder för stora att behålla ({count})
+	Save the document to keep everything. The recovery copy keeps the text but not: {names}	Spara dokumentet för att behålla allt. Återställningskopian behåller texten men inte: {names}
+	no copy could be written	ingen kopia kunde skrivas

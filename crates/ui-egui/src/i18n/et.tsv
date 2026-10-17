@@ -2280,3 +2280,7 @@
 # Reading Mode column widths (#1040)
 	Narrow	Kitsas
 	Medium	Keskmine
+	Not protected by recovery: {reason}	Taastamine ei kaitse: {reason}
+	pictures too large to keep ({count})	pildid on säilitamiseks liiga suured ({count})
+	Save the document to keep everything. The recovery copy keeps the text but not: {names}	Kõige säilitamiseks salvestage dokument. Taastekoopia säilitab teksti, kuid mitte: {names}
+	no copy could be written	koopiat ei saanud kirjutada

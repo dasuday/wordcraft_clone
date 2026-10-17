@@ -2643,3 +2643,7 @@ preview	Title	Пример
 # Reading Mode column widths (#1040)
 	Narrow	Узкая
 	Medium	Средняя
+	Not protected by recovery: {reason}	Не защищено восстановлением: {reason}
+	pictures too large to keep ({count})	рисунки слишком велики для сохранения ({count})
+	Save the document to keep everything. The recovery copy keeps the text but not: {names}	Сохраните документ, чтобы сохранить всё. Копия для восстановления хранит текст, но не: {names}
+	no copy could be written	не удалось записать копию

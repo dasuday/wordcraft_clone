@@ -2637,3 +2637,7 @@ preview	Title	Ukázka
 # Reading Mode column widths (#1040)
 	Narrow	Úzká
 	Medium	Střední
+	Not protected by recovery: {reason}	Nechráněno obnovením: {reason}
+	pictures too large to keep ({count})	obrázky příliš velké k uložení ({count})
+	Save the document to keep everything. The recovery copy keeps the text but not: {names}	Uložte dokument, aby se zachovalo vše. Kopie pro obnovení uchovává text, ale ne: {names}
+	no copy could be written	kopii nelze zapsat
