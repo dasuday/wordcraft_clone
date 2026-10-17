@@ -881,6 +881,24 @@ mod tests {
         assert_eq!(para(&s, 1, 1).plain_text(), "r1c1");
     }
 
+    /// The ribbon's double-click is click, click (off), then a sticky re-arm: the painter stays on
+    /// after each paste until it's toggled off.
+    #[test]
+    fn a_double_click_makes_the_format_painter_sticky() {
+        let mut s = table_session(2, 2);
+        fill(&mut s);
+        s.sel = Selection::caret(cell_pos(&s, 0, 0));
+        s.run("edit.formatPainter", &json!({})).unwrap();
+        s.run("edit.formatPainter", &json!({})).unwrap();
+        assert!(s.painter.is_none());
+        s.run("edit.formatPainter", &json!({"sticky": true})).unwrap();
+        s.sel = Selection::caret(cell_pos(&s, 0, 1));
+        s.run("edit.pasteFormat", &json!({})).unwrap();
+        assert!(s.painter.is_some());
+        s.run("edit.formatPainter", &json!({})).unwrap();
+        assert!(s.painter.is_none());
+    }
+
     /// Where the app extends the selection while dragging (`caret.set` with `extend`).
     fn drag_to(s: &mut Session, to: Pos) {
         s.run("caret.set", &json!({"pos": to, "extend": true})).unwrap();

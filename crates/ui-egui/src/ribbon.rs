@@ -753,8 +753,19 @@ fn home(app: &mut WordApp, ui: &mut Ui) {
         stack(ui, |ui| {
             small(ui, app, "cut", Some("Cut"), "Cut", "edit.cut", json!({}), false);
             small(ui, app, "copy", Some("Copy"), "Copy", "edit.copy", json!({}), false);
-            let active = app.session.painter.is_some();
-            small(ui, app, "painter", Some("Format"), "Format Painter", "edit.formatPainter", json!({}), active);
+            // One click arms it once (blue border only); a double-click keeps it on (blue fill too).
+            let armed = app.session.painter.is_some();
+            let sticky = app.session.painter.as_ref().is_some_and(|p| p.2);
+            let resp = small(ui, app, "painter", Some("Format"), "Format Painter", "edit.formatPainter", json!({}), sticky);
+            if armed && !sticky {
+                let accent = Tokens::get(ui.ctx()).accent;
+                ui.painter().rect_stroke(resp.rect, egui::CornerRadius::same(4), Stroke::new(1.0, accent), egui::StrokeKind::Inside);
+            }
+            // Double-click keeps the painter on until Esc or the button is clicked again (Word). The
+            // second click of the pair has just toggled it off, so switch it back on, sticky.
+            if resp.double_clicked() {
+                let _ = app.run("edit.formatPainter", json!({"sticky": true}));
+            }
         });
     });
     group(ui, "Font", Some("format.fontDialog"), app, |ui, app| {
