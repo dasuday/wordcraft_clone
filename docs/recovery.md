@@ -40,7 +40,9 @@ first.
 
 Version 1 snapshots wrap the native JSON document with an id, document name, timestamp and
 monotonic generation. Native JSON now includes media bytes, opaque preserved parts, and
-chart/SmartArt/OLE source markup and relationships. Older JSON without these fields still opens.
+chart/SmartArt/OLE source markup and relationships. Media and preserved parts are written as one
+base64 string each. Older JSON without these fields, or with their bytes as arrays of numbers (as
+written before base64), still opens.
 Paragraph cache revisions are transient and regenerated on load; undo history and selection are
 not part of the document snapshot. Recovery preserves the current in-memory model. It cannot
 recover content already lost during import or make later export more faithful than the exporter.
@@ -61,9 +63,9 @@ unverified.
 Limits are 256 MiB of encoded JSON per snapshot, 2 GiB of snapshot files per profile, 128 records
 and 16 generations per record during discovery. Ordinarily only two valid generations remain.
 Copies are retained until saved or explicitly discarded; there is no automatic age-based deletion.
-Over-limit writes report an error and retain the previous valid copy. JSON stores binary parts
-as byte arrays, so it can be substantially larger than DOCX. There is no cloud,
-version-history or browser recovery.
+Over-limit writes report an error and retain the previous valid copy. Base64 takes 4/3 of a
+part's size (a 27 MiB picture makes a 36 MiB copy), and DOCX compresses, so a copy can still be
+larger than the DOCX it came from. There is no cloud, version-history or browser recovery.
 
 ## Commands and verification
 
