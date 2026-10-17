@@ -17,8 +17,8 @@ wordcraft-cli — WordCraft from the command line
 
 USAGE:
   wordcraft-cli convert <in> <out> [--markup] [--format wordml2003|flatopc]
-                                              convert between formats (docx, doc [read], pdf, odt, rtf, html, md, tex, txt, json, png,
-                                              xml); an .xml file is a Word XML Document (Flat OPC), or with
+                                              convert between formats (docx, doc [read], pdf, odt, rtf, html, epub, md, tex, txt, json,
+                                              png, xml); an .xml file is a Word XML Document (Flat OPC), or with
                                               --format wordml2003 a Word 2003 XML Document;
                                               --markup (Print Markup): comments beside each page and
                                               tracked changes in pdf/png, a comment list in html/md/txt
