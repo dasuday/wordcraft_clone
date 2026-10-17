@@ -446,7 +446,8 @@ mod tests {
     #[test]
     fn a_read_with_a_lost_reply_is_sent_again() {
         let n = Arc::new(AtomicUsize::new(0));
-        let (port, seen) = fake_app(move |_| if n.fetch_add(1, Ordering::SeqCst) == 0 { None } else { Some((json!({"ok": true, "result": 3}), false)) });
+        let (port, seen) =
+            fake_app(move |_| if n.fetch_add(1, Ordering::SeqCst) == 0 { None } else { Some((json!({"ok": true, "result": 3}), false)) });
         let mut r = Remote::connect_with(&format!("127.0.0.1:{port}"), fixed_key("k")).unwrap();
         assert_eq!(r.call("document.inspect", json!({})).unwrap(), json!(3));
         assert_eq!(seen.try_iter().count(), 2);
