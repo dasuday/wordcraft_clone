@@ -43,6 +43,9 @@ pub struct LtLink {
     settings: Option<Settings>,
     /// The paragraph text being checked.
     in_flight: Option<String>,
+    /// The language key ([`wordcraft_engine::layout::para::language_key`]) of the paragraph being
+    /// checked: results are stored under it, so identical text in another language is separate.
+    job_key: String,
     /// Debounce: the document revision last seen and when it changed.
     seen_rev: u64,
     changed_at: f64,
@@ -74,6 +77,7 @@ impl LtLink {
         self.worker = None;
         self.settings = None;
         self.in_flight = None;
+        self.job_key.clear();
         self.idle_rev = None;
         self.paused_until = 0.0;
         self.stopped = None;
@@ -288,7 +292,7 @@ fn take_results(app: &mut WordApp, ctx: &egui::Context, now: f64) {
                 lt.last_error = None;
             }
             Ok(issues) => {
-                wordcraft_proof::external::put(&done.text, &done.language, issues);
+                wordcraft_proof::external::put(&done.text, &lt.job_key, &done.language, issues);
                 lt.checked = lt.checked.saturating_add(1);
                 lt.last_error = None;
                 changed = true;
@@ -379,21 +383,23 @@ fn next_job(app: &mut WordApp, settings: &Settings) -> (Option<Job>, bool) {
             continue;
         }
         let text = wordcraft_engine::layout::para::proof_text(p);
+        let pkey = wordcraft_engine::layout::para::language_key(&wordcraft_engine::layout::para::proof_runs(doc, p, None));
         let spans = language_spans(doc, p, &text, settings);
         if let [(_, language)] = spans.as_slice() {
             // A result in another language (the paragraph's language changed since) is asked
             // for again (#575 review).
             let key = (language.clone(), text);
-            if wordcraft_proof::external::has(&key.1, &key.0) || lt.skipped.contains(&key) {
+            if wordcraft_proof::external::has(&key.1, &pkey, &key.0) || lt.skipped.contains(&key) {
                 continue;
             }
             let (language, text) = key;
+            lt.job_key = pkey;
             return (Some(Job { text, language }), stored);
         }
         // Mixed languages (#763): the stored result's "language" names every span, so a
         // paragraph whose languages or span boundaries changed is put together again.
         let signature = spans.iter().map(|(r, l)| format!("{l}@{}-{}", r.start, r.end)).collect::<Vec<_>>().join(",");
-        if wordcraft_proof::external::has(&text, &signature) {
+        if wordcraft_proof::external::has(&text, &pkey, &signature) {
             continue;
         }
         let mut languages: Vec<&String> = Vec::new();
@@ -409,6 +415,7 @@ fn next_job(app: &mut WordApp, settings: &Settings) -> (Option<Job>, bool) {
             }
             if !lt.partial.contains_key(&key) {
                 lt.partial_in_flight = Some(key.clone());
+                lt.job_key = pkey;
                 let (language, text) = key;
                 return (Some(Job { text, language }), stored);
             }
@@ -419,7 +426,7 @@ fn next_job(app: &mut WordApp, settings: &Settings) -> (Option<Job>, bool) {
             let Some(found) = lt.partial.remove(&((*l).clone(), text.clone())) else { continue };
             issues.extend(found.into_iter().filter(|i| spans.iter().any(|(r, sl)| sl == *l && r.start <= i.start && i.end <= r.end)));
         }
-        wordcraft_proof::external::put(&text, &signature, issues);
+        wordcraft_proof::external::put(&text, &pkey, &signature, issues);
         lt.checked = lt.checked.saturating_add(1);
         stored = true;
     }
@@ -440,6 +447,15 @@ mod tests {
     fn serial() -> std::sync::MutexGuard<'static, ()> {
         static L: Mutex<()> = Mutex::new(());
         L.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    /// The stored result for the first body paragraph, which holds `text`.
+    fn stored(app: &WordApp, text: &str) -> Option<Vec<wordcraft_proof::Issue>> {
+        let doc = &app.session.doc;
+        let path = doc.para_paths(wordcraft_engine::doc::StoryRef::Body).into_iter().next()?;
+        let p = doc.para(wordcraft_engine::doc::StoryRef::Body, &path)?;
+        let key = wordcraft_engine::layout::para::language_key(&wordcraft_engine::layout::para::proof_runs(doc, p, None));
+        wordcraft_proof::external::get(text, &key)
     }
 
     fn app_with(text: &str) -> WordApp {
@@ -518,7 +534,7 @@ mod tests {
         // Off: results are dropped and nothing more is sent.
         app.run("ui.languageTool", json!({"enabled": false})).unwrap();
         super::poll_at(&mut app, &ctx, t + 5.0);
-        assert!(wordcraft_proof::external::get(text).is_none());
+        assert!(stored(&app, text).is_none());
     }
 
     /// A fake server for #763: in whatever language it's asked, it flags the typos "sayd" and
@@ -564,8 +580,8 @@ mod tests {
         app.run("ui.languageTool", json!({"enabled": true, "language": "document"})).unwrap();
         let ctx = egui::Context::default();
         let mut t = 0.0;
-        run_until(&mut app, &ctx, &mut t, |_| wordcraft_proof::external::get(text).is_some());
-        let issues = wordcraft_proof::external::get(text).unwrap().iter().map(|i| (i.start, i.end)).collect();
+        run_until(&mut app, &ctx, &mut t, |a| stored(a, text).is_some());
+        let issues = stored(&app, text).unwrap().iter().map(|i| (i.start, i.end)).collect();
         // Done: more frames send nothing.
         for _ in 0..10 {
             t += 1.0;
@@ -618,6 +634,58 @@ mod tests {
         assert_eq!(super::language_spans(doc, p, &text, &s), vec![(0..11, "en-US".to_string())]);
         s.language = "auto".into();
         assert_eq!(super::language_spans(doc, p, &text, &s).len(), 1);
+    }
+
+    /// #2679: two paragraphs with the same text in different languages each keep their own
+    /// result (the store is keyed by text and language), so neither is checked twice.
+    #[test]
+    fn languagetool_same_text_in_two_languages_keeps_both_results() {
+        let _serial = serial();
+        let text = "Thiss is sayd badly";
+        let mut app = app_with(text);
+        app.run("text.newParagraph", json!({})).unwrap();
+        app.run("text.insert", json!({"text": text})).unwrap();
+        let pos = |off| json!({"block": 1, "off": off});
+        app.run("select.range", json!({"anchor": pos(0), "focus": pos(text.len())})).unwrap();
+        app.run("review.language", json!({"lang": "fr-FR"})).unwrap();
+        // English flags "sayd" (bytes 6..10), French flags "Thiss" (0..5).
+        let sent = Arc::new(Mutex::new(Vec::<(String, String)>::new()));
+        let log = sent.clone();
+        app.language_tool.fake = Some(Arc::new(move |r: &wordcraft_languagetool::Request| {
+            let f = wordcraft_languagetool::request::fields(&r.body);
+            let get = |k: &str| f.iter().find(|(a, _)| a == k).map(|(_, b)| b.clone()).unwrap_or_default();
+            let language = get("language");
+            log.lock().unwrap().push((get("text"), language.clone()));
+            let (offset, length) = if language == "en-US" { (6, 4) } else { (0, 5) };
+            Ok(json!({"matches": [{"offset": offset, "length": length, "message": "Flagged", "replacements": [],
+                "rule": {"issueType": "misspelling", "category": {"id": "X"}}}]})
+            .to_string())
+        }));
+        app.run("ui.languageTool", json!({"enabled": true, "language": "document"})).unwrap();
+        let ctx = egui::Context::default();
+        let mut t = 0.0;
+        run_until(&mut app, &ctx, &mut t, |a| a.language_tool.checked >= 2);
+        for _ in 0..20 {
+            t += 1.0;
+            super::poll_at(&mut app, &ctx, t);
+        }
+        let mut sent = sent.lock().unwrap().clone();
+        sent.sort();
+        assert_eq!(sent, vec![(text.to_string(), "en-US".to_string()), (text.to_string(), "fr-FR".to_string())]);
+        let squiggles: Vec<Vec<(usize, usize, bool)>> = app
+            .session
+            .layout()
+            .pages
+            .iter()
+            .flat_map(|p| p.items.iter())
+            .filter_map(|it| match it {
+                wordcraft_engine::layout::Placed::Lines { para, .. } => Some(para.issues.clone()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(squiggles, vec![vec![(6, 10, false)], vec![(0, 5, false)]], "each paragraph shows its own result");
+        app.run("ui.languageTool", json!({"enabled": false})).unwrap();
+        super::poll_at(&mut app, &ctx, t + 5.0);
     }
 
     /// #575: failures pause or stop checking with a message instead of retrying in a loop.

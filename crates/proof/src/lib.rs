@@ -724,10 +724,10 @@ pub fn check_text_with(text: &str, spans: &[(Range<usize>, ProofLang)], opts: &O
     v
 }
 
-/// The external checker's issues for exactly `text`, if it has answered for it ([`external`]),
+/// The external checker's issues for exactly `text` with language key `key`, if it has answered for it ([`external`]),
 /// without spelling issues on words the user added or ignored. `None`: use the built-in checks.
-pub fn check_external(text: &str) -> Option<Vec<Issue>> {
-    let found = external::get(text)?;
+pub fn check_external(text: &str, key: &str) -> Option<Vec<Issue>> {
+    let found = external::get(text, key)?;
     Some(found.into_iter().filter(|i| i.kind != IssueKind::Spelling || !text.get(i.start..i.end).is_some_and(is_user_word)).collect())
 }
 
@@ -1305,7 +1305,7 @@ mod tests {
 
     /// The checks a paragraph gets ([`check_external`] first, else the built-in English ones).
     fn check(text: &str) -> Vec<Issue> {
-        check_external(text).unwrap_or_else(|| check_text_with(text, &[(0..text.len(), ProofLang::En)], &Options::default(), true))
+        check_external(text, "").unwrap_or_else(|| check_text_with(text, &[(0..text.len(), ProofLang::En)], &Options::default(), true))
     }
 
     /// #575: an external checker's result replaces the built-in checks for exactly the text it
@@ -1314,11 +1314,12 @@ mod tests {
     #[test]
     fn external_results_apply_to_their_exact_text() {
         let text = "Zqxv external checker teh text 575.";
-        assert!(!external::has(text, "en-US"));
-        assert_eq!(external::stamp(text), 0);
+        assert!(!external::has(text, "", "en-US"));
+        assert_eq!(external::stamp(text, ""), 0);
         let issue = |start, end, kind| Issue { start, end, kind, message: "m".into(), suggestions: vec!["x".into()], lang: ProofLang::En };
         external::put(
             text,
+            "",
             "en-US",
             vec![
                 issue(26, 30, IssueKind::Grammar),
@@ -1329,21 +1330,21 @@ mod tests {
                 issue(40, 10, IssueKind::Spelling), // reversed
             ],
         );
-        let s1 = external::stamp(text);
+        let s1 = external::stamp(text, "");
         assert!(s1 > 0);
         let got: Vec<(usize, usize)> = check(text).iter().map(|i| (i.start, i.end)).collect();
         assert_eq!(got, [(0, 4), (22, 25), (26, 30)]);
         // Edited text: the built-in checks again (they flag "Zqxv").
         let edited = "Zqxv external checker teh text 575!";
-        assert!(external::get(edited).is_none());
+        assert!(external::get(edited, "").is_none());
         assert!(check(edited).iter().any(|i| i.kind == IssueKind::Spelling && edited.get(i.start..i.end) == Some("Zqxv")));
         // Add to Dictionary hides the external spelling issue for that word.
         add_word("zqxv");
         let got: Vec<(usize, usize)> = check(text).iter().map(|i| (i.start, i.end)).collect();
         assert_eq!(got, [(22, 25), (26, 30)]);
         // A new result gets a new stamp.
-        external::put(text, "en-US", Vec::new());
-        assert!(external::stamp(text) > s1);
+        external::put(text, "", "en-US", Vec::new());
+        assert!(external::stamp(text, "") > s1);
         assert!(check(text).is_empty());
     }
 
@@ -1353,14 +1354,28 @@ mod tests {
     fn external_results_belong_to_their_language() {
         let text = "Les enfant 575 jouent.";
         let issue = |start, end| Issue { start, end, kind: IssueKind::Spelling, message: "m".into(), suggestions: Vec::new(), lang: ProofLang::En };
-        external::put(text, "en-US", vec![issue(4, 10)]);
-        assert!(external::has(text, "en-US"));
-        assert!(!external::has(text, "fr-FR"), "a French paragraph needs a French result");
-        let s1 = external::stamp(text);
-        external::put(text, "fr-FR", vec![issue(0, 10)]);
-        assert!(external::has(text, "fr-FR") && !external::has(text, "en-US"));
-        assert!(external::stamp(text) > s1, "the new result redraws the paragraph");
+        external::put(text, "", "en-US", vec![issue(4, 10)]);
+        assert!(external::has(text, "", "en-US"));
+        assert!(!external::has(text, "", "fr-FR"), "a French paragraph needs a French result");
+        let s1 = external::stamp(text, "");
+        external::put(text, "", "fr-FR", vec![issue(0, 10)]);
+        assert!(external::has(text, "", "fr-FR") && !external::has(text, "", "en-US"));
+        assert!(external::stamp(text, "") > s1, "the new result redraws the paragraph");
         assert_eq!(check(text).iter().map(|i| (i.start, i.end)).collect::<Vec<_>>(), [(0, 10)]);
+    }
+
+    /// #2679: the same text under two language keys keeps two results.
+    #[test]
+    fn external_results_are_keyed_by_text_and_language_key() {
+        let text = "Les enfant 2679 jouent.";
+        let issue = |start, end| Issue { start, end, kind: IssueKind::Spelling, message: "m".into(), suggestions: Vec::new(), lang: ProofLang::En };
+        external::put(text, "en-US@0-23", "en-US", vec![issue(4, 10)]);
+        external::put(text, "fr-FR@0-23", "fr-FR", vec![issue(0, 3)]);
+        assert_eq!(check_external(text, "en-US@0-23").map(|v| v.len()), Some(1));
+        assert_eq!(external::get(text, "en-US@0-23").map(|v| v[0].start), Some(4));
+        assert_eq!(external::get(text, "fr-FR@0-23").map(|v| v[0].start), Some(0));
+        assert!(external::has(text, "en-US@0-23", "en-US") && external::has(text, "fr-FR@0-23", "fr-FR"));
+        assert!(external::get(text, "de-DE@0-23").is_none());
     }
 
     /// #575: a range that cuts a character in two is dropped, never sliced.
@@ -1369,10 +1384,11 @@ mod tests {
         let text = "é😀 575 boundaries";
         external::put(
             text,
+            "",
             "en-US",
             vec![Issue { start: 1, end: 3, kind: IssueKind::Grammar, message: String::new(), suggestions: Vec::new(), lang: ProofLang::En }],
         );
-        assert_eq!(external::get(text), Some(Vec::new()));
+        assert_eq!(external::get(text, ""), Some(Vec::new()));
     }
 
     proptest::proptest! {
