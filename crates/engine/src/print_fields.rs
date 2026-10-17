@@ -1,6 +1,8 @@
 //! Cross-reference results in a transient print copy.
 
-use wordcraft_doc::{Document, InlineObject, Pos, StoryRef};
+use std::collections::{HashMap, HashSet};
+
+use wordcraft_doc::{Document, InlineObject, Paragraph, Pos, StoryRef};
 use wordcraft_layout::{DocLayout, LayoutCache, LayoutOptions};
 
 use crate::cmd::references::FieldCode;
@@ -12,6 +14,7 @@ const MAX_REF_WORK_BYTES: usize = 64 * 1024 * 1024;
 const REF_NAME: &str = "REF";
 const PAGE_REF_NAME: &str = "PAGEREF";
 const MISSING_TARGET: &str = "Missing reference target.";
+const REF_INSPECTION_LIMIT: &str = "Print cross-reference inspection exceeds the work limit";
 
 pub(crate) struct PrintCopy {
     pub doc: Document,
@@ -32,62 +35,43 @@ pub(crate) fn prepare(doc: &Document, opts: &LayoutOptions) -> Result<PrintCopy,
         let layout = wordcraft_layout::layout(&doc, &mut cache, opts);
         return Ok(PrintCopy { doc, layout });
     }
+    let held = held_ref_targets(&doc, MAX_REF_WORK_BYTES)?;
     let mut budget = MAX_REF_WORK_BYTES;
-    settle_text(&mut doc, &mut budget)?;
+    settle_text(&mut doc, &mut budget, &held)?;
     for _ in 0..MAX_PAGE_REF_PASSES {
         let layout = wordcraft_layout::layout(&doc, &mut cache, opts);
-        if !refresh(&mut doc, RefPass::Pages(&layout), &mut budget)? {
+        if !refresh(&mut doc, RefPass::Pages(&layout), &mut budget, &held)? {
             return Ok(PrintCopy { doc, layout });
         }
-        settle_text(&mut doc, &mut budget)?;
+        settle_text(&mut doc, &mut budget, &held)?;
     }
     Err("Print page-reference results did not converge".into())
 }
 
-fn settle_text(doc: &mut Document, budget: &mut usize) -> Result<(), String> {
+fn settle_text(doc: &mut Document, budget: &mut usize, held: &HashSet<String>) -> Result<(), String> {
     let count: usize = std::iter::once(StoryRef::Body)
         .chain(doc.parts.keys().copied().map(StoryRef::Part))
         .map(|story| {
             doc.para_paths(story)
                 .iter()
                 .filter_map(|path| doc.para(story, path))
-                .map(|p| {
-                    p.objects
-                        .iter()
-                        .filter(|o| {
-                            matches!(o, InlineObject::Field { instr, locked: false, .. }
-                if wordcraft_layout::fields::field_name(instr) == REF_NAME)
-                        })
-                        .count()
-                })
+                .map(|p| p.objects.iter().filter_map(print_field_code).filter(|code| code.name == REF_NAME).count())
                 .sum::<usize>()
         })
         .sum();
     // An acyclic chain propagates through at most its number of REF fields. One extra
     // pass checks stability without laying out every intermediate dependency value.
     for _ in 0..=count {
-        if !refresh(doc, RefPass::Text, budget)? {
+        if !refresh(doc, RefPass::Text, budget, held)? {
             return Ok(());
         }
     }
     Err("Print REF dependencies did not converge".into())
 }
 
-fn refresh(doc: &mut Document, pass: RefPass<'_>, budget: &mut usize) -> Result<bool, String> {
+fn refresh(doc: &mut Document, pass: RefPass<'_>, budget: &mut usize, held: &HashSet<String>) -> Result<bool, String> {
     let bookmarks: std::collections::HashMap<_, _> = doc.bookmarks().into_iter().collect();
-    // These targets exist, but body-only evaluators cannot refresh their results.
-    let mut nonbody_targets = std::collections::HashSet::new();
-    for part in doc.parts.keys().copied() {
-        let story = StoryRef::Part(part);
-        for path in doc.para_paths(story) {
-            let Some(para) = doc.para(story, &path) else { continue };
-            for object in &para.objects {
-                if let InlineObject::BookmarkStart { name } = object {
-                    nonbody_targets.insert(name.clone());
-                }
-            }
-        }
-    }
+    let nonbody_targets = nonbody_bookmarks(doc);
     let sections = doc.sections();
     let pages: std::collections::HashMap<_, _> = match pass {
         RefPass::Text => Default::default(),
@@ -135,26 +119,12 @@ fn refresh(doc: &mut Document, pass: RefPass<'_>, budget: &mut usize) -> Result<
                 if locks.iter().any(|r| r.start < pos && pos < r.end) {
                     continue;
                 }
-                let code = FieldCode::parse(instr);
-                if code.name != wanted || code.args.len() != 1 {
-                    continue;
-                }
-                // Numbered, relative and note references need their own evaluators.
-                if code.switches.iter().any(|(s, arg)| match s {
-                    'h' => false,
-                    '*' => !arg.as_deref().is_some_and(|a| {
-                        a.eq_ignore_ascii_case("MERGEFORMAT")
-                            || a.eq_ignore_ascii_case("CHARFORMAT")
-                            || (code.name == PAGE_REF_NAME && wordcraft_layout::fields::format_switch(&format!(r"PAGEREF target \* {a}")).is_some())
-                    }),
-                    _ => true,
-                }) {
+                let Some(code) = print_field_code(object) else { continue };
+                if code.name != wanted {
                     continue;
                 }
                 let Some(target) = code.args.first() else { continue };
-                // The shared parser does not split adjacent targets or switches. Hold
-                // the complete cache rather than lose a target or an unsupported flag.
-                if target.contains('\\') || instr.split_whitespace().any(|word| word.matches('\\').count() > 1) {
+                if wanted == REF_NAME && held.contains(target) {
                     continue;
                 }
                 let text = match bookmarks.get(target) {
@@ -185,6 +155,143 @@ fn refresh(doc: &mut Document, pass: RefPass<'_>, budget: &mut usize) -> Result<
         }
     }
     Ok(changed)
+}
+
+fn print_field_code(object: &InlineObject) -> Option<FieldCode> {
+    let InlineObject::Field { instr, locked: false, .. } = object else { return None };
+    print_ref_code(instr)
+}
+
+// Keep one eligibility rule for exported fields and fields copied through a REF.
+fn print_ref_code(instr: &str) -> Option<FieldCode> {
+    let code = FieldCode::parse(instr);
+    if !matches!(code.name.as_str(), REF_NAME | PAGE_REF_NAME) || code.args.len() != 1 {
+        return None;
+    }
+    // Numbered, relative and note references need their own evaluators.
+    if code.switches.iter().any(|(s, arg)| match s {
+        'h' => false,
+        '*' => !arg.as_deref().is_some_and(|a| {
+            a.eq_ignore_ascii_case("MERGEFORMAT")
+                || a.eq_ignore_ascii_case("CHARFORMAT")
+                || (code.name == PAGE_REF_NAME && wordcraft_layout::fields::format_switch(&format!(r"PAGEREF target \* {a}")).is_some())
+        }),
+        _ => true,
+    }) {
+        return None;
+    }
+    // Adjacent targets or switches are not separated by the shared parser.
+    if code.args.first()?.contains('\\') || instr.split_whitespace().any(|word| word.matches('\\').count() > 1) {
+        return None;
+    }
+    Some(code)
+}
+
+fn nonbody_bookmarks(doc: &Document) -> HashSet<String> {
+    let mut nonbody_targets = std::collections::HashSet::new();
+    for part in doc.parts.keys().copied() {
+        let story = StoryRef::Part(part);
+        for path in doc.para_paths(story) {
+            let Some(para) = doc.para(story, &path) else { continue };
+            for object in &para.objects {
+                if let InlineObject::BookmarkStart { name } = object {
+                    nonbody_targets.insert(name.clone());
+                }
+            }
+        }
+    }
+    nonbody_targets
+}
+
+fn bookmark_end(para: &Paragraph, name: &str, start: usize) -> Option<usize> {
+    para.object_offsets()
+        .into_iter()
+        .zip(&para.objects)
+        .find_map(|(off, object)| (off > start && matches!(object, InlineObject::BookmarkEnd { name: n } if n == name)).then_some(off))
+}
+
+/// Layout-only or unsupported fields cannot supply their stored text to a REF.
+/// Propagate this restriction through REF dependencies once, without recursion.
+/// Charge selected inspection work; initial scans and total heap use are not capped.
+fn held_ref_targets(doc: &Document, mut budget: usize) -> Result<HashSet<String>, String> {
+    let has_refs = std::iter::once(StoryRef::Body).chain(doc.parts.keys().copied().map(StoryRef::Part)).any(|story| {
+        doc.para_paths(story)
+            .iter()
+            .filter_map(|path| doc.para(story, path))
+            .any(|para| para.objects.iter().filter_map(print_field_code).any(|code| code.name == REF_NAME))
+    });
+    if !has_refs {
+        return Ok(HashSet::new());
+    }
+    let bookmarks: HashMap<_, _> = doc.bookmarks().into_iter().collect();
+    let nonbody = nonbody_bookmarks(doc);
+    let mut held: HashSet<_> = nonbody.iter().filter(|name| !bookmarks.contains_key(*name)).cloned().collect();
+    let ranges = doc.field_ranges(StoryRef::Body);
+    let mut parents: HashMap<String, Vec<String>> = HashMap::new();
+    for (name, start) in &bookmarks {
+        let Some(para) = doc.para(start.story, &start.path) else {
+            held.insert(name.clone());
+            continue;
+        };
+        budget = budget.checked_sub(para.text.len()).ok_or(REF_INSPECTION_LIMIT)?;
+        let Some(end) = bookmark_end(para, name, start.off) else {
+            held.insert(name.clone());
+            continue;
+        };
+        let stop = Pos { off: end, ..start.clone() };
+        let mut in_field = false;
+        for range in &ranges {
+            budget = budget.checked_sub(std::mem::size_of::<wordcraft_doc::FieldRange>()).ok_or(REF_INSPECTION_LIMIT)?;
+            if range.start < stop && range.end > *start {
+                in_field = true;
+                break;
+            }
+        }
+        if in_field {
+            held.insert(name.clone());
+            continue;
+        }
+        for (off, object) in para.object_offsets().into_iter().zip(&para.objects) {
+            if off < start.off || off >= end {
+                continue;
+            }
+            let instr = match object {
+                InlineObject::Field { instr, locked: false, code: false, .. } => instr,
+                InlineObject::Field { .. } | InlineObject::FieldStart { .. } | InlineObject::FieldEnd => {
+                    held.insert(name.clone());
+                    break;
+                }
+                _ => continue,
+            };
+            budget = budget.checked_sub(instr.len()).ok_or(REF_INSPECTION_LIMIT)?;
+            let Some(code) = print_ref_code(instr) else {
+                held.insert(name.clone());
+                break;
+            };
+            let Some(target) = code.args.first() else { continue };
+            if code.name == REF_NAME {
+                budget = budget
+                    .checked_sub(name.len())
+                    .and_then(|left| left.checked_sub(target.len()))
+                    .and_then(|left| left.checked_sub(std::mem::size_of::<(String, String)>()))
+                    .ok_or(REF_INSPECTION_LIMIT)?;
+                parents.entry(target.clone()).or_default().push(name.clone());
+            } else if !bookmarks.contains_key(target) && nonbody.contains(target) {
+                held.insert(name.clone());
+                break;
+            }
+        }
+    }
+    let mut pending: Vec<_> = held.iter().cloned().collect();
+    while let Some(target) = pending.pop() {
+        let Some(dependents) = parents.remove(&target) else { continue };
+        for name in dependents {
+            if held.insert(name.clone()) {
+                pending.push(name);
+            }
+        }
+    }
+    Ok(held)
 }
 
 /// A spanning range labels its first text. Leading hard page breaks alone move that
@@ -228,13 +335,7 @@ fn range_page_pos(doc: &Document, start: &Pos, end: &Pos) -> Option<Pos> {
 /// cache unless the bookmark ends in its starting paragraph; never truncate at that boundary.
 fn inline_bookmark(doc: &Document, name: &str, start: &Pos, budget: usize) -> Result<Option<String>, String> {
     let Some(para) = doc.para(start.story, &start.path) else { return Ok(None) };
-    let Some(end) = para
-        .object_offsets()
-        .into_iter()
-        .find(|off| *off > start.off && matches!(para.object_at(*off), Some(InlineObject::BookmarkEnd { name: n }) if n == name))
-    else {
-        return Ok(None);
-    };
+    let Some(end) = bookmark_end(para, name, start.off) else { return Ok(None) };
     let bytes = para.objects.iter().try_fold(para.text.len(), |n, o| n.checked_add(o.plain_text().len()));
     if bytes.is_none_or(|n| n > budget) {
         return Err("Print cross-reference text exceeds the work limit".into());
@@ -421,6 +522,145 @@ mod tests {
         for index in doc.body.len() - 2..doc.body.len() {
             assert_eq!(print.doc.para(StoryRef::Body, &Path::top(index)).unwrap().plain_text(), super::MISSING_TARGET);
         }
+    }
+
+    #[test]
+    fn quoted_refs_converge() {
+        for instr in [r#"REF"Target""#, r#""REF" Target"#, r#"REF "Target""#] {
+            let props = CharProps::default();
+            let mut doc = Document::new();
+            let mut lookup = Paragraph::new();
+            lookup.insert_object(0, field(&instr.replace("Target", "Middle"), "Old heading", FieldFlags::Dirty), &props).unwrap();
+            let mut middle = Paragraph::new();
+            middle.insert_object(0, InlineObject::BookmarkStart { name: "Middle".into() }, &props).unwrap();
+            middle.insert_object(middle.len(), field(instr, "Old middle", FieldFlags::Clean), &props).unwrap();
+            middle.insert_object(middle.len(), InlineObject::BookmarkEnd { name: "Middle".into() }, &props).unwrap();
+            let mut target = Paragraph::with_text("Current heading", props.clone());
+            target.insert_object(0, InlineObject::BookmarkStart { name: "Target".into() }, &props).unwrap();
+            target.insert_object(target.len(), InlineObject::BookmarkEnd { name: "Target".into() }, &props).unwrap();
+            doc.body = vec![para_block(lookup), para_block(middle), para_block(target)];
+            let doc = wordcraft_docx::read(&wordcraft_docx::write(&doc).unwrap()).unwrap();
+            let before = serde_json::to_value(&doc).unwrap();
+            let print = super::prepare(&doc, &Default::default()).unwrap();
+            assert_eq!(shown(&print.layout, 0), ["Current heading"], "{instr}");
+            let text = pdf_text(&crate::io::save_bytes("out.pdf", &doc).unwrap()).concat();
+            assert_eq!(text.matches("Current heading").count(), 3, "{instr}: {text}");
+            assert_eq!(serde_json::to_value(&doc).unwrap(), before);
+        }
+    }
+
+    #[test]
+    fn quoted_refs_hold_cache() {
+        for instr in [r#"REF"Target""#, r#""REF" Target"#] {
+            for nested in ["PAGE", "NUMPAGES", "SEQ Figure", "MERGEFIELD Caption"] {
+                let props = CharProps::default();
+                let mut doc = Document::new();
+                let mut lookup = Paragraph::new();
+                lookup.insert_object(0, field(instr, "Complete saved cache", FieldFlags::Dirty), &props).unwrap();
+                for unsupported in [r#""REF" Target\h"#, r#"REF"Target" \n"#, r#"REF"Target" \h\p"#] {
+                    lookup.insert_object(lookup.len(), field(unsupported, "Unsupported complete cache", FieldFlags::Dirty), &props).unwrap();
+                }
+                let mut target = Paragraph::new();
+                target.insert_object(0, InlineObject::BookmarkStart { name: "Target".into() }, &props).unwrap();
+                target.insert_object(target.len(), field(nested, "99", FieldFlags::Dirty), &props).unwrap();
+                target.insert_object(target.len(), InlineObject::BookmarkEnd { name: "Target".into() }, &props).unwrap();
+                doc.body = vec![para_block(lookup), para_block(target)];
+                let doc = wordcraft_docx::read(&wordcraft_docx::write(&doc).unwrap()).unwrap();
+                let before = serde_json::to_value(&doc).unwrap();
+                let print = super::prepare(&doc, &Default::default()).unwrap();
+                assert_eq!(print.doc.para(StoryRef::Body, &Path::top(0)), doc.para(StoryRef::Body, &Path::top(0)), "{instr}: {nested}");
+                let text = pdf_text(&crate::io::save_bytes("out.pdf", &doc).unwrap()).concat();
+                assert!(text.contains("Complete saved cache"), "{instr}: {nested}: {text}");
+                assert_eq!(text.matches("Unsupported complete cache").count(), 3, "{instr}: {nested}: {text}");
+                assert_eq!(serde_json::to_value(&doc).unwrap(), before);
+            }
+        }
+    }
+
+    #[test]
+    fn ref_inspection_charges_work() {
+        assert!(super::held_ref_targets(&control(), 0).unwrap_err().contains("work limit"));
+    }
+
+    #[test]
+    fn print_ref_holds_nested_fields() {
+        for (instr, painted) in [("PAGE", "1"), ("NUMPAGES", "1"), ("SEQ Figure", "99"), ("MERGEFIELD Caption", "99"), (r"REF Other \n", "99")] {
+            let props = CharProps::default();
+            let mut doc = Document::new();
+            let mut lookup = Paragraph::with_text("Refs ", props.clone());
+            lookup.insert_object(lookup.len(), field("REF Nested", "1", FieldFlags::Dirty), &props).unwrap();
+            lookup.insert_text(lookup.len(), " / ", &props).unwrap();
+            lookup.insert_object(lookup.len(), field("REF Nested", "1", FieldFlags::Clean), &props).unwrap();
+            let mut target = Paragraph::new();
+            target.insert_object(0, InlineObject::BookmarkStart { name: "Nested".into() }, &props).unwrap();
+            target.insert_object(target.len(), field(instr, "99", FieldFlags::Dirty), &props).unwrap();
+            target.insert_object(target.len(), InlineObject::BookmarkEnd { name: "Nested".into() }, &props).unwrap();
+            let mut indirect = Paragraph::new();
+            indirect.insert_object(0, InlineObject::BookmarkStart { name: "Indirect".into() }, &props).unwrap();
+            indirect.insert_object(indirect.len(), field("REF Nested", "Stale indirect", FieldFlags::Clean), &props).unwrap();
+            indirect.insert_object(indirect.len(), InlineObject::BookmarkEnd { name: "Indirect".into() }, &props).unwrap();
+            let mut outer = Paragraph::with_text("Indirect ref ", props.clone());
+            outer.insert_object(outer.len(), field("REF Indirect", "1", FieldFlags::Dirty), &props).unwrap();
+            doc.body = vec![para_block(lookup), para_block(target), para_block(indirect), para_block(outer)];
+            let doc = wordcraft_docx::read(&wordcraft_docx::write(&doc).unwrap()).unwrap();
+            let before = serde_json::to_value(&doc).unwrap();
+            let print = super::prepare(&doc, &Default::default()).unwrap();
+            for index in [0, 2, 3] {
+                assert_eq!(print.doc.para(StoryRef::Body, &Path::top(index)), doc.para(StoryRef::Body, &Path::top(index)), "{instr}");
+            }
+            assert_eq!(shown(&print.layout, 1), [painted], "{instr}");
+            let text = pdf_text(&crate::io::save_bytes("out.pdf", &doc).unwrap()).concat();
+            assert!(text.contains("Refs 1 / 1"), "{instr}: {text}");
+            assert!(text.contains("Indirect ref 1"), "{instr}: {text}");
+            assert_eq!(serde_json::to_value(&doc).unwrap(), before);
+        }
+    }
+
+    #[test]
+    fn print_ref_page_dependency() {
+        let mut doc = control();
+        let props = CharProps::default();
+        let target = doc.para_mut(StoryRef::Body, &Path::top(4)).unwrap();
+        target.insert_object(0, InlineObject::BookmarkStart { name: "Label".into() }, &props).unwrap();
+        target.insert_object(target.len(), InlineObject::BookmarkEnd { name: "Label".into() }, &props).unwrap();
+        let mut lookup = Paragraph::new();
+        lookup.insert_object(0, field("REF Label", "99", FieldFlags::Clean), &props).unwrap();
+        doc.body.push(para_block(lookup));
+        let print = super::prepare(&doc, &Default::default()).unwrap();
+        assert_eq!(shown(&print.layout, 6), ["2"]);
+    }
+
+    #[test]
+    fn print_ref_holds_range_field() {
+        let props = CharProps::default();
+        let mut doc = Document::new();
+        let mut lookup = Paragraph::new();
+        lookup.insert_object(0, field("REF Nested", "Complete REF cache", FieldFlags::Dirty), &props).unwrap();
+        let mut target = Paragraph::new();
+        target.insert_object(0, InlineObject::FieldStart { instr: "SEQ Figure".into(), locked: false, dirty: true }, &props).unwrap();
+        target.insert_object(target.len(), InlineObject::BookmarkStart { name: "Nested".into() }, &props).unwrap();
+        target.insert_text(target.len(), "99", &props).unwrap();
+        target.insert_object(target.len(), InlineObject::BookmarkEnd { name: "Nested".into() }, &props).unwrap();
+        target.insert_object(target.len(), InlineObject::FieldEnd, &props).unwrap();
+        doc.body = vec![para_block(lookup), para_block(target)];
+        let print = super::prepare(&doc, &Default::default()).unwrap();
+        assert_eq!(print.doc.para(StoryRef::Body, &Path::top(0)), doc.para(StoryRef::Body, &Path::top(0)));
+    }
+
+    #[test]
+    fn print_ref_plain_heading() {
+        use wordcraft_doc::{numbering::ListKind, props::NumRef};
+        let mut doc = control();
+        let num = doc.numbering.add_list(ListKind::Numbered);
+        let target = doc.para_mut(StoryRef::Body, &Path::top(5)).unwrap();
+        target.props.numbering = Some(NumRef { num, level: 0 });
+        // Page fields outside the bookmark must not disable plain-text refresh.
+        target.insert_object(0, field("PAGE", "99", FieldFlags::Clean), &Default::default()).unwrap();
+        target.insert_object(target.len(), field("NUMPAGES", "99", FieldFlags::Clean), &Default::default()).unwrap();
+        let doc = wordcraft_docx::read(&wordcraft_docx::write(&doc).unwrap()).unwrap();
+        let print = super::prepare(&doc, &Default::default()).unwrap();
+        assert_eq!(shown(&print.layout, 1), ["Current target heading"]);
+        assert_eq!(shown(&print.layout, 4), ["2"]);
     }
 
     #[test]
