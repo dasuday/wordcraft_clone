@@ -1667,6 +1667,37 @@ mod tests {
     }
 
     #[test]
+    fn zero_width_connector_dashes() {
+        use wordcraft_doc::{
+            connector::ShapeExtra,
+            line_dash::LineDash,
+            para::{Anchor, Float, InlineObject, Wrap},
+        };
+        let shape = InlineObject::Shape {
+            kind: ShapeKind::ElbowConnector,
+            w: 70.0,
+            h: 28.0,
+            fill: None,
+            stroke: Some(Rgb(192, 0, 0)),
+            stroke_width: 0.0,
+            float: Float { wrap: Wrap::InFrontOfText, h_rel: Anchor::Page, v_rel: Anchor::Page, x: 100.0, y: 100.0, ..Default::default() },
+            story: None,
+            freeform: None,
+            effects: Default::default(),
+            extra: ShapeExtra { dash: LineDash::Dash, ..Default::default() },
+        };
+        let mut p = wordcraft_doc::Paragraph::new();
+        p.insert_object(0, shape, &Default::default()).unwrap();
+        let mut d = Document::new();
+        d.body = vec![wordcraft_doc::para_block(p)];
+        let l = layout(&d, &mut LayoutCache::new(), &LayoutOptions::default());
+        let image = render_page(&d, &l.pages[0], 8.0, &RenderOptions::default());
+        // A 0.75 pt stroke has a 3 pt dash followed by a 2.25 pt gap.
+        assert!(image.pixel(812, 800)[1] < 80, "inside the first dash");
+        assert_eq!(image.pixel(832, 800), [255, 255, 255, 255], "inside the first gap");
+    }
+
+    #[test]
     fn flowchart_or_spokes() {
         let r = kurbo::Rect::new(0.0, 0.0, 10.0, 10.0);
         let path = shape_path(ShapeKind::FlowchartOr, r, None);

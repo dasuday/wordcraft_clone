@@ -1388,7 +1388,8 @@ fn shape_draws(
         if closed {
             segs.push(PathSeg::Close);
         }
-        out.push(Draw::Path { segs, fill: if closed { fill } else { None }, stroke, stroke_width: width, dash: extra.dash.pattern(stroke_width) });
+        let width = path_stroke_width(width);
+        out.push(Draw::Path { segs, fill: if closed { fill } else { None }, stroke, stroke_width: width, dash: extra.dash.pattern(width) });
         if !closed
             && extra.arrow_end
             && let Some(color) = stroke
@@ -1399,6 +1400,11 @@ fn shape_draws(
             }
         }
     }
+}
+
+// Dash lengths use the effective width used by both path painters.
+fn path_stroke_width(width: f32) -> f32 {
+    if width.is_finite() && width > 0.0 { width.clamp(0.25, 200.0) } else { 0.75 }
 }
 
 fn path_arrowhead(points: &[(f32, f32)], color: Rgb, stroke_width: f32) -> Option<Draw> {
@@ -1442,7 +1448,8 @@ fn line_draws(
                     PathSeg::Close => PathSeg::Close,
                 })
                 .collect();
-            out.push(Draw::Path { segs, fill: None, stroke, stroke_width, dash: extra.dash.pattern(stroke_width) });
+            let width = path_stroke_width(stroke_width);
+            out.push(Draw::Path { segs, fill: None, stroke, stroke_width: width, dash: extra.dash.pattern(width) });
         }
         None => out.push(Draw::Shape { rect, kind, fill: None, stroke, stroke_width, effects, corner: None, dash: extra.dash.pattern(stroke_width) }),
     }
