@@ -170,7 +170,7 @@ The same gaps grouped the way the parity documents are, for agents working in on
 | 2026-10-11 | trivial | Formatting revisions landed (#41); gap #5 narrowed to move tracking and content controls, 8–12 h |
 | 2026-10-11 | trivial | Omitted `w:pPrDefault` stays omitted across saves; explicit empty/default properties and later spacing edits remain writable. Synthetic preservation checks only; readiness estimates unchanged |
 | 2026-10-11 | trivial | #12 narrowed: Lasso Select, Add Pen, Ink to Shape and Ink Replay landed (#395) |
-| 2026-10-16 | trivial | Draw Table works like Word's pen (#2544): floating, nested and row tables, lines across whole cells |
+| 2026-10-16 | trivial | Draw Table works like Word's pen (#2544): floating, nested and row tables, lines across whole cells, merged cells split |
 | 2026-10-16 | trivial | The table eraser works like Word's (#2543): drags, the table's outside borders, a zoom-independent reach, Esc and gridlines |
 | 2026-10-10 | trivial | Draw Table and Eraser landed (#303); removed from the feature-gap list |
 | 2026-10-10 | trivial | Tabs and Borders and Shading dialogs landed (#320); removed from the dialog-depth list |

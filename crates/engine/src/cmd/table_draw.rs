@@ -6,6 +6,8 @@
 //! points, like the layout's; the app turns the pen and eraser on as canvas modes and sends each
 //! finished stroke or click here, so every stroke is one undo step.
 
+use std::collections::BTreeSet;
+
 use serde_json::Value;
 use wordcraft_doc::para::Anchor;
 use wordcraft_doc::props::{HeightRule, TableFloat, VMerge};
@@ -28,6 +30,8 @@ const FLOAT_GAP: f32 = 7.09;
 const SNAP: f32 = 3.0;
 /// The shortest stroke (points) that counts as a line.
 const MIN_LINE: f32 = 6.0;
+/// The share of a cell a line has to run along to split it when it runs on past the cell.
+const GRAZE: f32 = 0.4;
 
 pub fn specs() -> Vec<CommandSpec> {
     vec![
@@ -164,15 +168,25 @@ pub fn line_extent(l: &DocLayout, page: usize, stroke: Stroke) -> Option<((f32, 
     }
 }
 
+/// Whether a pen line from `a` to `b` runs along enough of a cell from `lo` to `hi` to split it
+/// (Word splits every cell it crosses): more than a hair, and either all of the line is in the
+/// cell or it covers two fifths of it (Word: a line from the middle of A1 to the middle of B1
+/// splits both). A line only grazing the next cell leaves it whole: at 100 %
+/// a row is about 20 px and a stroke needs 23, so a line in one row always runs a little over.
+fn runs_along(lo: f32, hi: f32, a: f32, b: f32) -> bool {
+    let over = b.min(hi) - a.max(lo);
+    over > SNAP && ((a >= lo - SNAP && b <= hi + SNAP) || over >= (hi - lo) * GRAZE)
+}
+
 /// Whether a vertical pen line at `x` from `ya` to `yb` splits the cell drawn at `r`: it runs
-/// down the cell, clear of its sides, for more than a hair (Word splits every cell it crosses).
+/// down the cell (see [`runs_along`]), clear of its sides.
 fn splits_column(r: &Rect, x: f32, (ya, yb): (f32, f32)) -> bool {
-    x > r.x + SNAP && x < r.right() - SNAP && yb.min(r.bottom()) - ya.max(r.y) > SNAP
+    x > r.x + SNAP && x < r.right() - SNAP && runs_along(r.y, r.bottom(), ya, yb)
 }
 
 /// Whether a horizontal pen line at `y` from `xa` to `xb` splits the cell drawn at `r`.
 fn splits_row(r: &Rect, y: f32, (xa, xb): (f32, f32)) -> bool {
-    y > r.y + SNAP && y < r.bottom() - SNAP && xb.min(r.right()) - xa.max(r.x) > SNAP
+    y > r.y + SNAP && y < r.bottom() - SNAP && runs_along(r.x, r.right(), xa, xb)
 }
 
 fn page_param(v: &Value) -> Result<usize, CmdError> {
@@ -515,51 +529,108 @@ fn split_columns(s: &mut Session, l: &DocLayout, page: usize, x: f32, (ya, yb): 
 }
 
 /// A horizontal line at page `y`: split the row it crosses there. Crossed cells become two;
-/// the row's other cells span both rows (a vertical merge).
+/// the row's other cells span both rows (a vertical merge). A line through a vertically merged
+/// cell splits the merge there: on a border the eraser took away (between two of its rows, or
+/// across a row the merge leaves empty) it draws that border back without adding a row.
 fn split_rows(s: &mut Session, l: &DocLayout, page: usize, y: f32, (xa, xb): (f32, f32)) -> CmdResult {
     let boxes = cell_boxes(l, page);
     let hit = |r: &Rect| splits_row(r, y, (xa, xb));
     let Some((story, tp, cells)) = crossed(&boxes, ((xa + xb) / 2.0, y), hit) else {
         return Err(CmdError::Failed("the line doesn't cross a table cell".into()));
     };
-    let Some(&(r, c0, _)) = cells.first() else { return Err(CmdError::Failed("the line doesn't cross a table cell".into())) };
-    if cells.iter().any(|c| c.0 != r) {
-        return Err(CmdError::Failed("draw the line within one row".into()));
-    }
-    // The row's extent on this page.
-    let row_boxes: Vec<&Rect> = boxes.iter().filter(|b| b.story == story && b.table == tp && b.row == r).map(|b| &b.rect).collect();
-    let top = row_boxes.iter().map(|b| b.y).fold(f32::INFINITY, f32::min);
-    let bottom = row_boxes.iter().map(|b| b.bottom()).fold(f32::NEG_INFINITY, f32::max);
+    let rows = row_spans(&boxes, story, &tp);
+    let Some(&(r, top, bottom)) = rows.iter().find(|row| (row.1..row.2).contains(&y)) else {
+        return Err(CmdError::Failed("the line doesn't cross a table cell".into()));
+    };
     let t = s.doc.table(story, &tp).ok_or_else(|| CmdError::Failed("the table isn't there any more".into()))?;
-    if t.rows.len() >= MAX_ROWS {
-        return Err(CmdError::Failed("the table has too many rows".into()));
+    // The grid columns the line crosses (a merged cell's box is its first row's) and row `r`'s
+    // cells there.
+    let cols: BTreeSet<usize> = cells.iter().map(|&(cr, cc, _)| t.grid_col(cr, cc)).collect();
+    let row_len = t.rows.get(r).map_or(0, |row| row.cells.len());
+    let crossed_set: BTreeSet<usize> = (0..row_len).filter(|&ci| cols.contains(&t.grid_col(r, ci))).collect();
+    let Some(&c0) = crossed_set.first() else { return Err(CmdError::Failed("the line doesn't cross a table cell".into())) };
+    // On the border between two rows of a merge: split the merge there.
+    let has = |k: usize| rows.iter().any(|x| x.0 == k);
+    let border = if r > 0 && has(r - 1) && y - top < SNAP {
+        Some(r - 1)
+    } else if has(r + 1) && bottom - y < SNAP {
+        Some(r)
+    } else {
+        None
+    };
+    if let Some(k) = border {
+        let t = s.doc.table_mut(story, &tp)?;
+        if !unmerge_below(t, k, &cols) {
+            return Err(CmdError::Failed("there's already a border there".into()));
+        }
+        return finish(s, story, &tp, k + 1, c0);
     }
     // An exact height leaves out the row's bottom margin (its cells' largest), which the layout
     // adds below it: take it off each half so the two rows draw where the line went.
-    let row_bottom =
-        t.rows.get(r).map_or(0.0, |row| (0..row.cells.len()).map(|ci| wordcraft_layout::cell_margins(&s.doc, t, r, ci)[2]).fold(0.0f32, f32::max));
-    let crossed_set: std::collections::BTreeSet<usize> = cells.iter().map(|c| c.1).collect();
-    let merged = |ci: &usize| t.rows.get(r).and_then(|row| row.cells.get(*ci)).is_some_and(|c| c.props.vmerge != VMerge::None);
-    if crossed_set.iter().any(merged) {
-        return Err(CmdError::Failed("splitting a vertically merged cell across rows isn't supported; erase its merge first".into()));
+    let margin_below = |k: usize| {
+        t.rows.get(k).map_or(0.0, |row| (0..row.cells.len()).map(|ci| wordcraft_layout::cell_margins(&s.doc, t, k, ci)[2]).fold(0.0f32, f32::max))
+    };
+    let exact = |k: usize| t.rows.get(k).is_some_and(|row| row.props.height_rule == HeightRule::Exact);
+    let continued = |rr: usize, g: usize| {
+        t.cell_at_grid(rr, g)
+            .filter(|&ci| t.grid_col(rr, ci) == g)
+            .and_then(|ci| t.rows.get(rr)?.cells.get(ci))
+            .is_some_and(|c| c.props.vmerge == VMerge::Continue)
+    };
+    // Crossed cells whose merge runs on below this row.
+    let runs_on: BTreeSet<usize> = crossed_set.iter().copied().filter(|&ci| continued(r + 1, t.grid_col(r, ci))).collect();
+    // Two rows the eraser joined: every cell of the lower one continues a merge, so the pair
+    // draws as one row (the layout shares the merges' height between them). A line through the
+    // pair splits the merges between its rows again, which take the drawn heights; no row is added.
+    let only_continues =
+        |k: usize| t.rows.get(k).is_some_and(|row| !row.cells.is_empty() && row.cells.iter().all(|c| c.props.vmerge == VMerge::Continue));
+    let joined = rows.iter().find_map(|x| {
+        let below = rows.iter().find(|n| n.0 == x.0 + 1)?;
+        (only_continues(x.0 + 1) && (x.1..below.2).contains(&y)).then_some((x.0, x.1, below.2))
+    });
+    if let Some((k, upper_top, lower_bottom)) = joined {
+        let rule = if exact(k) { HeightRule::Exact } else { HeightRule::AtLeast };
+        let less = if rule == HeightRule::Exact { margin_below(k) } else { 0.0 };
+        let heights = [(k, y - upper_top - less), (k + 1, lower_bottom - y - less)];
+        let first = (0..t.rows.get(k + 1).map_or(0, |row| row.cells.len())).find(|&ci| cols.contains(&t.grid_col(k + 1, ci))).unwrap_or(0);
+        let t = s.doc.table_mut(story, &tp)?;
+        if !unmerge_below(t, k, &cols) {
+            return Err(CmdError::Failed("there's already a border there".into()));
+        }
+        for (k, h) in heights {
+            if let Some(row) = t.rows.get_mut(k) {
+                row.props.height = Some(h.clamp(1.0, 1584.0));
+                row.props.height_rule = rule;
+            }
+        }
+        return finish(s, story, &tp, k + 1, first);
     }
+    if t.rows.len() >= MAX_ROWS {
+        return Err(CmdError::Failed("the table has too many rows".into()));
+    }
+    let rule = if exact(r) { HeightRule::Exact } else { HeightRule::AtLeast };
+    let less = if rule == HeightRule::Exact { margin_below(r) } else { 0.0 };
+    let heights = (bottom > top).then(|| ((y - top - less).clamp(1.0, 1584.0), (bottom - y - less).clamp(1.0, 1584.0)));
     let t = s.doc.table_mut(story, &tp)?;
     let Some(row) = t.rows.get_mut(r) else { return Err(CmdError::Failed("the row isn't there any more".into())) };
     let mut new_row = wordcraft_doc::Row { props: row.props.clone(), cells: Vec::with_capacity(row.cells.len()), controls: Default::default() };
     new_row.props.header = false;
-    if top.is_finite() && bottom.is_finite() && bottom > top {
-        let rule = if row.props.height_rule == HeightRule::Exact { HeightRule::Exact } else { HeightRule::AtLeast };
-        let less = if rule == HeightRule::Exact { row_bottom } else { 0.0 };
-        row.props.height = Some((y - top - less).clamp(1.0, 1584.0));
+    if let Some((upper, lower)) = heights {
+        row.props.height = Some(upper);
         row.props.height_rule = rule;
-        new_row.props.height = Some((bottom - y - less).clamp(1.0, 1584.0));
+        new_row.props.height = Some(lower);
         new_row.props.height_rule = rule;
     }
     for (ci, cell) in row.cells.iter_mut().enumerate() {
         let mut nc = Cell::empty();
         nc.props = cell.props.clone();
         if crossed_set.contains(&ci) {
-            nc.props.vmerge = VMerge::None;
+            // The part above the line keeps the text; a merge that started here stands alone,
+            // and the part below starts the rest of the merge, if any.
+            if cell.props.vmerge == VMerge::Restart {
+                cell.props.vmerge = VMerge::None;
+            }
+            nc.props.vmerge = if runs_on.contains(&ci) { VMerge::Restart } else { VMerge::None };
         } else {
             if cell.props.vmerge == VMerge::None {
                 cell.props.vmerge = VMerge::Restart;
@@ -570,6 +641,53 @@ fn split_rows(s: &mut Session, l: &DocLayout, page: usize, y: f32, (xa, xb): (f3
     }
     t.rows.insert(r + 1, new_row);
     finish(s, story, &tp, r + 1, c0)
+}
+
+/// Each row's index, top and bottom on the page for table `tp` among `boxes`. A row ends where
+/// the next one starts (a merged cell's box runs over its rows, so it only gives its first
+/// row's top); a row the layout draws with no height has its top at its bottom.
+fn row_spans(boxes: &[CellBox], story: StoryRef, tp: &Path) -> Vec<(usize, f32, f32)> {
+    let mut rows: Vec<(usize, f32, f32)> = Vec::new();
+    for b in boxes.iter().filter(|b| b.story == story && b.table == *tp) {
+        match rows.iter_mut().find(|r| r.0 == b.row) {
+            Some(r) => (r.1, r.2) = (r.1.min(b.rect.y), r.2.max(b.rect.bottom())),
+            None => rows.push((b.row, b.rect.y, b.rect.bottom())),
+        }
+    }
+    rows.sort_by_key(|r| r.0);
+    let tops: Vec<(usize, f32)> = rows.iter().map(|r| (r.0, r.1)).collect();
+    for r in rows.iter_mut() {
+        if let Some(&(_, next)) = tops.iter().find(|n| n.0 == r.0 + 1) {
+            r.2 = next.max(r.1);
+        }
+    }
+    rows
+}
+
+/// Split the vertical merges in grid columns `cols` between rows `k` and `k + 1`: the part
+/// above keeps its text (a merge of one row is no merge), the part below starts a merge of its
+/// own if it runs on. `false` when no merge runs across there.
+fn unmerge_below(t: &mut Table, k: usize, cols: &BTreeSet<usize>) -> bool {
+    let at = |t: &Table, r: usize, g: usize| t.cell_at_grid(r, g).filter(|&ci| t.grid_col(r, ci) == g);
+    let vm = |t: &Table, r: usize, g: usize| at(t, r, g).and_then(|ci| t.rows.get(r)?.cells.get(ci)).map(|c| c.props.vmerge);
+    let mut changed = false;
+    for &g in cols {
+        if vm(t, k + 1, g) != Some(VMerge::Continue) {
+            continue;
+        }
+        let lower = if vm(t, k + 2, g) == Some(VMerge::Continue) { VMerge::Restart } else { VMerge::None };
+        let (above, below) = (at(t, k, g), at(t, k + 1, g));
+        if vm(t, k, g) == Some(VMerge::Restart)
+            && let Some(c) = above.and_then(|ci| t.rows.get_mut(k)?.cells.get_mut(ci))
+        {
+            c.props.vmerge = VMerge::None;
+        }
+        if let Some(c) = below.and_then(|ci| t.rows.get_mut(k + 1)?.cells.get_mut(ci)) {
+            c.props.vmerge = lower;
+            changed = true;
+        }
+    }
+    changed
 }
 
 /// Put the caret in cell (`r`, `c`) of the table (clamped) and re-lay its paragraphs out.
@@ -988,7 +1106,7 @@ mod tests {
         assert!(tables[0].props.float.is_none() && tables[1].props.float.is_some(), "a second, floating table");
     }
 
-    /// A line splits every cell it crosses, even a little (Word: one from inside A1 to inside B1
+    /// A line splits every cell it crosses (Word: one from the middle of A1 to the middle of B1
     /// splits both, not C1); the app's preview runs across the whole of those cells.
     #[test]
     fn a_line_splits_every_cell_it_crosses() {
@@ -1001,7 +1119,7 @@ mod tests {
         t.unwrap().rows[0].props.height = Some(60.0);
         s.touch();
         let (a, b) = (cell_rect(&mut s, 0, 0), cell_rect(&mut s, 0, 1));
-        let (y, x0, x1) = (a.y + 30.0, a.x + a.w * 0.7, b.x + b.w * 0.3);
+        let (y, x0, x1) = (a.y + 30.0, a.x + a.w * 0.5, b.x + b.w * 0.5);
         let l = s.layout();
         let line = stroke(&l, 0, x0, y, x1, y, ERASER_REACH).unwrap();
         assert_eq!(line_extent(&l, 0, line), Some(((a.x, y), (b.right(), y))), "the preview spans A1 and B1");
