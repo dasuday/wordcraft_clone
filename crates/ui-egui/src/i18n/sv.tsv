@@ -2617,6 +2617,19 @@ preview	Title	Titel
 	{language}: {file}	{language}: {file}
 	{language}: no dictionary found	{language}: ingen ordlista hittades
 	Recover	Återställ
+	Recover documents	Återställ dokument
+	Restore opens an unsaved copy. Your original file stays unchanged.	Återställning öppnar en osparad kopia. Originalfilen ändras inte.
+	Recovery is disabled while this document has a password.	Återställning är avstängd medan dokumentet har ett lösenord.
+	Local recovery is unavailable or still loading.	Lokal återställning är inte tillgänglig eller läses fortfarande in.
+	No recovery copies.	Inga återställningskopior.
+	Recovery copy	Återställningskopia
+	Restore	Återställ
+	Discard…	Kassera…
+	Continue without restoring	Fortsätt utan att återställa
+	Discard recovery copy	Kassera återställningskopia
+	Discard the recovery copy of {name}?	Vill du kassera återställningskopian av {name}?
+	This cannot be undone. Your original file stays unchanged.	Det går inte att ångra. Originalfilen ändras inte.
+	Discard	Kassera
 	Mirror margins	Spegelvända marginaler
 	Existing File or Web Page	Befintlig fil eller webbsida
 	Link to:	Länka till:
@@ -2647,3 +2660,7 @@ preview	Title	Titel
 	Bottom Right Cell	Nedre högra cellen
 	Inside Horizontal Border	Inre vågrät kantlinje
 	Inside Vertical Border	Inre lodrät kantlinje
+	Not protected by recovery: {reason}	Inte skyddat av återställning: {reason}
+	pictures too large to keep ({count})	bilder för stora att behålla ({count})
+	Save the document to keep everything. The recovery copy keeps the text but not: {names}	Spara dokumentet för att behålla allt. Återställningskopian behåller texten men inte: {names}
+	no copy could be written	ingen kopia kunde skrivas
