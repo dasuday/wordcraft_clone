@@ -2677,3 +2677,6 @@ preview	Title	Titel
 	{added}; {count} couldn't be read: {names}	{added}; {count} kunde inte läsas: {names}
 	{names} and {n} more	{names} och {n} till
 	{added}; {n} skipped (limit {max})	{added}; {n} hoppades över (gräns {max})
+	Border Styles	Kantlinjeformat
+	Border\nStyles	Kantlinje-\nformat
+	Click a table border to paint it with the chosen border style. Esc stops.	Klicka på en kantlinje i tabellen för att måla den med det valda kantlinjeformatet. Esc avslutar.

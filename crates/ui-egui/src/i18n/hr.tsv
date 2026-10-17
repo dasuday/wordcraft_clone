@@ -2662,3 +2662,6 @@ preview	Title	Naslov
 	{added}; {count} couldn't be read: {names}	{added}; nije moguće pročitati ({count}): {names}
 	{names} and {n} more	{names} i još {n}
 	{added}; {n} skipped (limit {max})	{added}; preskočeno: {n} (ograničenje {max})
+	Border Styles	Stilovi obruba
+	Border\nStyles	Stilovi\nobruba
+	Click a table border to paint it with the chosen border style. Esc stops.	Kliknite obrub tablice da biste ga obojili odabranim stilom obruba. Esc zaustavlja.
