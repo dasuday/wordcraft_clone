@@ -7263,3 +7263,179 @@ fn row_nil_overrides_style() {
     d.insert_block(StoryRef::Body, &Path::top(1), wordcraft_doc::Block::Table(t)).unwrap();
     assert_eq!(rules_on_page0(&lay(&d)), vec![2.0]);
 }
+
+fn sparse_border_rows() -> Document {
+    use wordcraft_doc::props::LineSpacing;
+    let mut d = Document::new();
+    let mut table = Table::new(2, 2, 200.0);
+    table.props.style = None;
+    table.props.borders = Some(Borders::default());
+    table.props.cell_margins = Some([4.0; 4]);
+    for row in &mut table.rows {
+        for (ci, cell) in row.cells.iter_mut().enumerate() {
+            let mut p = wordcraft_doc::Paragraph::with_text(if ci == 0 { "" } else { "Probe" }, Default::default());
+            p.props = ParaProps {
+                space_before: Some(0.0),
+                space_after: Some(0.0),
+                line_spacing: Some(LineSpacing::Exactly(if ci == 0 { 14.0 } else { 10.0 })),
+                ..Default::default()
+            };
+            cell.blocks = vec![wordcraft_doc::para_block(p)];
+            cell.props.borders = Some(Borders {
+                top: (ci == 1).then_some(Border { style: BorderStyle::Single, width: 0.5, color: None, space: 0.0 }),
+                ..Default::default()
+            });
+        }
+    }
+    d.body = vec![std::sync::Arc::new(wordcraft_doc::Block::Table(table))];
+    d
+}
+
+#[test]
+fn shared_top_band_sets_height() {
+    let d = sparse_border_rows();
+    let l = lay(&d);
+    let heights: Vec<_> = l.pages[0]
+        .items
+        .iter()
+        .filter_map(|it| match it {
+            Placed::Cell { rect, cell: 0, .. } => Some(rect.h),
+            _ => None,
+        })
+        .collect();
+    // A shorter neighbouring cell supplies the row's top border band, even when the
+    // tallest cell is empty and has no top border of its own.
+    assert_eq!(heights.len(), 2);
+    for height in heights {
+        assert!((height - 22.5).abs() < 0.01, "row height {height}");
+    }
+}
+
+#[test]
+fn shared_band_moves_row() {
+    let mut d = sparse_border_rows();
+    d.last_section.page_h = 188.5;
+    d.last_section.margin_top = 72.0;
+    d.last_section.margin_bottom = 72.0;
+    let l = lay(&d);
+    let pages: Vec<_> = l
+        .pages
+        .iter()
+        .enumerate()
+        .filter_map(|(page, p)| p.items.iter().any(|it| matches!(it, Placed::Cell { row: 1, .. })).then_some(page))
+        .collect();
+    assert_eq!(pages, vec![1], "44.5 pt cannot hold two 22.5 pt rows");
+}
+
+#[test]
+fn sparse_band_exact_minimum() {
+    use wordcraft_doc::props::HeightRule;
+    for (rule, expected) in [(HeightRule::Exact, 34.0), (HeightRule::AtLeast, 38.5)] {
+        let mut d = sparse_border_rows();
+        let Block::Table(table) = std::sync::Arc::make_mut(&mut d.body[0]) else { panic!("table") };
+        for row in &mut table.rows {
+            row.props.height = Some(30.0);
+            row.props.height_rule = rule;
+        }
+        let l = lay(&d);
+        for item in &l.pages[0].items {
+            if let Placed::Cell { rect, .. } = item {
+                assert!((rect.h - expected).abs() < 0.01, "{rule:?}: {}", rect.h);
+            }
+        }
+    }
+}
+
+#[test]
+fn sparse_band_borderless() {
+    let mut d = sparse_border_rows();
+    let Block::Table(table) = std::sync::Arc::make_mut(&mut d.body[0]) else { panic!("table") };
+    for row in &mut table.rows {
+        row.cells[1].props.borders = Some(Borders::default());
+    }
+    let l = lay(&d);
+    for item in &l.pages[0].items {
+        if let Placed::Cell { rect, .. } = item {
+            assert!((rect.h - 22.0).abs() < 0.01, "borderless row height {}", rect.h);
+        }
+    }
+}
+
+#[test]
+fn empty_marks_dont_split_row() {
+    let mut d = sparse_border_rows();
+    d.last_section.page_h = 187.5;
+    d.last_section.margin_top = 72.0;
+    d.last_section.margin_bottom = 72.0;
+    let l = lay(&d);
+    let pages: Vec<_> = l
+        .pages
+        .iter()
+        .enumerate()
+        .filter_map(|(page, p)| p.items.iter().any(|it| matches!(it, Placed::Cell { row: 1, .. })).then_some(page))
+        .collect();
+    // The short label fits, but only empty paragraph marks would continue. Move the
+    // row whole rather than separating its label from its empty cells.
+    assert_eq!(pages, vec![1]);
+}
+
+#[test]
+fn real_text_can_continue() {
+    let mut d = sparse_border_rows();
+    let Block::Table(table) = std::sync::Arc::make_mut(&mut d.body[0]) else { panic!("table") };
+    table.rows.truncate(1);
+    let mut p = Paragraph::with_text("First\nSecond", Default::default());
+    p.props = table.rows[0].cells[0].blocks[0].as_para().unwrap().props.clone();
+    p.props.widow_control = Some(false);
+    table.rows[0].cells[0].blocks = vec![wordcraft_doc::para_block(p)];
+    d.last_section.page_h = 168.0;
+    d.last_section.margin_top = 72.0;
+    d.last_section.margin_bottom = 72.0;
+    let l = lay(&d);
+    assert_eq!(l.pages.len(), 2);
+    for page in &l.pages {
+        assert!(page.items.iter().any(|it| matches!(it, Placed::Lines { path, .. } if path.0 == [0, 0, 0, 0])));
+    }
+}
+
+#[test]
+fn text_uses_own_top_band() {
+    let mut d = sparse_border_rows();
+    let Block::Table(table) = std::sync::Arc::make_mut(&mut d.body[0]) else { panic!("table") };
+    for row in &mut table.rows {
+        let mut p = Paragraph::with_text("Tall content", Default::default());
+        p.props = row.cells[0].blocks[0].as_para().unwrap().props.clone();
+        row.cells[0].blocks = vec![wordcraft_doc::para_block(p)];
+    }
+    let l = lay(&d);
+    let heights: Vec<_> = l.pages[0]
+        .items
+        .iter()
+        .filter_map(|it| match it {
+            Placed::Cell { rect, cell: 0, .. } => Some(rect.h),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(heights, vec![22.0; 2], "nonempty content keeps its own top border inset");
+}
+
+#[test]
+fn empty_spacing_covers_band() {
+    let mut d = sparse_border_rows();
+    let Block::Table(table) = std::sync::Arc::make_mut(&mut d.body[0]) else { panic!("table") };
+    for row in &mut table.rows {
+        let mut p = row.cells[0].blocks[0].as_para().unwrap().clone();
+        p.props.space_after = Some(8.0);
+        row.cells[0].blocks = vec![wordcraft_doc::para_block(p)];
+    }
+    let l = lay(&d);
+    let heights: Vec<_> = l.pages[0]
+        .items
+        .iter()
+        .filter_map(|it| match it {
+            Placed::Cell { rect, cell: 0, .. } => Some(rect.h),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(heights, vec![30.0; 2], "paragraph spacing already exceeds the shared band minimum");
+}
