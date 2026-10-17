@@ -1,6 +1,6 @@
 # File-format parity with Microsoft Word
 
-> **Last reviewed:** 2026-10-11 · **Last updated:** 2026-10-16 · **Change:** trivial (transient print REF/PAGEREF refresh; previously trivial: every table style part round-trips, #714); previously trivial: VML freeforms read and kept on save; previously trivial: multi-paragraph field instructions no longer add blank lines; previously trivial: `flowChartOr` draws its circle and cross spokes, as in Word; previously trivial: RTF: Mac OS Roman and DOS text, #1653; previously trivial: VML text boxes keep their internal margins, fit to their text and vertical alignment; hidden drawings not shown; previously trivial: PDF export draws horizontal and vertical lines inside groups, #1474; previously trivial: symbol-font text exported as Unicode, #776; previously trivial: text-box margins, Resize shape to fit text and freeforms in groups, #743; previously trivial: formatted paste from the system clipboard's HTML and RTF, #687; previously trivial: independent complex-script formatting inheritance and round-trip regression tests; previously trivial: import/export fixes for TXT, RTF, ODT, HTML and LaTeX, #433–#440; previously major: first version; every format Word reads or writes, measured from the readers and writers on origin/main) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4, plus Word for Windows' extra formats
+> **Last reviewed:** 2026-10-11 · **Last updated:** 2026-10-17 · **Change:** trivial (print PAGEREF range anchors; previously trivial: transient print REF/PAGEREF refresh; previously trivial: every table style part round-trips, #714); previously trivial: VML freeforms read and kept on save; previously trivial: multi-paragraph field instructions no longer add blank lines; previously trivial: `flowChartOr` draws its circle and cross spokes, as in Word; previously trivial: RTF: Mac OS Roman and DOS text, #1653; previously trivial: VML text boxes keep their internal margins, fit to their text and vertical alignment; hidden drawings not shown; previously trivial: PDF export draws horizontal and vertical lines inside groups, #1474; previously trivial: symbol-font text exported as Unicode, #776; previously trivial: text-box margins, Resize shape to fit text and freeforms in groups, #743; previously trivial: formatted paste from the system clipboard's HTML and RTF, #687; previously trivial: independent complex-script formatting inheritance and round-trip regression tests; previously trivial: import/export fixes for TXT, RTF, ODT, HTML and LaTeX, #433–#440; previously major: first version; every format Word reads or writes, measured from the readers and writers on origin/main) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4, plus Word for Windows' extra formats
 
 Every format Word opens or saves, what WordCraft does with it, and how it's tested. Fidelity is the
 share of a typical real-world file's content and formatting that survives (read: shows correctly;
@@ -34,6 +34,7 @@ Weights are the share of a Word user's file traffic (estimate). Read/write: ✅ 
 
 | Format | Weight | Word | WordCraft read | WordCraft write | Fidelity | Hours | How it's tested | Notes |
 |---|---|---|---|---|---|---|---|---|
+| 2026-10-17 | trivial | Print PAGEREF labels distinguish leading hard page breaks from text-first spanning ranges; ambiguous ranges keep complete caches. |
 | `.docx` page background picture/texture (`v:background/v:fill`) | — | R/W | ✅ | ✅ | ~80% | — | `roundtrip.rs::page_background_picture_round_trips`, `crates/render` | Image part and `type`/`o:title` kept; tiled at 96 dpi or stretched; drawn on screen and in PDF; no Fill Effects dialog yet, gradients and patterns are not read |
 | `.docx` Word Document (ECMA-376 Transitional) | 70% | R/W | ✅ | ✅ | ~65% | 70–110 | `crates/docx/tests` (roundtrip 34, fixtures 29, malformed 8, bidi 5, citations 5); synthetic fixtures only | Word opens our files. Untested on a real-world corpus. Tracked changes inside a field result stay revisions (the field is kept as a range, #1037). Details below |
 | `.docx` Strict Open XML | 1% | R/W | ✅ (namespace mapping in `xml.rs`) | ❌ | ~60% | 2–4 | one fixture | Writing Strict is rare |
@@ -216,8 +217,10 @@ both `updateFields` values, without an explicit field/table update.
 
 This pass retains caches under field locks or document protection. Existing header/footer
 field evaluation is unchanged. Multi-paragraph REF targets and unsupported numbering/relative
-switches retain their complete caches. PAGEREF ranges spanning pages also retain caches
-until their range-page policy has native proof. Missing targets show WordCraft's
+switches retain their complete caches. Spanning PAGEREF ranges label their first text page;
+leading hard page breaks alone advance to the following text. Native standalone and cached-TOC
+controls prove this distinction. Blank starts, whitespace, unsupported objects and ranges without
+supported text retain their complete caches. Bookmark navigation is unchanged. Missing targets show WordCraft's
 own error text. External fields are not evaluated. REF dependencies settle before page
 reflow; pagination feedback has a separate pass limit and generated text work is bounded.
 Full TOC regeneration remains an explicit update.

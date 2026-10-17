@@ -94,12 +94,11 @@ fn refresh(doc: &mut Document, pass: RefPass<'_>, budget: &mut usize) -> Result<
                     let end = ends.get(name)?;
                     let first = layout.caret(pos)?;
                     let last = layout.caret(end)?;
-                    // Do not replace a complete cache while page-spanning range semantics
-                    // remain unsupported. A single-page range has one unambiguous label.
-                    if end < pos || first.page != last.page {
+                    if end < pos {
                         return None;
                     }
-                    let page = layout.pages.get(first.page)?;
+                    let anchor = if first.page == last.page { first } else { layout.caret(&range_page_pos(doc, pos, end)?)? };
+                    let page = layout.pages.get(anchor.page)?;
                     let format = sections.get(page.section).map(|(_, s)| s.page_num_format).unwrap_or_default();
                     Some((name.clone(), (page.number, format)))
                 })
@@ -167,6 +166,43 @@ fn refresh(doc: &mut Document, pass: RefPass<'_>, budget: &mut usize) -> Result<
         }
     }
     Ok(changed)
+}
+
+/// A spanning range labels its first text. Leading hard page breaks alone move that
+/// anchor forward; blank paragraphs and unsupported objects retain the saved cache.
+fn range_page_pos(doc: &Document, start: &Pos, end: &Pos) -> Option<Pos> {
+    if start.story != end.story || end < start {
+        return None;
+    }
+    let mut after_break = false;
+    for path in doc.para_paths(start.story).into_iter().filter(|p| *p >= start.path && *p <= end.path) {
+        let para = doc.para(start.story, &path)?;
+        let from = if path == start.path { start.off } else { 0 };
+        let to = if path == end.path { end.off } else { para.len() };
+        let mut has_break = false;
+        for (offset, ch) in para.text.get(from..to)?.char_indices() {
+            let off = from + offset;
+            if ch == wordcraft_doc::para::OBJ {
+                if para.object_at(off).is_some_and(InlineObject::is_marker) {
+                    continue;
+                }
+                return None;
+            }
+            if ch == '\u{c}' {
+                has_break = true;
+                after_break = true;
+                continue;
+            }
+            if ch.is_control() || ch.is_whitespace() {
+                return None;
+            }
+            return Some(if after_break { Pos::new(start.story, path, off) } else { start.clone() });
+        }
+        if !has_break {
+            return None;
+        }
+    }
+    None
 }
 
 /// Buffered fields cannot represent copied paragraph formatting. Preserve their complete
@@ -377,23 +413,90 @@ mod tests {
         assert!(text[0].contains("Second paragraph"));
     }
 
+    #[derive(Clone, Copy)]
+    enum RangeContext {
+        Standalone,
+        Toc,
+    }
+
+    fn break_range_control(context: RangeContext) -> Document {
+        let props = CharProps::default();
+        let mut doc = Document::new();
+        doc.body.clear();
+        for name in ["BreakFirst", "TextFirst"] {
+            let mut p = Paragraph::with_text(&format!("{name} page "), props.clone());
+            p.insert_object(p.len(), field(&format!(r"PAGEREF {name} \h"), "99", FieldFlags::Clean), &props).unwrap();
+            doc.body.push(para_block(p));
+        }
+        if matches!(context, RangeContext::Toc) {
+            for (index, name) in ["BreakFirst", "TextFirst"].into_iter().enumerate() {
+                let mut p = Paragraph::with_text(&format!("Cached TOC {name} page "), props.clone());
+                if index == 0 {
+                    p.insert_object(0, InlineObject::FieldStart { instr: r#"TOC \o "1-3" \h"#.into(), locked: false, dirty: false }, &props).unwrap();
+                }
+                p.insert_object(p.len(), field(&format!(r"PAGEREF {name} \h"), "99", FieldFlags::Clean), &props).unwrap();
+                if index == 1 {
+                    p.insert_object(p.len(), InlineObject::FieldEnd, &props).unwrap();
+                }
+                doc.body.push(para_block(p));
+            }
+        }
+        doc.body.push(para_block(Paragraph::with_text("\u{c}", props.clone())));
+        let mut first = Paragraph::with_text("\u{c}", props.clone());
+        first.insert_object(0, InlineObject::BookmarkStart { name: "BreakFirst".into() }, &props).unwrap();
+        doc.body.push(para_block(first));
+        let mut last = Paragraph::with_text("First visible range text", props.clone());
+        last.insert_object(last.len(), InlineObject::BookmarkEnd { name: "BreakFirst".into() }, &props).unwrap();
+        doc.body.push(para_block(last));
+        doc.body.push(para_block(Paragraph::with_text("\u{c}", props.clone())));
+        let mut text = Paragraph::with_text("Visible range prefix\u{c}Visible range suffix", props.clone());
+        text.insert_object(0, InlineObject::BookmarkStart { name: "TextFirst".into() }, &props).unwrap();
+        text.insert_object(text.len(), InlineObject::BookmarkEnd { name: "TextFirst".into() }, &props).unwrap();
+        doc.body.push(para_block(text));
+        doc
+    }
+
+    #[test]
+    fn print_range_break_labels() {
+        // Word's unchanged default-export controls show 3/4, including cached TOC entries.
+        for context in [RangeContext::Standalone, RangeContext::Toc] {
+            let doc = break_range_control(context);
+            let before = serde_json::to_value(&doc).unwrap();
+            let print = super::prepare(&doc, &Default::default()).unwrap();
+            assert_eq!(shown(&print.layout, 0), ["3"]);
+            assert_eq!(shown(&print.layout, 1), ["4"]);
+            if matches!(context, RangeContext::Toc) {
+                assert_eq!(shown(&print.layout, 2), ["3"]);
+                assert_eq!(shown(&print.layout, 3), ["4"]);
+            }
+            let text = pdf_text(&crate::io::save_bytes("out.pdf", &doc).unwrap());
+            assert_eq!(text.len(), 5);
+            assert!(text[0].contains("BreakFirst page 3"));
+            assert!(text[0].contains("TextFirst page 4"));
+            assert!(text[2].contains("First visible range text"));
+            assert!(text[3].contains("Visible range prefix"));
+            assert!(text[4].contains("Visible range suffix"));
+            assert_eq!(serde_json::to_value(&doc).unwrap(), before);
+        }
+    }
+
     #[test]
     fn print_page_span_keeps_cache() {
         let props = CharProps::default();
         let mut doc = Document::new();
         let mut lookup = Paragraph::new();
-        lookup.insert_object(0, field("PAGEREF span", "3", FieldFlags::Clean), &props).unwrap();
+        lookup.insert_object(0, field("PAGEREF span", "Saved range label 99", FieldFlags::Clean), &props).unwrap();
         let mut first = Paragraph::new();
         first.props.page_break_before = Some(true);
         first.insert_object(0, InlineObject::BookmarkStart { name: "span".into() }, &props).unwrap();
-        first.insert_text(first.len(), "\u{c}", &props).unwrap();
+        first.insert_text(first.len(), " \u{c}", &props).unwrap();
         let mut last = Paragraph::with_text("Range text", props.clone());
         last.insert_object(last.len(), InlineObject::BookmarkEnd { name: "span".into() }, &props).unwrap();
         doc.body = vec![para_block(lookup), para_block(first), para_block(last)];
         let output = super::prepare(&doc, &Default::default()).unwrap();
-        assert_eq!(output.doc.para(StoryRef::Body, &Path::top(0)).unwrap().plain_text(), "3");
+        assert_eq!(output.doc.para(StoryRef::Body, &Path::top(0)).unwrap().plain_text(), "Saved range label 99");
         let text = pdf_text(&crate::io::save_bytes("out.pdf", &doc).unwrap());
-        assert_eq!(text[0], "3", "unsupported page-spanning ranges retain their complete cache");
+        assert_eq!(text[0], "Saved range label 99", "whitespace before a break retains the complete cache");
     }
 
     #[test]
