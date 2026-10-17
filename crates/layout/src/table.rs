@@ -25,8 +25,16 @@ pub struct RowLayout {
     pub cells: Vec<CellPart>,
 }
 
+/// An exact nested row's closing rule and the row's top, relative to its containing box.
+#[derive(Clone)]
+pub(crate) struct AnchoredRule {
+    pub item: usize,
+    pub top: f32,
+}
+
 /// A cell of a [`RowLayout`].
 pub struct CellPart {
+    pub(crate) anchored_rules: Vec<AnchoredRule>,
     /// Index of this cell's closing rule in the row items.
     pub(crate) bottom_rule: Option<usize>,
     /// Reserved closing band for an unmerged, non-exact final row.
@@ -440,6 +448,7 @@ pub fn layout_table(ctx: &mut Ctx, story: StoryRef, t: &Table, path: &[u32], ava
     // First pass: lay out every cell's content.
     struct CellBox {
         items: Vec<Placed>,
+        anchored_rules: Vec<AnchoredRule>,
         h: f32,
         x: f32,
         w: f32,
@@ -542,6 +551,7 @@ pub fn layout_table(ctx: &mut Ctx, story: StoryRef, t: &Table, path: &[u32], ava
             let insets = margins[0] + margins[2] + band_t + band_b;
             let turn = cell.props.text_direction;
             let mut turned = None;
+            let mut anchored_rules = Vec::new();
             let (items, h) = if cell.props.vmerge == VMerge::Continue {
                 (Vec::new(), 0.0)
             } else if turn.is_turned() {
@@ -564,7 +574,7 @@ pub fn layout_table(ctx: &mut Ctx, story: StoryRef, t: &Table, path: &[u32], ava
                 turned = Some(Turned { turn, len, across, snap, region, ci, top: margins[0] + band_t });
                 (items, len)
             } else {
-                let BoxLayout { mut items, mut height, floats_bottom, last_top } =
+                let BoxLayout { mut items, mut height, floats_bottom, last_top, anchored_rules: mut rules } =
                     layout_box(ctx, story, &cell.blocks, &cpath, cw, BoxContext::Cell(text), depth, None);
                 // A hidden end-of-cell mark: an empty last paragraph takes no room (Word for
                 // Windows: a row of empty such cells is only its borders).
@@ -576,6 +586,10 @@ pub fn layout_table(ctx: &mut Ctx, story: StoryRef, t: &Table, path: &[u32], ava
                 for it in &mut items {
                     it.translate(x0 + margins[1], margins[0] + band_t);
                 }
+                for rule in &mut rules {
+                    rule.top += margins[0] + band_t;
+                }
+                anchored_rules = rules;
                 // The cell grows to hold its floating tables.
                 (items, height.max(floats_bottom))
             };
@@ -588,6 +602,7 @@ pub fn layout_table(ctx: &mut Ctx, story: StoryRef, t: &Table, path: &[u32], ava
             row_below = row_below.max(margins[2] + band_b);
             cells.push(CellBox {
                 items,
+                anchored_rules,
                 h,
                 x: x0,
                 w: x1 - x0,
@@ -717,6 +732,7 @@ pub fn layout_table(ctx: &mut Ctx, story: StoryRef, t: &Table, path: &[u32], ava
                     it.turn(tn.turn, ox, oy);
                 }
             }
+            let anchored_rules = c.anchored_rules.into_iter().map(|r| AnchoredRule { item: items.len() + r.item, top: r.top + dy }).collect();
             for mut it in cell_items {
                 it.translate(0.0, dy);
                 items.push(it);
@@ -758,7 +774,7 @@ pub fn layout_table(ctx: &mut Ctx, story: StoryRef, t: &Table, path: &[u32], ava
                 story,
                 clip: exact && c.h > span_h + 0.01,
             });
-            parts.push(CellPart { bottom_rule, bottom_band, items: first..items.len(), end });
+            parts.push(CellPart { anchored_rules, bottom_rule, bottom_band, items: first..items.len(), end });
         }
         out.push(RowLayout { height: rh, items, bottom: bottoms.get(ri).copied().unwrap_or(0.0), cells: parts });
     }
@@ -875,6 +891,7 @@ pub fn split_row(row: &RowLayout, cut: f32) -> Option<(RowLayout, RowLayout)> {
     for (((c, items), splits), &shift) in row.cells.iter().zip(&cells).zip(&splits).zip(&shifts) {
         let start = b.len();
         let mut bottom_rule = None;
+        let mut anchored_rules = Vec::new();
         for (index, (it, &split)) in items.iter().zip(splits).enumerate() {
             let source = c.items.start.saturating_add(index);
             if let Some(r) = it.turned_bounds() {
@@ -946,7 +963,14 @@ pub fn split_row(row: &RowLayout, cut: f32) -> Option<(RowLayout, RowLayout)> {
                 Placed::Rule { x0, y0, x1, y1, border } => {
                     if (y0 - y1).abs() < 0.01 {
                         // Horizontal: the top edge stays, the bottom edge moves; both fragments close.
-                        if c.bottom_rule == Some(source) {
+                        if let Some(rule) = c.anchored_rules.iter().find(|r| r.item == source) {
+                            if rule.top < cut {
+                                a.push(it.clone());
+                            } else {
+                                anchored_rules.push(AnchoredRule { item: b.len(), top: rule.top - shift });
+                                b.push(Placed::Rule { x0: *x0, y0: y0 - shift, x1: *x1, y1: y1 - shift, border: *border });
+                            }
+                        } else if c.bottom_rule == Some(source) {
                             // Keep the entire closing stroke inside each physical fragment's band.
                             let above = cut - c.bottom_band / 2.0;
                             let below = if c.bottom_band > 0.0 { height - c.bottom_band / 2.0 } else { y0 - rest };
@@ -974,7 +998,7 @@ pub fn split_row(row: &RowLayout, cut: f32) -> Option<(RowLayout, RowLayout)> {
                 }
             }
         }
-        parts.push(CellPart { bottom_rule, bottom_band: c.bottom_band, items: start..b.len(), end: c.end.map(|e| e - shift) });
+        parts.push(CellPart { anchored_rules, bottom_rule, bottom_band: c.bottom_band, items: start..b.len(), end: c.end.map(|e| e - shift) });
     }
     // The part left on the page is placed and never split again.
     Some((

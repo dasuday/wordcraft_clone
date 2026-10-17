@@ -2479,7 +2479,7 @@ fn split_row_rejects_a_hostile_cut() {
         height,
         items: vec![line(0.0), line(150.0)],
         bottom,
-        cells: vec![CellPart { bottom_rule: None, bottom_band: 0.0, items: 0..2, end: Some(170.0) }],
+        cells: vec![CellPart { anchored_rules: Vec::new(), bottom_rule: None, bottom_band: 0.0, items: 0..2, end: Some(170.0) }],
     };
     for cut in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY, 0.0, -1.0, 200.0] {
         assert!(split_row(&row(200.0, 4.0), cut).is_none(), "{cut}");
@@ -2493,8 +2493,14 @@ fn split_row_rejects_a_hostile_cut() {
     }
     // Cell ranges past the items are ignored.
     let mut r = row(200.0, 4.0);
-    r.cells.push(CellPart { bottom_rule: None, bottom_band: 0.0, items: 5..9, end: None });
-    r.cells.push(CellPart { bottom_rule: None, bottom_band: 0.0, items: std::ops::Range { start: 2, end: 1 }, end: None });
+    r.cells.push(CellPart { anchored_rules: Vec::new(), bottom_rule: None, bottom_band: 0.0, items: 5..9, end: None });
+    r.cells.push(CellPart {
+        anchored_rules: Vec::new(),
+        bottom_rule: None,
+        bottom_band: 0.0,
+        items: std::ops::Range { start: 2, end: 1 },
+        end: None,
+    });
     assert!(split_row(&r, 100.0).is_some());
 }
 
@@ -4551,7 +4557,7 @@ fn a_split_row_moves_shading_below_the_cut_with_it() {
         height: 200.0,
         items: vec![line_row(0.0), line_row(150.0), fill(0.0, 200.0), fill(150.0, 50.0)],
         bottom: 0.0,
-        cells: vec![CellPart { bottom_rule: None, bottom_band: 0.0, items: 0..4, end: None }],
+        cells: vec![CellPart { anchored_rules: Vec::new(), bottom_rule: None, bottom_band: 0.0, items: 0..4, end: None }],
     };
     let (a, b) = split_row(&row, 100.0).expect("splits");
     let fills = |r: &RowLayout| {
@@ -7358,5 +7364,83 @@ fn nested_side_is_not_row_close() {
             assert_eq!(&short_rules[..2], &[0, 0], "nested width {width}, stroke {stroke}: {short_rules:?}");
             assert_eq!(short_rules.iter().sum::<usize>(), 1, "{short_rules:?}");
         }
+    }
+}
+
+#[test]
+fn nested_rule_stays_anchored() {
+    use wordcraft_doc::props::{HeightRule, LineSpacing, Rgb};
+    let red = Rgb(255, 0, 0);
+    let para = |text: &str| {
+        let mut p = Paragraph::with_text(text, CharProps { font: Some("Source Sans 3".into()), size: Some(9.0), ..Default::default() });
+        p.props.line_spacing = Some(LineSpacing::Exactly(10.0));
+        p.props.space_before = Some(0.0);
+        p.props.space_after = Some(0.0);
+        p.props.widow_control = Some(false);
+        p
+    };
+    for (height, lines, behind, deep) in
+        [(150.0, 15usize, false, false), (350.0, 35, false, false), (650.0, 65, false, false), (350.0, 35, true, false), (350.0, 35, false, true)]
+    {
+        let mut inner = Table::new(1, 1, 100.0);
+        inner.props.fixed = true;
+        inner.props.style = None;
+        inner.props.cell_margins = Some([0.0; 4]);
+        inner.props.borders = Some(Borders {
+            bottom: Some(Border { style: BorderStyle::Single, width: 4.0, color: Some(red), ..Default::default() }),
+            ..Borders::all(Border::default())
+        });
+        inner.rows[0].props.height = Some(height);
+        inner.rows[0].props.height_rule = HeightRule::Exact;
+        inner.rows[0].cells[0].blocks = vec![wordcraft_doc::para_block(para("Nested original"))];
+        let mut outer = Table::new(1, 2, 300.0);
+        outer.props.fixed = true;
+        outer.props.style = None;
+        outer.props.cell_margins = Some([0.0; 4]);
+        outer.props.borders = Some(Borders::all(Border::default()));
+        outer.rows[0].cells[0].blocks = vec![wordcraft_doc::para_block(para(&vec!["Original line"; lines].join("\n")))];
+        outer.rows[0].cells[1].props.hide_mark = true;
+        if deep {
+            let mut wrapper = Table::new(1, 1, 100.0);
+            wrapper.props.fixed = true;
+            wrapper.props.style = None;
+            wrapper.props.cell_margins = Some([0.0; 4]);
+            wrapper.props.borders = Some(Borders::all(Border::default()));
+            wrapper.rows[0].cells[0].props.hide_mark = true;
+            wrapper.rows[0].cells[0].blocks = vec![Arc::new(Block::Table(inner)), wordcraft_doc::para_block(para(""))];
+            inner = wrapper;
+        }
+        let mut end = para("");
+        if behind {
+            use wordcraft_doc::para::{Float, Wrap};
+            end.insert_object(0, rect_shape(1.0, 1.0, Float { wrap: Wrap::BehindText, ..Default::default() }), &Default::default()).unwrap();
+        }
+        outer.rows[0].cells[1].blocks = vec![Arc::new(Block::Table(inner)), wordcraft_doc::para_block(end)];
+        let mut d = Document::new();
+        d.last_section.page_w = 500.0;
+        d.last_section.page_h = 360.0;
+        d.last_section.margin_top = 36.0;
+        d.last_section.margin_bottom = 36.0;
+        d.last_section.margin_left = 36.0;
+        d.last_section.margin_right = 36.0;
+        d.body = vec![Arc::new(Block::Table(outer))];
+        let l = lay(&d);
+        assert_eq!(l.pages.len(), lines.div_ceil(28));
+        let edges: Vec<Vec<f32>> = l
+            .pages
+            .iter()
+            .map(|page| {
+                page.items
+                    .iter()
+                    .filter_map(|it| match it {
+                        Placed::Rule { y0, y1, border, .. } if border.color == Some(red) && (y1 - y0).abs() < 0.01 => Some(*y0),
+                        _ => None,
+                    })
+                    .collect()
+            })
+            .collect();
+        // Word keeps this nested exact row's closing rule on its starting page, outside the page.
+        assert_eq!(edges[0], vec![36.0 + height]);
+        assert!(edges.iter().skip(1).all(Vec::is_empty), "{edges:?}");
     }
 }
