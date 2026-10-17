@@ -43,9 +43,11 @@ What limits the risk:
 - Every third-party action in these workflows is pinned to a full commit SHA. The shared workflow's
   third-party actions are pinned the same way; its own composite actions are still called at
   `@main`, so pinning a caller alone would not freeze all of the code.
+- `craft-fonts-ref` is a full commit SHA, so the fonts embedded in a release are pinned even
+  though the workflow that checks them out is not.
 - `cargo xtask workflows` (part of `cargo xtask ci`) rejects any `uses:` that is neither a local
-  path nor a full 40-character commit SHA. The shared workflow is the one allowlisted exception,
-  with its reason, in `xtask/src/workflows.rs`.
+  path nor a full 40-character commit SHA (or an immutable Docker digest). The shared workflow is
+  the one allowlisted exception, with its reason, in `xtask/src/workflows.rs`.
 - `storytold/craft-common-actions` must require a pull request and review on `main`, and run CI on
   every change. Those are repository settings, not files here. Until #1358 is closed, check them
   before a release, and review
