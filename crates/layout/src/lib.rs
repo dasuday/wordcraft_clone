@@ -1092,6 +1092,8 @@ fn layout_box(
                 }
                 let paragraph_y = y;
                 y += if i == 0 { before } else { before.max(0.0) };
+                // Header/footer drawing and edit origins precede applied paragraph spacing.
+                let anchor_y = if story_root { paragraph_y } else { y };
                 // Floating objects anchored here: place them, then wrap the text around them.
                 // One left out of the layout (hidden, or deleted in the final text) takes no room.
                 let mut floats = HashMap::new();
@@ -1101,9 +1103,8 @@ fn layout_box(
                     if left_out(oi) {
                         continue;
                     }
-                    // Header/footer paragraph anchors start above the paragraph's applied spacing.
-                    let anchor_y = if story_root && float.v_rel == Anchor::Paragraph { paragraph_y } else { y };
-                    let r = float_rect(frame, (0.0, width), anchor_y, w, h, float);
+                    let object_y = if float.v_rel == Anchor::Paragraph { anchor_y } else { y };
+                    let r = float_rect(frame, (0.0, width), object_y, w, h, float);
                     let outline = ctx.wrap_outline(o);
                     excl.extend(wrap_area(r, float, outline.as_deref().map(|v| v.as_slice())));
                     floats.insert(oi, r);
@@ -1116,7 +1117,7 @@ fn layout_box(
                 push_para(&mut items, story, &path, &pl, 0, pl.lines.len(), 0.0, y + lead, width);
                 // Pictures, shapes and text boxes: drawn, their areas and text boxes' text.
                 if !p.objects.is_empty() {
-                    let at = ObjFrame { page: frame, col: (0.0, width), para_y: y, table_chr: table.map(|t| &t.chr) };
+                    let at = ObjFrame { page: frame, col: (0.0, width), para_y: anchor_y, table_chr: table.map(|t| &t.chr) };
                     let (back, front) = place_objects(ctx, story, &path, p, &pl, (0, pl.lines.len()), (0.0, y + lead), &at, &floats, depth);
                     let at = behind.min(items.len());
                     behind += back.len();
