@@ -191,6 +191,7 @@
 	Use the Insert key to switch overtype on and off	Använd Insert-tangenten för att slå på och av överskrivning
 	Whole document	Hela dokumentet
 	This section	Det här avsnittet
+	Selected text	Markerad text
 	Fill	Fyllning
 	Setting:	Inställning:
 	3-D	3D
@@ -573,6 +574,10 @@
 	More templates →	Fler mallar →
 	Move or Resize	Flytta eller ändra storlek
 	Multilevel List	Lista med flera nivåer
+	Multilevel List Library	Bibliotek med listor med flera nivåer
+	Article I.	Artikel I.
+	Chapter 1	Kapitel 1
+	Section 1.01	Avsnitt 1.01
 	Multiple Pages	Flera sidor
 	Name (A–Z)	Namn (A–Ö)
 	Name:	Namn:
@@ -2546,6 +2551,7 @@ preview	Title	Titel
 	Local font access was denied.	Åtkomst till lokala typsnitt nekades.
 	Loaded {count} system fonts.	{count} systemtypsnitt har lästs in.
 	Croatian	Kroatiska
+	Indonesian	Indonesiska
 	Text of the nearest paragraph with a given style (running headers)	Text från närmaste stycke med en viss stil (löpande sidhuvuden)
 	Style name:	Stilnamn:
 	Filter Recipients	Filtrera mottagare
@@ -2647,24 +2653,21 @@ preview	Title	Titel
 	Bottom Right Cell	Nedre högra cellen
 	Inside Horizontal Border	Inre vågrät kantlinje
 	Inside Vertical Border	Inre lodrät kantlinje
-# LanguageTool proofing (#575, #1283)
-	Check spelling and grammar with LanguageTool	Kontrollera stavning och grammatik med LanguageTool
-	Sends the text of your paragraphs to the LanguageTool server below. Off, WordCraft's built-in checker is used and nothing leaves this computer.	Skickar texten i dina stycken till LanguageTool-servern nedan. När det är avstängt används WordCrafts inbyggda kontroll och inget lämnar den här datorn.
-	Server:	Server:
-	Use your own LanguageTool server by entering its address, such as http://localhost:8081.	Använd din egen LanguageTool-server genom att ange dess adress, till exempel http://localhost:8081.
-	Username:	Användarnamn:
-	API key:	API-nyckel:
-	Detect automatically	Identifiera automatiskt
-	Each paragraph's proofing language	Språkkontrollens språk för varje stycke
-	Language:	Språk:
-	Paragraphs checked: {count}	Kontrollerade stycken: {count}
-	LanguageTool checking needs the desktop app; the browser version can't send text to a checking server yet.	Kontroll med LanguageTool kräver skrivbordsappen; webbläsarversionen kan ännu inte skicka text till en kontrollserver.
-	The LanguageTool server address isn't a web address: {address}	LanguageTool-serverns adress är inte en webbadress: {address}
-	A paragraph is too long to check ({bytes} bytes; at most {max}).	Ett stycke är för långt för att kontrolleras ({bytes} byte; högst {max}).
-	Couldn't reach the LanguageTool server: {reason}	Det gick inte att nå LanguageTool-servern: {reason}
-	The LanguageTool server didn't answer in time.	LanguageTool-servern svarade inte i tid.
-	The LanguageTool server is limiting requests; checking resumes in a minute.	LanguageTool-servern begränsar förfrågningar; kontrollen återupptas om en minut.
-	The LanguageTool server answered {status}: {message}	LanguageTool-servern svarade {status}: {message}
-	Unexpected answer from the LanguageTool server: {reason}	Oväntat svar från LanguageTool-servern: {reason}
-	The username and API key are only sent over https:// or to this computer. Use an https:// server address.	Användarnamn och API-nyckel skickas bara över https:// eller till den här datorn. Använd en serveradress med https://.
-	Changes to these fields apply when you press Enter or leave the field.	Ändringar i de här fälten börjar gälla när du trycker på Enter eller lämnar fältet.
+# Split Cells and Convert Text to Table (#2592)
+	Merge cells before split	Sammanfoga celler före delning
+	Table size	Tabellstorlek
+	AutoFit behavior	Autopassning
+	Initial column width:	Ursprunglig kolumnbredd:
+	AutoFit to contents	Autoanpassa efter innehåll
+	AutoFit to window	Autoanpassa efter fönster
+	Separate text at	Avgränsa text vid
+	Commas	Kommatecken
+	Other:	Annat:
+	The number must be between 1 and {max}.	Talet måste vara mellan 1 och {max}.
+	The measurement must be between {min} and {max}.	Måttet måste vara mellan {min} och {max}.
+	Recently Used Fonts	Senast använda typsnitt
+	All Fonts	Alla typsnitt
+	Moved from:	Flyttat från:
+	Moved to:	Flyttat till:
+	Spike	Samlare
+	Insert Spike	Infoga samlare
