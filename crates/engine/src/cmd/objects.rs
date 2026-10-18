@@ -1037,20 +1037,19 @@ fn crop_aspect(s: &mut Session, v: &Value) -> CmdResult {
     let ratio = a / b;
     with_obj(s, |o| {
         if let InlineObject::Image { crop, w, h, .. } = o {
-            let mut c = crop.map(crop_side);
+            // The crop there is (a file's may go past what the dialog allows) is kept as it is;
+            // only the cut added here is limited: never negative, at most half of what shows (so
+            // part of the source always stays visible; padding may take more than `MAX_CROP`).
+            let mut c = crop.map(|v| if v.is_finite() { v } else { 0.0 });
             let (bw, bh) = (wordcraft_geom::finite(*w).clamp(1.0, 4000.0), wordcraft_geom::finite(*h).clamp(1.0, 4000.0));
             let shown = bw / bh;
-            if shown > ratio {
-                // Too wide: keep `ratio / shown` of the visible width.
-                let cut = (1.0 - c[0] - c[2]) * (1.0 - ratio / shown) / 2.0;
-                c[0] += cut;
-                c[2] += cut;
-            } else {
-                let cut = (1.0 - c[1] - c[3]) * (1.0 - shown / ratio) / 2.0;
-                c[1] += cut;
-                c[3] += cut;
-            }
-            *crop = c.map(crop_side);
+            let (lo, hi, keep) = if shown > ratio { (0, 2, ratio / shown) } else { (1, 3, shown / ratio) };
+            // Keep `keep` of the visible length, cropping both ends equally.
+            let visible = wordcraft_geom::finite(1.0 - c[lo] - c[hi]).max(0.0);
+            let cut = wordcraft_geom::finite(visible * (1.0 - keep) / 2.0).clamp(0.0, visible / 2.0);
+            c[lo] += cut;
+            c[hi] += cut;
+            *crop = c;
             // Keep the side that fits: a shown picture wider than the ratio keeps its height.
             let (nw, nh) = if shown > ratio { (bh * ratio, bh) } else { (bw, bw / ratio) };
             *w = nw.clamp(1.0, 4000.0);
@@ -2205,6 +2204,24 @@ mod tests {
         s.run("picture.crop", &json!({"left": 0.2})).unwrap();
         s.run("picture.cropAspect", &json!({"ratio": "4:3"})).unwrap();
         near(&s, 133.333_33, 100.0, [0.2 + 0.8 / 3.0 / 2.0, 0.0, 0.8 / 3.0 / 2.0, 0.0]);
+        // A file's crop beyond what the dialog allows (sides up to 1, padding) is kept as it is;
+        // only the new cut is added. A non-finite side counts as uncropped.
+        for (from, want) in [
+            ([0.7, 0.6, 0.0, 0.1], [0.8, 0.6, 0.1, 0.1]),
+            ([-0.5, 0.0, -0.5, 0.0], [-0.5 + 2.0 / 3.0, 0.0, -0.5 + 2.0 / 3.0, 0.0]),
+            ([f32::NAN, 0.0, f32::INFINITY, 0.0], [1.0 / 3.0, 0.0, 1.0 / 3.0, 0.0]),
+        ] {
+            let mut s = picture_at(300.0, 100.0);
+            let (pos, _) = selected(&s).unwrap();
+            edit_obj(&mut s, &pos, |o| {
+                if let InlineObject::Image { crop, .. } = o {
+                    *crop = from;
+                }
+            })
+            .unwrap();
+            s.run("picture.cropAspect", &json!({"ratio": "1:1"})).unwrap();
+            near(&s, 100.0, 100.0, want);
+        }
         // Word's list only: no 9:16 or 10:16, and junk is refused without a change.
         let before = cropped(&s);
         for bad in [

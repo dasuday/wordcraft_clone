@@ -1208,6 +1208,19 @@ impl Exporter<'_> {
     }
 
     fn picture(&mut self, s: &mut Surface, rect: &Rect, media: &str, crop: &[f32; 4], alpha: f32, shape: Option<ShapeKind>) {
+        // A shaped picture is also clipped to its frame: an outline reaching past the frame
+        // can't draw outside it.
+        let frame = shape.and_then(|_| rect_path(rect));
+        if let Some(f) = &frame {
+            s.push_clip_path(f, &FillRule::NonZero);
+        }
+        self.picture_in(s, rect, media, crop, alpha, shape);
+        if frame.is_some() {
+            s.pop();
+        }
+    }
+
+    fn picture_in(&mut self, s: &mut Surface, rect: &Rect, media: &str, crop: &[f32; 4], alpha: f32, shape: Option<ShapeKind>) {
         // Crop to Shape: the picture shows inside the shape's outline only.
         let clip = match shape {
             Some(k) => shape_path(k, rect, None),

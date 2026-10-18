@@ -1647,10 +1647,12 @@ fn bundled_unicode_glyphs_are_visible_and_extractable() {
 
 /// What a page draws, as hayro's interpreter sees it: each image's placement (the image
 /// square's bounds) and whether a curved clip (an outline, not a rectangle) is active around
-/// it; and the bounds of every red filled path.
+/// it; the clips around each image (curved or not, and their bounds); and the bounds of every
+/// red filled path.
 #[derive(Default)]
 struct Drawn {
     images: Vec<(kurbo::Rect, bool)>,
+    image_clips: Vec<Vec<(bool, kurbo::Rect)>>,
     red_fills: Vec<kurbo::Rect>,
 }
 
@@ -1662,7 +1664,7 @@ fn drawn(bytes: &[u8]) -> Drawn {
     };
     use hayro_syntax::Pdf;
     use kurbo::Shape;
-    struct Rec(Drawn, Vec<bool>);
+    struct Rec(Drawn, Vec<(bool, kurbo::Rect)>);
     impl Device<'_> for Rec {
         fn set_soft_mask(&mut self, _: Option<SoftMask<'_>>) {}
         fn set_blend_mode(&mut self, _: BlendMode) {}
@@ -1674,13 +1676,15 @@ fn drawn(bytes: &[u8]) -> Drawn {
             }
         }
         fn push_clip_path(&mut self, c: &ClipPath) {
-            self.1.push(c.path.elements().iter().any(|e| matches!(e, kurbo::PathEl::CurveTo(..) | kurbo::PathEl::QuadTo(..))));
+            let curved = c.path.elements().iter().any(|e| matches!(e, kurbo::PathEl::CurveTo(..) | kurbo::PathEl::QuadTo(..)));
+            self.1.push((curved, c.path.bounding_box()));
         }
         fn push_transparency_group(&mut self, _: f32, _: Option<SoftMask<'_>>, _: BlendMode) {}
         fn draw_glyph(&mut self, _: &Glyph<'_>, _: kurbo::Affine, _: kurbo::Affine, _: &Paint<'_>, _: &GlyphDrawMode) {}
         fn draw_image(&mut self, _: Image<'_, '_>, t: kurbo::Affine) {
             let b = t.transform_rect_bbox(kurbo::Rect::new(0.0, 0.0, 1.0, 1.0));
-            self.0.images.push((b, self.1.iter().any(|c| *c)));
+            self.0.images.push((b, self.1.iter().any(|c| c.0)));
+            self.0.image_clips.push(self.1.clone());
         }
         fn pop_clip_path(&mut self) {
             self.1.pop();
@@ -1728,6 +1732,18 @@ fn shape_cropped_picture_is_clipped_to_its_outline() {
     assert!(d.images[0].1, "drawn inside the ellipse's curved clip");
     let d = drawn(&picture_pdf(solid_png(), "png", [0.0; 4], None));
     assert!(!d.images[0].1, "a plain picture: a rectangle clip");
+}
+
+/// A shape-cropped picture is also clipped to its frame, so an outline reaching past the frame
+/// can't draw outside it; the outline's own clip stays.
+#[test]
+fn shape_cropped_picture_is_also_clipped_to_its_frame() {
+    use wordcraft_doc::para::{PictureShape, ShapeKind};
+    let d = drawn(&picture_pdf(solid_png(), "png", [0.0; 4], Some(PictureShape::new(ShapeKind::Ellipse))));
+    let clips = d.image_clips.first().expect("the picture is drawn");
+    let square = |r: &kurbo::Rect| (r.width() - 100.0).abs() < 0.5 && (r.height() - 100.0).abs() < 0.5;
+    assert!(clips.iter().any(|(curved, r)| !curved && square(r)), "a 100 x 100 frame clip: {clips:?}");
+    assert!(clips.iter().any(|(curved, r)| *curved && square(r)), "the ellipse's clip: {clips:?}");
 }
 
 /// Fit in PDF: a padded picture is drawn smaller than its frame (the padding stays empty), for

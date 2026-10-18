@@ -667,6 +667,30 @@ mod tests {
         assert_eq!(image_at(&h, 0), (200.0, 100.0, [0.0; 4]));
     }
 
+    /// A real mouse drag of the right crop handle outward past the picture's edge: the drop
+    /// stores a negative (padding) crop and a wider box at the same scale; one undo brings back
+    /// the crop there was before.
+    #[test]
+    fn dragging_a_crop_handle_outward_with_the_mouse_pads_and_undoes() {
+        let mut h = crop_window(1);
+        h.state_mut().run("picture.crop", json!({"left": 0.1, "width": 180.0, "height": 100.0})).unwrap();
+        steps(&mut h, 2);
+        let before = image_at(&h, 0);
+        let r = rect_of(&mut h, 0);
+        let from = screen(&mut h, r.right(), r.y + r.h / 2.0);
+        let to = from + egui::vec2(60.0, 0.0);
+        drag(&mut h, from, to);
+        assert_eq!(image_at(&h, 0), before, "nothing changes while dragging");
+        button(&h, to, false);
+        steps(&mut h, 3);
+        let (w, ht, crop) = image_at(&h, 0);
+        assert!(crop[2] < -0.05 && crop[0] == 0.1 && crop[1] == 0.0 && crop[3] == 0.0, "padding on the right: {crop:?}");
+        assert!(w > 190.0 && ht == 100.0, "the box grows: {w}×{ht}");
+        assert!((w / (1.0 - crop[0] - crop[2]) - 200.0).abs() < 0.5, "scale kept: {w} {crop:?}");
+        h.state_mut().run("edit.undo", json!({})).unwrap();
+        assert_eq!(image_at(&h, 0), before, "undo restores the prior crop");
+    }
+
     /// A click outside the picture leaves crop mode, keeping the crop.
     #[test]
     fn a_click_outside_the_picture_leaves_crop_mode_and_keeps_the_crop() {

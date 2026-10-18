@@ -3096,6 +3096,42 @@ mod tests {
         assert_eq!(h.state().session.undo_depth(), depth, "no undo step");
     }
 
+    /// The Crop menu's items work through their accessible controls: Aspect Ratio › 1:1 crops
+    /// the 2:1 picture square and leaves it in crop mode, Crop to Shape › Oval outlines it, and
+    /// Fit pads it back to the whole picture.
+    #[test]
+    fn crop_menu_items_crop_the_picture() {
+        use egui_kittest::kittest::Queryable;
+        let mut app = WordApp::new(Session::new(wordcraft_doc::Document::new()), crate::Services::default());
+        app.run("insert.picture", json!({"data": png_data()})).unwrap();
+        let picture = |app: &WordApp| match crate::objects::selected(app) {
+            Some((_, wordcraft_doc::para::InlineObject::Image { w, h, crop, shape, .. })) => (*w, *h, *crop, shape.as_ref().map(|s| s.kind)),
+            other => panic!("expected a picture, got {other:?}"),
+        };
+        let (w0, h0, _, _) = picture(&app);
+        let mut h = egui_kittest::Harness::builder().with_size(vec2(600.0, 800.0)).build_ui_state(|ui, app: &mut WordApp| crop_menu(ui, app), app);
+        h.run();
+        h.get_by_label("Aspect Ratio").click();
+        h.run();
+        h.get_by_label("1:1").click();
+        h.run();
+        let (w, ht, crop, _) = picture(h.state());
+        assert!((w - h0).abs() < 1e-3 && (ht - h0).abs() < 1e-3, "square at the kept height: {w}×{ht} (was {w0}×{h0})");
+        assert!(crop.iter().zip([0.25, 0.0, 0.25, 0.0]).all(|(a, b)| (a - b).abs() < 1e-4), "{crop:?}");
+        assert!(crate::crop::active(h.state()).is_some(), "left in crop mode");
+        h.get_by_label("Crop to Shape").click();
+        h.run();
+        // A command item's label ends in its (here empty) shortcut text.
+        h.get_by(|n| n.label().as_deref().map(str::trim) == Some("Oval")).click();
+        h.run();
+        assert_eq!(picture(h.state()).3, Some(wordcraft_doc::para::ShapeKind::Ellipse));
+        h.get_by(|n| n.label().as_deref().map(str::trim) == Some("Fit")).click();
+        h.run();
+        let (_, _, crop, shape) = picture(h.state());
+        assert!(crop.iter().zip([0.0, -0.5, 0.0, -0.5]).all(|(a, b)| (a - b).abs() < 1e-4), "Fit pads the square box: {crop:?}");
+        assert_eq!(shape, Some(wordcraft_doc::para::ShapeKind::Ellipse), "the outline stays");
+    }
+
     #[test]
     fn shape_format_tab_appears_when_shape_selected() {
         let mut s = Session::new(wordcraft_doc::Document::new());
