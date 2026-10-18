@@ -506,8 +506,14 @@ impl<'a> Builder<'a> {
         let mut out = Paragraph::new();
         out.props = para_props(p, list_num);
         if let Some(c) = &p.fmt_change {
-            // A list item stays in its list instance (only its level may differ).
-            let old = para_props(&c.old, c.old.list.and(list_num));
+            // A list item stays in its list instance (only its level may differ); an old list on a
+            // paragraph that is no list now gets an instance of its own, so Reject can restore it.
+            let old_num = match (c.old.list, list_num) {
+                (Some(_), Some(num)) => Some(num),
+                (Some(li), None) => Some(self.new_list(&[li])),
+                _ => None,
+            };
+            let old = para_props(&c.old, old_num);
             out.props.fmt_change = PropChange::boxed(self.revision(RevisionKind::Format, &c.mark), old);
         }
         out.section.clone_from(&p.section);

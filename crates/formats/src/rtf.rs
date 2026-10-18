@@ -3073,6 +3073,23 @@ mod tests {
     }
 
     #[test]
+    fn paragraph_that_was_a_list_item_gets_its_old_list_back_on_reject() {
+        use model::{FmtChange, ListInfo};
+        // Alice took the paragraph out of a numbered list: it is no list item now, but was one.
+        let mark = RevMark { author: "Alice".into(), date: "2024-03-15T10:30:00Z".into(), id: None };
+        let old = Para { list: Some(ListInfo { ordered: true, level: 0 }), ..Default::default() };
+        let mut item = Para { fmt_change: Some(Box::new(FmtChange { mark, old })), ..Default::default() };
+        item.push_text("Item", &Fmt::default());
+        let flow = Flow { blocks: vec![FBlock::Para(item)], meta: Meta::default() };
+        let doc = model::to_doc(&flow);
+        let paras = doc_paras(&doc);
+        let p = paras.first().unwrap();
+        assert!(p.props.numbering.is_none());
+        let change = p.props.fmt_change.as_deref().expect("change kept");
+        assert!(change.old.formatting().numbering.is_some(), "Reject restores the list");
+    }
+
+    #[test]
     fn heading_formatting_change_has_no_style_formatting_in_the_old_formatting() {
         // A heading's runs repeat its style's bold and size; the old formatting does too.
         let rtf = br"{\rtf1{\stylesheet{\s0 Normal;}{\s1 heading 1;}}{\*\revtbl {Unknown;}{Alice;}}
