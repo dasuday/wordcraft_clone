@@ -2648,6 +2648,13 @@ preview	Title	Ukázka
 	All Fonts	Všechna písma
 	Spike	Sběrač
 	Insert Spike	Vložit ze sběrače
+# Add Font status (#1789)
+	Added 1 font	Přidáno 1 písmo
+	Added {n} fonts	Přidaná písma: {n}
+	{added}; {count} couldn't be read: {names}	{added}; nelze přečíst ({count}): {names}
+	{names} and {n} more	{names} a dalších {n}
+	{added}; {n} skipped (limit {max})	{added}; přeskočeno: {n} (limit {max})
+
 # Drop Cap menu and Drop Cap Options (#2601)
 	Dropped	Zapuštěná
 	In margin	Na okraji
