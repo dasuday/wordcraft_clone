@@ -389,6 +389,7 @@ fn collapsed_group(ui: &mut Ui, id_title: &str, title: &str, app: &mut WordApp, 
     );
     label_line(ui, r.center().x, r.min.y + BIG_LABEL_Y, title, regular(11.5), t.text, true);
     let resp = resp.on_hover_text(title);
+    resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, title));
     egui::Popup::menu(&resp).show(|ui| {
         ui.horizontal_top(|ui| {
             ui.set_min_height(CONTENT_H);
@@ -407,6 +408,8 @@ fn group_icon(title: &str) -> &'static str {
         "Styles" => "styles",
         "Editing" => "find",
         "Voice" => "dictate",
+        "Tables" => "table",
+        "Links" => "link",
         _ => "more",
     }
 }
