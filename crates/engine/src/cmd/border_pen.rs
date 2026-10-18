@@ -336,6 +336,6 @@ fn paint_at(s: &mut Session, v: &Value) -> CmdResult {
         (_, side) => side,
     };
     paint_edge(t, row, cell, side, b);
-    table::touch_cells(s, &tp)?;
+    table::touch_cells_in(s, story, &tp)?;
     sel_result(s)
 }

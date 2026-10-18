@@ -76,17 +76,12 @@ The same gaps grouped the way the parity documents are, for agents working in on
   styles, and Draw Table and Eraser (#303) landed on 2026-10-10. Paste from other programs keeps
   their formatting (system clipboard HTML/RTF), Merge Formatting keeps emphasis, Paste Special lists
   what the system clipboard holds, and Linux/Wayland clipboard pictures paste (#687, #833);
-  still missing: the Paste Options button after a paste, and RTF on macOS and X11. Copying an
-  equation puts MathML in HTML on the clipboard (#816; pasting into Word/LibreOffice not yet
-  verified; OMML on the clipboard is #1297); only copies containing an equation get HTML,
-  text-only copies stay plain text.
-- **UI/UX gaps:** #7, #18, #24; context menus for objects (the table's landed, with Border Styles); Linux title bar theming (#78); File ›
-- **UI/UX gaps:** #7, #18, #24; context menus for objects (the table's landed; it still lacks Border Styles); Linux title bar theming (#78); File ›
   still missing: the Paste Options button after a paste, and RTF on macOS and X11. Copy puts
-  HTML beside the text on the clipboard, so other programs keep the formatting (#1523), with
+  HTML beside the text when the host supports HTML clipboard writes, so other programs keep the formatting (#1523), with
   equations as MathML (#816), and a lone equation also in the MathML clipboard formats on
   Windows and macOS (#1297; pasting into Word/LibreOffice not yet verified); RTF on the
   clipboard is not written yet.
+- **UI/UX gaps:** #7, #18, #24; context menus for objects (the table's landed, with Border Styles); Linux title bar theming (#78); File ›
   Options › Animation effects › Use system setting reads macOS (Reduce motion) and the Linux/BSD
   desktops (`apps/wordcraft/src/animations.rs`) but hasn't been tried on a Mac or in a real
   GNOME or KDE session yet.

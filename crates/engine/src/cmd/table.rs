@@ -469,6 +469,11 @@ pub(crate) fn text_direction(s: &mut Session, v: &Value) -> CmdResult {
 /// Bump the revision of every paragraph in a table (table style changes alter their layout).
 pub(crate) fn touch_cells(s: &mut Session, tp: &Path) -> Result<(), CmdError> {
     let story = s.sel.focus.story;
+    touch_cells_in(s, story, tp)
+}
+
+/// `touch_cells` for a table in a given story (the caret may be in a different one).
+pub(crate) fn touch_cells_in(s: &mut Session, story: StoryRef, tp: &Path) -> Result<(), CmdError> {
     let paths: Vec<Path> = s.doc.para_paths(story).into_iter().filter(|p| p.0.len() > tp.0.len() && p.0.starts_with(&tp.0)).collect();
     for p in paths {
         s.doc.para_mut(story, &p)?.touch();
