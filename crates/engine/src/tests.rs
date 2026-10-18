@@ -1722,7 +1722,9 @@ fn multiple_pages_command_sets_each_mode_and_undoes() {
     run(&mut s, "layout.multiplePages", json!({"mode": "bookFold", "sheets": 4, "reverse": true}));
     assert_eq!((s.doc.settings.book_fold_sheets, s.doc.settings.book_fold_reverse), (4, true));
     assert!(s.doc.last_section.landscape, "a booklet is printed on a landscape sheet");
-    assert_eq!(s.layout().pages[0].w, s.doc.last_section.page_w / 2.0);
+    // Half the paper's short side by its long side (Word for Mac, user-checked: 4.25 x 11 in).
+    let p = &s.layout().pages[0];
+    assert_eq!((p.w, p.h), (s.doc.last_section.page_h / 2.0, s.doc.last_section.page_w));
     run(&mut s, "layout.multiplePages", json!({"mode": "bookFold", "sheets": 99999}));
     assert_eq!(s.doc.settings.book_fold_sheets, 40);
     run(&mut s, "edit.undo", json!({}));
@@ -1735,9 +1737,11 @@ fn multiple_pages_command_sets_each_mode_and_undoes() {
     for bad in [json!({}), json!({"mode": "diagonal"}), json!({"mode": 3}), json!({"mode": "bookFold", "sheets": -1})] {
         assert!(s.run("layout.multiplePages", &bad).is_err(), "{bad}");
     }
-    // Margins that fit the sheet but not the half page are refused.
+    // Margins that fit the sheet but not the half page are refused (the sheet is still landscape
+    // from Book fold, so its pages are 396 pt wide).
     run(&mut s, "layout.multiplePages", json!({"mode": "twoPerSheet"}));
-    assert!(s.run("layout.margins", &json!({"top": 200.0, "bottom": 200.0})).is_err());
+    assert!(s.doc.last_section.landscape);
+    assert!(s.run("layout.margins", &json!({"left": 200.0, "right": 200.0})).is_err());
 }
 
 /// #1836 review: under Book fold new tables and pictures are sized to the half page's text
@@ -1807,7 +1811,13 @@ fn orientation_respects_multiple_pages() {
     run(&mut s, "layout.orientation", json!({"value": "portrait"}));
     run(&mut s, "layout.margins", json!({"left": 150.0, "right": 150.0}));
     run(&mut s, "layout.multiplePages", json!({"mode": "twoPerSheet"}));
-    // Landscape turns left/right into top/bottom: 300 pt on a 306 pt high half page.
+    // A landscape sheet holds two 396 x 612 pt pages side by side (Word for Mac, user-checked):
+    // the left/right margins, turned into top/bottom, fit their 612 pt height.
+    run(&mut s, "layout.orientation", json!({"value": "landscape"}));
+    assert_eq!(s.layout().pages[0].w, 396.0);
+    run(&mut s, "layout.orientation", json!({"value": "portrait"}));
+    run(&mut s, "layout.margins", json!({"top": 150.0, "bottom": 150.0, "left": 72.0, "right": 72.0, "gutter": 80.0}));
+    // Landscape turns top/bottom into left/right: 300 pt plus an 80 pt gutter on a 396 pt wide page.
     assert!(s.run("layout.orientation", &json!({"value": "landscape"})).is_err());
     assert!(!s.doc.last_section.landscape);
 }

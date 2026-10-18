@@ -1143,8 +1143,14 @@ impl Reader<'_> {
                     };
                     s.zoom = Some(Zoom { percent, fit }).filter(|z| z.percent != 100 || z.fit.is_some());
                 }
+                "w:gutterAtTop" => s.gutter_at_top = on_off(k),
                 _ => {}
             }
+        }
+        // Every Multiple pages mode but Normal fixes the gutter's position (Word greys it out, and
+        // writes `w:gutterAtTop` itself for 2 pages per sheet on a portrait sheet).
+        if s.multiple_pages() != wordcraft_doc::section::MultiplePages::Normal {
+            s.gutter_at_top = false;
         }
         Ok(())
     }

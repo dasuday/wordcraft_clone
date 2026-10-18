@@ -732,17 +732,42 @@ impl MultiplePages {
         matches!(self, MultiplePages::TwoPerSheet | MultiplePages::BookFold)
     }
 
-    /// The size of one laid-out page on a sheet of `w` x `h` points. With two pages per sheet the
-    /// height is halved (a portrait sheet is cut across its long side); on a landscape sheet that
-    /// still halves the height, giving wide, short strips. Whether Word instead halves the width
-    /// of a landscape sheet is unconfirmed (a Mac check is pending). In a booklet the width is
-    /// halved (folded across its width). Never smaller than 1 pt.
+    /// The size of one laid-out page on a sheet of `w` x `h` points, as Word for Mac 16.113.4
+    /// lays it out (user-checked, Letter): with two pages per sheet the sheet's long side is
+    /// halved, so a portrait sheet holds two wide pages one above the other (8.5 x 5.5 in) and a
+    /// landscape sheet two tall pages side by side (5.5 x 8.5 in). A booklet's page is half the
+    /// paper's short side by its long side (4.25 x 11 in on the landscape Letter sheet Book fold
+    /// uses). This is also what `w:pgSz` holds in those modes. Never smaller than 1 pt.
     pub fn page_size(self, w: f32, h: f32) -> (f32, f32) {
-        let (w, h) = (if w.is_finite() { w } else { 612.0 }, if h.is_finite() { h } else { 792.0 });
+        let side = |v: f32, d: f32| if v.is_finite() { v.max(1.0) } else { d };
+        let (w, h) = (side(w, 612.0), side(h, 792.0));
+        let half = |v: f32| (v / 2.0).max(1.0);
         match self {
-            MultiplePages::TwoPerSheet => (w, (h / 2.0).max(1.0)),
-            MultiplePages::BookFold => ((w / 2.0).max(1.0), h),
+            MultiplePages::TwoPerSheet if w > h => (half(w), h),
+            MultiplePages::TwoPerSheet => (w, half(h)),
+            MultiplePages::BookFold => (half(w.min(h)), w.max(h)),
             _ => (w, h),
+        }
+    }
+
+    /// The sheet, and whether it is landscape, that a page of `w` x `h` points (as `w:pgSz` holds
+    /// it) comes from under this mode: the inverse of [`Self::page_size`]. `landscape` is what the
+    /// file says (`w:orient`), None when it doesn't. Two pages per sheet sit side by side on a
+    /// landscape sheet, else one above the other; a booklet's sheet is always landscape. Sides
+    /// stay finite and at least 1 pt.
+    pub fn sheet_size(self, w: f32, h: f32, landscape: Option<bool>) -> (f32, f32, bool) {
+        let side = |v: f32, d: f32| if v.is_finite() { v.clamp(1.0, f32::MAX / 4.0) } else { d };
+        let (w, h) = (side(w, 612.0), side(h, 792.0));
+        match self {
+            MultiplePages::TwoPerSheet => {
+                if landscape.unwrap_or(w < h) {
+                    (w * 2.0, h, true)
+                } else {
+                    (w, h * 2.0, false)
+                }
+            }
+            MultiplePages::BookFold => ((w * 2.0).max(h), (w * 2.0).min(h), true),
+            _ => (w, h, landscape.unwrap_or(w > h)),
         }
     }
 }
@@ -929,6 +954,30 @@ impl SectionProps {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// #1836, Word for Mac 16.113.4 (user-checked), Letter: 2 pages per sheet halves a portrait
+    /// sheet's height and a landscape sheet's width; a booklet page is half the paper's short side
+    /// by its long side. `sheet_size` gives the sheet back.
+    #[test]
+    fn multiple_pages_page_size_follows_word() {
+        use MultiplePages as M;
+        assert_eq!(M::TwoPerSheet.page_size(612.0, 792.0), (612.0, 396.0));
+        assert_eq!(M::TwoPerSheet.page_size(792.0, 612.0), (396.0, 612.0));
+        assert_eq!(M::BookFold.page_size(792.0, 612.0), (306.0, 792.0));
+        assert_eq!(M::Mirror.page_size(792.0, 612.0), (792.0, 612.0));
+        assert_eq!(M::TwoPerSheet.sheet_size(612.0, 396.0, None), (612.0, 792.0, false));
+        assert_eq!(M::TwoPerSheet.sheet_size(396.0, 612.0, Some(true)), (792.0, 612.0, true));
+        assert_eq!(M::BookFold.sheet_size(306.0, 792.0, Some(true)), (792.0, 612.0, true));
+        assert_eq!(M::Normal.sheet_size(612.0, 792.0, None), (612.0, 792.0, false));
+        for m in [M::Normal, M::Mirror, M::TwoPerSheet, M::BookFold] {
+            for (w, h) in [(0.0, 0.0), (f32::NAN, 1.0), (f32::INFINITY, -5.0), (f32::MAX, f32::MAX)] {
+                let (pw, ph) = m.page_size(w, h);
+                assert!(pw.is_finite() && ph.is_finite() && pw >= 1.0 && ph >= 1.0, "{m:?} {w} {h}");
+                let (sw, sh, _) = m.sheet_size(w, h, None);
+                assert!(sw.is_finite() && sh.is_finite() && sw >= 1.0 && sh >= 1.0, "{m:?} {w} {h}");
+            }
+        }
+    }
 
     #[test]
     fn number_formats() {

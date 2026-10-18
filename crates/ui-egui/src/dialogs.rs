@@ -1334,8 +1334,17 @@ pub(crate) fn paper_entry(paper: (f32, f32)) -> Option<&'static str> {
     wordcraft_geom::paper_name(paper.0 * ppu, paper.1 * ppu)
 }
 
-/// Sheets per booklet offered besides "All" (Word allows 1 to 40).
-const BOOKLET_SHEETS: [u16; 14] = [1, 2, 3, 4, 5, 6, 8, 10, 12, 16, 20, 24, 32, 40];
+/// The Sheets per booklet list, 0 being All: All and 4 to 40 in fours, as Word for Mac 16.113.4
+/// offers (user-checked). Word's "Auto" entry is left out: what it writes is unknown. A
+/// document's own count (1-40) is listed too, so it can be kept.
+fn booklet_sheet_choices(current: u16) -> Vec<u16> {
+    let mut v: Vec<u16> = std::iter::once(0).chain((4..=wordcraft_doc::MAX_BOOKLET_SHEETS).step_by(4)).collect();
+    if current <= wordcraft_doc::MAX_BOOKLET_SHEETS && !v.contains(&current) {
+        v.push(current);
+        v.sort_unstable();
+    }
+    v
+}
 
 /// The commands Page Setup's OK runs for the paper, orientation and margins (#1433), all in the
 /// measurement unit as the dialog shows them. Refuses when the margins don't fit the paper.
@@ -2010,9 +2019,8 @@ fn body(app: &mut WordApp, ui: &mut Ui, d: &mut Dialog) -> bool {
                     let label = ui.label(tl!("Sheets per booklet:"));
                     let shown = if *sheets == 0 { tl!("All").to_string() } else { sheets.to_string() };
                     let combo = egui::ComboBox::from_id_salt("ps_sheets").width(80.0).selected_text(shown).show_ui(ui, |ui| {
-                        ui.selectable_value(sheets, 0, tl!("All"));
-                        for n in BOOKLET_SHEETS {
-                            ui.selectable_value(sheets, n, n.to_string());
+                        for n in booklet_sheet_choices(*sheets) {
+                            ui.selectable_value(sheets, n, if n == 0 { tl!("All").to_string() } else { n.to_string() });
                         }
                     });
                     combo.response.labelled_by(label.id);
@@ -4599,6 +4607,17 @@ mod tests {
         assert_eq!(h.state().session.doc.settings.multiple_pages(), MultiplePages::Normal);
     }
 
+    /// #1836, Word for Mac 16.113.4 (user-checked): Sheets per booklet offers All and 4 to 40 in
+    /// fours; a file's other count stays in the list so it can be kept.
+    #[test]
+    fn booklet_sheet_choices_follow_word() {
+        let word = vec![0, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40];
+        assert_eq!(booklet_sheet_choices(0), word);
+        assert_eq!(booklet_sheet_choices(8), word);
+        assert_eq!(booklet_sheet_choices(5), vec![0, 4, 5, 8, 12, 16, 20, 24, 28, 32, 36, 40]);
+        assert_eq!(booklet_sheet_choices(u16::MAX).last(), Some(&40));
+    }
+
     /// #1836 review: choosing Book fold turns a portrait page landscape, and the margin fields turn
     /// with it as the page's margins would; switching from 2 pages per sheet to Book fold checks
     /// the margins against the booklet's half page, not the old mode's.
@@ -4619,8 +4638,8 @@ mod tests {
         let pt = |x: f32| (x * ppu).round();
         assert_eq!((pt(top), pt(bottom), pt(left), pt(right)), (100.0, 50.0, 72.0, 72.0), "turned like the page");
 
-        // 2 pages per sheet → Book fold, with margins that fit the booklet's 396 x 612 page but not
-        // a 792 x 306 one.
+        // 2 pages per sheet → Book fold, with margins that fit the booklet's 306 x 792 page but not
+        // the 612 x 396 one of 2 pages per sheet.
         let mut h = app_harness(app_with("Page"));
         h.state_mut().run("layout.multiplePages", json!({"mode": "twoPerSheet"})).unwrap();
         h.state_mut().run("ui.dialog", json!({"name": "pageSetup"})).unwrap();

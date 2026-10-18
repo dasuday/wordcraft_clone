@@ -34,7 +34,8 @@ fn body_left(l: &DocLayout) -> Vec<f32> {
 }
 
 /// #1836: 2 pages per sheet lays pages out on half the sheet (cut across its long side), a book
-/// fold on half its width; the margins apply to that half page. Mirrored margins follow a book
+/// fold on half the paper's short side by its long side (Word for Mac 16.113.4, user-checked);
+/// the margins apply to that half page. Mirrored margins follow a book
 /// fold. Tiny and zero sheets don't panic.
 #[test]
 fn two_per_sheet_and_book_fold_lay_out_on_half_the_sheet() {
@@ -61,7 +62,11 @@ fn two_per_sheet_and_book_fold_lay_out_on_half_the_sheet() {
     (d.last_section.margin_top, d.last_section.margin_bottom) = (36.0, 36.0);
     d.settings.set_multiple_pages(MultiplePages::BookFold);
     let l = lay(&d);
-    assert_eq!((l.pages[0].w, l.pages[0].h), (396.0, 612.0), "landscape letter folded");
+    assert_eq!((l.pages[0].w, l.pages[0].h), (306.0, 792.0), "landscape letter folded");
+    d.settings.set_multiple_pages(MultiplePages::TwoPerSheet);
+    assert_eq!((lay(&d).pages[0].w, lay(&d).pages[0].h), (396.0, 612.0), "two pages side by side on a landscape sheet");
+    d.settings.set_multiple_pages(MultiplePages::BookFold);
+    let l = lay(&d);
     // A booklet mirrors: the inside margin is toward the fold, the left of page 1 and the right of page 2.
     let lefts = body_left(&l);
     assert!(lefts.len() >= 2 && (lefts[0] - 54.0).abs() < 0.01 && (lefts[1] - 36.0).abs() < 0.01, "{lefts:?}");

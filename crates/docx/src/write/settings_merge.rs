@@ -18,6 +18,7 @@ const OWNED: &[&str] = &[
     "w:removeDateAndTime",
     "w:displayBackgroundShape",
     "w:mirrorMargins",
+    "w:gutterAtTop",
     "w:bookFoldRevPrinting",
     "w:bookFoldPrinting",
     "w:bookFoldPrintingSheets",

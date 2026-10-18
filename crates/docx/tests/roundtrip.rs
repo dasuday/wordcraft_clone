@@ -2662,3 +2662,106 @@ fn multiple_pages_settings_round_trip() {
     assert_eq!(again.settings.multiple_pages(), MultiplePages::TwoPerSheet);
     assert!(!again.settings.book_fold);
 }
+
+fn zip_part(zip_bytes: &[u8], name: &str) -> String {
+    let mut zip = zip::ZipArchive::new(std::io::Cursor::new(zip_bytes)).unwrap();
+    let mut xml = String::new();
+    std::io::Read::read_to_string(&mut zip.by_name(name).unwrap(), &mut xml).unwrap();
+    xml
+}
+
+/// #1836, Word for Mac 16.113.4 (user-checked), Letter sheet: `w:pgSz` holds the half page,
+/// not the sheet; 2 pages per sheet on a portrait sheet adds `w:gutterAtTop`; Mirror margins
+/// writes only `w:mirrorMargins`; Book fold with all sheets writes no sheet count. Each comes back
+/// as the same sheet and mode.
+#[test]
+fn multiple_pages_write_word_page_sizes() {
+    use wordcraft_doc::section::MultiplePages as M;
+    let cases = [
+        (M::TwoPerSheet, false, r#"<w:pgSz w:w="12240" w:h="7920"/>"#, true),
+        (M::TwoPerSheet, true, r#"<w:pgSz w:w="7920" w:h="12240" w:orient="landscape"/>"#, false),
+        (M::BookFold, true, r#"<w:pgSz w:w="6120" w:h="15840" w:orient="landscape"/>"#, false),
+        (M::Mirror, false, r#"<w:pgSz w:w="12240" w:h="15840"/>"#, false),
+    ];
+    for (mode, landscape, pg_sz, gutter_at_top) in cases {
+        let mut d = Document::new();
+        d.last_section.set_landscape(landscape);
+        d.settings.set_multiple_pages(mode);
+        let bytes = wordcraft_docx::write(&d).expect("write");
+        let body = zip_part(&bytes, "word/document.xml");
+        assert!(body.contains(pg_sz), "{mode:?} {landscape}: {body}");
+        let settings = zip_part(&bytes, "word/settings.xml");
+        assert_eq!(settings.contains("<w:gutterAtTop/>"), gutter_at_top, "{mode:?} {landscape}: {settings}");
+        assert!(!settings.contains("bookFoldPrintingSheets") && !settings.contains("bookFoldRevPrinting"), "{settings}");
+        let tags = ["<w:mirrorMargins/>", "<w:printTwoOnOne/>", "<w:bookFoldPrinting/>"];
+        let want = match mode {
+            M::Mirror => [true, false, false],
+            M::TwoPerSheet => [false, true, false],
+            _ => [false, false, true],
+        };
+        assert_eq!(tags.map(|t| settings.contains(t)), want, "{mode:?}: {settings}");
+        let back = wordcraft_docx::read(&bytes).expect("read");
+        assert_eq!(back.settings.multiple_pages(), mode);
+        let s = &back.last_section;
+        assert_eq!((s.page_w, s.page_h, s.landscape), (d.last_section.page_w, d.last_section.page_h, landscape), "{mode:?}");
+    }
+    let mut d = Document::new();
+    d.settings.gutter_at_top = true;
+    let settings = zip_part(&wordcraft_docx::write(&d).expect("write"), "word/settings.xml");
+    let at = |t: &str| settings.find(t).unwrap_or_else(|| panic!("{t}: {settings}"));
+    assert!(at("<w:zoom") < at("<w:gutterAtTop/>") && at("<w:gutterAtTop/>") < at("<w:defaultTabStop"));
+}
+
+/// #1836: files with Word for Mac's own numbers (1-2 twips of rounding noise) read back as a
+/// Letter sheet in the right orientation; hostile page sizes don't panic.
+#[test]
+fn multiple_pages_read_word_page_sizes() {
+    use wordcraft_doc::section::MultiplePages as M;
+    let plain = wordcraft_docx::write(&Document::new()).expect("write");
+    let body = zip_part(&plain, "word/document.xml");
+    let settings = zip_part(&plain, "word/settings.xml");
+    let with = |pg_sz: &str, flags: &str| {
+        let doc = body.replacen(r#"<w:pgSz w:w="12240" w:h="15840"/>"#, pg_sz, 1);
+        assert!(doc.contains(pg_sz));
+        let set = settings.replacen("<w:defaultTabStop", &format!("{flags}<w:defaultTabStop"), 1);
+        let file = replace_part(&replace_part(&plain, "word/document.xml", doc.as_bytes()), "word/settings.xml", set.as_bytes());
+        wordcraft_docx::read(&file).expect("read")
+    };
+    let cases = [
+        (r#"<w:pgSz w:w="12242" w:h="7921"/>"#, "<w:gutterAtTop/><w:printTwoOnOne/>", M::TwoPerSheet, (612.0, 792.0, false)),
+        (r#"<w:pgSz w:w="7920" w:h="12240" w:orient="landscape"/>"#, "<w:printTwoOnOne/>", M::TwoPerSheet, (792.0, 612.0, true)),
+        (r#"<w:pgSz w:w="6121" w:h="15842" w:orient="landscape"/>"#, "<w:bookFoldPrinting/>", M::BookFold, (792.0, 612.0, true)),
+        (
+            r#"<w:pgSz w:w="6121" w:h="15842" w:orient="landscape"/>"#,
+            r#"<w:bookFoldPrinting/><w:bookFoldPrintingSheets w:val="4"/>"#,
+            M::BookFold,
+            (792.0, 612.0, true),
+        ),
+    ];
+    for (pg_sz, flags, mode, sheet) in cases {
+        let d = with(pg_sz, flags);
+        assert_eq!(d.settings.multiple_pages(), mode, "{flags}");
+        let s = &d.last_section;
+        assert_eq!((s.page_w, s.page_h, s.landscape), sheet, "{pg_sz} {flags}");
+        // The mode fixes the gutter's position: not kept as Page Setup's own choice.
+        assert!(!d.settings.gutter_at_top);
+    }
+    assert_eq!(
+        with(r#"<w:pgSz w:w="6121" w:h="15842" w:orient="landscape"/>"#, r#"<w:bookFoldPrinting/><w:bookFoldPrintingSheets w:val="4"/>"#)
+            .settings
+            .book_fold_sheets,
+        4
+    );
+    assert!(with(r#"<w:pgSz w:w="12240" w:h="15840"/>"#, "<w:gutterAtTop/>").settings.gutter_at_top);
+    for pg_sz in [
+        r#"<w:pgSz w:w="0" w:h="0"/>"#,
+        r#"<w:pgSz w:w="99999999999" w:h="-5" w:orient="landscape"/>"#,
+        r#"<w:pgSz w:w="12241.5" w:h="NaN"/>"#,
+        r#"<w:pgSz w:w="31680" w:h="31680" w:orient="portrait"/>"#,
+    ] {
+        for flags in ["<w:printTwoOnOne/>", "<w:bookFoldPrinting/>"] {
+            let s = with(pg_sz, flags).last_section;
+            assert!(s.page_w.is_finite() && s.page_h.is_finite() && s.page_w > 0.0 && s.page_h > 0.0, "{pg_sz} {flags}");
+        }
+    }
+}

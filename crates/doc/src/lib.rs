@@ -452,7 +452,7 @@ pub struct Settings {
     pub default_tab: f32,
     pub even_odd_headers: bool,
     pub mirror_margins: bool,
-    /// Two pages share one sheet, stacked along its long side (`w:printTwoOnOne`).
+    /// Two pages share one sheet, its long side halved (`w:printTwoOnOne`).
     pub two_per_sheet: bool,
     /// Pages are printed as a booklet, folded in the middle of the sheet (`w:bookFoldPrinting`).
     pub book_fold: bool,
@@ -460,6 +460,10 @@ pub struct Settings {
     pub book_fold_reverse: bool,
     /// Sheets per booklet (`w:bookFoldPrintingSheets`); 0 = all in one booklet.
     pub book_fold_sheets: u16,
+    /// Page Setup's Gutter position is Top (`w:gutterAtTop`). Only kept for Normal pages: the
+    /// other Multiple pages modes fix the gutter's position (and 2 pages per sheet on a portrait
+    /// sheet writes it, as Word does). Not laid out yet.
+    pub gutter_at_top: bool,
     pub auto_hyphenation: bool,
     /// Hyphenation zone (`w:hyphenationZone`), points: a line is hyphenated only when breaking
     /// it at a word boundary would leave more than this empty at its end.
@@ -662,6 +666,7 @@ impl Default for Settings {
             book_fold: false,
             book_fold_reverse: false,
             book_fold_sheets: 0,
+            gutter_at_top: false,
             auto_hyphenation: false,
             hyphenation_zone: DEFAULT_HYPHENATION_ZONE,
             hyphenate_caps: true,

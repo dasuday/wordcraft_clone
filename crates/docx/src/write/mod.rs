@@ -15,6 +15,7 @@ use std::collections::{BTreeMap, HashMap};
 use wordcraft_doc::ParaProps;
 use wordcraft_doc::numbering::{Level, LevelSuffix};
 use wordcraft_doc::props::VAlign;
+use wordcraft_doc::section::MultiplePages;
 use wordcraft_doc::styles::{Style, StyleKind, TablePart};
 use wordcraft_doc::{Blocks, Document, PartKind};
 
@@ -987,6 +988,16 @@ fn settings_xml(doc: &Document, footnotes: bool, endnotes: bool, template_rel: O
     }
     if s.mirror_margins {
         w.empty("w:mirrorMargins", &[]);
+    }
+    // §17.15.1.47. Word for Mac writes it for 2 pages per sheet on a portrait sheet (user-checked),
+    // not on a landscape one nor for Book fold; with Normal pages it is Page Setup's own choice.
+    let gutter_at_top = match s.multiple_pages() {
+        MultiplePages::Normal => s.gutter_at_top,
+        MultiplePages::TwoPerSheet => !doc.last_section.landscape,
+        _ => false,
+    };
+    if gutter_at_top {
+        w.empty("w:gutterAtTop", &[]);
     }
     if let Some(id) = template_rel {
         w.empty("w:attachedTemplate", &[("r:id", id)]);
