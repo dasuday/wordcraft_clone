@@ -335,8 +335,13 @@ impl WordApp {
             return;
         }
         let req = if save {
-            // The theme's name comes from the document: suggest it only if it makes a file name.
-            let name = wordcraft_engine::cmd::themes::check_name(&self.session.doc.settings.theme_name).unwrap_or_else(|_| "Theme".into());
+            // A custom theme's name suggests its file; a built-in's can't be saved over (and a name
+            // that makes no file name is no use), so those get Word for Mac's own "Theme1".
+            let current = &self.session.doc.settings.theme_name;
+            let name = wordcraft_engine::cmd::themes::check_name(current)
+                .ok()
+                .filter(|n| !wordcraft_engine::cmd::themes::is_builtin(n))
+                .unwrap_or_else(|| "Theme1".into());
             FileDialogRequest::Save { name: format!("{name}.thmx") }
         } else {
             FileDialogRequest::Open { purpose: "theme".into() }

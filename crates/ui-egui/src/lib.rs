@@ -6539,11 +6539,11 @@ mod tests {
             ..Default::default()
         };
         let mut a = WordApp::new(Session::new(wordcraft_doc::Document::new()), services);
-        for name in ["../../etc/passwd", "CON", "Harbour"] {
+        for name in ["../../etc/passwd", "CON", "Office", "Harbour"] {
             a.session.doc.settings.theme_name = name.into();
             let _ = a.run("design.saveTheme", json!({}));
         }
-        assert_eq!(*asked.borrow(), vec!["Theme.thmx", "Theme.thmx", "Harbour.thmx"]);
+        assert_eq!(*asked.borrow(), vec!["Theme1.thmx", "Theme1.thmx", "Theme1.thmx", "Harbour.thmx"]);
     }
 
     /// Web: the picked file arrives through the inbox and loads as recipients, even as .txt; a

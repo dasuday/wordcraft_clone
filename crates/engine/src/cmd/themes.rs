@@ -198,7 +198,7 @@ fn parse_colors(v: &Value) -> Result<[Rgb; 12], CmdError> {
     Ok(out)
 }
 
-fn is_builtin(name: &str) -> bool {
+pub fn is_builtin(name: &str) -> bool {
     THEMES.iter().any(|t| t.0.eq_ignore_ascii_case(name))
 }
 
