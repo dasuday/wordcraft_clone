@@ -3,7 +3,7 @@
 use std::io::Write;
 
 use wordcraft_doc::para::{Anchor, FloatAlign, NoteKind, ShapeKind, Wrap};
-use wordcraft_doc::props::{Align, Border, BorderStyle, Rgb, TextColor, VMerge};
+use wordcraft_doc::props::{Align, Border, BorderStyle, Rgb, TextColor, Underline, VMerge};
 use wordcraft_doc::{Block, Document, InlineObject, Paragraph, RevisionKind};
 
 const W_NS: &str = r#"xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape" xmlns:wpg="http://schemas.microsoft.com/office/word/2010/wordprocessingGroup" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office""#;
@@ -98,6 +98,28 @@ fn paras(d: &Document) -> Vec<&Paragraph> {
 }
 
 #[test]
+fn ref_links_keep_cached_results() {
+    let d = read_body(
+        r#"
+<w:p><w:fldSimple w:instr="REF destination \h" w:fldLock="1"><w:r><w:rPr><w:b/></w:rPr><w:t>Cached simple</w:t></w:r></w:fldSimple></w:p>
+<w:p><w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText xml:space="preserve">REF destination </w:instrText></w:r><w:r><w:instrText>\w \h</w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:t>Cached complex</w:t></w:r><w:r><w:fldChar w:fldCharType="end"/></w:r></w:p>
+<w:p><w:bookmarkStart w:id="0" w:name="destination"/><w:r><w:t>Changed destination</w:t></w:r><w:bookmarkEnd w:id="0"/></w:p>"#,
+    );
+    let again = wordcraft_docx::read(&wordcraft_docx::write(&d).unwrap()).unwrap();
+    for doc in [&d, &again] {
+        let p = paras(doc);
+        for (index, instr, cached, locked) in
+            [(0, r"REF destination \h", "Cached simple", true), (1, r"REF destination \w \h", "Cached complex", false)]
+        {
+            assert!(matches!(&p[index].objects[0], InlineObject::Field { instr: actual, result, locked: lock, .. }
+                if actual == instr && result == cached && *lock == locked));
+        }
+        assert_eq!(p[0].props_of_char(0).bold, Some(true));
+        assert!(doc.bookmarks().iter().any(|(name, _)| name == "destination"));
+    }
+}
+
+#[test]
 fn single_entry_toc_keeps_formatted_result_and_nested_page_field() {
     let d = read_body(
         r#"
@@ -115,14 +137,28 @@ fn single_entry_toc_keeps_formatted_result_and_nested_page_field() {
     assert_eq!(p[0].plain_text(), "Contents");
     assert_eq!(
         p[0].objects,
-        vec![InlineObject::Field { instr: r#"TOC \o "1-1" \h"#.into(), result: String::new(), locked: true, code: false, form: String::new() }]
+        vec![InlineObject::Field {
+            instr: r#"TOC \o "1-1" \h"#.into(),
+            result: String::new(),
+            locked: true,
+            dirty: false,
+            code: false,
+            form: String::new()
+        }]
     );
     assert_eq!(p[1].plain_text(), "Intro\t1");
     assert_eq!(p[1].props_of_char(0).bold, Some(true));
     assert_eq!(p[1].props_of_char(0).link.as_deref(), Some("#_Toc1"));
     assert_eq!(
         p[1].objects,
-        vec![InlineObject::Field { instr: r#"PAGEREF _Toc1 \h"#.into(), result: "1".into(), locked: false, code: false, form: String::new() }]
+        vec![InlineObject::Field {
+            instr: r#"PAGEREF _Toc1 \h"#.into(),
+            result: "1".into(),
+            locked: false,
+            dirty: false,
+            code: false,
+            form: String::new()
+        }]
     );
 }
 
@@ -141,10 +177,17 @@ fn toc_complex_field_spanning_paragraphs() {
     let p = paras(&d);
     assert_eq!(p.len(), 5);
     assert_eq!(p[0].text, "\u{FFFC}Intro\t\u{FFFC}");
-    assert_eq!(p[0].objects[0], InlineObject::FieldStart { instr: r#"TOC \o "1-3" \h \z \u"#.into(), locked: false });
+    assert_eq!(p[0].objects[0], InlineObject::FieldStart { instr: r#"TOC \o "1-3" \h \z \u"#.into(), locked: false, dirty: false });
     assert_eq!(
         p[0].objects[1],
-        InlineObject::Field { instr: r#"PAGEREF _Toc1 \h"#.into(), result: "1".into(), locked: false, code: false, form: String::new() }
+        InlineObject::Field {
+            instr: r#"PAGEREF _Toc1 \h"#.into(),
+            result: "1".into(),
+            locked: false,
+            dirty: false,
+            code: false,
+            form: String::new()
+        }
     );
     assert_eq!(p[0].props_of_char(3).link.as_deref(), Some("#_Toc1"));
     assert_eq!(p[0].props.style.as_deref(), Some("TOC1"));
@@ -153,7 +196,10 @@ fn toc_complex_field_spanning_paragraphs() {
     assert_eq!(p[2].objects, vec![InlineObject::FieldEnd]);
     assert_eq!(p[3].objects, vec![InlineObject::BookmarkStart { name: "_Toc1".into() }, InlineObject::BookmarkEnd { name: "_Toc1".into() }]);
     assert_eq!(p[4].plain_text(), "Page 7");
-    assert_eq!(p[4].objects[0], InlineObject::Field { instr: "PAGE".into(), result: "7".into(), locked: false, code: false, form: String::new() });
+    assert_eq!(
+        p[4].objects[0],
+        InlineObject::Field { instr: "PAGE".into(), result: "7".into(), locked: false, dirty: false, code: false, form: String::new() }
+    );
     // And it writes back out and reads the same.
     let again = wordcraft_docx::read(&wordcraft_docx::write(&d).unwrap()).unwrap();
     assert_eq!(again.body, d.body);
@@ -210,6 +256,19 @@ fn symbol_font_text_reads_as_unicode_and_round_trips_unchanged() {
     let q = paras(&again);
     assert_eq!(q[0].plain_text(), p[0].plain_text());
     assert_eq!(q[0].shown_text(), p[0].shown_text());
+}
+
+#[test]
+fn pcl6_symbol_roundtrip() {
+    let body = r#"<w:p><w:r><w:sym w:font="Symbol (PCL6)" w:char="F0B3"/></w:r></w:p>"#;
+    let d = wordcraft_docx::read(&docx(body, &[], &[])).unwrap();
+    let again = wordcraft_docx::read(&wordcraft_docx::write(&d).unwrap()).unwrap();
+    for doc in [&d, &again] {
+        let p = paras(doc)[0];
+        assert_eq!(p.text, "\u{F0B3}");
+        assert_eq!(p.props_of_char(0).font.as_deref(), Some("Symbol (PCL6)"));
+        assert_eq!(p.shown_text(), "≥");
+    }
 }
 
 #[test]
@@ -536,6 +595,26 @@ fn empty_tbl_borders_elements_leave_sides_unset() {
     assert!(b.top.is_some() && b.between.is_some() && b.inside_v.is_some());
 }
 
+/// A style ID defined twice is its last definition, whole (Word drops the earlier one rather
+/// than merging: observed with synthetic documents). Generators that write a placeholder
+/// Heading 1 and then their own made headings come out in the placeholder's font and size.
+#[test]
+fn a_style_defined_twice_is_its_last_definition() {
+    let styles = format!(
+        r#"<w:styles {W_NS}>
+<w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:pPr><w:jc w:val="center"/></w:pPr><w:rPr><w:i/><w:color w:val="FF0000"/><w:sz w:val="40"/></w:rPr></w:style>
+<w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:rPr><w:b/><w:color w:val="0000FF"/><w:sz w:val="24"/></w:rPr></w:style>
+</w:styles>"#
+    );
+    let body = r#"<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>Probe</w:t></w:r></w:p>"#;
+    let d = wordcraft_docx::read(&docx(body, &[("rId1", "styles", "styles.xml")], &[("word/styles.xml", &styles)])).unwrap();
+    assert_eq!(d.styles.styles.iter().filter(|s| s.id == "Heading1").count(), 1);
+    let h = d.styles.get("Heading1").unwrap();
+    assert_eq!((h.chr.bold, h.chr.italic, h.chr.size), (Some(true), None, Some(12.0)));
+    assert_eq!(h.chr.color, Some(TextColor::Rgb(Rgb(0, 0, 0xFF))));
+    assert_eq!(h.para.align, None, "nothing kept from the first definition");
+}
+
 #[test]
 fn vml_image_and_inline_drawing() {
     let png: &[u8] = b"\x89PNG\r\n\x1a\nnot really a png";
@@ -590,6 +669,24 @@ fn chart_and_diagram_drawings_are_graphic_objects() {
         }
         o => panic!("{o:?}"),
     }
+}
+
+/// A text box shape's style text colour (`wps:style/a:fontRef`) is kept on its story, as what
+/// automatic text colour means inside it; a box without one has none.
+#[test]
+fn a_text_box_s_style_font_colour_is_read() {
+    let shape = |style: &str| {
+        format!(
+            r#"<w:r><w:drawing><wp:anchor behindDoc="0"><wp:positionH relativeFrom="column"><wp:posOffset>0</wp:posOffset></wp:positionH><wp:positionV relativeFrom="paragraph"><wp:posOffset>0</wp:posOffset></wp:positionV><wp:extent cx="1270000" cy="635000"/><wp:wrapNone/><wp:docPr id="1" name="S"/><a:graphic><a:graphicData uri="http://schemas.microsoft.com/office/word/2010/wordprocessingShape"><wps:wsp><wps:spPr><a:prstGeom prst="rect"/></wps:spPr>{style}<wps:txbx><w:txbxContent><w:p><w:r><w:t>In the box</w:t></w:r></w:p></w:txbxContent></wps:txbx><wps:bodyPr/></wps:wsp></a:graphicData></a:graphic></wp:anchor></w:drawing></w:r>"#
+        )
+    };
+    let style = r#"<wps:style><a:lnRef idx="2"><a:srgbClr val="000000"/></a:lnRef><a:fillRef idx="1"><a:srgbClr val="203040"/></a:fillRef><a:effectRef idx="0"><a:srgbClr val="000000"/></a:effectRef><a:fontRef idx="minor"><a:srgbClr val="FFFFFF"/></a:fontRef></wps:style>"#;
+    let d = read_body(&format!("<w:p>{}{}</w:p>", shape(style), shape("")));
+    let boxes: Vec<_> =
+        paras(&d)[0].objects.iter().filter_map(|o| if let InlineObject::Shape { story: Some(id), .. } = o { Some(*id) } else { None }).collect();
+    let [styled, plain] = boxes.as_slice() else { panic!("{boxes:?}") };
+    assert_eq!(d.parts[styled].body.auto_color, Some(Rgb(0xFF, 0xFF, 0xFF)));
+    assert_eq!(d.parts[plain].body.auto_color, None);
 }
 
 #[test]
@@ -659,10 +756,52 @@ fn unbalanced_fields_and_markers() {
     assert_eq!(p[0].text, "a");
     assert_eq!(
         p[1].objects,
-        vec![InlineObject::Field { instr: "IF X = \"y\"".into(), result: String::new(), locked: false, code: false, form: String::new() }]
+        vec![InlineObject::Field {
+            instr: "IF X = \"y\"".into(),
+            result: String::new(),
+            locked: false,
+            dirty: false,
+            code: false,
+            form: String::new()
+        }]
     );
     assert_eq!(p[2].objects, vec![InlineObject::BookmarkStart { name: "between".into() }, InlineObject::BookmarkEnd { name: "between".into() }]);
     assert_eq!(p[2].plain_text(), "after");
+}
+
+#[test]
+fn field_code_spans_paragraphs() {
+    let body = r#"
+<w:p><w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText>IF</w:instrText></w:r></w:p>
+<w:p><w:r><w:instrText> MERGEFIELD x</w:instrText><w:br/><w:instrText> = "y"</w:instrText></w:r></w:p>
+<w:p><w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:fldChar w:fldCharType="end"/></w:r></w:p>
+<w:p><w:r><w:t>Visible</w:t></w:r></w:p>"#;
+    let doc = read_body(body);
+    let p = paras(&doc);
+    assert_eq!(p.len(), 4);
+    for code in &p[..2] {
+        assert!(code.plain_text().is_empty());
+        assert_eq!(code.mark.hidden, Some(true));
+    }
+    assert_eq!(p[2].mark.hidden, None);
+    assert_eq!(p[3].plain_text(), "Visible");
+    assert_eq!(p[3].mark.hidden, None);
+}
+
+#[test]
+fn empty_field_results_keep_line() {
+    let body = r#"<w:p><w:r><w:fldChar w:fldCharType="begin"/><w:instrText>PAGE</w:instrText><w:fldChar w:fldCharType="separate"/><w:fldChar w:fldCharType="end"/></w:r></w:p>
+<w:p><w:r><w:fldChar w:fldCharType="begin"/><w:instrText>IF</w:instrText></w:r></w:p>
+<w:p/>
+<w:p><w:r><w:instrText> x = y</w:instrText><w:fldChar w:fldCharType="separate"/><w:t>Result</w:t><w:fldChar w:fldCharType="end"/></w:r></w:p>"#;
+    let doc = read_body(body);
+    let p = paras(&doc);
+    assert_eq!(p[0].mark.hidden, None);
+    assert!(matches!(&p[0].objects[0], InlineObject::Field { instr, .. } if instr == "PAGE"));
+    assert_eq!(p[1].mark.hidden, Some(true));
+    assert_eq!(p[2].mark.hidden, Some(true));
+    assert_eq!(p[3].mark.hidden, None);
+    assert_eq!(p[3].plain_text(), "Result");
 }
 
 #[test]
@@ -741,6 +880,28 @@ fn line_rule_is_read_case_insensitively() {
     let p = paras(&d);
     assert_eq!(p[0].props.line_spacing, Some(wordcraft_doc::props::LineSpacing::AtLeast(14.0)));
     assert_eq!(p[1].props.line_spacing, Some(wordcraft_doc::props::LineSpacing::Exactly(15.0)));
+}
+
+/// #2329: Word 2024 saves strict OOXML with the line height written out with a unit
+/// (`w:line="13.90pt"`). Under `auto` it reads through twips, as Word renders it (13.90 × 20 =
+/// 278; the 1.1583 multiple), not as 240ths of a line like the bare number — a Word file with
+/// a `line="13.90pt"` default came in at 13.9 lines per line of text.
+#[test]
+fn strict_line_heights_with_a_unit_are_read_as_point_multiples() {
+    let d = read_body(
+        r#"<w:p><w:pPr><w:spacing w:after="8pt" w:line="13.90pt" w:lineRule="auto"/></w:pPr><w:r><w:t>x</w:t></w:r></w:p><w:p><w:pPr><w:spacing w:line="13.90pt" w:lineRule="exact"/></w:pPr></w:p>"#,
+    );
+    let p = paras(&d);
+    let Some(wordcraft_doc::props::LineSpacing::Multiple(m)) = p[0].props.line_spacing else {
+        panic!("auto line spacing: {:?}", p[0].props.line_spacing)
+    };
+    assert!((m - 278.0 / 240.0).abs() < 1e-5, "{m}");
+    assert_eq!(p[0].props.space_after, Some(8.0), "the unit form of w:after too");
+    assert_eq!(p[1].props.line_spacing, Some(wordcraft_doc::props::LineSpacing::Exactly(13.9)), "exact keeps reading it as points");
+    // Saves as the transitional 240ths form and reads back the same multiple.
+    let again = wordcraft_docx::read(&wordcraft_docx::write(&d).unwrap()).unwrap();
+    let Some(wordcraft_doc::props::LineSpacing::Multiple(m2)) = paras(&again)[0].props.line_spacing else { panic!("multiple after a save") };
+    assert!((m2 - m).abs() < 1e-5, "{m2} vs {m}");
 }
 
 #[test]
@@ -1528,6 +1689,23 @@ fn theme_colour_without_a_theme_keeps_the_fixed_colour() {
 }
 
 #[test]
+fn underline_without_a_val_draws_no_underline() {
+    // w:val has no schema default (ECMA-376 CT_Underline); Word leaves a bare w:u with a colour plain.
+    let d = read_body(
+        r#"<w:p><w:r><w:rPr><w:u w:val="single"/></w:rPr><w:t>a</w:t></w:r><w:r><w:rPr><w:u w:color="FF0000"/></w:rPr><w:t>b</w:t></w:r><w:r><w:t>c</w:t></w:r></w:p>"#,
+    );
+    let p = paras(&d);
+    assert_eq!(p[0].props_of_char(0).underline, Some(Underline::Single));
+    let b = p[0].props_of_char(1);
+    assert_eq!(b.underline, None);
+    assert_eq!(b.underline_color, Some(Rgb(0xFF, 0, 0)), "the colour is still read");
+    assert_eq!(p[0].props_of_char(2).underline, None);
+    let back = wordcraft_docx::read(&wordcraft_docx::write(&d).unwrap()).unwrap();
+    let b = paras(&back)[0].props_of_char(1);
+    assert_eq!((b.underline, b.underline_color), (None, Some(Rgb(0xFF, 0, 0))), "saving keeps the colour, not an underline");
+}
+
+#[test]
 fn theme_font_wins_over_the_fixed_font() {
     let styles = r#"<w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:rPr><w:rFonts w:ascii="Calibri Light" w:hAnsi="Calibri Light" w:asciiTheme="majorHAnsi" w:hAnsiTheme="majorHAnsi"/></w:rPr></w:style>"#;
     let body = r#"<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>H</w:t></w:r></w:p>
@@ -1732,7 +1910,7 @@ fn includepicture_keeps_its_embedded_picture() {
             let p = paras(d);
             let objs = &p[0].objects;
             assert_eq!(objs.len(), 3, "{objs:?}");
-            assert_eq!(objs[0], InlineObject::FieldStart { instr: "INCLUDEPICTURE \"picture.png\"".into(), locked });
+            assert_eq!(objs[0], InlineObject::FieldStart { instr: "INCLUDEPICTURE \"picture.png\"".into(), locked, dirty: false });
             let InlineObject::Image { media, .. } = &objs[1] else { panic!("{objs:?}") };
             assert_eq!(d.media.get(media).unwrap().as_slice(), png);
             assert_eq!(objs[2], InlineObject::FieldEnd);
@@ -1924,8 +2102,9 @@ fn vml_preset_shapes_are_drawn() {
     assert_eq!(shape(3), Some((ShapeKind::Triangle, 20.0, 10.0, None, black, 0.75, true, false)));
     // A preset holding text keeps its geometry around the text.
     assert_eq!(shape(4), Some((ShapeKind::Diamond, 50.0, 50.0, Some(Rgb(0xFF, 0xFF, 0)), black, 0.75, true, true)));
-    assert_eq!(shape(5), Some((ShapeKind::Triangle, 20.0, 20.0, Some(Rgb(0xFF, 0, 0)), black, 0.75, true, false)));
-    assert_eq!(shape(6), None);
+    assert_eq!(shape(5), Some((ShapeKind::RightTriangle, 20.0, 20.0, Some(Rgb(0xFF, 0, 0)), black, 0.75, true, false)));
+    // Its own path is drawn as a freeform, not as the shapetype's arrow.
+    assert_eq!(kind(6), Some((ShapeKind::Freeform, false)));
     assert_eq!(shape(7), Some((ShapeKind::Line, 40.0, 10.0, None, black, 0.75, true, false)));
     assert_eq!(shape(8), Some((ShapeKind::Line, 30.0, 15.0, None, Some(Rgb(0xFF, 0, 0)), 0.75, false, false)));
     assert!(matches!(ps[8].objects.first(), Some(InlineObject::Shape { extra, .. }) if extra.arrow_end && !extra.arrow_start));
@@ -2567,6 +2746,148 @@ fn text_frames_read_and_round_trip() {
     assert!(q.iter().any(|x| x.props.drop_cap == Some(2) && x.props.frame.is_none()));
 }
 
+/// A legacy VML freeform (`v:shape` with a `path`, ECMA-376 Part 4): a rule across a header,
+/// drawn in a 1000 × 1000 coordinate space, outlined, its fill transparent. It is read as a
+/// freeform of the shape's size and kept when saved (as DrawingML custom geometry) and read back.
+#[test]
+fn vml_freeform_rule_in_header() {
+    let w10 = r#"xmlns:w10="urn:schemas-microsoft-com:office:word""#;
+    let rule = r##"<w:p><w:r><w:pict><v:shape style="position:absolute;margin-left:0;margin-top:30pt;width:360pt;height:12pt;z-index:2;mso-position-horizontal-relative:margin;mso-position-vertical-relative:margin" coordsize="1000,1000" path="m,500l1000,500xe" fillcolor="this" stroked="t" strokecolor="#3366cc" strokeweight="1.5pt"><v:fill opacity="0"/><w10:wrap anchorx="margin"/></v:shape></w:pict></w:r>
+<w:r><w:pict><v:shape style="width:20pt;height:10pt" coordorigin="100,100" coordsize="200,100" path="t100,100r100,0,0,100nfx e" strokecolor="red"><v:stroke opacity="32768f"/></v:shape></w:pict></w:r></w:p>"##;
+    let header = format!(r#"<w:hdr {W_NS} {w10}><w:p><w:r><w:t>Header</w:t></w:r></w:p>{rule}</w:hdr>"#);
+    let body = r#"<w:p><w:r><w:t>Body</w:t></w:r></w:p><w:sectPr><w:headerReference w:type="default" r:id="rIdH"/></w:sectPr>"#;
+    let bytes = docx(body, &[("rIdH", "header", "header1.xml")], &[("word/header1.xml", &header)]);
+    let near = |a: f32, b: f32| (a - b).abs() < 0.05;
+    let check = |d: &Document| {
+        let hid = d.last_section.headers.default.unwrap();
+        let shapes: Vec<&InlineObject> = d.parts.get(&hid).unwrap().blocks.iter().filter_map(|b| b.as_para()).flat_map(|p| &p.objects).collect();
+        let [rule, tri] = shapes.as_slice() else { panic!("{shapes:?}") };
+        let InlineObject::Shape { kind, w, h, fill, stroke, stroke_width, float, freeform: Some(f), .. } = rule else { panic!("{rule:?}") };
+        assert_eq!((*kind, *fill, *stroke), (ShapeKind::Freeform, None, Some(Rgb(0x33, 0x66, 0xCC))));
+        assert!(near(*w, 360.0) && near(*h, 12.0) && near(*stroke_width, 1.5), "{w} x {h}, {stroke_width}");
+        assert_eq!((float.h_rel, float.v_rel, float.wrap), (Anchor::Margin, Anchor::Margin, Wrap::InFrontOfText));
+        assert!(near(float.y, 30.0), "{float:?}");
+        let [p] = f.paths.as_slice() else { panic!("{f:?}") };
+        let pts = f.placed(0.0, 0.0, *w, *h);
+        let [(pts, _)] = pts.as_slice() else { panic!("{pts:?}") };
+        assert!(p.closed && pts.len() == 2, "{pts:?}");
+        assert!(near(pts[0][0], 0.0) && near(pts[0][1], 6.0) && near(pts[1][0], 360.0) && near(pts[1][1], 6.0), "{pts:?}");
+        // Relative moves and lines from the origin, `nf`: an outlined triangle, half opaque.
+        let InlineObject::Shape { kind: ShapeKind::Freeform, fill: None, stroke: Some(Rgb(255, 0, 0)), w, h, freeform: Some(f), .. } = tri else {
+            panic!("{tri:?}")
+        };
+        let placed = f.placed(0.0, 0.0, *w, *h);
+        let [(pts, true)] = placed.as_slice() else { panic!("{placed:?}") };
+        let want = [[0.0, 0.0], [10.0, 0.0], [10.0, 10.0]];
+        assert!(pts.len() == 3 && pts.iter().zip(want).all(|(a, b)| near(a[0], b[0]) && near(a[1], b[1])), "{pts:?}");
+        assert!(near(f.alpha, 0.5), "{}", f.alpha);
+    };
+    let d = wordcraft_docx::read(&bytes).unwrap();
+    check(&d);
+    check(&wordcraft_docx::read(&wordcraft_docx::write(&d).unwrap()).unwrap());
+}
+
+/// Hostile VML paths and coordinate spaces read without panicking and stay finite.
+#[test]
+fn hostile_vml_paths_stay_finite() {
+    let paths = [
+        "m,",
+        "l",
+        "mxe",
+        "m99999999999999999999999999,0l-99999999999999999999,1e",
+        "minf,nanlNaN,-inf",
+        "m@1,@2l@3,@4nfnse",
+        "wa1",
+        "c1",
+        "m١٢,٣l٤,٥",
+        "m0,0c",
+        "m0,0v1,2,3",
+        "ar0,0,10,10,0,0,10,10at",
+        "m0,0r1,1,1,1,1,1,1,1,1,1x x x l",
+        "--..,,@@ ,,, xm1.5.5,2..3l+-+,-e",
+        "\u{1F600}m1,1l2,2",
+        "qbqxqyaeal1,2,3,4,5,6",
+    ];
+    let spaces = [("0,0", "0,0"), ("-5,-5", "x,y"), ("1e39,x", "-99999999999999999999,99999999999999999999"), ("", ""), ("1,1", "1e308,1e308")];
+    for path in paths {
+        for (size, origin) in spaces {
+            let body = format!(
+                r#"<w:p><w:r><w:pict><v:shape style="width:1e30pt;height:-4pt" coordsize="{size}" coordorigin="{origin}" path="{path}" strokecolor="black"/></w:pict></w:r></w:p>"#
+            );
+            let d = read_body(&body);
+            // A path with formulas isn't drawn (they aren't evaluated).
+            if path.contains('@') {
+                assert!(paras(&d)[0].objects.iter().all(|o| !matches!(o, InlineObject::Shape { freeform: Some(_), .. })), "{path}");
+            }
+            for o in &paras(&d)[0].objects {
+                if let InlineObject::Shape { w, h, freeform: Some(f), .. } = o {
+                    assert!(w.is_finite() && h.is_finite() && f.alpha.is_finite(), "{path}");
+                    assert!(f.paths.iter().flat_map(|p| &p.pts).all(|[x, y]| x.is_finite() && y.is_finite()), "{path} {size} {origin}");
+                    for (pts, _) in f.placed(0.0, 0.0, *w, *h) {
+                        assert!(pts.iter().all(|[x, y]| x.is_finite() && y.is_finite()), "{path}");
+                    }
+                }
+            }
+            wordcraft_docx::write(&d).unwrap();
+        }
+    }
+}
+
+/// Measured in Word: `w:asciiTheme="minorBidi"` names the theme's complex-script font (`a:cs`);
+/// when that is empty it names nothing, and the run keeps the font it inherits.
+#[test]
+fn bidi_theme_slots_name_the_complex_script_font() {
+    let font = |cs: &str| {
+        let theme = format!(
+            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="T"><a:themeElements><a:fontScheme name="F"><a:majorFont><a:latin typeface="Cambria"/><a:ea typeface=""/><a:cs typeface="{cs}"/></a:majorFont><a:minorFont><a:latin typeface="Calibri"/><a:ea typeface=""/><a:cs typeface="{cs}"/></a:minorFont></a:fontScheme></a:themeElements></a:theme>"#
+        );
+        let rels = [("rId9", "http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme", "theme/theme1.xml")];
+        let body = r#"<w:p><w:r><w:rPr><w:rFonts w:asciiTheme="minorBidi" w:hAnsiTheme="minorBidi"/></w:rPr><w:t>x</w:t></w:r></w:p>"#;
+        let d = wordcraft_docx::read(&docx(body, &rels, &[("word/theme/theme1.xml", &theme)])).unwrap();
+        paras(&d)[0].runs[0].props.font.clone()
+    };
+    assert_eq!(font(""), None);
+    assert_eq!(font("Times New Roman").as_deref(), Some("Times New Roman"));
+}
+
+/// The font table's family classes: Word draws a missing roman font in a serif face.
+#[test]
+fn roman_fonts_are_read_from_the_font_table() {
+    let fonts = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:fonts xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:font w:name="Brand Serif"><w:family w:val="roman"/></w:font><w:font w:name="Brand Sans"><w:family w:val="swiss"/></w:font></w:fonts>"#;
+    let rels = [("rId9", "http://schemas.openxmlformats.org/officeDocument/2006/relationships/fontTable", "fontTable.xml")];
+    let d = wordcraft_docx::read(&docx("<w:p/>", &rels, &[("word/fontTable.xml", fonts)])).unwrap();
+    assert_eq!(d.settings.roman_fonts, ["Brand Serif"]);
+}
+
+/// `w:doNotUseHTMLParagraphAutoSpacing` in the settings' `w:compat`: paragraph spacing adds up.
+#[test]
+fn html_auto_spacing_off_is_read_and_kept() {
+    let settings = |compat: &str| {
+        let s = format!(r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:settings {W_NS}><w:compat>{compat}</w:compat></w:settings>"#);
+        let rels = [("rId9", "http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings", "settings.xml")];
+        let d = wordcraft_docx::read(&docx("<w:p/>", &rels, &[("word/settings.xml", &s)])).unwrap();
+        let again = wordcraft_docx::read(&wordcraft_docx::write(&d).unwrap()).unwrap();
+        (d.settings.sum_paragraph_spacing, again.settings.sum_paragraph_spacing)
+    };
+    assert_eq!(settings("<w:doNotUseHTMLParagraphAutoSpacing/>"), (true, true));
+    assert_eq!(settings(""), (false, false));
+}
+
+/// A right triangle (`rtTriangle`) has its right angle at the bottom left: a cover page's white
+/// corner cut-outs drawn as isosceles triangles pointed the wrong way.
+#[test]
+fn a_right_triangle_keeps_its_right_angle() {
+    let body = anchored_wsp("Corner", 1270000, 635000, r#"<a:prstGeom prst="rtTriangle"><a:avLst/></a:prstGeom>"#, "", "<wps:cNvSpPr/>");
+    let d = read_body(&format!("<w:p>{body}</w:p>"));
+    let kind = |d: &Document| match &paras(d)[0].objects[0] {
+        InlineObject::Shape { kind, .. } => *kind,
+        o => panic!("{o:?}"),
+    };
+    assert_eq!(kind(&d), ShapeKind::RightTriangle);
+    let saved = wordcraft_docx::write(&d).unwrap();
+    assert_eq!(kind(&wordcraft_docx::read(&saved).unwrap()), ShapeKind::RightTriangle);
+}
+
 #[test]
 fn hyperlink_with_empty_target_is_no_link() {
     // LibreOffice writes `Target=""` for the Hyperlink character style without an address (#1005).
@@ -2604,4 +2925,136 @@ fn hyperlink_with_empty_target_is_no_link() {
     let p = back.body.iter().find_map(|b| b.as_para()).unwrap();
     assert_eq!(p.props_of_char(0).link, None);
     assert_eq!(p.props_of_char(5).link.as_deref(), Some("mailto:a@example.com"));
+}
+
+#[test]
+fn row_table_borders_round_trip() {
+    let d = read_body(
+        r#"<w:tbl><w:tblPr/><w:tblGrid><w:gridCol w:w="2000"/><w:gridCol w:w="2000"/></w:tblGrid>
+<w:tr><w:tblPrEx><w:tblBorders><w:top w:val="single" w:sz="8"/><w:insideV w:val="single" w:sz="4"/></w:tblBorders></w:tblPrEx>
+<w:trPr><w:trHeight w:val="400"/></w:trPr><w:tc><w:p/></w:tc><w:tc><w:p/></w:tc></w:tr>
+<w:tr><w:tc><w:p/></w:tc><w:tc><w:p/></w:tc></w:tr></w:tbl><w:p/>"#,
+    );
+    let saved = wordcraft_docx::write(&d).unwrap();
+    let xml = text(&unzip(&saved), "word/document.xml");
+    assert!(xml.contains("<w:tblPrEx>"), "row table borders were dropped: {xml}");
+    assert!(xml.contains("<w:insideV"));
+    let again = wordcraft_docx::read(&saved).unwrap();
+    assert_eq!(d.body, again.body);
+}
+
+#[test]
+fn field_result_keeps_run_props() {
+    let styles = format!(
+        r#"<w:styles {W_NS}><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:rPr><w:sz w:val="8"/></w:rPr></w:style><w:style w:type="character" w:styleId="Result"><w:name w:val="Result"/><w:rPr><w:sz w:val="16"/><w:b/></w:rPr></w:style></w:styles>"#
+    );
+    for result_pr in [r#"<w:sz w:val="16"/><w:b/>"#, r#"<w:rStyle w:val="Result"/>"#, ""] {
+        for simple in [false, true] {
+            let result = format!(r#"<w:r><w:rPr>{result_pr}</w:rPr><w:t>7</w:t></w:r>"#);
+            let field = if simple {
+                format!(r#"<w:fldSimple w:instr="PAGE" w:fldLock="1" w:dirty="1">{result}</w:fldSimple>"#)
+            } else {
+                format!(
+                    r#"<w:r><w:rPr><w:sz w:val="6"/><w:i/></w:rPr><w:fldChar w:fldCharType="begin" w:fldLock="1" w:dirty="1"/></w:r><w:r><w:instrText>PAGE</w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:rPr><w:sz w:val="40"/></w:rPr><w:t/></w:r>{result}<w:r><w:rPr><w:sz w:val="50"/></w:rPr><w:fldChar w:fldCharType="end"/></w:r>"#
+                )
+            };
+            let body = format!(r#"<w:p><w:r><w:rPr><w:sz w:val="16"/></w:rPr><w:t>Counter </w:t></w:r>{field}</w:p>"#);
+            let mut d = wordcraft_docx::read(&docx(&body, &[("styles", "styles", "styles.xml")], &[("word/styles.xml", &styles)])).unwrap();
+            for _ in 0..2 {
+                let p = paras(&d)[0];
+                let props = p.props_of_char("Counter ".len());
+                assert_eq!(p.props_at(0).size, Some(8.0));
+                assert_eq!(props.size, result_pr.starts_with("<w:sz").then_some(8.0), "simple={simple}, result={result_pr}");
+                assert_eq!(props.style.as_deref(), result_pr.starts_with("<w:rStyle").then_some("Result"));
+                assert_eq!(props.italic, None);
+                assert!(
+                    matches!(&p.objects[0], InlineObject::Field { instr, result, locked: true, dirty: true, .. } if instr == "PAGE" && result == "7")
+                );
+                d = wordcraft_docx::read(&wordcraft_docx::write(&d).unwrap()).unwrap();
+            }
+        }
+    }
+}
+
+#[test]
+fn empty_field_keeps_begin_props() {
+    let d = read_body(
+        r#"<w:p><w:r><w:rPr><w:sz w:val="12"/><w:i/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText>PAGE</w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:rPr><w:sz w:val="40"/></w:rPr><w:t/></w:r><w:r><w:fldChar w:fldCharType="end"/></w:r></w:p>"#,
+    );
+    let p = paras(&d)[0];
+    assert_eq!(p.props_at(0).size, Some(6.0));
+    assert_eq!(p.props_at(0).italic, Some(true));
+    assert!(matches!(&p.objects[0], InlineObject::Field { result, .. } if result.is_empty()));
+}
+
+#[test]
+fn shape_dashes_import_and_save() {
+    use wordcraft_doc::line_dash::LineDash;
+    for (xml, expected) in [
+        (r#"<a:prstDash val="dash"/>"#, LineDash::Dash),
+        (r#"<a:prstDash val="sysDashDot"/>"#, LineDash::SystemDashDot),
+        (
+            r#"<a:custDash><a:ds d="400000" sp="300000"/><a:ds d="100000" sp="300000"/></a:custDash>"#,
+            LineDash::Custom(vec![(400_000, 300_000), (100_000, 300_000)]),
+        ),
+        (r#"<a:custDash><a:ds d="400%" sp="300%"/></a:custDash>"#, LineDash::Custom(vec![(400_000, 300_000)])),
+        (r#"<a:custDash><a:ds d="NaN%" sp="-1"/></a:custDash>"#, LineDash::Solid),
+        (r#"<a:prstDash val="solid"/>"#, LineDash::Solid),
+        ("", LineDash::Solid),
+    ] {
+        let sppr = format!(r#"<a:prstGeom prst="rect"/><a:noFill/><a:ln w="12700"><a:solidFill><a:srgbClr val="C00000"/></a:solidFill>{xml}</a:ln>"#);
+        let body = anchored_wsp("Annotation", 889000, 355600, &sppr, "", "<wps:cNvSpPr/>");
+        let d = read_body(&format!("<w:p>{body}</w:p>"));
+        let saved = wordcraft_docx::read(&wordcraft_docx::write(&d).unwrap()).unwrap();
+        for doc in [&d, &saved] {
+            let InlineObject::Shape { w, h, stroke, stroke_width, extra, .. } = &paras(doc)[0].objects[0] else { panic!("shape") };
+            assert_eq!(extra.dash, expected);
+            assert_eq!((*w, *h, *stroke, *stroke_width), (70.0, 28.0, Some(Rgb(192, 0, 0)), 1.0));
+        }
+    }
+}
+
+#[test]
+fn bookmark_end_name_and_id_trim() {
+    let body = r#"<w:p>
+        <w:bookmarkStart w:id=" 42 " w:name="section_intro"/>
+        <w:r><w:t>Hello</w:t></w:r>
+        <w:bookmarkEnd w:id="42"/>
+        <w:bookmarkEnd w:id="999" w:name="standalone_target"/>
+    </w:p>"#;
+    let doc = wordcraft_docx::read(&docx(body, &[], &[])).unwrap();
+    let p = doc.body.first().unwrap().as_para().unwrap();
+    let names: Vec<(&'static str, String)> = p
+        .objects
+        .iter()
+        .filter_map(|o| match o {
+            InlineObject::BookmarkStart { name } => Some(("start", name.clone())),
+            InlineObject::BookmarkEnd { name } => Some(("end", name.clone())),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(names, vec![("start", "section_intro".into()), ("end", "section_intro".into()), ("end", "standalone_target".into())]);
+}
+
+#[test]
+fn zero_effects_stay_zero_rotated() {
+    const ANGLE_UNITS_PER_DEGREE: i32 = 60_000;
+
+    // ECMA-376 §20.4.2.6: zero effect extents add no space around a rotated picture.
+    for degrees in [0, 90, 180, 270] {
+        for effects in ["", r#"<wp:effectExtent l="0" t="0" r="0" b="0"/>"#] {
+            let body = format!(
+                r#"<w:p><w:r><w:drawing><wp:inline><wp:extent cx="914400" cy="457200"/>{effects}<wp:docPr id="1" name="Synthetic picture"/><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic><pic:blipFill><a:blip r:embed="rId1"/></pic:blipFill><pic:spPr><a:xfrm rot="{}"><a:off x="0" y="0"/><a:ext cx="914400" cy="457200"/></a:xfrm></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>"#,
+                degrees * ANGLE_UNITS_PER_DEGREE
+            );
+            let d = wordcraft_docx::read(&docx(&body, &[("rId1", "image", "media/marker.png")], &[("word/media/marker.png", "synthetic")])).unwrap();
+            let (w, h, float) = paras(&d)[0].objects[0].frame().unwrap();
+            assert_eq!(float.rot, degrees as f32);
+            assert_eq!(float.effect, [0.0; 4], "rotation {degrees} must not invent effects");
+            let (px, py) = float.spin_pad(w, h);
+            let expected = if degrees % 180 == 0 { (w, h) } else { (h, w) };
+            assert!((w + 2.0 * px - expected.0).abs() < 0.001);
+            assert!((h + 2.0 * py - expected.1).abs() < 0.001);
+        }
+    }
 }

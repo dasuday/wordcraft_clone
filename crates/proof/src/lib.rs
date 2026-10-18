@@ -28,6 +28,12 @@
 //!   words (`кто-то`, `по-русски`, `северо-западный`) understood, suggestions tuned for Russian
 //!   (`е`/`ё`, `жи`/`ши`, `тся`/`ться`, voiced and voiceless pairs, missing spaces), Russian
 //!   grammar rules with Russian messages, and Russian word division.
+//! - **Czech** ([`ProofLang::Cs`], module [`cs`]): the installed Hunspell `cs_CZ` dictionary
+//!   (not bundled), dictionary-driven suggestions and generic checks with Czech messages.
+//!   Hyphenation uses the existing English fallback; no Czech patterns are bundled.
+//! - **Indonesian** ([`ProofLang::Id`], module [`id`]): the installed Hunspell `id_ID`
+//!   dictionary (not bundled), dictionary-driven suggestions and generic checks with Indonesian
+//!   messages. Hyphenation uses the existing English fallback.
 //! - **Other languages** ([`ProofLang::Other`]): no spelling or grammar marks, like Word without
 //!   the language's proofing tools.
 //! - **Hyphenation** ([`hyphen`]): dictionary, Liang patterns (English, Polish, Portuguese),
@@ -38,10 +44,12 @@
 
 pub mod affix;
 pub mod bg;
+pub mod cs;
 pub mod dict;
 pub mod hr;
 pub mod hunspell;
 pub mod hyphen;
+pub mod id;
 pub mod it;
 pub mod lang;
 pub mod patterns;
@@ -49,6 +57,7 @@ pub mod pl;
 pub mod pt;
 pub mod ru;
 pub mod tr;
+pub mod vi;
 
 use std::collections::HashSet;
 use std::ops::Range;
@@ -141,6 +150,7 @@ pub fn set_dictionaries_folder(dir: Option<std::path::PathBuf>) {
     it::reload_dictionary();
     hr::reload_dictionary();
     tr::reload_dictionary();
+    id::reload_dictionary();
     DICTIONARY_GENERATION.fetch_add(1, Ordering::Relaxed);
 }
 
@@ -153,6 +163,7 @@ pub fn installed_dictionaries() -> Vec<(ProofLang, Option<std::path::PathBuf>)> 
         (ProofLang::It, it::installed_path()),
         (ProofLang::Hr, hr::installed_path()),
         (ProofLang::Tr, tr::installed_path()),
+        (ProofLang::Id, id::installed_path()),
     ]
 }
 
@@ -304,7 +315,7 @@ fn known_core(w: &str) -> bool {
         return true;
     }
     // Inflections.
-    let stems: [(&str, &[&str]); 12] = [
+    let stems: [(&str, &[&str]); 13] = [
         ("'s", &[""]),
         ("s", &[""]),
         ("es", &["", "e"]),
@@ -314,6 +325,8 @@ fn known_core(w: &str) -> bool {
         ("ing", &["", "e"]),
         ("ly", &["", "le"]),
         ("ily", &["y"]),
+        // specifically → specific (#1694): only -ic adjectives, so "desktopally" stays wrong.
+        ("ically", &["ic"]),
         ("er", &["", "e"]),
         ("est", &["", "e"]),
         ("ness", &[""]),
@@ -581,7 +594,8 @@ fn enclosing_token(text: &str, a: usize, b: usize) -> (usize, usize, bool) {
 /// classification of the word's enclosing token, from [`enclosing_token`].
 fn spelling_issue(text: &str, a: usize, b: usize, lang: ProofLang, opts: &Options, internet: bool) -> Option<Issue> {
     let w = text.get(a..b)?;
-    if (opts.ignore_internet && internet) || is_correct_in_with(w, lang, opts) {
+    // A word with a Vietnamese-only letter (a name like Nguyễn in English text) isn't English.
+    if (opts.ignore_internet && internet) || (lang == ProofLang::En && vi::is_vietnamese_word(w)) || is_correct_in_with(w, lang, opts) {
         return None;
     }
     let message = match lang {
@@ -591,6 +605,8 @@ fn spelling_issue(text: &str, a: usize, b: usize, lang: ProofLang, opts: &Option
         ProofLang::It => "Possibile errore di ortografia",
         ProofLang::Tr => "Olası yazım hatası",
         ProofLang::Ru => "Возможна орфографическая ошибка",
+        ProofLang::Cs => "Možná pravopisná chyba",
+        ProofLang::Id => "Kemungkinan salah eja",
         _ => "Possible spelling mistake",
     };
     Some(Issue { start: a, end: b, kind: IssueKind::Spelling, message: message.into(), suggestions: Vec::new(), lang })
@@ -611,6 +627,8 @@ pub fn is_correct_in_with(word: &str, lang: ProofLang, opts: &Options) -> bool {
         ProofLang::It => accepted_by_options(word, opts) || it::is_correct(word),
         ProofLang::Tr => accepted_by_options(word, opts) || tr::is_correct(word),
         ProofLang::Ru => accepted_by_options(word, opts) || ru::is_correct(word),
+        ProofLang::Cs => accepted_by_options(word, opts) || cs::is_correct(word),
+        ProofLang::Id => accepted_by_options(word, opts) || id::is_correct(word),
         ProofLang::Bg | ProofLang::Other => true,
     }
 }
@@ -625,22 +643,33 @@ pub fn suggest_in(word: &str, max: usize, lang: ProofLang) -> Vec<String> {
         ProofLang::It => it::suggest(word, max),
         ProofLang::Tr => tr::suggest(word, max),
         ProofLang::Ru => ru::suggest(word, max),
+        ProofLang::Cs => cs::suggest(word, max),
+        ProofLang::Id => id::suggest(word, max),
         ProofLang::Bg | ProofLang::Other => Vec::new(),
     }
 }
 
 /// Grammar issues in a paragraph of text in `lang`: the English rules, the Polish ones
 /// ([`pl::grammar`]), the Portuguese ones ([`pt::grammar`]), the Italian ones ([`it::grammar`]),
-/// the Turkish ones ([`tr::grammar`]), or none for a language WordCraft doesn't proof.
+/// the Turkish ones ([`tr::grammar`]), Czech and Indonesian generic checks ([`cs::grammar`], [`id::grammar`]), or none for a language WordCraft doesn't proof.
 pub fn check_grammar_in(text: &str, lang: ProofLang) -> Vec<Issue> {
+    grammar_in(text, lang, true)
+}
+
+/// [`check_grammar_in`] where `capital_first` says whether the first word must be capitalized
+/// (false for a list item).
+fn grammar_in(text: &str, lang: ProofLang, capital_first: bool) -> Vec<Issue> {
     match lang {
-        ProofLang::En => check_grammar(text),
-        ProofLang::Pl => pl::grammar::check(text),
-        ProofLang::Hr => hr::grammar::check(text),
-        ProofLang::Pt => pt::grammar::check(text),
-        ProofLang::It => it::grammar::check(text),
-        ProofLang::Tr => tr::grammar::check(text),
-        ProofLang::Ru => ru::grammar::check(text),
+        ProofLang::En => grammar_en(text, capital_first),
+        ProofLang::Pl => pl::grammar::check_with(text, capital_first),
+        ProofLang::Hr => hr::grammar::check_with(text, capital_first),
+        ProofLang::Pt => pt::grammar::check_with(text, capital_first),
+        ProofLang::It => it::grammar::check_with(text, capital_first),
+        ProofLang::Tr => tr::grammar::check_with(text, capital_first),
+        ProofLang::Ru => ru::grammar::check_with(text, capital_first),
+        // Czech has no sentence-capital rule, so a list item needs no exception.
+        ProofLang::Cs => cs::grammar::check(text),
+        ProofLang::Id => id::grammar::check(text),
         ProofLang::Bg | ProofLang::Other => Vec::new(),
     }
 }
@@ -652,12 +681,15 @@ pub fn check_grammar_in(text: &str, lang: ProofLang) -> Vec<Issue> {
 /// inside that language's spans: an English quotation in a Polish paragraph gets English
 /// spelling and is never told a Polish rule.
 pub fn check_text(text: &str, spans: &[(Range<usize>, ProofLang)]) -> Vec<Issue> {
-    check_text_with(text, spans, &Options::default(), true)
+    check_text_with(text, spans, &Options::default(), true, false)
 }
 
 /// [`check_text`] with the File › Options › Proofing choices: what spelling skips, and whether
 /// grammar is checked at all.
-pub fn check_text_with(text: &str, spans: &[(Range<usize>, ProofLang)], opts: &Options, grammar: bool) -> Vec<Issue> {
+///
+/// `list_item` marks a list paragraph: items are often fragments, so the English rule asking for
+/// a capital on the paragraph's first word is off for it (later sentences are still checked).
+pub fn check_text_with(text: &str, spans: &[(Range<usize>, ProofLang)], opts: &Options, grammar: bool, list_item: bool) -> Vec<Issue> {
     // Sorted, empty ones dropped, neighbours of one language merged.
     let mut sorted: Vec<&(Range<usize>, ProofLang)> = spans.iter().filter(|(r, _)| r.start < r.end).collect();
     sorted.sort_by_key(|s| s.0.start);
@@ -668,9 +700,19 @@ pub fn check_text_with(text: &str, spans: &[(Range<usize>, ProofLang)], opts: &O
             _ => merged.push((r.clone(), *l)),
         }
     }
+    // A paragraph typed in Vietnamese under the default English language is Vietnamese, which
+    // has no proofing tools: no marks (Word detects the language the same way).
+    let default = if vi::looks_vietnamese(text) {
+        for (_, l) in merged.iter_mut().filter(|(_, l)| *l == ProofLang::En) {
+            *l = ProofLang::Other;
+        }
+        ProofLang::Other
+    } else {
+        ProofLang::En
+    };
     let lang_at = |i: usize| -> ProofLang {
         let k = merged.partition_point(|(r, _)| r.end <= i);
-        merged.get(k).filter(|(r, _)| r.start <= i).map_or(ProofLang::En, |s| s.1)
+        merged.get(k).filter(|(r, _)| r.start <= i).map_or(default, |s| s.1)
     };
     let mut v: Vec<Issue> = spelling_issues(text, lang_at, opts);
     if !grammar {
@@ -686,12 +728,13 @@ pub fn check_text_with(text: &str, spans: &[(Range<usize>, ProofLang)], opts: &O
         covered = covered.max(r.end);
     }
     if covered < text.len() || merged.is_empty() {
-        langs.push(ProofLang::En);
+        langs.push(default);
     }
     langs.sort();
     langs.dedup();
     for lang in langs {
-        v.extend(check_grammar_in(text, lang).into_iter().filter(|i| lang_at(i.start) == lang));
+        let found = grammar_in(text, lang, !list_item);
+        v.extend(found.into_iter().filter(|i| lang_at(i.start) == lang));
     }
     v.sort_by_key(|i| (i.start, i.end));
     v
@@ -699,6 +742,12 @@ pub fn check_text_with(text: &str, spans: &[(Range<usize>, ProofLang)], opts: &O
 
 /// Grammar issues in a paragraph of English text.
 pub fn check_grammar(text: &str) -> Vec<Issue> {
+    grammar_en(text, true)
+}
+
+/// The English rules; `capital_first` is whether the text's first word must start a sentence
+/// with a capital (false for a list item, which may be a fragment).
+fn grammar_en(text: &str, capital_first: bool) -> Vec<Issue> {
     let mut v = Vec::new();
     let ws = words(text);
     for pair in ws.windows(2) {
@@ -771,7 +820,7 @@ pub fn check_grammar(text: &str) -> Vec<Issue> {
         });
     }
     // Sentence start capital.
-    let mut after_end = true;
+    let mut after_end = capital_first;
     for (a, b) in &ws {
         let Some(w) = text.get(*a..*b) else { continue };
         if after_end && w.chars().next().is_some_and(char::is_lowercase) && w.chars().all(char::is_alphabetic) {
@@ -836,6 +885,7 @@ mod tests {
             ("pt_BR", pt::test_dict::AFF, pt::test_dict::DIC),
             ("it_IT", it::test_dict::AFF, it::test_dict::DIC),
             ("hr_HR", hr::test_dict::AFF, hr::test_dict::DIC),
+            ("id_ID", id::test_dict::AFF, id::test_dict::DIC),
         ] {
             std::fs::write(dir.join(format!("{name}.aff")), aff).unwrap();
             std::fs::write(dir.join(format!("{name}.dic")), dic).unwrap();
@@ -843,9 +893,10 @@ mod tests {
         let before = dictionary_generation();
         set_dictionaries_folder(Some(dir.clone()));
         assert!(dictionary_generation() > before, "cached checks are dropped");
-        // Turkish has no test dictionary to put in the folder; it's listed after the others.
+        // Turkish has no test dictionary to put in the folder; Indonesian is listed after it.
         let found = installed_dictionaries();
-        assert_eq!(found.last().map(|(lang, _)| *lang), Some(ProofLang::Tr));
+        assert_eq!(found.get(4).map(|(lang, _)| *lang), Some(ProofLang::Tr));
+        assert_eq!(found.last(), Some(&(ProofLang::Id, Some(dir.join("id_ID.dic")))));
         assert_eq!(
             found[..4],
             [
@@ -856,6 +907,36 @@ mod tests {
             ]
         );
         assert!(is_correct_in("chrząszcz", ProofLang::Pl) && !is_correct_in("chrzonszcz", ProofLang::Pl));
+    }
+
+    /// #1741: a list item may be a fragment, so its first word needs no capital in any language
+    /// with the rule; a plain paragraph's does, and later sentences in the item are still checked.
+    #[test]
+    fn list_item_first_word_needs_no_capital() {
+        let grammar = |t: &str, lang: ProofLang, list: bool| -> Vec<String> {
+            check_text_with(t, &[(0..t.len(), lang)], &Options::default(), true, list)
+                .into_iter()
+                .filter(|i| i.kind == IssueKind::Grammar)
+                .filter_map(|i| t.get(i.start..i.end).map(str::to_string))
+                .collect()
+        };
+        for (lang, text) in [
+            (ProofLang::En, "item one"),
+            (ProofLang::Pl, "jabłka i gruszki"),
+            (ProofLang::Hr, "jabuke i kruške"),
+            (ProofLang::It, "mele e pere"),
+            (ProofLang::Tr, "elma ve armut"),
+            (ProofLang::Pt, "maçãs e peras"),
+            (ProofLang::Ru, "яблоки и груши"),
+        ] {
+            let first = text.split(' ').next().unwrap();
+            assert!(grammar(text, lang, true).is_empty(), "{lang:?} list item: {:?}", grammar(text, lang, true));
+            assert_eq!(grammar(text, lang, false), [first], "{lang:?} plain paragraph");
+        }
+        assert_eq!(grammar("hello world.", ProofLang::En, false), ["hello"]);
+        // Later sentences in a list item are still checked.
+        assert_eq!(grammar("item one. then two", ProofLang::En, true), ["then"]);
+        assert_eq!(grammar("elma ve armut. sonra kiraz", ProofLang::Tr, true), ["sonra"]);
     }
 
     #[test]
@@ -890,6 +971,27 @@ mod tests {
         let s = suggest("recieve", 5);
         assert!(s.contains(&"receive".to_string()), "{s:?}");
         assert!(suggest("Wrold", 3).contains(&"World".to_string()));
+    }
+
+    /// #1694: `-ically` adverbs come from their `-ic` adjective (specific → specifically).
+    #[test]
+    fn ically_adverbs_are_known() {
+        for w in ["specifically", "scientifically", "automatically", "dramatically", "Specifically"] {
+            assert!(is_correct(w), "{w}");
+        }
+        for w in ["specificaly", "specifcally", "zzzically"] {
+            assert!(!is_correct(w), "{w}");
+        }
+    }
+
+    /// #1694 review: only `-ic` adjectives take `-ally`; other known words (dictionary or
+    /// supplement) don't.
+    #[test]
+    fn non_ic_words_do_not_take_ally() {
+        for (base, wrong) in [("desktop", "desktopally"), ("house", "houseally"), ("final", "finalally"), ("green", "greenally")] {
+            assert!(is_correct(base), "{base}");
+            assert!(!is_correct(wrong), "{wrong}");
+        }
     }
 
     /// #520: common modern words (and their inflections) are known; misspellings still flagged.
@@ -1278,7 +1380,7 @@ mod tests {
             let _ = has_dictionary(Some(&s));
             let _ = is_correct_for(&s, Some(&s));
             let _ = hyphen::hyphen_points(&s, &hyphen::Limits::default());
-            for lang in [ProofLang::En, ProofLang::Pl, ProofLang::Pt, ProofLang::It, ProofLang::Hr, ProofLang::Tr, ProofLang::Ru, ProofLang::Other] {
+            for lang in [ProofLang::En, ProofLang::Pl, ProofLang::Pt, ProofLang::It, ProofLang::Hr, ProofLang::Tr, ProofLang::Ru, ProofLang::Cs, ProofLang::Id, ProofLang::Other] {
                 let _ = check_spelling_in(&s, lang);
                 let _ = check_grammar_in(&s, lang);
                 let _ = is_correct_in(&s, lang);
@@ -1299,13 +1401,31 @@ mod tests {
         }
 
         #[test]
+        fn italian_suggestions_never_panic(s in "[a-zàèéìòóùA-ZÀÈÉÌÒÓÙ'’ -]{0,14}") {
+            let _ = suggest_in(&s, 4, ProofLang::It);
+        }
+
+        #[test]
         fn turkish_suggestions_never_panic(s in "[a-zçğıöşüA-ZÇĞİÖŞÜ'’ -]{0,14}") {
             let _ = suggest_in(&s, 4, ProofLang::Tr);
         }
 
         #[test]
-        fn mixed_spans_never_panic(s in "\\PC{0,60}", cuts in proptest::collection::vec((0usize..80, 0usize..80, 0u8..6), 0..6)) {
-            let langs = [ProofLang::En, ProofLang::Pl, ProofLang::Pt, ProofLang::Tr, ProofLang::Ru, ProofLang::Other];
+        fn czech_suggestions_never_panic(s in "[a-zěščřžýáíéůúĚŠČŘŽÝÁÍÉŮÚ'’ -]{0,14}") {
+            cs::test_dict::install();
+            let _ = suggest_in(&s, 4, ProofLang::Cs);
+        }
+
+        #[test]
+        fn indonesian_suggestions_never_panic(s in "[a-zA-Zé'’ -]{0,14}") {
+            id::test_dict::install();
+            let _ = suggest_in(&s, 4, ProofLang::Id);
+            let _ = is_correct_in(&s, ProofLang::Id);
+        }
+
+        #[test]
+        fn mixed_spans_never_panic(s in "\\PC{0,60}", cuts in proptest::collection::vec((0usize..80, 0usize..80, 0u8..9), 0..6)) {
+            let langs = [ProofLang::En, ProofLang::Pl, ProofLang::Pt, ProofLang::It, ProofLang::Tr, ProofLang::Ru, ProofLang::Cs, ProofLang::Id, ProofLang::Other];
             let spans: Vec<(Range<usize>, ProofLang)> = cuts.iter().map(|&(a, b, l)| (a.min(b)..a.max(b), langs[l as usize % langs.len()])).collect();
             for i in check_text(&s, &spans) {
                 proptest::prop_assert!(i.start <= i.end && i.end <= s.len());

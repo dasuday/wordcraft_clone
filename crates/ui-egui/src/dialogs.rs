@@ -269,6 +269,8 @@ pub enum Dialog {
     Link {
         url: String,
         text: String,
+        /// Focus and select the address when the dialog first opens.
+        focus: bool,
         /// "Place in This Document" instead of "Existing File or Web Page".
         place: bool,
         /// The document's places (`link.targets`), read when that tab is first shown.
@@ -335,20 +337,22 @@ pub enum Dialog {
         alphabetical: bool,
         selected: String,
     },
-    /// Table Design › New / Modify Table Style: one formatting region at a time.
+    /// Table Design › New / Modify Table Style: one table style part at a time (#714).
     TableStyle {
         /// The style being modified; `None` creates one.
         id: Option<String>,
         name: String,
         /// Style id.
         based_on: String,
-        /// Index into `regions` (see `REGION_LABELS`).
+        /// Index into `regions` (see `dialogs_table_style::PARTS`).
         region: usize,
-        regions: Box<[TableRegion; 7]>,
-        /// What the regions showed when the dialog opened (or the base style changed): only
+        regions: Box<[crate::dialogs_table_style::TableRegion; 13]>,
+        /// What the parts showed when the dialog opened (or the base style changed): only
         /// changes are sent, so everything else stays inherited.
         #[serde(skip)]
-        basis: Box<[TableRegion; 7]>,
+        basis: Box<[crate::dialogs_table_style::TableRegion; 13]>,
+        /// The line the border choices draw.
+        pen: crate::dialogs_table_style::BorderPen,
     },
     Commands {
         query: String,
@@ -467,6 +471,12 @@ pub enum Dialog {
         #[serde(skip)]
         basis: Box<TableForm>,
     },
+    /// Table Layout › Cell Margins: edits the table's default margins.
+    CellMargins {
+        form: Box<CellMarginsForm>,
+        #[serde(skip)]
+        basis: Box<CellMarginsForm>,
+    },
     /// Opening a password-protected document (#55): the password, then `file.open` with
     /// `params` again. The password is never serialised or printed.
     Password {
@@ -555,6 +565,47 @@ pub struct TableForm {
     pub valign: String,
 }
 
+/// The Cell Margins dialog's values, in the interface unit.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CellMarginsForm {
+    pub top: f32,
+    pub left: f32,
+    pub bottom: f32,
+    pub right: f32,
+}
+
+impl CellMarginsForm {
+    pub(crate) fn read(app: &WordApp) -> Option<Self> {
+        let (tp, _, _) = app.session.sel.focus.path.cell()?;
+        let table = app.session.doc.table(app.session.sel.focus.story, &tp)?;
+        let scale = crate::options::unit().pt_per_unit();
+        let style = table.props.style.as_deref().and_then(|id| app.session.doc.styles.table_style(id));
+        let margins = table.props.cell_margins.or_else(|| style.and_then(|s| s.parts.cell_margins)).unwrap_or([0.0, 5.4, 0.0, 5.4]);
+        let field = |value: f32, fallback: f32| if value.is_finite() { value.clamp(0.0, 144.0) / scale } else { fallback / scale };
+        Some(Self { top: field(margins[0], 0.0), left: field(margins[1], 5.4), bottom: field(margins[2], 0.0), right: field(margins[3], 5.4) })
+    }
+
+    /// Send all four values together: changing one side must preserve the other three.
+    pub(crate) fn changes(&self, basis: &CellMarginsForm) -> Value {
+        if [self.top, self.left, self.bottom, self.right]
+            .into_iter()
+            .zip([basis.top, basis.left, basis.bottom, basis.right])
+            .all(|(a, b)| (a - b).abs() <= 1e-4)
+        {
+            return json!({});
+        }
+        let scale = crate::options::unit().pt_per_unit();
+        let points = |v: f32, old: f32| if v.is_finite() { (v * scale).clamp(0.0, 144.0) } else { old * scale };
+        json!({
+            "top": points(self.top, basis.top),
+            "left": points(self.left, basis.left),
+            "bottom": points(self.bottom, basis.bottom),
+            "right": points(self.right, basis.right),
+        })
+    }
+}
+
 impl TableForm {
     /// The caret's table, row, column and cell as the dialog shows them.
     pub fn read(app: &WordApp) -> Option<TableForm> {
@@ -588,8 +639,8 @@ impl TableForm {
             cell_width_on: cell.width.is_some(),
             cell_width: fin(cell.width.unwrap_or(72.0)) / k,
             valign: match cell.valign {
-                VAlign::Center => "center",
-                VAlign::Bottom => "bottom",
+                Some(VAlign::Center) => "center",
+                Some(VAlign::Bottom) => "bottom",
                 _ => "top",
             }
             .into(),
@@ -751,188 +802,6 @@ impl RecipientFilter {
     }
 }
 
-/// One table style region in the Table Style dialog: colours are hex, empty for none.
-#[derive(Clone, Debug, Default, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct TableRegion {
-    pub borders: bool,
-    pub fill: String,
-    pub bold: bool,
-    pub color: String,
-}
-
-/// The Table Style dialog's regions, in the order of `table_style::REGIONS` (the param names).
-const REGION_LABELS: [&str; 7] = ["Whole Table", "Header Row", "Total Row", "First Column", "Last Column", "Banded Rows", "Banded Columns"];
-
-/// The regions of table style `id` as resolved through its based-on chain.
-fn table_regions(app: &WordApp, id: &str) -> Box<[TableRegion; 7]> {
-    let Some(st) = app.session.doc.styles.table_style(id) else { return Default::default() };
-    let p = &st.parts;
-    let hex = |c: Option<wordcraft_doc::Rgb>| c.map(|c| c.hex()).unwrap_or_default();
-    let text = |c: &wordcraft_doc::CharProps| match c.color {
-        Some(wordcraft_doc::TextColor::Rgb(c)) => c.hex(),
-        _ => String::new(),
-    };
-    let lines = |b: Option<wordcraft_doc::props::Borders>| b.is_some_and(|b| b.any_visible());
-    // A region's text: the whole table's formatting with the region's over it.
-    let region = |borders: Option<wordcraft_doc::props::Borders>, fill: Option<wordcraft_doc::Rgb>, chr: &wordcraft_doc::CharProps| {
-        let mut c = st.chr.clone();
-        c.overlay(chr);
-        TableRegion { borders: lines(borders), fill: hex(fill), bold: c.bold.unwrap_or(false), color: text(&c) }
-    };
-    let none = wordcraft_doc::CharProps::default();
-    Box::new([
-        region(p.borders, p.fill, &none),
-        region(p.header_borders, p.header_fill, &p.header_chr),
-        region(p.total_borders, p.total_fill, &p.total_chr),
-        region(p.first_col_borders, p.first_col_fill, &p.first_col_chr),
-        region(p.last_col_borders, p.last_col_fill, &p.last_col_chr),
-        region(p.band_borders, p.band_fill, &p.band_chr),
-        region(p.col_band_borders, p.col_band_fill, &p.col_band_chr),
-    ])
-}
-
-/// The params `table.newStyle` / `table.modifyStyle` take for the Table Style dialog's state:
-/// only what changed from `basis`, so the rest stays inherited.
-fn table_style_params(id: Option<&str>, name: &str, based_on: &str, regions: &[TableRegion; 7], basis: &[TableRegion; 7]) -> Value {
-    let mut v = json!({"name": name.trim(), "basedOn": based_on});
-    for ((key, r), b) in wordcraft_engine::cmd::table_style::REGIONS.into_iter().zip(regions.iter()).zip(basis.iter()) {
-        let ch = region_changes(r, b);
-        if ch.as_object().is_some_and(|o| !o.is_empty()) {
-            v[key] = ch;
-        }
-    }
-    if let Some(id) = id {
-        v["style"] = json!(id);
-    }
-    v
-}
-
-/// A small sample table drawn with `style` (5 columns, a header, three body rows and a total
-/// row), showing the regions `look` turns on: the Table Style dialog's live preview.
-fn table_style_preview(ui: &mut Ui, style: Option<&wordcraft_doc::styles::TableStyleProps>, look: wordcraft_doc::props::TableLook) {
-    use wordcraft_doc::props::{Border, Borders};
-    const COLS: usize = 5;
-    const ROWS: usize = 5;
-    const TEXT: [[&str; COLS]; ROWS] = [
-        ["", "Mon", "Tue", "Wed", "Sum"],
-        ["North", "4", "7", "2", "13"],
-        ["South", "6", "1", "5", "12"],
-        ["West", "3", "8", "4", "15"],
-        ["Total", "13", "16", "11", "40"],
-    ];
-    let (rect, _) = ui.allocate_exact_size(vec2(300.0, 120.0), Sense::hover());
-    let painter = ui.painter_at(rect);
-    // The page is white whatever the interface theme.
-    painter.rect_filled(rect, 2.0, egui::Color32::WHITE);
-    let t = Tokens::get(ui.ctx());
-    painter.rect_stroke(rect, 2.0, egui::Stroke::new(1.0, t.border), egui::StrokeKind::Inside);
-    let Some(st) = style else { return };
-    let p = &st.parts;
-    let table = rect.shrink2(vec2(14.0, 10.0));
-    let (cw, rh) = (table.width() / COLS as f32, table.height() / ROWS as f32);
-    let rgb = |c: wordcraft_doc::Rgb| egui::Color32::from_rgb(c.0, c.1, c.2);
-    let tb = p.borders.unwrap_or_default();
-    for (ri, row) in TEXT.iter().enumerate() {
-        let header = look.header_row && ri == 0;
-        let total = look.total_row && ri + 1 == ROWS;
-        let band = look.banded_rows
-            && !header
-            && (ri.saturating_sub(usize::from(look.header_row)) / p.band_size.unwrap_or(1).clamp(1, 1000) as usize).is_multiple_of(2);
-        for (ci, txt) in row.iter().enumerate() {
-            // Sample words in the interface language; numbers as they are.
-            let txt = &if txt.chars().any(char::is_alphabetic) { tl!(txt) } else { *txt };
-            let first = look.first_column && ci == 0;
-            let last = look.last_column && ci + 1 == COLS;
-            let col_band = look.banded_columns && !first && ci.saturating_sub(usize::from(look.first_column)).is_multiple_of(2);
-            let cell = egui::Rect::from_min_size(table.min + vec2(ci as f32 * cw, ri as f32 * rh), vec2(cw, rh));
-            // Regions from lowest to highest priority, as layout applies them.
-            let regions = [
-                (col_band, p.col_band_fill, &p.col_band_chr, p.col_band_borders),
-                (band, p.band_fill, &p.band_chr, p.band_borders),
-                (first, p.first_col_fill, &p.first_col_chr, p.first_col_borders),
-                (last, p.last_col_fill, &p.last_col_chr, p.last_col_borders),
-                (header, p.header_fill, &p.header_chr, p.header_borders),
-                (total, p.total_fill, &p.total_chr, p.total_borders),
-            ];
-            let mut fill = p.fill;
-            let mut chr = st.chr.clone();
-            let mut b = Borders {
-                top: if ri == 0 { tb.top } else { tb.between },
-                bottom: if ri + 1 == ROWS { tb.bottom } else { tb.between },
-                left: if ci == 0 { tb.left } else { tb.inside_v },
-                right: if ci + 1 == COLS { tb.right } else { tb.inside_v },
-                between: None,
-                inside_v: None,
-            };
-            for (on, f, c, rb) in regions {
-                if !on {
-                    continue;
-                }
-                fill = f.or(fill);
-                chr.overlay(c);
-                if let Some(rb) = rb {
-                    b.overlay(&Borders { between: None, inside_v: None, ..rb });
-                }
-            }
-            if total && p.total_borders.is_none_or(|x| x.top.is_none()) {
-                b.top = p.total_border_top.or(b.top);
-            }
-            if let Some(f) = fill {
-                painter.rect_filled(cell, 0.0, rgb(f));
-            }
-            let edge = |from: egui::Pos2, to: egui::Pos2, e: Option<Border>| {
-                if let Some(e) = e.filter(Border::is_visible) {
-                    let color = e.color.map_or(egui::Color32::BLACK, rgb);
-                    painter.line_segment([from, to], egui::Stroke::new(e.width.clamp(0.5, 3.0) * 1.3, color));
-                }
-            };
-            edge(cell.left_top(), cell.right_top(), b.top);
-            edge(cell.left_bottom(), cell.right_bottom(), b.bottom);
-            edge(cell.left_top(), cell.left_bottom(), b.left);
-            edge(cell.right_top(), cell.right_bottom(), b.right);
-            let color = match chr.color {
-                Some(wordcraft_doc::TextColor::Rgb(c)) => rgb(c),
-                _ => egui::Color32::BLACK,
-            };
-            let font = egui::FontId::proportional(11.0);
-            let pos = cell.left_center() + vec2(4.0, 0.0);
-            painter.text(pos, egui::Align2::LEFT_CENTER, tl!(*txt), font.clone(), color);
-            if chr.bold.unwrap_or(false) {
-                // A second pass a hair to the right reads as bold at this size.
-                painter.text(pos + vec2(0.6, 0.0), egui::Align2::LEFT_CENTER, tl!(*txt), font, color);
-            }
-        }
-    }
-}
-
-/// The style of the table at the caret, when it is a table style.
-fn current_table_style(app: &WordApp) -> Option<String> {
-    let s = &app.session;
-    let (tp, _, _) = s.sel.focus.path.cell()?;
-    let id = s.doc.table(s.sel.focus.story, &tp)?.props.style.clone()?;
-    s.doc.styles.get(&id).filter(|st| st.kind == wordcraft_doc::StyleKind::Table).map(|st| st.id.clone())
-}
-
-/// The params `table.newStyle` / `table.modifyStyle` need for what changed in one region.
-fn region_changes(r: &TableRegion, basis: &TableRegion) -> Value {
-    let color = |c: &str| if c.is_empty() { Value::Null } else { json!(c) };
-    let mut v = json!({});
-    if r.borders != basis.borders {
-        v["borders"] = json!(r.borders);
-    }
-    if r.fill != basis.fill {
-        v["fill"] = color(&r.fill);
-    }
-    if r.bold != basis.bold {
-        v["bold"] = json!(r.bold);
-    }
-    if r.color != basis.color {
-        v["color"] = color(&r.color);
-    }
-    v
-}
-
 /// A colour menu: a swatch with the colour grid and No Color. `value` is hex, empty for none.
 pub(crate) fn color_menu(ui: &mut Ui, theme: &[wordcraft_doc::Rgb], value: &mut String) {
     color_field(ui, theme, value, "No Color", "");
@@ -1010,6 +879,7 @@ impl Dialog {
             Dialog::MatchFields { .. } => "matchFields",
             Dialog::CheckErrors { .. } => "checkErrors",
             Dialog::TableProperties { .. } => "tableProperties",
+            Dialog::CellMargins { .. } => "tableCellMargins",
             Dialog::Password { .. } => "password",
             Dialog::EncryptPassword { .. } => "encryptPassword",
             Dialog::DefineList { .. } => "defineList",
@@ -1188,7 +1058,9 @@ impl Dialog {
                     valign: sp.valign,
                 }
             }
-            "link" => Dialog::Link { url: "https://".into(), text: app.session.selected_text(), place: false, targets: None, pick: None },
+            "link" => {
+                Dialog::Link { url: "https://".into(), text: app.session.selected_text(), place: false, targets: None, pick: None, focus: true }
+            }
             "bookmark" => Dialog::Bookmark { name: bookmark_at_caret(&app.session), by_location: false, hidden: false, deleted: false },
             "wordCount" => Dialog::WordCount { stats: app.session.run("review.wordCount", &json!({})).unwrap_or_default() },
             "zoom" => Dialog::Zoom { percent: (app.session.view.zoom * 100.0).round() },
@@ -1208,25 +1080,16 @@ impl Dialog {
             }
             "newStyle" => Dialog::NewStyle { name: "Style1".into(), based_on: "Normal".into(), back: false },
             "manageStyles" => Dialog::ManageStyles { alphabetical: false, selected: s("style") },
-            "newTableStyle" => {
-                let based_on = current_table_style(app).unwrap_or_else(|| "TableGrid".into());
-                let styles = &app.session.doc.styles;
-                let name = (1..1000).map(|i| format!("Table Style {i}")).find(|n| styles.find(n).is_none()).unwrap_or_default();
-                let regions = table_regions(app, &based_on);
-                Dialog::TableStyle { id: None, name, based_on, region: 0, basis: regions.clone(), regions }
-            }
-            "modifyTableStyle" => {
-                let id = current_table_style(app)?;
-                let st = app.session.doc.styles.get(&id)?;
-                let (name, based_on) = (st.name.clone(), st.based_on.clone().unwrap_or_default());
-                let regions = table_regions(app, &id);
-                Dialog::TableStyle { id: Some(id), name, based_on, region: 0, basis: regions.clone(), regions }
-            }
+            "newTableStyle" | "modifyTableStyle" => crate::dialogs_table_style::open(app, name)?,
             "commands" => Dialog::Commands { query: String::new(), swallow: true },
             "icons" => Dialog::Icons { query: String::new(), category: String::new(), selected: String::new() },
             "tableProperties" => {
                 let form = Box::new(TableForm::read(app)?);
                 Dialog::TableProperties { basis: form.clone(), form }
+            }
+            "tableCellMargins" => {
+                let form = Box::new(CellMarginsForm::read(app)?);
+                Dialog::CellMargins { basis: form.clone(), form }
             }
             "enclose" => {
                 // The selection's text and its enclosure, if it has one.
@@ -1429,7 +1292,6 @@ pub fn show(app: &mut WordApp, ctx: &egui::Context) {
         ctx.data_mut(|d| d.remove::<(egui::Id, u8)>(dialog_top_key()));
         return;
     };
-    let mut open = true;
     let mut close = false;
     let title = match &d {
         Dialog::RenameDocument { .. } => "Rename Document",
@@ -1470,6 +1332,7 @@ pub fn show(app: &mut WordApp, ctx: &egui::Context) {
         Dialog::MatchFields { .. } => "Match Fields",
         Dialog::CheckErrors { .. } => "Check for Errors",
         Dialog::TableProperties { .. } => "Table Properties",
+        Dialog::CellMargins { .. } => "Cell Margins",
         Dialog::Password { .. } => "Password",
         Dialog::EncryptPassword { .. } => "Encrypt with Password",
         Dialog::DefineList { .. } => "Define New Multilevel List",
@@ -1485,17 +1348,34 @@ pub fn show(app: &mut WordApp, ctx: &egui::Context) {
         Dialog::Layout(d) => d.title(),
     };
     let id = egui::Id::new(("dialog", title));
-    let shown = place_dialog(ctx, id, egui::Window::new(tl!(title)).id(id).collapsible(false).resizable(false)).open(&mut open).show(ctx, |ui| {
+    let window = crate::window_close::window(ctx, egui::Window::new(tl!(title)).id(id).collapsible(false).resizable(false));
+    let shown = place_dialog(ctx, id, window).show(ctx, |ui| {
         ui.set_min_width(340.0);
         close = body(app, ui, &mut d);
     });
-    if shown.is_some() {
+    if let Some(shown) = &shown {
+        if let Dialog::SaveChanges { name, message, .. } = &d {
+            let question = crate::i18n::fmt(tl!("Do you want to save changes to {name}?"), &[("name", name)]);
+            let mut description = tl!("Your changes will be lost if you don't save them.").to_string();
+            if !message.is_empty() {
+                description.push('\n');
+                description.push_str(message);
+            }
+            // This is an urgent decision, not another application window. Keep its context with
+            // the focused choice, including when a failed Save brings the same prompt back.
+            ctx.accesskit_node_builder(shown.response.id, |node| {
+                node.set_role(egui::accesskit::Role::AlertDialog);
+                node.set_label(question);
+                node.set_description(description);
+            });
+        }
         count_dialog_frame(ctx, id);
+        close |= crate::window_close::show(ctx, &shown.response, &Tokens::get(ctx));
     }
-    if open && !close {
-        app.dialog = Some(d);
-    } else {
+    if close {
         app.canvas.want_focus = true;
+    } else {
+        app.dialog = Some(d);
     }
 }
 
@@ -1619,6 +1499,24 @@ fn page_paper_group(ui: &mut Ui, paper: &mut (f32, f32), landscape: &mut bool, c
     });
 }
 
+/// Cancel key for dialogs: Escape everywhere, plus ⌘. (Command+Period) on macOS.
+pub(crate) fn cancel_key_pressed(ui: &Ui) -> bool {
+    ui.input(|i| i.key_pressed(egui::Key::Escape) || (cfg!(target_os = "macos") && i.modifiers.command && i.key_pressed(egui::Key::Period)))
+}
+
+/// Lays out an OK and a Cancel button right-to-left, in the platform's order:
+/// macOS puts Cancel left of the default OK button; Windows and Linux put OK left of Cancel.
+/// Returns `(ok, cancel)` responses. Call inside a right-to-left layout.
+pub(crate) fn ok_cancel_responses(ui: &mut Ui, draw_ok: impl FnOnce(&mut Ui) -> egui::Response, cancel: &str) -> (egui::Response, egui::Response) {
+    if cfg!(target_os = "macos") {
+        let okb = draw_ok(ui);
+        (okb, ui.button(cancel))
+    } else {
+        let cancelb = ui.button(cancel);
+        (draw_ok(ui), cancelb)
+    }
+}
+
 pub(crate) fn buttons(ui: &mut Ui, ok: &str) -> (bool, bool) {
     let mut r = (false, false);
     ui.add_space(8.0);
@@ -1626,10 +1524,10 @@ pub(crate) fn buttons(ui: &mut Ui, ok: &str) -> (bool, bool) {
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             // Enter and Escape belong to the Colors dialog while it is open above this one.
             let keys = !crate::colors::is_open(ui.ctx());
-            if ui.button(tl!("Cancel")).clicked() || (keys && ui.input(|i| i.key_pressed(egui::Key::Escape))) {
+            let (okb, cancelb) = ok_cancel_responses(ui, |ui| ui.add(crate::widgets::primary_button(ui, ok)), tl!("Cancel"));
+            if cancelb.clicked() || (keys && cancel_key_pressed(ui)) {
                 r.1 = true;
             }
-            let okb = ui.add(crate::widgets::primary_button(ui, ok));
             if okb.clicked() || (keys && ui.input(|i| i.key_pressed(egui::Key::Enter))) {
                 r.0 = true;
             }
@@ -1761,14 +1659,26 @@ fn body(app: &mut WordApp, ui: &mut Ui, d: &mut Dialog) -> bool {
                     ui.label(tl!("Asian text font:"));
                     let fams = app.previews.east_asian_families();
                     if let Some(f) = crate::widgets::font_combo(ui, "fontdlg_asian", 220.0, font_ea, &fams, Some(&*prev)) {
-                        *font_ea = f;
+                        if f == crate::widgets::ADD_FONT {
+                            let _ = app.run("font.add", json!({}));
+                        } else if f == crate::widgets::LOAD_SYSTEM_FONTS {
+                            let _ = app.run("font.loadSystem", json!({}));
+                        } else {
+                            *font_ea = f;
+                        }
                     }
                     ui.end_row();
                 }
                 ui.label(if *asian { tl!("Latin text font:") } else { tl!("Font:") });
                 let fams = app.previews.families();
                 if let Some(f) = crate::widgets::font_combo(ui, "fontdlg_font", 220.0, font, &fams, Some(&*prev)) {
-                    *font = f;
+                    if f == crate::widgets::ADD_FONT {
+                        let _ = app.run("font.add", json!({}));
+                    } else if f == crate::widgets::LOAD_SYSTEM_FONTS {
+                        let _ = app.run("font.loadSystem", json!({}));
+                    } else {
+                        *font = f;
+                    }
                 }
                 ui.end_row();
                 ui.label(tl!("Size:"));
@@ -2093,6 +2003,17 @@ fn body(app: &mut WordApp, ui: &mut Ui, d: &mut Dialog) -> bool {
             }
             ok || cancel
         }
+        Dialog::CellMargins { form, basis } => {
+            cell_margins_dialog(ui, form);
+            let (ok, cancel) = buttons(ui, tl!("OK"));
+            if ok {
+                let changes = form.changes(basis);
+                if changes.as_object().is_some_and(|m| !m.is_empty()) {
+                    let _ = app.run("table.cellMargins", changes);
+                }
+            }
+            ok || cancel
+        }
         Dialog::InsertTable { rows, cols } => {
             egui::Grid::new("it").num_columns(2).show(ui, |ui| {
                 ui.label(tl!("Number of columns:"));
@@ -2191,7 +2112,7 @@ fn body(app: &mut WordApp, ui: &mut Ui, d: &mut Dialog) -> bool {
             }
             ok || cancel
         }
-        Dialog::Link { url, text, place, targets, pick } => {
+        Dialog::Link { url, text, place, targets, pick, focus } => {
             // Word's "Link to:" choices; the places are read once, when that tab is first shown.
             ui.horizontal(|ui| {
                 ui.label(tl!("Link to:"));
@@ -2207,7 +2128,13 @@ fn body(app: &mut WordApp, ui: &mut Ui, d: &mut Dialog) -> bool {
                 ui.end_row();
                 if !*place {
                     ui.label(tl!("Address:"));
-                    ui.text_edit_singleline(url);
+                    let mut out = egui::TextEdit::singleline(url).id(egui::Id::new("link_address")).show(ui);
+                    if std::mem::take(focus) {
+                        out.response.request_focus();
+                        let all = egui::text::CCursorRange::two(egui::text::CCursor::new(0), egui::text::CCursor::new(url.chars().count()));
+                        out.state.cursor.set_char_range(Some(all));
+                        out.state.store(ui.ctx(), out.response.id);
+                    }
                     ui.end_row();
                 }
             });
@@ -2465,96 +2392,8 @@ fn body(app: &mut WordApp, ui: &mut Ui, d: &mut Dialog) -> bool {
             ok || cancel
         }
         Dialog::ManageStyles { alphabetical, selected } => manage_styles(app, ui, alphabetical, selected),
-        Dialog::TableStyle { id, name, based_on, region, regions, basis } => {
-            let styles: Vec<(String, String)> = app
-                .session
-                .doc
-                .styles
-                .styles
-                .iter()
-                .filter(|s| s.kind == wordcraft_doc::StyleKind::Table && Some(&s.id) != id.as_ref())
-                .map(|s| (s.id.clone(), s.name.clone()))
-                .collect();
-            let base_name = styles.iter().find(|(i, _)| i == based_on).map(|(_, n)| n.clone()).unwrap_or_else(|| based_on.clone());
-            let mut rebased = false;
-            egui::Grid::new("tstyle").num_columns(2).spacing(vec2(10.0, 6.0)).show(ui, |ui| {
-                ui.label(tl!("Name:"));
-                ui.text_edit_singleline(name);
-                ui.end_row();
-                ui.label(tl!("Style based on:"));
-                egui::ComboBox::from_id_salt("tstyle_base").width(200.0).selected_text(base_name).show_ui(ui, |ui| {
-                    for (sid, sname) in &styles {
-                        if ui.selectable_label(sid == based_on, sname).clicked() && sid != based_on {
-                            *based_on = sid.clone();
-                            rebased = true;
-                        }
-                    }
-                });
-                ui.end_row();
-                ui.label(tl!("Apply formatting to:"));
-                egui::ComboBox::from_id_salt("tstyle_region")
-                    .width(200.0)
-                    .selected_text(tl!(REGION_LABELS.get(*region).copied().unwrap_or("Whole Table")))
-                    .show_ui(ui, |ui| {
-                        for (i, n) in REGION_LABELS.iter().enumerate() {
-                            ui.selectable_value(region, i, tl!(n));
-                        }
-                    });
-                ui.end_row();
-            });
-            // A new style shows its new base's formatting; a modified one keeps its own.
-            if rebased && id.is_none() {
-                *regions = table_regions(app, based_on);
-                *basis = regions.clone();
-            }
-            ui.separator();
-            let theme = app.session.doc.settings.theme_colors.clone();
-            if let Some(r) = regions.get_mut(*region) {
-                ui.horizontal(|ui| {
-                    ui.checkbox(&mut r.borders, tl!("Borders"));
-                    ui.checkbox(&mut r.bold, tl!("Bold"));
-                });
-                egui::Grid::new("tstyle_colors").num_columns(2).spacing(vec2(10.0, 6.0)).show(ui, |ui| {
-                    ui.label(tl!("Fill color:"));
-                    color_menu(ui, &theme, &mut r.fill);
-                    ui.end_row();
-                    ui.label(tl!("Font color:"));
-                    color_menu(ui, &theme, &mut r.color);
-                    ui.end_row();
-                });
-            }
-            // Live preview: the style as OK would leave it, on the current table's options with
-            // the region being edited turned on.
-            let v = table_style_params(id.as_deref(), name, based_on, regions, basis);
-            let mut look = app
-                .session
-                .sel
-                .focus
-                .path
-                .cell()
-                .and_then(|(tp, _, _)| app.session.doc.table(app.session.sel.focus.story, &tp).map(|t| t.props.look))
-                .unwrap_or_default();
-            match *region {
-                1 => look.header_row = true,
-                2 => look.total_row = true,
-                3 => look.first_column = true,
-                4 => look.last_column = true,
-                5 => look.banded_rows = true,
-                6 => look.banded_columns = true,
-                _ => {}
-            }
-            ui.add_space(4.0);
-            ui.label(egui::RichText::new(tl!("Preview")).small().weak());
-            table_style_preview(ui, wordcraft_engine::cmd::table_style::preview(&app.session, &v).as_ref(), look);
-            let (ok, cancel) = buttons(ui, tl!("OK"));
-            if ok {
-                let cmd = if id.is_some() { "table.modifyStyle" } else { "table.newStyle" };
-                if let Err(e) = app.run(cmd, v) {
-                    app.status(e);
-                    return false;
-                }
-            }
-            ok || cancel
+        Dialog::TableStyle { id, name, based_on, region, regions, basis, pen } => {
+            crate::dialogs_table_style::body(app, ui, crate::dialogs_table_style::Form { id, name, based_on, region, regions, basis, pen })
         }
         Dialog::Insert(f) => crate::dialogs_insert::body(app, ui, f),
         Dialog::Refs(f) => crate::dialogs_refs::body(app, ui, f),
@@ -3293,6 +3132,18 @@ fn table_properties(ui: &mut Ui, f: &mut TableForm) {
     });
 }
 
+fn cell_margins_dialog(ui: &mut Ui, f: &mut CellMarginsForm) {
+    let unit = crate::options::unit();
+    let max = 144.0 / unit.pt_per_unit();
+    egui::Grid::new("cell_margins").num_columns(2).spacing(vec2(10.0, 6.0)).show(ui, |ui| {
+        for (label, value) in [("Top:", &mut f.top), ("Left:", &mut f.left), ("Bottom:", &mut f.bottom), ("Right:", &mut f.right)] {
+            ui.label(tl!(label));
+            ui.add(egui::DragValue::new(value).speed(0.01).range(0.0..=max).measure(unit).max_decimals(2));
+            ui.end_row();
+        }
+    });
+}
+
 /// The Paragraph dialog as one paragraph's formatting fills it, on page `tab`.
 fn paragraph_dialog(rp: &wordcraft_doc::resolve::ResolvedPara, tab: u8) -> Dialog {
     let line = match rp.line_spacing {
@@ -3451,6 +3302,10 @@ fn bookmark(app: &mut WordApp, ui: &mut Ui, name: &mut String, by_location: &mut
                 ui.set_width(232.0);
                 ui.set_height(150.0);
                 egui::ScrollArea::vertical().id_salt("bookmark_list").max_height(150.0).auto_shrink([false, false]).show(ui, |ui| {
+                    if marks.is_empty() {
+                        // #1904: a blank box says nothing; reuse the Field dialog's wording.
+                        ui.label(egui::RichText::new(tl!("The document has no bookmarks yet.")).small().color(t.text_dim));
+                    }
                     for n in &marks {
                         if ui.selectable_label(*n == *name, n.as_str()).clicked() {
                             *name = n.clone();
@@ -3999,6 +3854,34 @@ mod tests {
         assert_eq!(h.state().session.doc.bookmarks().len(), 3, "one undo step");
     }
 
+    /// #1904: with no bookmarks the list says so instead of a blank box.
+    #[test]
+    fn the_bookmark_dialog_says_when_there_are_no_bookmarks() {
+        let mut app = app_with("Alpha beta gamma");
+        app.dialog = Dialog::open("bookmark", &mut app);
+        let mut h = egui_kittest::Harness::builder().with_size(vec2(1440.0, 900.0)).build_ui_state(
+            |ui, app: &mut WordApp| {
+                let ctx = ui.ctx().clone();
+                app.logic(&ctx);
+                app.ui(ui);
+            },
+            app,
+        );
+        for _ in 0..4 {
+            h.step();
+        }
+        let texts: Vec<String> = h
+            .output()
+            .shapes
+            .iter()
+            .filter_map(|s| match &s.shape {
+                egui::Shape::Text(t) => Some(t.galley.text().to_string()),
+                _ => None,
+            })
+            .collect();
+        assert!(texts.iter().any(|t| t.contains("The document has no bookmarks yet.")), "placeholder shown");
+    }
+
     /// Find, Replace and Go To are one dialog with three tabs (#712).
     #[test]
     fn find_replace_and_go_to_are_one_dialog() {
@@ -4079,7 +3962,9 @@ mod tests {
             ("tr", "İTALİK", "İtalik   —   Giriş › Yazı Tipi"),
             ("tr", "içindekiler", "İçindekiler Tablosu   —   Başvurular › İçindekiler Tablosu"),
             ("tr", "YAZI TİPİ", "İtalik   —   Giriş › Yazı Tipi"),
-            ("tr", "INSERT", "Tablo   —   Ekle › Tablolar"),
+            // Dozens of commands match a lone INSERT and the box shows 14, in registry order: the
+            // witness is an early one; Table is checked below, past the box's limit.
+            ("tr", "INSERT", "Bölünemez Boşluk   —   Ekle › Semboller"),
             ("tr", "INSERT.TABLE", "Tablo   —   Ekle › Tablolar"),
             ("tr", "FORMAT.ITALIC", "İtalik   —   Giriş › Yazı Tipi"),
             ("tr", "TABLE OF CONTENTS", "İçindekiler Tablosu   —   Başvurular › İçindekiler Tablosu"),
@@ -4098,6 +3983,9 @@ mod tests {
             assert_eq!(crate::i18n::lowercase("Iİıi"), if language == "tr" { "ıiıi" } else { "ii\u{307}ıi" });
         }
         assert_eq!(serde_json::to_value(&h.state().session.doc).unwrap(), before, "search does not change the document");
+        crate::i18n::set_current(crate::i18n::Lang::from_pref("tr"));
+        let reg = h.state().session.registry.clone();
+        assert!(command_matches(reg.get("insert.table").unwrap(), "INSERT"), "tr: INSERT finds Table");
         crate::i18n::set_current(crate::i18n::Lang::EN);
     }
 
@@ -4475,6 +4363,52 @@ mod tests {
         let after = h.ctx.memory(|m| m.area_rect(id)).expect("dialog is still open");
         assert!((after.min.x - (before.min.x - 200.0)).abs() <= 1.0, "moved left: {before:?} -> {after:?}");
         assert!((after.min.y - (before.min.y + 120.0)).abs() <= 1.0, "moved down: {before:?} -> {after:?}");
+    }
+
+    /// #1885: the close control is the whole box at the title bar's right end, as on a Windows
+    /// dialog, not only the ✕. A click 6 px from the window's right edge, mid title bar, closes
+    /// the dialog; one just under the title bar leaves it open; a drag that starts on the box
+    /// doesn't move the dialog. The box spans the title bar egui lays out.
+    #[test]
+    fn the_title_bar_close_box_is_the_whole_corner() {
+        fn press(h: &mut egui_kittest::Harness<'_, WordApp>, from: egui::Pos2, to: egui::Pos2) {
+            let button =
+                |pos, pressed| egui::Event::PointerButton { pos, button: egui::PointerButton::Primary, pressed, modifiers: egui::Modifiers::NONE };
+            h.event(egui::Event::PointerMoved(from));
+            h.step();
+            h.event(button(from, true));
+            h.step();
+            if to != from {
+                h.event(egui::Event::PointerMoved(to));
+                h.step();
+            }
+            h.event(button(to, false));
+            for _ in 0..4 {
+                h.step();
+            }
+        }
+        let mut app = app_with("Some text");
+        app.dialog = Dialog::open("wordCount", &mut app);
+        let mut h = app_harness(app);
+        for _ in 0..4 {
+            h.step();
+        }
+        let id = egui::Id::new(("dialog", "Word Count"));
+        let before = h.ctx.memory(|m| m.area_rect(id)).expect("dialog is open");
+        let bx = crate::window_close::close_rect(before, 1.0, crate::window_close::geometry(&h.ctx));
+        let title = h.ctx.read_response(id.with("__title_click")).expect("egui's title bar").rect;
+        assert!((bx.top() - before.top()).abs() <= 1.5 && (bx.bottom() - title.bottom()).abs() <= 1.5, "box {bx:?} spans the title bar {title:?}");
+        assert!(bx.width() >= 1.5 * bx.height() && bx.right() + 1.5 >= before.right(), "a wide box at the right end: {bx:?} in {before:?}");
+        let under = egui::pos2(before.right() - 6.0, bx.bottom() + 4.0);
+        press(&mut h, under, under);
+        assert!(h.state().dialog.is_some(), "a click under the title bar keeps the dialog");
+        let at = egui::pos2(before.right() - 6.0, bx.center().y);
+        press(&mut h, at, at + vec2(-150.0, 90.0));
+        assert!(h.state().dialog.is_some(), "a drag from the box isn't a click");
+        let after = h.ctx.memory(|m| m.area_rect(id)).expect("dialog is still open");
+        assert!((after.min - before.min).length() <= 1.0, "the box isn't a drag handle: {before:?} -> {after:?}");
+        press(&mut h, at, at);
+        assert!(h.state().dialog.is_none(), "a click in the box, away from the X, closes the dialog");
     }
 
     fn app_harness(app: WordApp) -> egui_kittest::Harness<'static, WordApp> {

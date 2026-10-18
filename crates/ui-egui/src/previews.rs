@@ -17,6 +17,7 @@ pub struct Previews {
     tex: HashMap<String, TextureHandle>,
     /// The font list, for the interface language it was made in.
     families: Option<(&'static str, Vec<String>)>,
+    font_gen: u64,
     /// Lowercase English family → its name in that language (simsun → 宋体), and back.
     local_names: HashMap<String, String>,
     english_names: HashMap<String, String>,
@@ -156,7 +157,9 @@ impl Previews {
     /// one (宋体 for SimSun in Chinese, #505), like Word's.
     pub fn families(&mut self) -> Vec<String> {
         let lang = crate::i18n::current().code();
-        if self.families.as_ref().is_none_or(|(l, _)| *l != lang) {
+        let generation = wordcraft_fonts::FontDb::global().generation();
+        if self.families.as_ref().is_none_or(|(l, _)| *l != lang) || self.font_gen != generation {
+            self.font_gen = generation;
             let db = wordcraft_fonts::FontDb::global();
             let mut f: Vec<String> = db.families_in(lang).into_iter().filter(|f| !f.starts_with('.')).collect();
             for w in [wordcraft_doc::styles::BODY_FONT, wordcraft_doc::styles::HEADING_FONT] {
@@ -211,6 +214,7 @@ impl Previews {
     /// `families` (an entry drawn before its font was added shows the fallback face).
     pub fn fonts_changed(&mut self, ctx: &egui::Context, families: impl Iterator<Item = String>) {
         self.families = None;
+        self.east_asian = None;
         ctx.data_mut(|d| {
             for f in families {
                 d.remove::<TextureHandle>(egui::Id::new(format!("font:{f}")));
@@ -224,6 +228,7 @@ impl Previews {
             let key = format!("font:{name}");
             let tex: Option<TextureHandle> = ui.ctx().data(|d| d.get_temp::<TextureHandle>(egui::Id::new(&key)));
             let (r, resp) = ui.allocate_exact_size(vec2(260.0, crate::widgets::COMBO_PREVIEW_ROW_H), Sense::click());
+            resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), name));
             let t = Tokens::get(ui.ctx());
             if resp.hovered() {
                 ui.painter().rect_filled(r, 3.0, t.hover);
