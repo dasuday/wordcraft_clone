@@ -4415,6 +4415,77 @@ fn no_line_break_right_after_a_slash() {
     assert!(lines > 10, "{lines} lines");
 }
 
+/// #2963: in a narrow fixed-layout cell a word that follows a slash travels with it — the line
+/// breaks before `/заполняется`, never inside the word (Word and LibreOffice wrap bilingual
+/// form captions this way); the same caption without the slash is unchanged, and a slashed
+/// word that alone exceeds the line still breaks anywhere.
+#[test]
+fn a_slash_opening_a_word_travels_with_it_to_the_next_line() {
+    let head = "ЖСН енгізілмеген жағдайда толтырылады";
+    let tail = "заполняется в случае неприсвоения ИИН";
+    let it = wordcraft_doc::CharProps { italic: Some(true), size: Some(7.0), ..Default::default() };
+    let para = |text: String, runs: Vec<wordcraft_doc::Run>| {
+        let mut p = wordcraft_doc::Paragraph::new();
+        p.text = text;
+        p.runs = runs;
+        p.props.align = Some(Align::Center);
+        p.props.space_after = Some(0.0);
+        wordcraft_doc::para_block(p)
+    };
+    // Two fixed 1800-twip (90 pt) cells, 7 pt italic, centred, the slash in its own run.
+    let mut table = Table::new(1, 2, 180.0);
+    table.props.fixed = true;
+    table.props.width = Some(180.0);
+    table.props.cell_margins = Some([0.0; 4]);
+    table.grid = vec![90.0, 90.0];
+    for cell in &mut table.rows[0].cells {
+        cell.props.width = Some(90.0);
+    }
+    // Cell 1: the Russian part follows a slash in its own run, plus a slashed word too wide
+    // for the cell (emergency breaking must keep working). Cell 2: the same text, no slash.
+    let a = format!("{head} /{tail}");
+    table.rows[0].cells[0].blocks = vec![para(
+        a.clone(),
+        vec![
+            wordcraft_doc::Run { len: head.len(), props: it.clone() },
+            wordcraft_doc::Run { len: 2, props: wordcraft_doc::CharProps { size: Some(7.0), ..Default::default() } },
+            wordcraft_doc::Run { len: a.len() - head.len() - 2, props: it.clone() },
+        ],
+    )];
+    let huge = format!("/{}", "заполняется".repeat(12));
+    table.rows[0].cells[0].blocks.push(para(huge.clone(), vec![wordcraft_doc::Run { len: huge.len(), props: it.clone() }]));
+    let b = format!("{head} {tail}");
+    table.rows[0].cells[1].blocks = vec![para(b.clone(), vec![wordcraft_doc::Run { len: b.len(), props: it }])];
+    let mut d = Document::new();
+    d.body = vec![std::sync::Arc::new(wordcraft_doc::Block::Table(table))];
+    let l = lay(&d);
+    let lines = |col: u32, para: u32, text: &str| -> Vec<String> {
+        l.pages[0]
+            .items
+            .iter()
+            .filter_map(|it| match it {
+                Placed::Lines { path, para: pl, l0, l1, .. } if path.0 == [0, 0, col, para] => {
+                    Some(pl.lines[*l0..*l1].iter().map(|ln| text.get(ln.start..ln.stop).unwrap_or_default().trim().to_string()).collect::<Vec<_>>())
+                }
+                _ => None,
+            })
+            .next()
+            .unwrap_or_default()
+    };
+    // A line starts with the whole "/заполняется", and every line holds whole words.
+    let slash = lines(0, 0, &a);
+    assert!(slash.iter().any(|l| l.starts_with("/заполняется")), "no line starts with the whole /заполняется: {slash:?}");
+    let words = |ls: &[String]| ls.join(" ").split_whitespace().map(str::to_string).collect::<Vec<_>>();
+    let whole = |t: &str| t.split_whitespace().map(str::to_string).collect::<Vec<_>>();
+    assert_eq!(words(&slash), whole(&a), "cell 1 wraps in whole words: {slash:?}");
+    // The control cell without the slash is unchanged: whole words, in order.
+    let control = lines(1, 0, &b);
+    assert_eq!(words(&control), whole(&b), "control cell wraps in whole words: {control:?}");
+    // A slashed word wider than the whole cell still breaks wherever it must.
+    let over = lines(0, 1, &huge);
+    assert!(over.len() > 1, "the too-wide slashed word stayed on one line: {over:?}");
+}
+
 #[test]
 fn unequal_formats_lay_out_in_linear_time() {
     // Runs whose formats never compare equal (NaN spacing from a hostile file) each get a style;

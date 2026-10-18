@@ -1717,6 +1717,19 @@ pub fn layout_para(p: &Paragraph, env: &ParaEnv) -> ParaLayout {
             found.push(i);
         }
     }
+    // A slash that opens a word after a space ("Kazakh /Russian" bilingual captions) travels
+    // with the word: the break before it is allowed, so `/word` moves to the next line whole
+    // (#2963). UAX #14 glues the slash to the word before it ("no break before '/' even after
+    // spaces"), which left "word /slashed" one unbreakable run that filled the line letter by
+    // letter. Without a space the slash stays glued both ways ("and/or", web addresses).
+    for (i, c) in text.char_indices() {
+        let opens_word = c == '/'
+            && text.get(..i).is_some_and(|t| t.ends_with(' '))
+            && text.get(i + 1..).and_then(|t| t.chars().next()).is_some_and(char::is_alphanumeric);
+        if opens_word {
+            found.push(i);
+        }
+    }
     // Myanmar has no spaces between words: it wraps between syllables.
     if text.chars().any(|c| matches!(u32::from(c), 0x1000..=0x109F | 0xA9E0..=0xA9FF | 0xAA60..=0xAA7F)) {
         found.extend(wordcraft_doc::cluster::myanmar_breaks(&text));
