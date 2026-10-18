@@ -2636,6 +2636,8 @@
 # Reading Mode column widths (#1040)
 	Narrow	Keskeny
 	Medium	Közepes
+# Separate pieces of text selected at once (#788)
+	Add to Selection	Hozzáadás a kijelöléshez
 # Split Cells and Convert Text to Table (#2592)
 	Merge cells before split	Cellák egyesítése felosztás előtt
 	Table size	Táblázat mérete

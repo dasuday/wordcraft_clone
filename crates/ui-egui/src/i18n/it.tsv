@@ -2649,6 +2649,8 @@ preview	Title	Esempio
 # Reading Mode column widths (#1040)
 	Narrow	Stretta
 	Medium	Media
+# Separate pieces of text selected at once (#788)
+	Add to Selection	Aggiungi alla selezione
 # Split Cells and Convert Text to Table (#2592)
 	Merge cells before split	Unisci le celle prima di dividere
 	Table size	Dimensioni tabella

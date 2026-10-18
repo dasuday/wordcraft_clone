@@ -2638,6 +2638,8 @@ preview	Title	Naslov
 	Bottom Right Cell	Donja desna ćelija
 	Inside Horizontal Border	Unutarnji vodoravni obrub
 	Inside Vertical Border	Unutarnji okomiti obrub
+# Separate pieces of text selected at once (#788)
+	Add to Selection	Dodaj odabiru
 # Split Cells and Convert Text to Table (#2592)
 	Merge cells before split	Spoji ćelije prije razdvajanja
 	Table size	Veličina tablice

@@ -2248,6 +2248,8 @@
 # Reading Mode column widths (#1040)
 	Narrow	Étroite
 	Medium	Moyenne
+# Separate pieces of text selected at once (#788)
+	Add to Selection	Ajouter à la sélection
 # Split Cells and Convert Text to Table (#2592)
 	Merge cells before split	Fusionner les cellules avant le fractionnement
 	Table size	Taille du tableau

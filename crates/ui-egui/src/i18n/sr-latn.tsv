@@ -2251,6 +2251,8 @@
 # Reading Mode column widths (#1040)
 	Narrow	Uska
 	Medium	Srednja
+# Separate pieces of text selected at once (#788)
+	Add to Selection	Dodaj u izbor
 # Split Cells and Convert Text to Table (#2592)
 	Merge cells before split	Spoji ćelije pre deljenja
 	Table size	Veličina tabele

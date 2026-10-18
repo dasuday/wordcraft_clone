@@ -2253,6 +2253,8 @@
 # Reading Mode column widths (#1040)
 	Narrow	窄
 	Medium	中等
+# Separate pieces of text selected at once (#788)
+	Add to Selection	添加到所选内容
 # Split Cells and Convert Text to Table (#2592)
 	Merge cells before split	拆分前合并单元格
 	Table size	表格尺寸
