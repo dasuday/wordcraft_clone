@@ -446,6 +446,13 @@ pub(crate) fn comment_draft(app: &WordApp, id: u32) -> Option<String> {
     if d.document == app.session.document_id() { d.edits.get(&id).cloned() } else { None }
 }
 
+/// Whether the open document has a comment or reply draft not yet written to it (typed, or
+/// kept after the document refused it): closing the page would lose it.
+pub(crate) fn has_comment_drafts(app: &WordApp) -> bool {
+    let d = &app.comment_drafts;
+    d.document == app.session.document_id() && !(d.edits.is_empty() && d.replies.is_empty())
+}
+
 fn drafts(app: &mut WordApp) -> &mut CommentDrafts {
     let document = app.session.document_id();
     app.comment_drafts.of(document)

@@ -882,7 +882,8 @@ impl WordApp {
         }
         let applied = applied_font(id, &params);
         let r = self.execute_user(id, params);
-        if let Some(e) = refused {
+        // A save error already on the status line is the reason to see; the refusal shows otherwise.
+        if let (Some(e), true) = (refused, r.is_ok()) {
             self.status(e);
         }
         if let (Ok(_), Some(name)) = (&r, applied) {
@@ -2077,7 +2078,7 @@ impl WordApp {
     /// Tell the host whether the document has unsaved changes ([`Services::on_dirty`]).
     fn report_dirty(&self) {
         if let Some(f) = &self.services.on_dirty {
-            f(self.session.dirty);
+            f(self.session.dirty || panes::has_comment_drafts(self));
         }
     }
 
@@ -2613,7 +2614,7 @@ fn flushes_comment_drafts(id: &str, params: &Value) -> bool {
 /// file picker; the open that follows is checked). Envelopes, Labels and Finish & Merge make a
 /// new document in its place; a merge written to a file (`path`) and an envelope added to this
 /// document (`add`) leave it alone.
-fn discards_document(id: &str, params: &Value) -> bool {
+pub(crate) fn discards_document(id: &str, params: &Value) -> bool {
     match id {
         "file.new" | "file.close" | "mailings.labels" => true,
         "mailings.envelopes" => params.get("add").and_then(Value::as_bool) != Some(true),

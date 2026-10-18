@@ -4193,6 +4193,22 @@ mod tests {
         assert!(matches!(h.state().dialog, Some(crate::dialogs::Dialog::SaveChanges { .. })));
     }
 
+    /// #1348: an agent can't replace the document while comment text is still being typed
+    /// unless it passes `force`, as with unsaved changes.
+    #[test]
+    fn an_agent_cannot_replace_the_document_over_a_pending_comment_draft() {
+        let (mut h, id) = comment_harness();
+        h.state_mut().session.dirty = false;
+        click_balloon(&mut h, id);
+        type_in(&mut h, "Typed ");
+        let open = json!({"path": "/nonexistent/other.docx"});
+        assert!(crate::control::close_refused(h.state(), "file.open", &open).is_some());
+        assert!(crate::control::close_refused(h.state(), "file.new", &json!({})).is_some());
+        assert!(crate::control::close_refused(h.state(), "file.close", &json!({})).is_some());
+        assert!(crate::control::close_refused(h.state(), "file.close", &json!({"force": true})).is_none());
+        assert!(crate::control::close_refused(h.state(), "text.insert", &json!({"text": "x"})).is_none());
+    }
+
     /// #1348: a comment edit typed, then refused (the document became read-only).
     fn refused_draft() -> (egui_kittest::Harness<'static, WordApp>, u32) {
         let (mut h, id) = comment_harness();
