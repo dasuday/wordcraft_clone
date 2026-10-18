@@ -246,10 +246,16 @@ fn float_table(s: &mut Session, v: &Value, l: &DocLayout, page: usize, start: (f
     let tw = super::page::sect(s).text_width().max(18.0);
     let mut t = one_cell(r.w.clamp(18.0, tw), r.h);
     let body_x = l.pages.get(page).map_or(0.0, |pg| pg.body.x);
-    // The table stands this far below where its paragraph starts (not above it, as in Word); in
-    // an older document's layout (Word 2010) its first cell's text margin hangs left of `x`.
+    // The table stands this far from where its paragraph starts: above it too, as in Word, when
+    // drawn up a later column the paragraph runs on to, but not above the body text, where Word
+    // puts it at the paragraph (in a header or footer, not above the paragraph). In an older
+    // document's layout (Word 2010) its first cell's text margin hangs left of `x`.
     let caret = l.caret(&pos).filter(|c| c.page == page);
     let top = caret.map_or(r.y, |c| c.top);
+    let floor = match (pos.story, l.pages.get(page)) {
+        (StoryRef::Body, Some(pg)) => pg.body.y,
+        _ => top,
+    };
     let legacy = if s.doc.settings.compat_mode < 15 { wordcraft_layout::cell_margins(&s.doc, &t, 0, 0)[1] } else { 0.0 };
     // From the left of the paragraph's column; from the margin when that isn't known.
     let (h_rel, origin) = caret.and_then(|c| column_x(s, l, page, pos.story, c.x)).map_or((Anchor::Margin, body_x), |x| (Anchor::Column, x));
@@ -257,7 +263,7 @@ fn float_table(s: &mut Session, v: &Value, l: &DocLayout, page: usize, start: (f
         h_rel,
         v_rel: Anchor::Paragraph,
         x: r.x - origin + legacy,
-        y: (r.y - top).max(0.0),
+        y: r.y.max(floor) - top,
         dist: [FLOAT_GAP, 0.0, FLOAT_GAP, 0.0],
         overlap: true,
         ..Default::default()
@@ -1084,6 +1090,44 @@ mod tests {
             let r = cell_rect(&mut s, 0, 0);
             assert!((r.x - x0).abs() < 1.0 && (r.y - y0).abs() < 1.0, "column {col}: where it was drawn: {r:?}");
         }
+    }
+
+    /// A rectangle drawn at the top of the second column, over a paragraph that started low in
+    /// the first, floats where it was drawn, above where its paragraph starts: Word saves that
+    /// as a negative offset from the paragraph. It stays there after saving and opening again.
+    #[test]
+    fn a_rectangle_drawn_up_a_later_column_floats_above_its_paragraph() {
+        let mut s = Session::new(wordcraft_doc::Document::new());
+        s.run("layout.columns", &json!({"count": 2})).unwrap();
+        // Short paragraphs down most of the first column, then one that runs on to the second.
+        for i in 0..15 {
+            s.run("text.insert", &json!({"text": format!("Line {i}")})).unwrap();
+            s.run("text.newParagraph", &json!({})).unwrap();
+        }
+        s.run("text.insert", &json!({"text": "word ".repeat(400)})).unwrap();
+        let l = s.layout();
+        let body = l.pages[0].body;
+        let starts = l.caret(&Pos::body(15, 0)).unwrap();
+        assert_eq!(starts.page, 0);
+        let right = body.x + s.doc.sections()[0].1.column_boxes()[1].0;
+        let (x0, y0) = (right + 20.0, body.y + 10.0);
+        assert!(starts.x < right && starts.top > y0 + 100.0, "the paragraph starts low in the first column: {starts:?}");
+        s.run("table.draw", &json!({"page": 0, "x0": x0, "y0": y0, "x1": x0 + 100.0, "y1": y0 + 40.0})).unwrap();
+        let f = first_table(&s).props.float.unwrap();
+        assert_eq!(f.v_rel, Anchor::Paragraph);
+        assert!((f.y - (y0 - starts.top)).abs() < 0.5, "above the paragraph's start: {f:?}");
+        let r = cell_rect(&mut s, 0, 0);
+        assert!((r.x - x0).abs() < 1.0 && (r.y - y0).abs() < 1.0, "where it was drawn: {r:?}");
+        let mut reopened = Session::new(wordcraft_docx::read(&wordcraft_docx::write(&s.doc).unwrap()).unwrap());
+        assert!((first_table(&reopened).props.float.unwrap().y - f.y).abs() < 0.05);
+        let again = cell_rect(&mut reopened, 0, 0);
+        assert!((again.x - r.x).abs() < 0.5 && (again.y - r.y).abs() < 0.5, "saved and opened: {again:?} vs {r:?}");
+        // Drawn above the body text, it stands at the top of the text, not in the margin.
+        let mut s = Session::new(wordcraft_doc::Document::new());
+        s.run("text.insert", &json!({"text": "Text"})).unwrap();
+        let body = s.layout().pages[0].body;
+        s.run("table.draw", &json!({"page": 0, "x0": body.x + 20.0, "y0": body.y - 30.0, "x1": body.x + 120.0, "y1": body.y + 20.0})).unwrap();
+        assert!(first_table(&s).props.float.unwrap().y.abs() < 0.5);
     }
 
     /// A line drawn through an exact-height row splits it into two exact rows that draw where
