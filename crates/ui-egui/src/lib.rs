@@ -22,6 +22,8 @@ macro_rules! tl {
 
 pub mod a11y;
 pub mod a11y_pane;
+#[cfg(not(target_arch = "wasm32"))]
+mod ai_studio;
 pub mod async_saves;
 pub mod autoscroll;
 pub mod backstage;
@@ -424,6 +426,8 @@ fn migrate_units(v: &mut Value) {
 
 /// The application.
 pub struct WordApp {
+    #[cfg(not(target_arch = "wasm32"))]
+    pub ai_studio: ai_studio::Studio,
     pub session: Session,
     pub ui: UiState,
     pub services: Services,
@@ -577,6 +581,8 @@ impl WordApp {
             wordcraft_engine::set_system_locale(&tag);
         }
         WordApp {
+            #[cfg(not(target_arch = "wasm32"))]
+            ai_studio: Default::default(),
             session,
             ui: UiState::default(),
             services,
@@ -2001,6 +2007,8 @@ impl WordApp {
             ctx.request_repaint();
             return;
         }
+        #[cfg(not(target_arch = "wasm32"))]
+        ai_studio::show(self, ui);
         let t = theme::Tokens::get(&ctx);
         self.escape_free = self.dialog.is_none() && !self.ui.backstage && self.ui.keytips == keytips::Phase::Off && !egui::Popup::is_any_open(&ctx);
         // Keytips are read before layout so the frame paints the new state; badges paint after
