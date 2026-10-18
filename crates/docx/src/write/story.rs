@@ -1053,6 +1053,7 @@ impl Writer<'_> {
             None => {
                 w.open("a:ln", &[]);
                 w.empty("a:noFill", &[]);
+                line_dash(w, &extra.dash);
                 w.close("a:ln");
             }
         }

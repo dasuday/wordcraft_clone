@@ -958,7 +958,7 @@ fn draw(ctx: &mut RenderContext, doc: &Document, it: &Draw, view: Affine, visibl
             }
             if let Some(s) = stroke {
                 ctx.set_paint(color(opts.ink(*s), 1.0));
-                ctx.set_stroke(kurbo::Stroke::new(stroke_width.max(0.25) as f64).with_dashes(0.0, dash.iter().map(|v| f64::from(*v))));
+                ctx.set_stroke(kurbo::Stroke::new(stroke_width.max(0.25).min(200.0) as f64).with_dashes(0.0, dash.iter().map(|v| f64::from(*v))));
                 ctx.stroke_path(&path);
             }
         }
