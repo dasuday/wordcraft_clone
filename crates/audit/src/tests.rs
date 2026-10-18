@@ -326,6 +326,7 @@ fn all_tracked_change_elements_report_authors() {
         "pPrChange",
         "sectPrChange",
         "tblPrChange",
+        "tblPrExChange",
         "trPrChange",
         "tcPrChange",
         "numberingChange",

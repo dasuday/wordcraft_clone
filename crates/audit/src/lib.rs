@@ -456,6 +456,7 @@ const REVISION_ELEMENTS: &[&str] = &[
     "pPrChange",
     "sectPrChange",
     "tblPrChange",
+    "tblPrExChange",
     "trPrChange",
     "tcPrChange",
     "numberingChange",
