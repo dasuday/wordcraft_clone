@@ -659,8 +659,11 @@ impl WordApp {
     /// dropped with it, so the page is what the ticked or unticked label promises (a migrated
     /// "Dark page" would otherwise turn over the theme's page once unticked).
     pub fn set_never_change_page(&mut self, never: bool) {
+        let changed = self.ui.never_change_page.unwrap_or(false) != never;
         self.ui.never_change_page = Some(never);
-        self.session.view.dark_mode = false;
+        if changed {
+            self.session.view.dark_mode = false;
+        }
     }
 
     /// Record the installed palette. A change of theme drops the Switch Modes flip (#1722), which
@@ -6387,6 +6390,11 @@ mod tests {
         assert_eq!((set["neverChangePage"].as_bool(), set["dark"].as_bool()), (Some(true), Some(false)));
         assert!(!a.page_is_dark());
         assert!(a.run("ui.neverChangePage", json!({"value": "yes"})).is_err());
+        // Writing the value it already has leaves a Switch Modes flip alone.
+        a.run("view.darkMode", json!({"value": true})).unwrap();
+        a.run("ui.neverChangePage", json!({"value": true})).unwrap();
+        assert!(a.page_is_dark(), "a repeated write keeps the flip");
+        a.run("view.darkMode", json!({"value": false})).unwrap();
         a.run("ui.neverChangePage", json!({"value": false})).unwrap();
         assert!(a.page_is_dark());
     }
