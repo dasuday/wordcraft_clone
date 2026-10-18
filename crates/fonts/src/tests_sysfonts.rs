@@ -457,6 +457,21 @@ fn font_list_previews_load_nothing_for_good() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+#[test]
+fn catalog_full_names() {
+    let dir = font_dir("full-name");
+    let db = FontDb::with_font_dirs(vec![dir.clone()]);
+    assert!(!db.is_loaded("Sysfont Sans3 Bold"));
+    assert!(db.has_family("Sysfont Sans3 Bold"));
+    let face = db.face("Sysfont Sans3 Bold", "Regular");
+    assert_eq!((face.family.as_str(), face.style.as_str()), (FAMILY, "Bold"));
+    assert_eq!(db.face("sysfont sans3 bold", "Italic").id(), face.id());
+    assert!(db.is_loaded("Sysfont Sans3 Bold"));
+    assert!(!db.families().iter().any(|n| n == "Sysfont Sans3 Bold"));
+    assert_eq!(db.face(FAMILY, "Regular").style, "Regular");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
 /// Give an OFL test face a complete synthetic name table without adding a font asset.
 fn named_face(file: &str, family: &str) -> Vec<u8> {
     let mut data = std::fs::read(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/fonts").join(file)).unwrap();
