@@ -170,6 +170,10 @@ pub enum Dialog {
         hidden: bool,
         color: String,
         spacing: f32,
+        /// Kerning for fonts (`w:kern`), from the Advanced tab: `None` while the selected text
+        /// differs, shown neither on nor off; `kern_at` is its Points and above size.
+        kern: Option<bool>,
+        kern_at: f32,
         /// The properties the fields stood for when the dialog opened: OK sends only what the
         /// user changed, so formatting the dialog can't show (a double underline) or left
         /// alone stays as it is.
@@ -265,6 +269,10 @@ pub enum Dialog {
         message: String,
         /// Vertical alignment (`layout.verticalAlign`, applied only if changed).
         valign: wordcraft_doc::section::PageVAlign,
+        /// Headers and footers: different odd and even pages (the document's) and a different
+        /// first page (the section's), applied only if changed (#1230).
+        odd_even: bool,
+        first_page: bool,
     },
     Link {
         url: String,
@@ -1013,6 +1021,7 @@ impl Dialog {
                     text
                 };
                 let asian = ["zh", "ja", "ko"].iter().any(|l| lang.starts_with(l)) || !font_ea.is_empty() || text.chars().any(east_asian_char);
+                let kern = st.get("kern").and_then(Value::as_f64);
                 let mut d = Dialog::Font {
                     font_was: font.clone(),
                     font,
@@ -1031,6 +1040,8 @@ impl Dialog {
                     hidden: b("hidden"),
                     color: s("color"),
                     spacing: st.get("spacing").and_then(Value::as_f64).unwrap_or(0.0) as f32,
+                    kern: kern.map(|k| k > 0.0),
+                    kern_at: kern.filter(|k| *k > 0.0).unwrap_or(12.0) as f32,
                     start: serde_json::Map::new(),
                 };
                 let props = font_props(&d);
@@ -1129,6 +1140,8 @@ impl Dialog {
                     grid_was: grid,
                     rtl: sp.rtl,
                     valign: sp.valign,
+                    odd_even: app.session.doc.settings.even_odd_headers,
+                    first_page: sp.title_page,
                 }
             }
             "link" => {
@@ -1611,7 +1624,10 @@ pub(crate) fn buttons(ui: &mut Ui, ok: &str) -> (bool, bool) {
 
 /// The character properties the Font dialog's fields stand for.
 fn font_props(d: &Dialog) -> serde_json::Map<String, Value> {
-    let Dialog::Font { font, font_ea, size, bold, italic, underline, strike, sup, sub, small_caps, caps, hidden, color, spacing, .. } = d else {
+    let Dialog::Font {
+        font, font_ea, size, bold, italic, underline, strike, sup, sub, small_caps, caps, hidden, color, spacing, kern, kern_at, ..
+    } = d
+    else {
         return serde_json::Map::new();
     };
     let mut props = serde_json::Map::new();
@@ -1631,6 +1647,15 @@ fn font_props(d: &Dialog) -> serde_json::Map<String, Value> {
     props.insert("caps".into(), json!(*caps));
     props.insert("hidden".into(), json!(*hidden));
     props.insert("spacing".into(), json!(*spacing));
+    match kern {
+        Some(true) => {
+            props.insert("kern".into(), json!(kern_at.clamp(1.0, 1638.0)));
+        }
+        Some(false) => {
+            props.insert("kern".into(), json!(0.0));
+        }
+        None => {}
+    }
     if !font.trim().is_empty() {
         props.insert("font".into(), json!(font.trim()));
     }
@@ -1703,7 +1728,26 @@ fn body(app: &mut WordApp, ui: &mut Ui, d: &mut Dialog) -> bool {
             false
         }
 
-        Dialog::Font { font, font_ea, asian, size, bold, italic, underline, strike, sup, sub, small_caps, caps, hidden, color, spacing, .. } => {
+        Dialog::Font {
+            font,
+            font_ea,
+            asian,
+            size,
+            bold,
+            italic,
+            underline,
+            strike,
+            sup,
+            sub,
+            small_caps,
+            caps,
+            hidden,
+            color,
+            spacing,
+            kern,
+            kern_at,
+            ..
+        } => {
             // Build the sample text format for the preview pane below.
             let preview_size = size.trim().parse::<f32>().unwrap_or(12.0).clamp(6.0, 72.0);
             let preview_color = wordcraft_doc::Rgb::parse(color).map(crate::theme::c32).unwrap_or_else(|| ui.visuals().text_color());
@@ -1763,6 +1807,22 @@ fn body(app: &mut WordApp, ui: &mut Ui, d: &mut Dialog) -> bool {
                 ui.end_row();
                 ui.label(tl!("Spacing (pt):"));
                 ui.add(egui::DragValue::new(spacing).speed(0.1).range(-20.0..=20.0));
+                ui.end_row();
+                let label = tl!("Kerning for fonts:");
+                match kern {
+                    Some(on) => {
+                        ui.checkbox(on, label);
+                    }
+                    None => {
+                        if ui.add(egui::Checkbox::new(&mut false, label).indeterminate(true)).clicked() {
+                            *kern = Some(true);
+                        }
+                    }
+                }
+                ui.horizontal(|ui| {
+                    ui.add_enabled(*kern == Some(true), egui::DragValue::new(kern_at).speed(0.5).range(1.0..=1638.0).max_decimals(1));
+                    ui.label(tl!("Points and above"));
+                });
                 ui.end_row();
             });
             ui.separator();
@@ -2102,7 +2162,24 @@ fn body(app: &mut WordApp, ui: &mut Ui, d: &mut Dialog) -> bool {
             }
             ok || cancel
         }
-        Dialog::PageSetup { top, bottom, left, right, landscape, mirror, rtl, grid, grid_was, paper, paper_was, paper_custom, message, valign } => {
+        Dialog::PageSetup {
+            top,
+            bottom,
+            left,
+            right,
+            landscape,
+            mirror,
+            rtl,
+            grid,
+            grid_was,
+            paper,
+            paper_was,
+            paper_custom,
+            message,
+            valign,
+            odd_even,
+            first_page,
+        } => {
             ui.label(egui::RichText::new(tl!("Margins")).font(semibold(12.5)));
             egui::Grid::new("ps").num_columns(4).show(ui, |ui| {
                 ui.label(tl!("Top:"));
@@ -2149,6 +2226,10 @@ fn body(app: &mut WordApp, ui: &mut Ui, d: &mut Dialog) -> bool {
                 ui.label(egui::RichText::new(message.as_str()).small().color(ui.visuals().error_fg_color));
             }
             page_valign_combo(ui, valign);
+            // Word's Page Setup › Layout: a title page without the page number (#1230).
+            ui.label(egui::RichText::new(tl!("Headers and footers")).font(semibold(12.5)));
+            ui.checkbox(odd_even, tl!("Different Odd & Even Pages"));
+            ui.checkbox(first_page, tl!("Different First Page"));
             let (mut ok, cancel) = buttons(ui, tl!("OK"));
             if ok {
                 // Everything OK changes is one undo step; a refused command applies nothing.
@@ -2175,6 +2256,12 @@ fn body(app: &mut WordApp, ui: &mut Ui, d: &mut Dialog) -> bool {
                         }
                         if *valign != wordcraft_engine::cmd::page::sect(&app.session).valign {
                             commands.push(("layout.verticalAlign", json!({"value": page_valign_value(*valign)})));
+                        }
+                        if *odd_even != app.session.doc.settings.even_odd_headers {
+                            commands.push(("layout.differentOddEven", json!({"value": *odd_even})));
+                        }
+                        if *first_page != wordcraft_engine::cmd::page::sect(&app.session).title_page {
+                            commands.push(("layout.differentFirstPage", json!({"value": *first_page})));
                         }
                         run_as_one_step(app, commands)
                     });
@@ -4409,6 +4496,42 @@ mod tests {
         assert_eq!((c.small_caps, c.caps, c.size), (Some(false), Some(true), Some(14.0)));
     }
 
+    /// Kerning for fonts and its Points and above size set `w:kern` on the selection in one undo
+    /// step; off is 0. Text that differs shows the box neither on nor off, and OK leaves each
+    /// run's own kerning.
+    #[test]
+    fn font_dialog_sets_kerning_for_fonts() {
+        let mut app = app_with("Kerned plain");
+        let _ = app.run("select.all", json!({}));
+        let _ = app.run("format.set", json!({"props": {"kern": 0}}));
+        let kern = |app: &WordApp, off| app.session.doc.para_at(&Pos::body(0, 0)).and_then(|p| p.props_of_char(off).kern);
+        let Some(mut d) = Dialog::open("font", &mut app) else { panic!("no font dialog") };
+        let Dialog::Font { kern: on, kern_at, .. } = &mut d else { panic!() };
+        assert_eq!((*on, *kern_at), (Some(false), 12.0), "off, offering 12 pt");
+        *on = Some(true);
+        *kern_at = 16.0;
+        apply_font(&mut app, &d);
+        assert_eq!((kern(&app, 0), kern(&app, 7)), (Some(16.0), Some(16.0)));
+        let _ = app.run("edit.undo", json!({}));
+        assert_eq!(kern(&app, 0), Some(0.0), "one undo step");
+        let _ = app.run("edit.redo", json!({}));
+        let Some(mut d) = Dialog::open("font", &mut app) else { panic!() };
+        let Dialog::Font { kern: on, kern_at, .. } = &mut d else { panic!() };
+        assert_eq!((*on, *kern_at), (Some(true), 16.0));
+        *on = Some(false);
+        apply_font(&mut app, &d);
+        assert_eq!((kern(&app, 0), kern(&app, 7)), (Some(0.0), Some(0.0)));
+        let _ = app.run("select.text", json!({"text": "Kerned"}));
+        let _ = app.run("format.set", json!({"props": {"kern": 14}}));
+        let _ = app.run("select.all", json!({}));
+        let Some(mut d) = Dialog::open("font", &mut app) else { panic!() };
+        let Dialog::Font { kern: on, size, .. } = &mut d else { panic!() };
+        assert_eq!(*on, None, "mixed kerning shows neither on nor off");
+        *size = "13".into();
+        apply_font(&mut app, &d);
+        assert_eq!((kern(&app, 0), kern(&app, 7)), (Some(14.0), Some(0.0)), "each run keeps its kerning");
+    }
+
     /// #1178: Modify Style's font box is the ribbon's font box, so typing part of a name picks the
     /// installed family instead of storing the typed text.
     #[test]
@@ -4823,5 +4946,48 @@ mod tests {
             h.step();
         }
         assert_eq!(wordcraft_engine::cmd::page::sect(&h.state().session).valign, PageVAlign::Justify);
+    }
+
+    /// #1230: Page Setup's Different first page check box gives the title page no page number
+    /// (its footer is the empty first-page one), in one undo step.
+    #[test]
+    fn page_setup_different_first_page_leaves_the_title_page_unnumbered() {
+        use egui_kittest::kittest::Queryable;
+        let mut app = app_with("Title");
+        app.run("insert.pageBreak", json!({})).unwrap();
+        app.run("text.insert", json!({"text": "Body"})).unwrap();
+        app.run("insert.pageNumber", json!({"position": "bottom", "align": "center"})).unwrap();
+        let _ = app.run("insert.closeHeader", json!({}));
+        assert!(app.session.layout().pages[0].footer_story.is_some(), "page 1 is numbered");
+        app.dialog = Dialog::open("pageSetup", &mut app);
+        assert!(matches!(app.dialog, Some(Dialog::PageSetup { first_page: false, odd_even: false, .. })));
+        let depth = app.session.undo_depth();
+        let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(1440.0, 900.0)).build_ui_state(
+            |ui, app: &mut WordApp| {
+                let ctx = ui.ctx().clone();
+                app.logic(&ctx);
+                app.ui(ui);
+            },
+            app,
+        );
+        for _ in 0..4 {
+            h.step();
+        }
+        assert!(h.query_by_label("Different Odd & Even Pages").is_some(), "the dialog has both check boxes");
+        h.get_by_label("Different First Page").click();
+        for _ in 0..2 {
+            h.step();
+        }
+        h.get_by_role_and_label(egui::accesskit::Role::Button, "OK").click();
+        for _ in 0..4 {
+            h.step();
+        }
+        let s = &mut h.state_mut().session;
+        assert!(wordcraft_engine::cmd::page::sect(s).title_page);
+        assert!(!s.doc.settings.even_odd_headers, "left as it was");
+        assert_eq!(s.undo_depth(), depth + 1);
+        let pages = &s.layout().pages;
+        assert!(pages[0].footer_story.is_none(), "the title page shows no page number");
+        assert!(pages[1].footer_story.is_some(), "the next page keeps its number");
     }
 }

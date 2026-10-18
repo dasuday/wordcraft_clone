@@ -764,6 +764,8 @@
 	Space before/after:	Abstand vor/nach:
 	Spacing	Abstand
 	Spacing (pt):	Abstand (pt):
+	Kerning for fonts:	Unterschneidung für Schriftarten:
+	Points and above	Punkt und größer
 	Speech	Sprache
 	Spelling & Grammar	Rechtschreibung und Grammatik
 	Spelling &\nGrammar	Rechtschreibung und\nGrammatik
@@ -2268,3 +2270,11 @@
 	{added}; {count} couldn't be read: {names}	{added}; {count} nicht lesbar: {names}
 	{names} and {n} more	{names} und {n} weitere
 	{added}; {n} skipped (limit {max})	{added}; {n} übersprungen (Limit {max})
+
+# Drop Cap menu and Drop Cap Options (#2601)
+	Dropped	Im Text
+	In margin	Im Rand
+	Drop Cap Options…	Initialoptionen…
+	Lines to drop:	Initialhöhe (Zeilen):
+	Distance from text:	Abstand zum Text:
+	Distance from text	Abstand zum Text

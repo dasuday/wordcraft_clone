@@ -81,6 +81,9 @@ pub struct CanvasState {
     pub open_url: Option<String>,
     /// Screen rects of pages last frame (for the control channel: page ↔ screen coordinates).
     pub page_rects: Vec<Rect>,
+    /// While the vertical scrollbar is dragged: the page at the top of the window (0-based),
+    /// which a tip beside the pointer names (#2551).
+    pub scrollbar_page: Option<usize>,
     /// Effective scale (screen points per document point).
     pub scale: f32,
     pub canvas_rect: Option<Rect>,
@@ -220,6 +223,7 @@ impl Default for CanvasState {
             last_shading: "FFF2CC".into(),
             open_url: None,
             page_rects: Vec::new(),
+            scrollbar_page: None,
             scale: PX_PER_PT,
             canvas_rect: None,
             focused: false,
@@ -1539,6 +1543,7 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
             }
         }
         crate::objects::paint(app, &painter, &t, &layout, &rects, geo.scale);
+        crate::dialogs_smart_art::frame_button(app, ui.ctx(), &layout, &rects, geo.scale, ui.clip_rect());
         crate::ink::paint(app, &painter, &rects, &layout, geo.scale);
         crate::table_pen::paint(app, &painter, &t, &layout, &rects, geo.scale);
         crate::table_resize::paint(app, &painter, &t, &layout, &rects, geo.scale);
@@ -1546,6 +1551,7 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
         (resp, rects)
     });
     app.canvas.scroll_offset = out.state.offset;
+    scrollbar_page_tip(app, ui, out.id, &geo.rects, &geo.bands, layout.pages.len());
     crate::ink::replay_bar(app, ui, out.inner_rect);
     app.canvas.scroll_max = (out.content_size - out.inner_rect.size()).max(egui::Vec2::ZERO);
     if app.session.view.read_mode {
@@ -2193,6 +2199,38 @@ pub fn nearest_page(rects: &[Rect], p: Pos2) -> Option<usize> {
         }
     }
     best.map(|(i, _)| i)
+}
+
+/// While the vertical scrollbar of the canvas scroll area `scroll` is dragged, a tip beside the
+/// pointer says which page is at the top of the window, as the status bar says it ("Page 15 of
+/// 42"): dragging through a long document, you see where you'll land (#2551). `rects` are the
+/// pages in content coordinates, `bands` the part of each on screen ([`Geometry::bands`]).
+fn scrollbar_page_tip(app: &mut WordApp, ui: &Ui, scroll: egui::Id, rects: &[Rect], bands: &[(f32, f32)], pages: usize) {
+    // egui's scroll bars sense under the scroll area's id with the axis (1: vertical).
+    let dragged = ui.ctx().is_being_dragged(scroll.with(1usize));
+    app.canvas.scrollbar_page =
+        (dragged && !rects.is_empty() && pages > 0).then(|| top_page(rects, bands, app.canvas.scroll_offset.y).min(pages - 1));
+    let (Some(page), Some(at)) = (app.canvas.scrollbar_page, ui.ctx().pointer_latest_pos()) else { return };
+    let text = crate::i18n::fmt(tl!("Page {page} of {pages}"), &[("page", &(page + 1).to_string()), ("pages", &pages.to_string())]);
+    egui::Area::new(egui::Id::new("scrollbar_page_tip"))
+        .order(egui::Order::Tooltip)
+        .interactable(false)
+        .pivot(egui::Align2::RIGHT_CENTER)
+        .fixed_pos(at - vec2(16.0, 0.0))
+        .show(ui.ctx(), |ui| {
+            egui::Frame::popup(ui.style()).show(ui, |ui| {
+                ui.label(text);
+            });
+        });
+}
+
+/// The page shown at height `y` (content coordinates), or the first one below it: the page at
+/// the top of a window scrolled to `y`. The last page past the end. A page ends where its band
+/// (`bands`, the part on screen) does: with Hide White Space the rects overlap in the hidden
+/// margins, and the next page's text already shows there.
+fn top_page(rects: &[Rect], bands: &[(f32, f32)], y: f32) -> usize {
+    let bottom = |i: usize, r: &Rect| r.min.y + bands.get(i).map_or(r.height(), |b| b.1);
+    rects.iter().enumerate().position(|(i, r)| bottom(i, r) > y).unwrap_or(rects.len().saturating_sub(1))
 }
 
 /// Whether wheel input counts as being over the canvas. Another widget's drag (a scrollbar, say)
@@ -2920,12 +2958,12 @@ pub fn editing_header_footer(app: &WordApp, layout: &DocLayout) -> bool {
     matches!(part_kind(app, story), Some(PartKind::Header | PartKind::Footer))
 }
 
-/// The body is dimmed while editing anything but the body (or a text box in it).
+/// Notes share the body editing context; other non-body stories dim the body.
 fn dims_body(app: &WordApp, layout: &DocLayout) -> bool {
     match app.session.sel.focus.story {
         StoryRef::Body => false,
         StoryRef::Part(_) if in_text_box(app) => editing_header_footer(app, layout),
-        StoryRef::Part(_) => true,
+        StoryRef::Part(_) => !matches!(part_kind(app, app.session.sel.focus.story), Some(PartKind::Footnote | PartKind::Endnote)),
     }
 }
 
@@ -3082,6 +3120,10 @@ fn context_menu(app: &mut WordApp, ui: &mut Ui) {
         item(ui, app, "Change Picture…", "ui.changePicture", json!({}));
         item(ui, app, "Reset Picture", "picture.reset", json!({}));
         item(ui, app, "Size and Crop…", "ui.tab", json!({"tab": "Picture Format"}));
+    }
+    if picture || object {
+        // A numbered caption under (or over) the picture, shape, text box or chart (#1230).
+        item(ui, app, "Insert Caption…", "references.caption", json!({}));
     }
     if object {
         ui.menu_button(tl!("Wrap Text"), |ui| crate::ribbon::wrap_text_items(ui, app));
@@ -3278,6 +3320,44 @@ mod tests {
         assert!(s.apply(vec2(1100.0, 700.0), 5.0, true, false), "a zoom with a still window applies now");
         s.leave();
         assert!(s.entering());
+    }
+
+    /// #2545: notes belong to the body editing context, not the faded header/footer context.
+    #[test]
+    fn editing_notes_keeps_the_body_and_active_note_opaque() {
+        use wordcraft_layout::display::{Draw, page_display};
+        for command in ["references.footnote", "references.endnote"] {
+            let mut app = WordApp::new(wordcraft_engine::Session::new(wordcraft_doc::Document::from_text("Body marker.")), Default::default());
+            app.run(command, json!({"text": "Note marker."})).unwrap();
+            let note = app.session.sel.focus.story;
+            assert!(matches!(part_kind(&app, note), Some(PartKind::Footnote | PartKind::Endnote)));
+            app.run("insert.header", json!({"text": "Header marker."})).unwrap();
+            let header = app.session.sel.focus.story;
+            for story in [note, StoryRef::Body, header] {
+                app.session.sel = wordcraft_engine::Selection::caret(app.session.doc.end_of(story));
+                let layout = app.session.layout();
+                for dark in [false, true] {
+                    app.session.view.dark_mode = dark;
+                    let opts = page_render_options(&app, dims_body(&app, &layout));
+                    let draws = page_display(&app.session.doc, &layout.pages[0], &opts.display);
+                    for marker in ["Body", "Note", "Header"] {
+                        let alphas: Vec<f32> = draws
+                            .iter()
+                            .filter_map(|d| match d {
+                                Draw::Glyphs { text, alpha, .. } if text.contains(marker) => Some(*alpha),
+                                _ => None,
+                            })
+                            .collect();
+                        assert!(!alphas.is_empty(), "{command}: {marker} is drawn");
+                        let active = if marker == "Header" { story == header } else { story != header };
+                        assert!(
+                            alphas.iter().all(|a| if active { *a == 1.0 } else { *a > 0.0 && *a < 1.0 }),
+                            "{command}, {story:?}, dark={dark}, {marker}: {alphas:?}"
+                        );
+                    }
+                }
+            }
+        }
     }
 
     /// What `page_image` replaced: the raster un-premultiplied, for egui to premultiply again.
@@ -3648,6 +3728,88 @@ mod tests {
         multi_drag(&mut h, at, at, 2);
         let (s, e) = h.state().session.sel.ordered();
         assert_eq!((s, e), (Pos::body(0, 0), Pos::body(0, 6)));
+    }
+
+    /// #2551: dragging the vertical scrollbar shows the page at the top of the window beside the
+    /// pointer ("Page 7 of 10"), and the tip goes when the button is let go.
+    #[test]
+    fn dragging_the_scrollbar_names_the_page_at_the_top() {
+        use egui::accesskit::Role;
+        use egui::{Event, PointerButton};
+        use egui_kittest::kittest::Queryable;
+        for hide_white_space in [false, true] {
+            let mut a = WordApp::new(wordcraft_engine::Session::new(wordcraft_doc::Document::new()), Default::default());
+            for _ in 0..9 {
+                a.run("text.insert", json!({"text": "Page text"})).unwrap();
+                a.run("layout.break", json!({"kind": "page"})).unwrap();
+            }
+            a.run("view.commentsPane", json!({"value": false})).unwrap();
+            a.run("view.hideWhiteSpace", json!({"value": hide_white_space})).unwrap();
+            let (rev, sel) = (a.session.rev(), a.session.sel.clone());
+            let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(1440.0, 900.0)).with_step_dt(1.0 / 60.0).build_ui_state(
+                |ui, app: &mut WordApp| {
+                    let ctx = ui.ctx().clone();
+                    app.logic(&ctx);
+                    app.ui(ui);
+                },
+                a,
+            );
+            for _ in 0..6 {
+                h.step();
+            }
+            assert_eq!(h.state_mut().session.layout().pages.len(), 10);
+            let bar = h
+                .query_all_by_role(Role::ScrollBar)
+                .map(|n| n.rect())
+                .filter(|r| r.height() > r.width())
+                .max_by(|a, b| a.height().total_cmp(&b.height()))
+                .expect("the canvas's vertical scrollbar");
+            let button =
+                |at: Pos2, pressed: bool| Event::PointerButton { pos: at, button: PointerButton::Primary, pressed, modifiers: Default::default() };
+            let from = pos2(bar.center().x, bar.top() + 8.0);
+            h.event(Event::PointerMoved(from));
+            h.step();
+            assert_eq!(h.state().canvas.scrollbar_page, None, "no tip before a drag");
+            h.event(button(from, true));
+            h.step();
+            let to = pos2(from.x, bar.top() + bar.height() * 0.65);
+            for k in 1..=6 {
+                h.event(Event::PointerMoved(from + (to - from) * (k as f32 / 6.0)));
+                h.step();
+            }
+            let page = h.state().canvas.scrollbar_page.expect("a tip while the scrollbar is dragged");
+            assert!((4..10).contains(&page), "a page well down the document: {page}");
+            assert!(h.query_by_label(&format!("Page {} of 10", page + 1)).is_some(), "the tip names page {}", page + 1);
+            h.event(button(to, false));
+            h.step();
+            h.step();
+            assert_eq!(h.state().canvas.scrollbar_page, None, "the tip goes with the button");
+            assert!(h.query_by_label(&format!("Page {} of 10", page + 1)).is_none(), "and its text");
+            assert_eq!((h.state().session.rev(), &h.state().session.sel), (rev, &sel), "scrolling changes neither the document nor the selection");
+        }
+    }
+
+    /// `top_page`: the page at a window's top, the one below in a gap, the last one past the end.
+    #[test]
+    fn the_page_at_the_top_of_the_window() {
+        let rects: Vec<Rect> = (0..3).map(|i| Rect::from_min_size(pos2(0.0, i as f32 * 110.0), vec2(80.0, 100.0))).collect();
+        let whole: Vec<(f32, f32)> = rects.iter().map(|r| (0.0, r.height())).collect();
+        assert_eq!(top_page(&rects, &whole, 0.0), 0);
+        assert_eq!(top_page(&rects, &whole, 99.0), 0);
+        assert_eq!(top_page(&rects, &whole, 105.0), 1, "in the gap: the page below");
+        assert_eq!(top_page(&rects, &whole, 250.0), 2);
+        assert_eq!(top_page(&rects, &whole, 1e6), 2, "past the end: the last page");
+        assert_eq!(top_page(&[], &[], 0.0), 0);
+
+        // Hide White Space: the rects overlap in the hidden margins. Just past the seam the next
+        // page's text shows, so that page is at the top, though the previous rect reaches further.
+        let sizes = [(612.0, 792.0); 3];
+        let (full, _) = place_pages(&sizes, 0.0, 1.0, 1, vec2(800.0, 600.0));
+        let (moved, bands, _) = collapse_white_space(&full, &[(72.0, 720.0); 3], 1.0, 600.0);
+        let seam = moved[0].min.y + bands[0].1;
+        assert!(moved[0].max.y > seam + SEAM + 2.0, "the rects overlap past the seam");
+        assert_eq!(top_page(&moved, &bands, seam - 2.0), 0);
+        assert_eq!(top_page(&moved, &bands, seam + SEAM + 2.0), 1, "across the seam: the next page");
     }
 
     /// #1014: Ctrl+drag on a shape leaves it and drops a copy; a plain drag moves it.
@@ -4667,6 +4829,46 @@ mod tests {
         assert_menu(&h, &["Split Cells", "Merge Cells"], false);
         pick(&mut h, &["Delete", "Delete Table"]);
         assert!(h.state().session.doc.body.iter().all(|b| b.as_table().is_none()));
+    }
+
+    /// #1230: right-clicking a picture offers Insert Caption…, as in Word. For a picture in a
+    /// table cell the dialog proposes a Figure caption (not Table), and the caption goes under
+    /// the picture in that cell.
+    #[test]
+    fn right_click_on_a_picture_offers_insert_caption() {
+        let mut h = table_window();
+        h.state_mut().run("caret.end", json!({})).unwrap();
+        let mut png = Vec::new();
+        let img = image::RgbaImage::from_pixel(40, 20, image::Rgba([30, 90, 200, 255]));
+        image::DynamicImage::ImageRgba8(img).write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png).unwrap();
+        h.state_mut().run("insert.picture", json!({"data": wordcraft_engine::cmd::insert::base64_encode(&png), "width": 60})).unwrap();
+        let pos = wordcraft_engine::cmd::objects::selected(&h.state().session).unwrap().0;
+        h.state_mut().session.sel = wordcraft_engine::Selection::caret(Pos::body(1, 0));
+        steps(&mut h, 4);
+        let rect = h.state_mut().session.layout().object(&pos, 0).expect("the picture is laid out").rect;
+        let at = crate::frame::to_screen(h.state().canvas.page_rects[0], h.state().canvas.scale, rect).center();
+        right_click(&mut h, at);
+        assert!(wordcraft_engine::cmd::objects::object_selection(&h.state().session).is_some(), "the right-click selected the picture");
+        assert_menu(&h, &["Insert Caption…", "Wrap Text"], true);
+        pick(&mut h, &["Insert Caption…"]);
+        let form = match &h.state().dialog {
+            Some(crate::dialogs::Dialog::Refs(d)) => match &**d {
+                crate::dialogs_refs::RefsDialog::Caption(f) => f.clone(),
+                d => panic!("not the caption dialog: {d:?}"),
+            },
+            d => panic!("no caption dialog: {d:?}"),
+        };
+        assert_eq!(form.label, "Figure", "a picture in a table gets a figure caption");
+        h.state_mut().dialog = None;
+        h.state_mut().run("references.caption", form.params()).unwrap();
+        let (table, r, c) = pos.path.cell().unwrap();
+        let cell: Vec<String> = h.state().session.doc.table(StoryRef::Body, &table).unwrap().rows[r].cells[c]
+            .blocks
+            .iter()
+            .filter_map(|b| b.as_para())
+            .map(|p| p.plain_text())
+            .collect();
+        assert_eq!(cell.last().map(String::as_str), Some("Figure 1"), "{cell:?}");
     }
 
     /// With just the caret in a cell, right-click › Delete › Delete Table removes the table, in
