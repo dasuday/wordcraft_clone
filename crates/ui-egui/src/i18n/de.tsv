@@ -2240,6 +2240,12 @@
 # Reading Mode column widths (#1040)
 	Narrow	Schmal
 	Medium	Mittel
+# Page Setup › Multiple pages (#1836)
+	Multiple pages:	Mehrere Seiten:
+	2 pages per sheet	2 Seiten pro Blatt
+	Book fold	Broschüre
+	Sheets per booklet:	Blätter pro Broschüre:
+	Normal	Normal
 # Split Cells and Convert Text to Table (#2592)
 	Merge cells before split	Zellen vor dem Teilen verbinden
 	Table size	Tabellengröße

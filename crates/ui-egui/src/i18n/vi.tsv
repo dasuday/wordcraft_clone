@@ -2680,6 +2680,11 @@ template	Letter	Thư
 # Reading Mode column widths (#1040)
 	Narrow	Hẹp
 	Medium	Trung bình
+# Page Setup › Multiple pages (#1836)
+	Multiple pages:	Nhiều trang:
+	2 pages per sheet	2 trang trên mỗi tờ
+	Book fold	Gấp sách
+	Sheets per booklet:	Số tờ mỗi tập:
 # Split Cells and Convert Text to Table (#2592)
 	Merge cells before split	Gộp ô trước khi tách
 	Table size	Kích thước bảng

@@ -2253,6 +2253,12 @@
 # Reading Mode column widths (#1040)
 	Narrow	Estreita
 	Medium	Média
+# Page Setup › Multiple pages (#1836)
+	Multiple pages:	Várias páginas:
+	2 pages per sheet	2 páginas por folha
+	Book fold	Livreto
+	Sheets per booklet:	Folhas por livreto:
+	Normal	Normal
 # Split Cells and Convert Text to Table (#2592)
 	Merge cells before split	Mesclar células antes de dividir
 	Table size	Tamanho da tabela

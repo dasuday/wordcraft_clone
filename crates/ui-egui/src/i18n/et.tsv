@@ -2275,6 +2275,12 @@
 # Reading Mode column widths (#1040)
 	Narrow	Kitsas
 	Medium	Keskmine
+# Page Setup › Multiple pages (#1836)
+	Multiple pages:	Mitu lehte:
+	2 pages per sheet	2 lehekülge lehel
+	Book fold	Brošüür
+	Sheets per booklet:	Lehti brošüüris:
+	Normal	Tavaline
 # Split Cells and Convert Text to Table (#2592)
 	Merge cells before split	Ühenda lahtrid enne tükeldamist
 	Table size	Tabeli suurus

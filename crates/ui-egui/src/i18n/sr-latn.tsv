@@ -2251,6 +2251,12 @@
 # Reading Mode column widths (#1040)
 	Narrow	Uska
 	Medium	Srednja
+# Page Setup › Multiple pages (#1836)
+	Multiple pages:	Više stranica:
+	2 pages per sheet	2 stranice po listu
+	Book fold	Knjižica
+	Sheets per booklet:	Listova po knjižici:
+	Normal	Normalno
 # Split Cells and Convert Text to Table (#2592)
 	Merge cells before split	Spoji ćelije pre deljenja
 	Table size	Veličina tabele
