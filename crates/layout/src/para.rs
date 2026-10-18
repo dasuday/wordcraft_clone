@@ -1747,7 +1747,7 @@ pub fn layout_para(p: &Paragraph, env: &ParaEnv) -> ParaLayout {
                 // The external checker's results are keyed without table-style formatting, as the
                 // app and the Review commands see the paragraph.
                 let key = if wordcraft_proof::external::is_empty() { String::new() } else { language_key(&proof_runs(env.doc, p, None)) };
-                proof_issues(p, &runs, &key, &o)
+                proof_issues(p, &runs, &key, &o, is_list_item(doc, p))
             })
             .unwrap_or_default(),
         drop_cap,
@@ -2940,12 +2940,15 @@ fn lang_at(runs: &[ProofRun], off: usize) -> wordcraft_proof::ProofLang {
 /// Spelling and grammar issues in a paragraph, in order: each word in its run's language
 /// ([`wordcraft_proof::check_text_with`]: what spelling skips, and grammar only with `grammar`),
 /// and none touching a run left unchecked.
+///
+/// `list_item` (see [`is_list_item`]) turns off the capital-first-word grammar rule.
 pub fn paragraph_issues(
     p: &Paragraph,
     runs: &[ProofRun],
     key: &str,
     spelling: &wordcraft_proof::Options,
     grammar: bool,
+    list_item: bool,
 ) -> Vec<wordcraft_proof::Issue> {
     if p.text.trim().is_empty() || p.text.len() > 100_000 {
         return Vec::new();
@@ -2963,12 +2966,17 @@ pub fn paragraph_issues(
             .map(|i| wordcraft_proof::Issue { lang: lang_at(i.start), ..i })
             .collect();
     }
-    wordcraft_proof::check_text_with(&text, &spans, spelling, grammar).into_iter().filter(|i| !skip(i.start, i.end)).collect()
+    wordcraft_proof::check_text_with(&text, &spans, spelling, grammar, list_item).into_iter().filter(|i| !skip(i.start, i.end)).collect()
+}
+
+/// Whether the paragraph is a list item: its own numbering, or its style's, names a list (not 0).
+pub fn is_list_item(doc: &Document, p: &Paragraph) -> bool {
+    p.props.numbering.or_else(|| doc.styles.resolve_para(&p.props).numbering).is_some_and(|n| n.num != 0)
 }
 
 /// Spelling and grammar issues in a paragraph as squiggles: (start, end, is grammar).
-fn proof_issues(p: &Paragraph, runs: &[ProofRun], key: &str, opts: &crate::ProofOptions) -> Vec<(usize, usize, bool)> {
-    paragraph_issues(p, runs, key, &opts.spelling, opts.grammar)
+fn proof_issues(p: &Paragraph, runs: &[ProofRun], key: &str, opts: &crate::ProofOptions, list_item: bool) -> Vec<(usize, usize, bool)> {
+    paragraph_issues(p, runs, key, &opts.spelling, opts.grammar, list_item)
         .into_iter()
         .map(|i| (i.start, i.end, i.kind == wordcraft_proof::IssueKind::Grammar))
         .collect()
