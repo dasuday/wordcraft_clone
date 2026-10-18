@@ -1,7 +1,7 @@
 //! Design › Colors › Customize Colors… and Fonts › Customize Fonts… (#1869): name a set of the
 //! 12 theme colours or a heading and body font pair. Save ends in one command
-//! (`design.customColors`, `design.customFonts`; `design.deleteCustom` too when an edited set is
-//! renamed), so agents get the same result without the dialogs. Shown through
+//! (`design.customColors`, `design.customFonts`; a rename passes `renameFrom`), so agents get the
+//! same result without the dialogs. Shown through
 //! [`crate::dialogs::Dialog::Themes`].
 
 use egui::{Sense, Ui, vec2};
