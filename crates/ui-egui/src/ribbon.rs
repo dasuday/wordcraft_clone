@@ -3167,11 +3167,9 @@ mod tests {
                 assert_eq!(buttons.len(), 3, "{lang} {width}: the three buttons are on the strip");
                 assert!(buttons.iter().all(|b| b.right() <= width + 0.5 && b.left() >= 0.0), "{lang} {width}: buttons inside {buttons:?}");
                 for tab in crate::ribbon::TABS.iter().copied().chain(["Table Design", "Table Layout"]) {
-                    let Some(node) = h.query_by_label(tl!(tab)) else { continue };
-                    let r = node.rect();
-                    if r.top() > 40.0 {
-                        continue; // a button of the ribbon with the same name, not the tab
-                    }
+                    // A group folded into a button can share the tab's name (Draw): only the node on
+                    // the strip is the tab.
+                    let Some(r) = h.query_all_by_label(tl!(tab)).map(|n| n.rect()).find(|r| r.top() <= 40.0) else { continue };
                     assert!(r.right() <= width + 0.5, "{lang} {width}: {tab} {r:?} past the window");
                     assert!(buttons.iter().all(|b| !b.intersects(r)), "{lang} {width}: {tab} {r:?} under {buttons:?}");
                 }

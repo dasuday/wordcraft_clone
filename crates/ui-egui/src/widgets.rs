@@ -431,6 +431,9 @@ fn collapsed_group(ui: &mut Ui, id_title: &str, title: &str, launcher: Option<&s
     let child_open = egui::Popup::is_any_open(ui.ctx());
     let mut shown = open;
     if open {
+        // This popup isn't counted by `Popup::is_any_open`, so keep the same Esc from also leaving
+        // full screen.
+        app.escape_free = false;
         egui::Popup::menu(&resp).open_bool(&mut shown).close_behavior(egui::PopupCloseBehavior::IgnoreClicks).show(|ui| {
             ui.vertical(|ui| {
                 ui.horizontal_top(|ui| {
