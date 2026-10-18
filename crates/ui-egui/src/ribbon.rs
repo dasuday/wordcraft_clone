@@ -3524,6 +3524,21 @@ mod tests {
         assert!(h.query(By::new().role(Role::Tab).predicate(|n| n.data().access_key().is_some())).is_none(), "no letters once keytips are off");
     }
 
+    /// #1012: Backstage opened with nothing focused gives the keyboard to the open page's button.
+    #[test]
+    fn backstage_focuses_the_open_page() {
+        use egui::accesskit::Role;
+        use egui_kittest::kittest::{By, NodeT, Queryable};
+        let mut h = app_harness(WordApp::new(Session::new(wordcraft_doc::Document::from_text("Text")), crate::Services::default()));
+        h.run_steps(3);
+        h.state_mut().run("ui.backstage", json!({"value": true, "page": "info"})).unwrap();
+        h.run_steps(4);
+        assert!(h.state().ui.backstage);
+        let n = h.query(By::new().predicate(|n| n.is_focused())).expect("the keyboard has a target in Backstage");
+        assert_eq!(n.accesskit_node().role(), Role::Button);
+        assert_eq!(n.accesskit_node().label().unwrap_or_default(), tl!("Info"));
+    }
+
     /// #1012: keytips that end because the window lost focus give the keyboard back to the page,
     /// so typing works when the window comes back.
     #[test]
