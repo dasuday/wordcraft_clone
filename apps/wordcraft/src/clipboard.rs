@@ -348,6 +348,10 @@ mod platform {
         None
     }
 
+    pub fn fallback_picture() -> Option<Vec<u8>> {
+        None
+    }
+
     pub fn can_set() -> bool {
         true
     }
