@@ -2653,7 +2653,6 @@ preview	Title	Titel
 	Bottom Right Cell	Nedre högra cellen
 	Inside Horizontal Border	Inre vågrät kantlinje
 	Inside Vertical Border	Inre lodrät kantlinje
-<<<<<<< HEAD
 # Split Cells and Convert Text to Table (#2592)
 	Merge cells before split	Sammanfoga celler före delning
 	Table size	Tabellstorlek
@@ -2672,7 +2671,6 @@ preview	Title	Titel
 	Moved to:	Flyttat till:
 	Spike	Samlare
 	Insert Spike	Infoga samlare
-=======
 	Saving as {name} may lose some of this document's features:	Om du sparar som {name} kan vissa av dokumentets funktioner gå förlorade:
 	Continue to save in this format, or save a Word document (.docx) to keep everything.	Fortsätt att spara i det här formatet, eller spara ett Word-dokument (.docx) för att behålla allt.
 	Continue	Fortsätt
@@ -2688,4 +2686,3 @@ preview	Title	Titel
 	Phonetic guides	Fonetiska guider
 	Other content from the original file	Annat innehåll från originalfilen
 	Pictures RTF can't hold (such as EMF, WMF and SVG)	Bilder som RTF inte kan lagra (som EMF, WMF och SVG)
->>>>>>> e4dc9fc (#1316: Croatian and Swedish strings for the save-safety warning)

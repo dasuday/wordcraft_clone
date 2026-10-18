@@ -2638,7 +2638,6 @@ preview	Title	Naslov
 	Bottom Right Cell	Donja desna ćelija
 	Inside Horizontal Border	Unutarnji vodoravni obrub
 	Inside Vertical Border	Unutarnji okomiti obrub
-<<<<<<< HEAD
 # Split Cells and Convert Text to Table (#2592)
 	Merge cells before split	Spoji ćelije prije razdvajanja
 	Table size	Veličina tablice
@@ -2657,7 +2656,6 @@ preview	Title	Naslov
 	Moved to:	Premješteno u:
 	Spike	Skupljač
 	Insert Spike	Umetni iz skupljača
-=======
 	Saving as {name} may lose some of this document's features:	Spremanje kao {name} moglo bi izgubiti neke značajke ovog dokumenta:
 	Continue to save in this format, or save a Word document (.docx) to keep everything.	Nastavite spremati u ovom formatu ili spremite Word dokument (.docx) da sve sačuvate.
 	Continue	Nastavi
@@ -2673,4 +2671,3 @@ preview	Title	Naslov
 	Phonetic guides	Fonetski vodiči
 	Other content from the original file	Ostali sadržaj iz izvorne datoteke
 	Pictures RTF can't hold (such as EMF, WMF and SVG)	Slike koje RTF ne može pohraniti (npr. EMF, WMF i SVG)
->>>>>>> e4dc9fc (#1316: Croatian and Swedish strings for the save-safety warning)
