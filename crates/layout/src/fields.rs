@@ -22,6 +22,9 @@ pub struct FieldCtx {
     pub title: Arc<str>,
     pub author: Arc<str>,
     pub filename: Arc<str>,
+    /// Body paragraphs for STYLEREF fields in headers and footers, and where the page being
+    /// drawn is among them (set only while laying out headers and footers that need it).
+    pub styleref: Option<(Arc<crate::styleref::StyleIndex>, crate::styleref::At)>,
     /// Where the body's bookmarks start, for `PAGEREF` in headers and footers: known once the
     /// body is paginated, empty while it is.
     pub bookmark_pages: Arc<BookmarkPages>,
@@ -63,11 +66,62 @@ impl FieldCtx {
     pub fn page_key(&self) -> (u32, u32, u32, u32, u64) {
         (self.page, self.pages, self.section_pages, self.section, self.bookmarks_key)
     }
+    /// A key for caches of paragraph `p` with STYLEREF fields (0 when they show their stored
+    /// result): a hash of the results its STYLEREF fields have on this page, so an edit to body
+    /// text that no STYLEREF shows leaves header paragraphs cached.
+    pub fn styleref_key(&self, p: &wordcraft_doc::Paragraph) -> u64 {
+        let Some((ix, at)) = &self.styleref else { return 0 };
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        for o in &p.objects {
+            if let wordcraft_doc::para::InlineObject::Field { instr, .. } = o
+                && field_name(instr) == "STYLEREF"
+            {
+                std::hash::Hash::hash(&ix.eval(instr, *at), &mut h);
+            }
+        }
+        std::hash::Hasher::finish(&h).max(1)
+    }
 }
 
 /// The field's name (first word of the instruction, upper-cased).
 pub fn field_name(instr: &str) -> String {
     instr.split_whitespace().next().unwrap_or("").trim_start_matches('=').to_ascii_uppercase()
+}
+
+/// REF's hyperlink switch links its cached result without updating that result.
+pub(crate) fn reference_link(instr: &str) -> Option<String> {
+    let (name, args) = instr.trim_start().split_once(char::is_whitespace)?;
+    if !name.eq_ignore_ascii_case("REF") {
+        return None;
+    }
+    let args = args.trim_start();
+    let (target, switches) = if let Some(quoted) = args.strip_prefix('"') {
+        let end = quoted.find('"')?;
+        (quoted.get(..end)?, quoted.get(end + 1..)?)
+    } else {
+        let end = args.find(|c: char| c.is_whitespace() || c == '\\').unwrap_or(args.len());
+        (args.get(..end)?, args.get(end..)?)
+    };
+    if target.is_empty() {
+        return None;
+    }
+    // Switch arguments can contain quoted backslashes; those are not switches.
+    let mut chars = switches.chars().peekable();
+    let mut quoted = false;
+    while let Some(c) = chars.next() {
+        if quoted && c == '\\' {
+            chars.next();
+        } else if c == '"' {
+            quoted = !quoted;
+        } else if !quoted
+            && c == '\\'
+            && chars.next().is_some_and(|s| s.eq_ignore_ascii_case(&'h'))
+            && chars.peek().is_none_or(|c| !c.is_alphanumeric())
+        {
+            return Some(format!("#{target}"));
+        }
+    }
+    None
 }
 
 /// `\* FORMAT` switch value (Arabic, roman, ROMAN, alphabetic, ALPHABETIC, CardText, Ordinal…).
@@ -125,6 +179,10 @@ pub fn field_text_on(instr: &str, result: &str, ctx: &FieldCtx, page: u32) -> (S
         "TITLE" if result.is_empty() => (ctx.title.to_string(), false),
         "AUTHOR" if result.is_empty() => (ctx.author.to_string(), false),
         "FILENAME" if result.is_empty() => (ctx.filename.to_string(), false),
+        "STYLEREF" => match &ctx.styleref {
+            Some((ix, at)) => (ix.eval(instr, *at), true),
+            None => (result.to_string(), false),
+        },
         _ => (result.to_string(), false),
     }
 }
@@ -152,6 +210,16 @@ fn has_switch(instr: &str, sw: char) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ref_link_switches() {
+        for instr in [r"REF mark\w\h", r#" REF "mark" \h"#, "REF\tmark \\H"] {
+            assert_eq!(reference_link(instr).as_deref(), Some("#mark"), "{instr}");
+        }
+        for instr in ["", "REF", r"REF \h", r#"REF "" \h"#, r#"REF "mark \h"#, r"REF mark \hidden", r"NOTEREF mark \h", r#"REF mark \d "\h""#] {
+            assert_eq!(reference_link(instr), None, "{instr}");
+        }
+    }
 
     #[test]
     fn page_fields() {
