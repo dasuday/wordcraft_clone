@@ -1050,6 +1050,10 @@ fn ref_fields_export_cached_links() {
         (r"REF absent \h", None, false, None),
         (r"REF target \h", None, true, None),
         (r"REF target \h", Some("#outer"), false, Some(2)),
+        // #2945: page and note references with `\h` link to their bookmark too.
+        (r"PAGEREF target \h", None, false, Some(1)),
+        (r"NOTEREF target \f \h", None, false, Some(1)),
+        (r"PAGEREF target", None, false, None),
     ] {
         let mut d = Document::new();
         let mut p = Paragraph::new();
@@ -1069,7 +1073,8 @@ fn ref_fields_export_cached_links() {
         let before = d.body.clone();
         let bytes = export(&d, &PdfOptions::default()).unwrap();
         assert_eq!(d.body, before, "export must not refresh cached fields");
-        if !code {
+        // A page reference shows its bookmark's page instead.
+        if !code && !instr.starts_with("PAGEREF") {
             assert_eq!(squash(&extract_text(&bytes)[0]), "Cached label");
         }
         let pdf = hayro_syntax::Pdf::new(bytes).unwrap();

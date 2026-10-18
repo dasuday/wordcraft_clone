@@ -2,7 +2,9 @@
 
 use serde_json::{Value, json};
 use wordcraft_doc::edit::Fragment;
+use wordcraft_doc::para::InlineObject;
 use wordcraft_doc::{Pos, StoryRef};
+use wordcraft_layout::DocLayout;
 
 use super::{delete_selection, find_pattern, pos_json, sel_result};
 use crate::{CmdError, CmdResult, CommandSpec, Selection, Session, p};
@@ -155,6 +157,9 @@ pub fn specs() -> Vec<CommandSpec> {
         })
         .key("Shift+F5 / Mod+Alt+Z")
         .pure(),
+        CommandSpec::new("edit.followLink", "Follow Link", "Navigation", follow_link)
+            .params(r#"{"pos"?: Pos (beside the linked character)} | {"page": n (0-based, unlike edit.goto), "x": pt, "y": pt, "story"?: StoryRef (the story hit, default the caret's)} | {} (the selection); a link to a place in the document (a hyperlink to a bookmark, or a REF, PAGEREF or NOTEREF field with \h) puts the caret there; a web link only returns its "url" (the app opens web and email links it is asked to follow)"#)
+            .pure(),
         CommandSpec::new("edit.formatPainter", "Format Painter", "Home › Clipboard", painter).params(r#"{"sticky"?: bool}"#).pure(),
         CommandSpec::new("edit.copyFormat", "Copy Formatting", "Home › Clipboard", |s, _| {
             painter_pick(s);
@@ -762,6 +767,96 @@ fn goto(s: &mut Session, v: &Value) -> CmdResult {
     sel_result(s)
 }
 
+/// A link a Ctrl/⌘+click follows: a hyperlink, or a cross-reference field with `\h`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Link {
+    /// `#bookmark` for a place in the document, else the hyperlink's address.
+    pub target: String,
+    /// Made by a REF, PAGEREF or NOTEREF field's `\h` switch, not by a hyperlink.
+    pub field: bool,
+    /// Where the linked character starts.
+    pub at: Pos,
+}
+
+/// The link on the character starting at `at`: its hyperlink, else the bookmark of a
+/// cross-reference field with `\h` that shows its result (not its code; `field_codes` is
+/// View › Field Codes).
+pub fn link_at(doc: &wordcraft_doc::Document, field_codes: bool, at: &Pos) -> Option<Link> {
+    let para = doc.para_at(at)?;
+    if at.off >= para.len() {
+        return None;
+    }
+    let link = |target: String, field: bool| Some(Link { target, field, at: at.clone() });
+    if let Some(url) = para.props_of_char(at.off).link.clone().filter(|l| !l.is_empty()) {
+        return link(url, false);
+    }
+    match para.object_at(at.off) {
+        Some(InlineObject::Field { instr, code, .. }) if *code == field_codes => link(wordcraft_layout::fields::reference_link(instr)?, true),
+        _ => None,
+    }
+}
+
+/// The link of the character after the caret position `at`, else of the one before it.
+fn link_beside(doc: &wordcraft_doc::Document, field_codes: bool, at: &Pos) -> Option<Link> {
+    let para = doc.para_at(at)?;
+    let before = Pos { off: para.prev_boundary(at.off), ..at.clone() };
+    link_at(doc, field_codes, at).or_else(|| if before.off < at.off { link_at(doc, field_codes, &before) } else { None })
+}
+
+/// The link under the point (x, y) on `page`, where `pos` is the caret position the point hits.
+/// The hit snaps to the nearest text, so the link only counts when the point is on the linked
+/// character itself, not beside, above or below it (#413).
+pub fn link_under(doc: &wordcraft_doc::Document, field_codes: bool, layout: &DocLayout, page: usize, x: f32, y: f32, pos: &Pos) -> Option<Link> {
+    let para = doc.para_at(pos)?;
+    let at = wordcraft_geom::Point::new(x, y);
+    // The caret falls between characters: the one under the point is on either side of it.
+    [(pos.off, para.next_boundary(pos.off)), (para.prev_boundary(pos.off), pos.off)].into_iter().filter(|(a, b)| a < b).find_map(|(a, b)| {
+        let link = link_at(doc, field_codes, &Pos { off: a, ..pos.clone() })?;
+        let (from, to) = (Pos { off: a, ..pos.clone() }, Pos { off: b, ..pos.clone() });
+        layout.selection_rects(doc, &from, &to, page).into_iter().any(|(pi, r)| pi == page && r.contains(at)).then_some(link)
+    })
+}
+
+/// Where a link to a place in the document (`#bookmark`) puts the caret: the bookmark's start, in
+/// whichever story it is; `#_top`, Word's built-in bookmark, is the top of the document. `None` for
+/// a web link or a bookmark that is gone.
+pub fn link_destination(doc: &wordcraft_doc::Document, target: &str) -> Option<Pos> {
+    match target.strip_prefix('#')? {
+        "_top" => Some(doc.start_of(StoryRef::Body)),
+        name => super::insert::bookmark_range(doc, name).map(|(from, _)| from),
+    }
+}
+
+/// Follow a link (#2945): a link to a place in the document puts the caret at its bookmark's
+/// start, scrolled into view, and Go Back returns to the link; a web or email link is the host's
+/// to open, so a command only returns its address.
+fn follow_link(s: &mut Session, v: &Value) -> CmdResult {
+    let fc = s.view.field_codes;
+    let link = if let Some(pv) = v.get("pos") {
+        let at = s.doc.clamp(&super::parse_pos(pv).ok_or_else(|| CmdError::Params("bad `pos`".into()))?);
+        link_beside(&s.doc, fc, &at)
+    } else if let (Some(pg), Some(x), Some(y)) = (p::u64(v, "page"), p::f32(v, "x"), p::f32(v, "y")) {
+        let story = super::story_param(s, v);
+        let pg = usize::try_from(pg).unwrap_or(usize::MAX);
+        let l = s.layout();
+        l.hit(pg, x, y, story).and_then(|pos| link_under(&s.doc, fc, &l, pg, x, y, &pos))
+    } else {
+        let (a, b) = s.sel.ordered();
+        if a == b { link_beside(&s.doc, fc, &a) } else { link_at(&s.doc, fc, &a) }
+    };
+    let link = link.ok_or_else(|| CmdError::Failed("there is no link here".into()))?;
+    let Some(name) = link.target.strip_prefix('#') else { return Ok(json!({"url": link.target})) };
+    let to = link_destination(&s.doc, &link.target).ok_or_else(|| CmdError::Failed(format!("no bookmark `{name}`")))?;
+    s.note_place(link.at.clone());
+    s.sel = Selection::caret(to);
+    s.goal_x = None;
+    let mut r = sel_result(s)?;
+    if let Some(m) = r.as_object_mut() {
+        m.insert("bookmark".into(), json!(name));
+    }
+    Ok(r)
+}
+
 fn painter_pick(s: &mut Session) {
     let f = s.sel.ordered().0;
     // A symbol's own font isn't formatting to paint onto text.
@@ -808,4 +903,148 @@ fn paste_format(s: &mut Session, _: &Value) -> CmdResult {
         s.painter = None;
     }
     sel_result(s)
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+    use wordcraft_doc::para::InlineObject;
+    use wordcraft_doc::{Document, Pos, StoryRef};
+
+    use super::{Link, link_at, link_under};
+    use crate::Session;
+
+    /// A photo with the caption "Figure 1: Kiln" under it, `n` paragraphs, then "See " and a
+    /// cross-reference to the figure with `params` added to `insert.crossReference`'s.
+    fn figure_and_reference(n: usize, params: serde_json::Value) -> Session {
+        let mut text = vec!["A kiln photo".to_string()];
+        text.extend((0..n).map(|i| format!("Paragraph {i} of the body text.")));
+        text.push("See ".into());
+        let mut s = Session::new(Document::from_text(&text.join("\n")));
+        s.run("caret.docStart", &json!({})).unwrap();
+        s.run("caret.end", &json!({})).unwrap();
+        s.run("references.caption", &json!({"label": "Figure", "text": "Kiln"})).unwrap();
+        s.run("caret.docEnd", &json!({})).unwrap();
+        let mut p = json!({"to": "figure", "target": "Figure 1", "show": "number"});
+        if let (Some(m), Some(extra)) = (p.as_object_mut(), params.as_object()) {
+            m.extend(extra.clone());
+        }
+        s.run("insert.crossReference", &p).unwrap();
+        s
+    }
+
+    /// Where the body's last field starts.
+    fn last_field(s: &Session) -> Pos {
+        let paths = s.doc.para_paths(StoryRef::Body);
+        let path = paths.last().unwrap().clone();
+        let para = s.doc.para(StoryRef::Body, &path).unwrap();
+        let off = para.object_offsets().into_iter().rfind(|o| matches!(para.object_at(*o), Some(InlineObject::Field { .. }))).unwrap();
+        Pos::new(StoryRef::Body, path, off)
+    }
+
+    /// A point in the middle of the field at `at`: (page, x, y).
+    fn middle_of(s: &mut Session, at: &Pos) -> (usize, f32, f32) {
+        let l = s.layout();
+        let a = l.caret(at).unwrap();
+        let b = l.caret(&Pos { off: at.off + wordcraft_doc::para::OBJ.len_utf8(), ..at.clone() }).unwrap();
+        (a.page, (a.x + b.x) / 2.0, a.top + a.height / 2.0)
+    }
+
+    /// #2945: a point on a cross-reference with `\h` maps to its bookmark; following it puts the
+    /// caret at the caption, and Go Back returns to the reference.
+    #[test]
+    fn a_point_on_a_hyperlinked_cross_reference_maps_to_its_bookmark() {
+        let mut s = figure_and_reference(80, json!({}));
+        let at = last_field(&s);
+        let (page, x, y) = middle_of(&mut s, &at);
+        assert!(page > 0, "the reference is on a later page than the caption");
+        let l = s.layout();
+        let hit = l.hit(page, x, y, StoryRef::Body).unwrap();
+        let link = link_under(&s.doc, false, &l, page, x, y, &hit).unwrap();
+        let (name, _) = s.doc.bookmarks().into_iter().find(|(n, _)| n.starts_with("_Ref")).unwrap();
+        assert_eq!(link, Link { target: format!("#{name}"), field: true, at: at.clone() });
+        // Beside the field, on the "See " text before it, there is no link.
+        let left = l.caret(&Pos { off: 1, ..at.clone() }).unwrap();
+        let plain = l.hit(page, left.x, y, StoryRef::Body).unwrap();
+        assert_eq!(link_under(&s.doc, false, &l, page, left.x, y, &plain), None);
+        // Field codes shown: the code isn't a link.
+        assert_eq!(link_at(&s.doc, true, &at), None);
+
+        let r = s.run("edit.followLink", &json!({"page": page, "x": x, "y": y})).unwrap();
+        assert_eq!(r["bookmark"], json!(name));
+        let (start, _) = crate::cmd::insert::bookmark_range(&s.doc, &name).unwrap();
+        assert!(s.sel.is_collapsed());
+        assert_eq!(s.sel.focus, start, "the caret is at the caption");
+        assert_eq!(s.doc.para_at(&s.sel.focus).unwrap().plain_text(), "Figure 1: Kiln");
+        s.run("edit.goBack", &json!({})).unwrap();
+        assert_eq!(s.sel.focus.path, at.path, "Go Back returns to the reference");
+
+        // By position, and from the caret beside the field.
+        s.run("caret.docStart", &json!({})).unwrap();
+        s.run("edit.followLink", &json!({"pos": at})).unwrap();
+        assert_eq!(s.sel.focus, start);
+        s.sel = crate::Selection::caret(Pos { off: at.off + wordcraft_doc::para::OBJ.len_utf8(), ..at.clone() });
+        s.run("edit.followLink", &json!({})).unwrap();
+        assert_eq!(s.sel.focus, start);
+    }
+
+    /// A cross-reference inserted without "Insert as hyperlink" is no link: following it fails
+    /// and leaves the caret where it was.
+    #[test]
+    fn a_cross_reference_without_the_hyperlink_switch_is_no_link() {
+        let mut s = figure_and_reference(2, json!({"hyperlink": false}));
+        let at = last_field(&s);
+        assert_eq!(link_at(&s.doc, false, &at), None);
+        s.sel = crate::Selection::caret(at.clone());
+        assert!(s.run("edit.followLink", &json!({})).is_err());
+        assert_eq!(s.sel.focus, at);
+    }
+
+    /// A cross-reference to a bookmark in a footnote follows into the note, and its tip text and
+    /// Go To find it there too.
+    #[test]
+    fn a_cross_reference_follows_into_a_note() {
+        let mut s = Session::new(Document::from_text("Body text\nSee "));
+        s.run("caret.docStart", &json!({})).unwrap();
+        s.run("caret.end", &json!({})).unwrap();
+        s.run("references.footnote", &json!({"text": "Kiln note"})).unwrap();
+        let note = s.sel.focus.story;
+        assert_ne!(note, StoryRef::Body);
+        s.run("insert.bookmark", &json!({"name": "InNote"})).unwrap();
+        s.run("caret.docEnd", &json!({})).unwrap();
+        s.sel = crate::Selection::caret(s.doc.end_of(StoryRef::Body));
+        s.run("insert.field", &json!({"instr": "REF InNote \\h", "result": "Kiln note"})).unwrap();
+        let at = last_field(&s);
+        assert!(link_at(&s.doc, false, &at).is_some());
+        s.run("edit.followLink", &json!({"pos": at})).unwrap();
+        assert_eq!(s.sel.focus.story, note, "the caret is in the note");
+        assert!(crate::cmd::references::bookmark_text(&s.doc, "InNote").is_some(), "found for the tip and Update Field");
+        s.sel = crate::Selection::caret(at);
+        s.run("edit.goto", &json!({"bookmark": "InNote"})).unwrap();
+        assert_eq!(s.sel.focus.story, note);
+    }
+
+    /// Hyperlinks to bookmarks follow the same way; a web link only returns its address.
+    #[test]
+    fn hyperlinks_follow_too() {
+        let mut s = Session::new(Document::from_text("Alpha beta\nSee here and there"));
+        s.run("select.text", &json!({"text": "beta"})).unwrap();
+        s.run("insert.bookmark", &json!({"name": "Spot"})).unwrap();
+        s.run("select.text", &json!({"text": "here"})).unwrap();
+        s.run("insert.link", &json!({"url": "#Spot"})).unwrap();
+        s.run("select.text", &json!({"text": "there"})).unwrap();
+        s.run("insert.link", &json!({"url": "https://example.com/"})).unwrap();
+        s.run("select.text", &json!({"text": "here"})).unwrap();
+        let r = s.run("edit.followLink", &json!({})).unwrap();
+        assert_eq!(r["bookmark"], json!("Spot"));
+        assert_eq!(s.sel.focus, crate::cmd::insert::bookmark_range(&s.doc, "Spot").unwrap().0);
+        s.run("select.text", &json!({"text": "there"})).unwrap();
+        let before = s.sel.clone();
+        assert_eq!(s.run("edit.followLink", &json!({})).unwrap(), json!({"url": "https://example.com/"}));
+        assert_eq!(s.sel, before, "a web link doesn't move the caret");
+        // Junk never panics.
+        for junk in [json!({"pos": {"story": "nope"}}), json!({"page": 99, "x": 1e30, "y": -1}), json!({"pos": {"block": 9999, "off": 99999}})] {
+            let _ = s.run("edit.followLink", &junk);
+        }
+    }
 }

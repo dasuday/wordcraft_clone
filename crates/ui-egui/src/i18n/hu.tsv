@@ -2694,3 +2694,8 @@
 	Type a size in any unit, such as 5 cm or 300 px. The other side follows, so the picture keeps its proportions.	Írj be egy méretet bármilyen mértékegységben, például 5 cm vagy 300 px. A másik oldal követi, így a kép megtartja az arányait.
 
 	Import…	Importálás…
+# Cross-references as links (#2945)
+	Insert as hyperlink	Beszúrás linkként
+	Bookmark: {name}	Könyvjelző: {name}
+	Follow Link	Link követése
+	The place this link goes to is no longer in the document	A hely, ahová ez a link mutat, már nincs a dokumentumban

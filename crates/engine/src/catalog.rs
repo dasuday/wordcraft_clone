@@ -496,6 +496,7 @@ Editing|Navigation|Document End|caret.docEnd
 Editing|Navigation|Page Up|caret.pageUp
 Editing|Navigation|Page Down|caret.pageDown
 Editing|Navigation|Go Back|edit.goBack
+Editing|Navigation|Follow Hyperlink|edit.followLink
 Editing|Selection|Select Word|select.word
 Editing|Selection|Select Sentence|select.sentence
 Editing|Selection|Select Paragraph|select.paragraph

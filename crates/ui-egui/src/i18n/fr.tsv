@@ -2700,3 +2700,8 @@ template	Letter	Lettre
 	Type a size in any unit, such as 5 cm or 300 px. The other side follows, so the picture keeps its proportions.	Tapez une taille dans n'importe quelle unité, par exemple 5 cm ou 300 px. L'autre côté suit, et l'image garde ses proportions.
 
 	Import…	Importer…
+# Cross-references as links (#2945)
+	Insert as hyperlink	Insérer en tant que lien hypertexte
+	Bookmark: {name}	Signet : {name}
+	Follow Link	Suivre le lien
+	The place this link goes to is no longer in the document	L’emplacement vers lequel pointe ce lien n’est plus dans le document

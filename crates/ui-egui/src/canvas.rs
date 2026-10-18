@@ -8,6 +8,7 @@ use std::hash::{Hash, Hasher};
 use egui::{Color32, Pos2, Rect, Sense, Stroke, TextureHandle, Ui, pos2, vec2};
 use serde_json::json;
 use wordcraft_doc::{PartKind, Pos, StoryRef};
+use wordcraft_engine::cmd::edit::Link;
 use wordcraft_layout::display::CommentDisplay;
 use wordcraft_layout::{DocLayout, Page, Placed};
 
@@ -2479,17 +2480,20 @@ fn mouse(app: &mut WordApp, ui: &Ui, resp: &egui::Response, rects: &[Rect], layo
             return;
         }
         let Some(pos) = layout.hit(page, x, y, story) else { return };
-        // Ctrl/⌘+click follows a hyperlink.
+        // Ctrl/⌘+click follows a hyperlink or a cross-reference with `\h` (#2945).
         if mods.command
             && let Some(link) = link_under(app, layout, page, x, y, &pos)
         {
-            if let Some(name) = link.strip_prefix('#') {
-                // The caret goes to the bookmark's start, as in Word (Go To selects its text).
-                if app.run("edit.goto", json!({"bookmark": name})).is_ok() {
-                    let _ = app.run("select.collapse", json!({}));
+            if link.target.starts_with('#') {
+                // The caret goes to the bookmark's start, as in Word (Go To selects its text). A
+                // link whose bookmark is gone leaves the caret and the view where they are.
+                if wordcraft_engine::cmd::edit::link_destination(&app.session.doc, &link.target).is_some() {
+                    let _ = app.run("edit.followLink", json!({"pos": link.at}));
+                } else {
+                    app.status(tl!("The place this link goes to is no longer in the document"));
                 }
-            } else if is_followable_link(&link) {
-                app.canvas.open_url = Some(link);
+            } else if is_followable_link(&link.target) {
+                app.canvas.open_url = Some(link.target);
             } else {
                 app.status(tl!("Only web (http, https) and email (mailto) links can be followed"));
             }
@@ -2582,8 +2586,12 @@ fn mouse(app: &mut WordApp, ui: &Ui, resp: &egui::Response, rects: &[Rect], layo
         && let Some(link) = link_under(app, layout, page, x, y, &pos)
     {
         let key = if cfg!(target_os = "macos") { "⌘" } else { "Ctrl" };
-        let target = if is_generated_bookmark_link(&link) { tl!("Current Document").to_string() } else { link };
-        let tip = format!("{target}\n{}", crate::i18n::fmt(tl!("{key}+Click to follow link"), &[("key", key)]));
+        let gone = link.target.starts_with('#') && wordcraft_engine::cmd::edit::link_destination(&app.session.doc, &link.target).is_none();
+        let tip = if gone {
+            tl!("The place this link goes to is no longer in the document").to_string()
+        } else {
+            format!("{}\n{}", link_tip(&app.session.doc, &link), crate::i18n::fmt(tl!("{key}+Click to follow link"), &[("key", key)]))
+        };
         egui::Tooltip::always_open(ui.ctx().clone(), ui.layer_id(), egui::Id::new("link_tip"), egui::PopupAnchor::Pointer).show(|ui| {
             ui.label(tip);
         });
@@ -3300,19 +3308,32 @@ pub(crate) fn screen_render_options() -> wordcraft_render::RenderOptions {
     wordcraft_render::RenderOptions { text_darkening: cfg!(target_os = "macos"), ..Default::default() }
 }
 
-/// The hyperlink under the pointer at (x, y) on `page`, where `pos` is the caret position the
-/// point hits. The hit snaps to the nearest text, so the link only counts when the point is on
-/// the linked character itself, not beside, above or below it (issue #413).
-fn link_under(app: &WordApp, layout: &DocLayout, page: usize, x: f32, y: f32, pos: &Pos) -> Option<String> {
-    let doc = &app.session.doc;
-    let para = doc.para_at(pos)?;
-    let at = wordcraft_geom::Point::new(x, y);
-    // The caret falls between characters: the one under the point is on either side of it.
-    [(pos.off, para.next_boundary(pos.off)), (para.prev_boundary(pos.off), pos.off)].into_iter().filter(|(a, b)| a < b).find_map(|(a, b)| {
-        let link = para.props_of_char(a).link.clone().filter(|l| !l.is_empty())?;
-        let (from, to) = (Pos { off: a, ..pos.clone() }, Pos { off: b, ..pos.clone() });
-        layout.selection_rects(doc, &from, &to, page).into_iter().any(|(pi, r)| pi == page && r.contains(at)).then_some(link)
-    })
+/// The hyperlink or cross-reference (`\h`) under the pointer at (x, y) on `page`, where `pos` is
+/// the caret position the point hits (see [`wordcraft_engine::cmd::edit::link_under`]).
+fn link_under(app: &WordApp, layout: &DocLayout, page: usize, x: f32, y: f32, pos: &Pos) -> Option<Link> {
+    wordcraft_engine::cmd::edit::link_under(&app.session.doc, app.session.view.field_codes, layout, page, x, y, pos)
+}
+
+/// The longest target text a cross-reference's hover tip shows, in characters.
+const TIP_TARGET_CHARS: usize = 60;
+
+/// The first line of a link's hover tip: where it goes. A cross-reference names its target (the
+/// text its hidden bookmark marks, "Figure 1", or the bookmark's name); a link to a hidden bookmark
+/// says the current document (#2177); any other link shows its address.
+fn link_tip(doc: &wordcraft_doc::Document, link: &Link) -> String {
+    match link.target.strip_prefix('#') {
+        Some(name) if link.field && !name.starts_with('_') => crate::i18n::fmt(tl!("Bookmark: {name}"), &[("name", name)]),
+        Some(name) if link.field => {
+            let text = wordcraft_engine::cmd::references::bookmark_text(doc, name).unwrap_or_default();
+            let mut shown: String = text.chars().take(TIP_TARGET_CHARS).collect();
+            if shown.len() < text.len() {
+                shown = format!("{}…", shown.trim_end());
+            }
+            if shown.is_empty() { tl!("Current Document").to_string() } else { shown }
+        }
+        _ if is_generated_bookmark_link(&link.target) => tl!("Current Document").to_string(),
+        _ => link.target.clone(),
+    }
 }
 
 /// A link to a hidden bookmark (`#_Toc…`, `#_Ref…`): a name the program made, which nobody
@@ -3323,7 +3344,7 @@ fn is_generated_bookmark_link(link: &str) -> bool {
 
 /// Whether Ctrl/⌘+click may hand a document's hyperlink to the system: web and email links only,
 /// so a document can't launch `file:` paths, programs or custom-scheme handlers.
-fn is_followable_link(url: &str) -> bool {
+pub(crate) fn is_followable_link(url: &str) -> bool {
     wordcraft_doc::link::is_web_or_mail_link(url)
 }
 
@@ -4904,6 +4925,123 @@ mod tests {
         let (start, _) = wordcraft_engine::cmd::insert::bookmark_range(&s.doc, "Spot").unwrap();
         assert!(s.sel.is_collapsed(), "a caret, not a selection: {:?}", s.sel);
         assert_eq!(s.sel.focus, start, "at the bookmark's start");
+    }
+
+    /// A photo captioned "Figure 1: Kiln", 80 paragraphs, then a cross-reference to the figure's
+    /// label and number at the end, with or without "Insert as hyperlink"; the window shows the
+    /// end. Returns the harness and where the reference field starts.
+    fn cross_reference_window(hyperlink: bool) -> (H, Pos) {
+        let mut text = vec!["A kiln photo".to_string()];
+        text.extend((0..80).map(|i| format!("Paragraph {i} of the body text.")));
+        text.push("See ".into());
+        let mut a = WordApp::new(wordcraft_engine::Session::new(wordcraft_doc::Document::from_text(&text.join("\n"))), Default::default());
+        a.run("caret.docStart", json!({})).unwrap();
+        a.run("caret.end", json!({})).unwrap();
+        a.run("references.caption", json!({"label": "Figure", "text": "Kiln"})).unwrap();
+        a.run("caret.docEnd", json!({})).unwrap();
+        let params = json!({"to": "figure", "target": "Figure 1", "show": "number", "hyperlink": hyperlink});
+        a.run("insert.crossReference", params).unwrap();
+        let field = wordcraft_engine::cmd::fields::story_fields(&a.session, StoryRef::Body).pop().unwrap().at;
+        let mut h: H = egui_kittest::Harness::builder().with_size(egui::vec2(1440.0, 900.0)).build_ui_state(
+            |ui, app: &mut WordApp| {
+                let ctx = ui.ctx().clone();
+                app.logic(&ctx);
+                app.ui(ui);
+            },
+            a,
+        );
+        steps(&mut h, 6);
+        (h, field)
+    }
+
+    /// The middle of the field at `at` on screen.
+    fn field_on_screen(h: &mut H, at: &Pos) -> Pos2 {
+        let l = h.state_mut().session.layout();
+        let a = l.caret(at).unwrap();
+        let b = l.caret(&Pos { off: at.off + wordcraft_doc::para::OBJ.len_utf8(), ..at.clone() }).unwrap();
+        page_to_screen(h.state_mut(), a.page, (a.x + b.x) / 2.0, a.top + a.height / 2.0).unwrap()
+    }
+
+    fn click_at(h: &mut H, at: Pos2, modifiers: egui::Modifiers) {
+        h.event(egui::Event::PointerMoved(at));
+        h.step();
+        h.event_modifiers(egui::Event::PointerButton { pos: at, button: egui::PointerButton::Primary, pressed: true, modifiers }, modifiers);
+        h.event(egui::Event::PointerButton { pos: at, button: egui::PointerButton::Primary, pressed: false, modifiers: Default::default() });
+        steps(h, 4);
+    }
+
+    /// #2945: hovering a cross-reference with `\h` names its target; a plain click only places the
+    /// caret; Ctrl/⌘+click puts the caret at the caption, pages back, and scrolls it into view.
+    #[test]
+    fn ctrl_click_on_a_cross_reference_goes_to_its_caption() {
+        use egui_kittest::kittest::Queryable;
+        let (mut h, field) = cross_reference_window(true);
+        let at = field_on_screen(&mut h, &field);
+        h.event(egui::Event::PointerMoved(at));
+        steps(&mut h, 2);
+        let key = if cfg!(target_os = "macos") { "⌘" } else { "Ctrl" };
+        assert!(h.query_by_label(&format!("Figure 1\n{key}+Click to follow link")).is_some(), "the tip names the figure");
+        // A plain click puts the caret beside the reference.
+        click_at(&mut h, at, Default::default());
+        assert_eq!(h.state().session.sel.focus.path, field.path);
+        let before = h.state().canvas.scroll_offset.y;
+        click_at(&mut h, at, egui::Modifiers::COMMAND);
+        let s = &h.state().session;
+        let name = s.doc.bookmarks().into_iter().find(|(n, _)| n.starts_with("_Ref")).unwrap().0;
+        let (start, _) = wordcraft_engine::cmd::insert::bookmark_range(&s.doc, &name).unwrap();
+        assert!(s.sel.is_collapsed(), "a caret: {:?}", s.sel);
+        assert_eq!(s.sel.focus, start, "at the caption");
+        assert_eq!(s.doc.para_at(&s.sel.focus).unwrap().plain_text(), "Figure 1: Kiln");
+        let after = h.state().canvas.scroll_offset.y;
+        assert!(after < before - 100.0, "the view went back to the caption: {before} -> {after}");
+        let c = h.state_mut().session.layout().caret(&start).unwrap();
+        let caption = page_to_screen(h.state_mut(), c.page, c.x, c.top).unwrap();
+        assert!(h.state().canvas.viewport.unwrap().contains(caption), "the caption is in view");
+        // Go Back returns to the reference.
+        h.state_mut().run("edit.goBack", json!({})).unwrap();
+        assert_eq!(h.state().session.sel.focus.path, field.path);
+    }
+
+    /// #2945: a cross-reference whose bookmark is gone isn't followed: Ctrl/⌘+click leaves the caret
+    /// (on page 1) and the view (at the end) where they are, and the status line and the tip say so
+    /// without the hidden bookmark's name.
+    #[test]
+    fn ctrl_click_on_a_cross_reference_to_a_deleted_bookmark_stays() {
+        use egui_kittest::kittest::Queryable;
+        let (mut h, field) = cross_reference_window(true);
+        let name = h.state().session.doc.bookmarks().into_iter().find(|(n, _)| n.starts_with("_Ref")).unwrap().0;
+        h.state_mut().run("insert.deleteBookmark", json!({"name": name})).unwrap();
+        steps(&mut h, 3);
+        let start = h.state().session.doc.start_of(StoryRef::Body);
+        h.state_mut().session.sel = wordcraft_engine::Selection::caret(start);
+        steps(&mut h, 3);
+        let at = field_on_screen(&mut h, &field);
+        h.event(egui::Event::PointerMoved(at));
+        steps(&mut h, 2);
+        assert!(h.query_by_label_contains("Click to follow link").is_none(), "nothing to follow");
+        assert!(h.query_by_label("The place this link goes to is no longer in the document").is_some());
+        let (sel, before) = (h.state().session.sel.clone(), h.state().canvas.scroll_offset.y);
+        click_at(&mut h, at, egui::Modifiers::COMMAND);
+        assert_eq!(h.state().session.sel, sel, "the caret stays on page 1");
+        assert!((h.state().canvas.scroll_offset.y - before).abs() < 1.0, "the view stays at the end");
+        let (msg, _) = h.state().status_msg.clone().unwrap();
+        assert!(msg.contains("no longer in the document") && !msg.contains("_Ref"), "{msg}");
+    }
+
+    /// #2945: a cross-reference inserted without "Insert as hyperlink" isn't a link: Ctrl/⌘+click
+    /// selects the sentence there, as on any text, and shows no link tip.
+    #[test]
+    fn ctrl_click_on_a_cross_reference_without_the_switch_stays() {
+        use egui_kittest::kittest::Queryable;
+        let (mut h, field) = cross_reference_window(false);
+        let at = field_on_screen(&mut h, &field);
+        let before = h.state().canvas.scroll_offset.y;
+        h.event(egui::Event::PointerMoved(at));
+        steps(&mut h, 2);
+        assert!(h.query_by_label_contains("Click to follow link").is_none(), "no link tip");
+        click_at(&mut h, at, egui::Modifiers::COMMAND);
+        assert_eq!(h.state().session.sel.focus.path, field.path, "the caret stays at the reference");
+        assert!((h.state().canvas.scroll_offset.y - before).abs() < 1.0, "the view stays");
     }
 
     /// #688: the drag auto-scroll waits in the middle, ramps in from both edges and never leaves

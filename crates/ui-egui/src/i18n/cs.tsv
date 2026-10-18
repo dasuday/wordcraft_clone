@@ -2690,3 +2690,8 @@ preview	Title	Ukázka
 	Type a size in any unit, such as 5 cm or 300 px. The other side follows, so the picture keeps its proportions.	Zadejte velikost v libovolné jednotce, například 5 cm nebo 300 px. Druhá strana se přizpůsobí, takže obrázek zachová své proporce.
 
 	Import…	Importovat…
+# Cross-references as links (#2945)
+	Insert as hyperlink	Vložit jako hypertextový odkaz
+	Bookmark: {name}	Záložka: {name}
+	Follow Link	Otevřít odkaz
+	The place this link goes to is no longer in the document	Místo, na které tento odkaz vede, už v dokumentu není

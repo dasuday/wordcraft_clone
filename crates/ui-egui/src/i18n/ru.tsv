@@ -2696,3 +2696,8 @@ preview	Title	Пример
 	Type a size in any unit, such as 5 cm or 300 px. The other side follows, so the picture keeps its proportions.	Введите размер в любых единицах, например 5 cm или 300 px. Другая сторона изменится вместе с ней, и рисунок сохранит пропорции.
 
 	Import…	Импорт…
+# Cross-references as links (#2945)
+	Insert as hyperlink	Вставить как гиперссылку
+	Bookmark: {name}	Закладка: {name}
+	Follow Link	Перейти по ссылке
+	The place this link goes to is no longer in the document	Место, на которое указывает эта ссылка, больше не находится в документе

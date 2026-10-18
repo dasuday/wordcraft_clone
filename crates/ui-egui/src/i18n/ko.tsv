@@ -2542,3 +2542,8 @@ preview	Title	제목
 	Type a size in any unit, such as 5 cm or 300 px. The other side follows, so the picture keeps its proportions.	5 cm 또는 300 px처럼 원하는 단위로 크기를 입력하세요. 다른 쪽도 함께 바뀌어 그림의 비율이 유지됩니다.
 
 	Import…	가져오기…
+# Cross-references as links (#2945)
+	Insert as hyperlink	하이퍼링크로 삽입
+	Bookmark: {name}	책갈피: {name}
+	Follow Link	링크로 이동
+	The place this link goes to is no longer in the document	이 링크가 가리키는 위치가 더 이상 문서에 없습니다
