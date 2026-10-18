@@ -349,6 +349,8 @@ impl AutoCorrectForm {
             "bullets": o.bullets,
             "numbering": o.numbering,
             "borderLines": o.border_lines,
+            "autoAddFirstLetter": o.auto_add_first_letter,
+            "autoAddInitialCaps": o.auto_add_initial_caps,
         })
     }
 }
@@ -479,6 +481,8 @@ fn autocorrect_tab(app: &mut WordApp, ui: &mut Ui, f: &mut AutoCorrectForm) {
 
 fn exceptions(app: &mut WordApp, ui: &mut Ui, f: &mut AutoCorrectForm) {
     egui::Frame::group(ui.style()).show(ui, |ui| {
+        ui.checkbox(&mut f.options.auto_add_first_letter, tl!("Automatically add words to list (First Letter)"));
+        ui.checkbox(&mut f.options.auto_add_initial_caps, tl!("Automatically add words to list (INitial CAps)"));
         ui.label(tl!("Don't capitalize after:"));
         let list = f.options.exception_list();
         let mut picked = None;
@@ -712,7 +716,8 @@ fn enforced_ui(app: &mut WordApp, ui: &mut Ui, st: &mut RestrictPane, mode: &str
     };
     ui.label(egui::RichText::new(tl!(what)).small());
     let regions = app.session.doc.perm_ranges().iter().filter(|r| r.everyone() || r.editor.eq_ignore_ascii_case(&app.session.author)).count();
-    if regions > 0 {
+    let fields = app.session.doc.fillable_controls() as u64;
+    if regions > 0 || fields > 0 {
         ui.add_space(6.0);
         if ui.button(tl!("Find Next Editable Region")).clicked() {
             let from = app.session.sel.ordered().1;

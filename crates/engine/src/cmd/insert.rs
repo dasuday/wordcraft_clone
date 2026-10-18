@@ -36,7 +36,10 @@ pub fn specs() -> Vec<CommandSpec> {
                 matches!(s.sel.focus.story, StoryRef::Part(id) if s.doc.parts.get(&id).is_some_and(|p| p.kind == PartKind::TextBox))
                     .then_some("text boxes can't go inside a text box")
             }),
-        CommandSpec::new("insert.link", "Link", "Insert › Links", link).key("Mod+K").params(r#"{"url": string, "text"?: string}"#),
+        CommandSpec::new("insert.link", "Link", "Insert › Links", link).key("Mod+K").params(
+            r#"{"url": string} | {"bookmark": name} | {"heading": block (see link.targets)} | {"top": true}, "text"?: string (Place in This Document: a bookmark, a heading or the top of the document)"#,
+        ),
+        CommandSpec::new("link.targets", "Link", "Insert › Links", link_targets).pure(),
         CommandSpec::new("insert.removeLink", "Remove Hyperlink", "Insert › Links", |s, _| super::format::apply(s, &|c| {
             c.link = None;
             if c.style.as_deref() == Some("Hyperlink") {
@@ -44,6 +47,7 @@ pub fn specs() -> Vec<CommandSpec> {
             }
         })),
         CommandSpec::new("insert.bookmark", "Bookmark", "Insert › Links", bookmark).params(r#"{"name": string}"#).key("Mod+Shift+F5"),
+        CommandSpec::new("insert.deleteBookmark", "Delete Bookmark", "Insert › Links", delete_bookmark).params(r#"{"name": string}"#),
         CommandSpec::new("insert.header", "Header", "Insert › Header & Footer", |s, v| header_footer(s, v, true)).params(r#"{"text"?: string, "preset"?: "blank|blankThree|title"}"#),
         CommandSpec::new("insert.footer", "Footer", "Insert › Header & Footer", |s, v| header_footer(s, v, false)).params(r#"{"text"?: string, "preset"?: "blank|blankThree|pageNumber"}"#),
         CommandSpec::new("insert.pageNumber", "Page Number", "Insert › Header & Footer", page_number).params(r#"{"position"?: "top|bottom|current", "align"?: "left|center|right", "format"?: "x of y"}"#),
@@ -115,7 +119,8 @@ pub fn specs() -> Vec<CommandSpec> {
         CommandSpec::new("insert.textFromFile", "Text from File", "Insert › Text › Object", |s, v| {
             let path = p::req_str(v, "path")?;
             let doc = crate::io::open_path(std::path::Path::new(path)).map_err(CmdError::Failed)?;
-            let frag = doc.body_fragment();
+            let mut frag = doc.body_fragment();
+            super::paste::unlink_sections(&mut frag.blocks);
             let at = delete_selection(s)?;
             let end = s.doc.insert_fragment(&at, &frag)?;
             s.sel = Selection::caret(end);
@@ -153,6 +158,11 @@ fn table(s: &mut Session, v: &Value) -> CmdResult {
     if let Some(st) = p::str(v, "style") {
         let id = s.doc.styles.find(st).map(|x| x.id.clone()).ok_or_else(|| CmdError::Params(format!("no table style `{st}`")))?;
         t.props.style = Some(id);
+    }
+    // Like Word, a table inserted in a right-to-left paragraph is a right-to-left table (#2634):
+    // its first cell stands at the right, so Tab, which follows reading order, moves leftwards.
+    if s.doc.para_at(&s.sel.focus).is_some_and(|p| s.doc.styles.resolve_para(&p.props).bidi) {
+        t.props.bidi_visual = true;
     }
     let story = s.sel.focus.story;
     let path = insert_block_at_caret(s, Block::Table(t))?;
@@ -217,22 +227,31 @@ pub(crate) fn picture(s: &mut Session, v: &Value) -> CmdResult {
     place_picture(s, bytes, p::f32(v, "width"), p::str(v, "alt").unwrap_or(""))
 }
 
+/// The media extension of an encoded image by its magic bytes, as `image_size` accepted it
+/// (TIFF included: the `image` crate decodes it).
+pub(crate) fn image_ext(bytes: &[u8]) -> &'static str {
+    match bytes.get(..4) {
+        Some([0x89, b'P', b'N', b'G']) => "png",
+        Some([0xFF, 0xD8, ..]) => "jpeg",
+        Some([b'G', b'I', b'F', _]) => "gif",
+        Some([b'R', b'I', b'F', b'F']) => "webp",
+        Some([b'B', b'M', ..]) => "bmp",
+        Some([b'I', b'I', 0x2A, 0x00]) | Some([b'M', b'M', 0x00, 0x2A]) => "tiff",
+        _ => "png",
+    }
+}
+
 /// Insert an encoded image at the selection as an inline picture, `width` points wide (default:
-/// its natural size at 96 ppi), never wider than the text column.
+/// its natural size at 96 ppi), never wider than the text column. The caret ends after it, so a
+/// script's next typing doesn't replace it (#965); Picture Format commands still act on it. The
+/// app selects a picture the person inserts (`WordApp::run`).
 fn place_picture(s: &mut Session, bytes: Vec<u8>, width: Option<f32>, alt: &str) -> CmdResult {
     if bytes.len() > 200 << 20 {
         return Err(CmdError::Failed("image is larger than 200 MB".into()));
     }
     // Natural size: pixels at 96 ppi, or a metafile's own frame (WMF, EMF: #802).
     let (natural_w, natural_h, ext) = if let Some((pw, ph)) = wordcraft_render::image_size(&bytes) {
-        let ext = match bytes.get(..4) {
-            Some([0x89, b'P', b'N', b'G']) => "png",
-            Some([0xFF, 0xD8, ..]) => "jpeg",
-            Some([b'G', b'I', b'F', _]) => "gif",
-            Some([b'R', b'I', b'F', b'F']) => "webp",
-            Some([b'B', b'M', ..]) => "bmp",
-            _ => "png",
-        };
+        let ext = image_ext(&bytes);
         (pw as f32 * 0.75, ph as f32 * 0.75, ext)
     } else if let Some(size) = wordcraft_render::metafile_size(&bytes) {
         size
@@ -260,7 +279,7 @@ fn place_picture(s: &mut Session, bytes: Vec<u8>, width: Option<f32>, alt: &str)
     let props = s.typing_props();
     let at = delete_selection(s)?;
     let end = s.doc.insert_object(&at, obj, &props)?;
-    s.sel = Selection { anchor: at, focus: end };
+    s.sel = Selection::caret(end);
     Ok(json!({"media": key, "width": w, "height": h}))
 }
 
@@ -340,7 +359,7 @@ fn text_box(s: &mut Session, v: &Value) -> CmdResult {
     let text = p::str(v, "text").unwrap_or("").to_string();
     let w = p::f32(v, "width").unwrap_or(144.0).clamp(18.0, 2000.0);
     let h = p::f32(v, "height").unwrap_or(72.0).clamp(18.0, 2000.0);
-    let id = s.doc.add_part(PartKind::TextBox, vec![para_block(Paragraph::with_text(&text, CharProps::default()))]);
+    let id = s.doc.try_add_part(PartKind::TextBox, vec![para_block(Paragraph::with_text(&text, CharProps::default()))])?;
     let obj = InlineObject::Shape {
         kind: ShapeKind::TextBox,
         w,
@@ -365,17 +384,60 @@ fn text_box(s: &mut Session, v: &Value) -> CmdResult {
     Ok(json!({"story": id}))
 }
 
+/// What a link can point to inside the document (Insert › Link › Place in This Document): the top
+/// of the document, its headings (body block, level, text) and its bookmarks, without the hidden
+/// ones (names starting with `_`).
+fn link_targets(s: &mut Session, _: &Value) -> CmdResult {
+    let headings: Vec<Value> =
+        super::references::headings(s).into_iter().map(|(block, level, text, _)| json!({"block": block, "level": level, "text": text})).collect();
+    let mut bookmarks: Vec<String> = Vec::new();
+    for (name, _) in s.doc.bookmarks() {
+        if !name.starts_with('_') && !bookmarks.contains(&name) {
+            bookmarks.push(name);
+        }
+    }
+    Ok(json!({"top": true, "headings": headings, "bookmarks": bookmarks}))
+}
+
+/// The address and the default text of a link to a place in this document, from `top`, `bookmark`
+/// or `heading` (a heading gets a hidden `_Toc` bookmark, as in Word); None when none is given.
+fn place_target(s: &mut Session, v: &Value) -> Result<Option<(String, String)>, CmdError> {
+    if p::bool(v, "top") == Some(true) {
+        return Ok(Some(("#_top".into(), "Top of the Document".into())));
+    }
+    if let Some(name) = p::str(v, "bookmark") {
+        if !s.doc.bookmarks().iter().any(|(n, _)| n == name) {
+            return Err(CmdError::Params(format!("no bookmark `{name}`")));
+        }
+        return Ok(Some((format!("#{name}"), name.to_string())));
+    }
+    if let Some(block) = p::u64(v, "heading") {
+        let Some((i, _, text, lead)) = super::references::headings(s).into_iter().find(|h| h.0 as u64 == block) else {
+            return Err(CmdError::Params(format!("block {block} is not a heading")));
+        };
+        let name = super::references::toc_bookmark(s, i, lead)?;
+        return Ok(Some((format!("#{name}"), text)));
+    }
+    Ok(None)
+}
+
 fn link(s: &mut Session, v: &Value) -> CmdResult {
-    let Some(url) = p::str(v, "url").map(str::to_string) else {
-        s.ui_requests.push(json!({"open": "link"}));
-        return sel_result(s);
+    let (url, label) = match p::str(v, "url") {
+        Some(url) => (url.to_string(), url.to_string()),
+        None => match place_target(s, v)? {
+            Some(t) => t,
+            None => {
+                s.ui_requests.push(json!({"open": "link"}));
+                return sel_result(s);
+            }
+        },
     };
     if url.is_empty() || url.len() > 4096 {
         return Err(CmdError::Params("bad url".into()));
     }
     let style = Some("Hyperlink".to_string());
     if s.sel.is_collapsed() {
-        let text = p::str(v, "text").unwrap_or(&url).to_string();
+        let text = p::str(v, "text").unwrap_or(&label).to_string();
         let mut props = s.typing_props();
         props.link = Some(url.clone());
         props.style = style;
@@ -393,20 +455,85 @@ fn link(s: &mut Session, v: &Value) -> CmdResult {
     sel_result(s)
 }
 
+/// Whether `name` can name a bookmark: no spaces, at most 40 characters, not starting with a digit.
+pub fn bookmark_name_ok(name: &str) -> bool {
+    !name.is_empty() && !name.contains(' ') && name.len() <= 40 && !name.chars().next().is_some_and(|c| c.is_ascii_digit())
+}
+
+/// Where bookmark `name` is: see [`bookmark_span`]. `None` when there is no such bookmark.
+pub fn bookmark_range(doc: &wordcraft_doc::Document, name: &str) -> Option<(Pos, Pos)> {
+    let (_, start) = doc.bookmarks().into_iter().find(|(n, _)| n == name)?;
+    Some(bookmark_span(doc, name, &start))
+}
+
+/// The text of bookmark `name` whose start mark is at `start`: from just after that mark to its
+/// end mark — in a later paragraph when it spans several (the start again when it has no end).
+pub fn bookmark_span(doc: &wordcraft_doc::Document, name: &str, start: &Pos) -> (Pos, Pos) {
+    let from = Pos { off: start.off.saturating_add(wordcraft_doc::para::OBJ.len_utf8()), ..start.clone() };
+    let end = doc.para_paths(start.story).into_iter().skip_while(|p| *p != start.path).find_map(|path| {
+        let para = doc.para(start.story, &path)?;
+        let off = para.object_offsets().into_iter().find(|o| {
+            (path != start.path || *o > start.off) && matches!(para.object_at(*o), Some(InlineObject::BookmarkEnd { name: n }) if n == name)
+        })?;
+        Some(Pos { story: start.story, path, off })
+    });
+    let end = end.unwrap_or_else(|| from.clone());
+    (from, end)
+}
+
+/// Remove bookmark `name`'s start and end marks, in whichever paragraphs and stories they are,
+/// keeping the selection on the same text. Returns whether the bookmark was there.
+fn remove_bookmark(s: &mut Session, name: &str) -> Result<bool, CmdError> {
+    let mark_len = wordcraft_doc::para::OBJ.len_utf8();
+    let mut found = false;
+    let stories: Vec<StoryRef> = std::iter::once(StoryRef::Body).chain(s.doc.parts.keys().map(|k| StoryRef::Part(*k))).collect();
+    for story in stories {
+        for path in s.doc.para_paths(story) {
+            let Some(p) = s.doc.para(story, &path) else { continue };
+            let mut marks = Vec::new();
+            for off in p.object_offsets() {
+                match p.object_at(off) {
+                    Some(InlineObject::BookmarkStart { name: n }) if n == name => {
+                        found = true;
+                        marks.push(off);
+                    }
+                    Some(InlineObject::BookmarkEnd { name: n }) if n == name => marks.push(off),
+                    _ => {}
+                }
+            }
+            if marks.is_empty() {
+                continue;
+            }
+            let para = s.doc.para_mut(story, &path)?;
+            for off in marks.into_iter().rev() {
+                para.delete(off, off + mark_len)?;
+                for at in [&mut s.sel.anchor, &mut s.sel.focus] {
+                    if at.story == story && at.path == path && at.off > off {
+                        at.off = at.off.saturating_sub(mark_len);
+                    }
+                }
+            }
+        }
+    }
+    s.clamp_selection();
+    Ok(found)
+}
+
+fn delete_bookmark(s: &mut Session, v: &Value) -> CmdResult {
+    let name = p::req_str(v, "name")?.trim();
+    if !remove_bookmark(s, name)? {
+        return Err(CmdError::Params(format!("no bookmark `{name}`")));
+    }
+    sel_result(s)
+}
+
 fn bookmark(s: &mut Session, v: &Value) -> CmdResult {
     let name = p::req_str(v, "name")?.trim().to_string();
-    if name.is_empty() || name.contains(' ') || name.len() > 40 || name.chars().next().is_some_and(|c| c.is_ascii_digit()) {
+    if !bookmark_name_ok(&name) {
         return Err(CmdError::Params("bookmark names start with a letter, have no spaces and at most 40 characters".into()));
     }
     // Replace an existing bookmark of the same name.
-    for (_, pos) in s.doc.bookmarks().into_iter().filter(|(n, _)| *n == name).rev() {
-        let para = s.doc.para_mut(pos.story, &pos.path)?;
-        para.delete(pos.off, pos.off + wordcraft_doc::para::OBJ.len_utf8())?;
-        let offs: Vec<usize> = para.object_offsets();
-        if let Some(e) = offs.into_iter().find(|o| matches!(para.object_at(*o), Some(InlineObject::BookmarkEnd { name: n }) if *n == name)) {
-            para.delete(e, e + wordcraft_doc::para::OBJ.len_utf8())?;
-        }
-    }
+    remove_bookmark(s, &name)?;
     let (a, b) = s.sel.ordered();
     let props = CharProps::default();
     let end = s.doc.insert_object(&b, InlineObject::BookmarkEnd { name: name.clone() }, &props)?;
@@ -415,21 +542,30 @@ fn bookmark(s: &mut Session, v: &Value) -> CmdResult {
     sel_result(s)
 }
 
+/// The header (or footer) of the caret's section in the slot the caret's page uses (first page,
+/// even page or the default), made when there is none: with Different First Page on, a header
+/// inserted on page 1 is the one page 1 shows (#2826).
 fn hf_part(s: &mut Session, header: bool) -> u32 {
     let block = s.sel.focus.path.0.first().copied().unwrap_or(0) as usize;
-    let sect = s.doc.section_mut(block).clone();
-    let existing = if header { sect.headers.default } else { sect.footers.default };
+    let layout = s.layout();
+    let page = if s.sel.focus.story == StoryRef::Body { layout.page_of(&s.sel.focus) } else { Some(s.page_hint) };
+    let slot = page.and_then(|pg| layout.pages.get(pg)).map(|pg| pg.hf_slot).unwrap_or_default();
+    fn slot_of(slot: wordcraft_layout::HfSlot, set: &mut wordcraft_doc::section::HeaderSet) -> &mut Option<u32> {
+        match slot {
+            wordcraft_layout::HfSlot::First => &mut set.first,
+            wordcraft_layout::HfSlot::Even => &mut set.even,
+            wordcraft_layout::HfSlot::Default => &mut set.default,
+        }
+    }
+    let mut sect = s.doc.section_mut(block).clone();
+    let existing = *slot_of(slot, if header { &mut sect.headers } else { &mut sect.footers });
     if let Some(id) = existing.filter(|id| s.doc.parts.contains_key(id)) {
         return id;
     }
     let style = if header { "Header" } else { "Footer" };
     let id = s.doc.add_part(if header { PartKind::Header } else { PartKind::Footer }, vec![para_block(Paragraph::new().styled(style))]);
     let sect = s.doc.section_mut(block);
-    if header {
-        sect.headers.default = Some(id);
-    } else {
-        sect.footers.default = Some(id);
-    }
+    *slot_of(slot, if header { &mut sect.headers } else { &mut sect.footers }) = Some(id);
     id
 }
 
@@ -453,7 +589,7 @@ fn header_footer(s: &mut Session, v: &Value, header: bool) -> CmdResult {
                 para.props.align = Some(Align::Center);
                 para.insert_object(
                     0,
-                    InlineObject::Field { instr: "PAGE".into(), result: "1".into(), locked: false, code: false },
+                    InlineObject::Field { instr: "PAGE".into(), result: "1".into(), locked: false, dirty: false, code: false, form: String::new() },
                     &CharProps::default(),
                 )?;
             }
@@ -468,7 +604,12 @@ fn header_footer(s: &mut Session, v: &Value, header: bool) -> CmdResult {
 }
 
 fn edit_hf(s: &mut Session, v: &Value, header: bool) -> CmdResult {
-    let page = p::u64(v, "page").map(|page| usize::try_from(page).unwrap_or(usize::MAX));
+    let mut page = p::u64(v, "page").map(|page| usize::try_from(page).unwrap_or(usize::MAX));
+    if page.is_none() && s.sel.focus.story == StoryRef::Body {
+        // The caret's page: with Different First Page on, page 1 edits its own header (#2826).
+        let focus = s.sel.focus.clone();
+        page = s.layout().page_of(&focus);
+    }
     let shown = match page {
         Some(page) => shown_hf(s, page, header)?,
         None => {
@@ -618,7 +759,7 @@ fn page_number(s: &mut Session, v: &Value) -> CmdResult {
         _ => Align::Center,
     };
     let x_of_y = p::str(v, "format").is_some_and(|f| f.contains("of"));
-    let field = InlineObject::Field { instr: "PAGE".into(), result: "1".into(), locked: false, code: false };
+    let field = InlineObject::Field { instr: "PAGE".into(), result: "1".into(), locked: false, dirty: false, code: false, form: String::new() };
     if position == "current" {
         let props = s.typing_props();
         let at = delete_selection(s)?;
@@ -637,7 +778,7 @@ fn page_number(s: &mut Session, v: &Value) -> CmdResult {
         let end = para.len();
         para.insert_object(
             end,
-            InlineObject::Field { instr: "NUMPAGES".into(), result: "1".into(), locked: false, code: false },
+            InlineObject::Field { instr: "NUMPAGES".into(), result: "1".into(), locked: false, dirty: false, code: false, form: String::new() },
             &CharProps { bold: Some(true), ..Default::default() },
         )?;
     } else {
@@ -655,7 +796,7 @@ fn date_time(s: &mut Session, v: &Value) -> CmdResult {
         let at = delete_selection(s)?;
         let end = s.doc.insert_object(
             &at,
-            InlineObject::Field { instr: format!("DATE \\@ \"{fmt}\""), result: text, locked: false, code: false },
+            InlineObject::Field { instr: format!("DATE \\@ \"{fmt}\""), result: text, locked: false, dirty: false, code: false, form: String::new() },
             &props,
         )?;
         s.sel = Selection::caret(end);
@@ -763,7 +904,8 @@ fn field(s: &mut Session, v: &Value) -> CmdResult {
     let result = p::str(v, "result").unwrap_or("").to_string();
     let props = s.typing_props();
     let at = delete_selection(s)?;
-    let end = s.doc.insert_object(&at, InlineObject::Field { instr, result, locked: false, code: false }, &props)?;
+    let end =
+        s.doc.insert_object(&at, InlineObject::Field { instr, result, locked: false, dirty: false, code: false, form: String::new() }, &props)?;
     s.sel = Selection::caret(end);
     let _ = super::references::update_fields(s);
     sel_result(s)
@@ -849,6 +991,29 @@ mod tests {
         assert_eq!(s.run("insert.editHeader", &json!({"page": 0})).unwrap()["story"].as_u64(), Some(first as u64));
         assert!(s.run("insert.editHeader", &json!({"page": 99})).is_err());
         assert!(s.run("insert.editHeader", &json!({"page": u64::MAX})).is_err());
+    }
+
+    /// #2826: with Different First Page on, Insert › Header and Edit Header with the caret on
+    /// page 1 give page 1 its own header; page 2 keeps the default one.
+    #[test]
+    fn different_first_page_header_is_reachable_from_page_one() {
+        let mut s = two_pages();
+        s.run("insert.header", &json!({"text": "Head"})).unwrap();
+        s.run("insert.closeHeader", &json!({})).unwrap();
+        let head = s.doc.last_section.headers.default.unwrap();
+        s.run("layout.differentFirstPage", &json!({"value": true})).unwrap();
+        assert_eq!(s.layout().pages[0].header_story, None, "page 1 shows the empty first-page header");
+        s.sel = Selection::caret(s.doc.start_of(StoryRef::Body));
+        let first = s.run("insert.header", &json!({"preset": "title"})).unwrap()["story"].as_u64().unwrap() as u32;
+        assert_ne!(first, head);
+        assert_eq!(s.doc.last_section.headers.first, Some(first));
+        let pages = s.layout().pages.clone();
+        assert_eq!((pages[0].header_story, pages[1].header_story), (Some(first), Some(head)));
+        // Edit Footer from page 1 (no page given): page 1's own footer, not the default.
+        s.run("insert.closeHeader", &json!({})).unwrap();
+        s.sel = Selection::caret(s.doc.start_of(StoryRef::Body));
+        let foot = s.run("insert.editFooter", &json!({})).unwrap()["story"].as_u64().unwrap() as u32;
+        assert_eq!((s.doc.last_section.footers.first, s.doc.last_section.footers.default), (Some(foot), None));
     }
 
     fn two_pages() -> Session {
@@ -937,6 +1102,57 @@ mod tests {
         let data = b"hello world!?";
         assert_eq!(base64_decode(&base64_encode(data)).unwrap(), data);
         assert!(base64_decode("!!!").is_none());
+    }
+
+    /// Every bookmark mark in the body, in order: (paragraph, start or end, name).
+    fn bookmark_marks(s: &Session) -> Vec<(usize, bool, String)> {
+        let mut out = Vec::new();
+        for (i, path) in s.doc.para_paths(StoryRef::Body).iter().enumerate() {
+            let p = s.doc.para(StoryRef::Body, path).unwrap();
+            for off in p.object_offsets() {
+                match p.object_at(off) {
+                    Some(InlineObject::BookmarkStart { name }) => out.push((i, true, name.clone())),
+                    Some(InlineObject::BookmarkEnd { name }) => out.push((i, false, name.clone())),
+                    _ => {}
+                }
+            }
+        }
+        out
+    }
+
+    /// Insert › Bookmark › Delete (#1236): a bookmark across two paragraphs loses both its marks,
+    /// the text and the selection stay where they were, and one undo brings it back. Go To
+    /// selects the bookmark's text, as in Word.
+    #[test]
+    fn deleting_a_bookmark_removes_its_start_and_end() {
+        let mut s = Session::new(wordcraft_doc::Document::from_text("Alpha beta\ngamma delta"));
+        s.sel = Selection { anchor: Pos::body(0, 6), focus: Pos::body(1, 5) };
+        s.run("insert.bookmark", &json!({"name": "Across"})).unwrap();
+        assert_eq!(bookmark_marks(&s), vec![(0, true, "Across".into()), (1, false, "Across".into())]);
+        s.run("edit.goto", &json!({"bookmark": "Across"})).unwrap();
+        let picked = s.selected_text();
+        assert!(picked.starts_with("beta") && picked.ends_with("gamma"), "{picked:?}");
+        s.run("select.text", &json!({"text": "delta"})).unwrap();
+        s.run("insert.deleteBookmark", &json!({"name": "Across"})).unwrap();
+        assert!(bookmark_marks(&s).is_empty(), "{:?}", bookmark_marks(&s));
+        assert_eq!(s.doc.plain_text(StoryRef::Body), "Alpha beta\ngamma delta");
+        assert_eq!(s.selected_text(), "delta", "the selection stays on its text");
+        assert!(s.run("insert.deleteBookmark", &json!({"name": "Across"})).is_err(), "gone");
+        s.run("edit.undo", &json!({})).unwrap();
+        assert_eq!(bookmark_marks(&s).len(), 2, "one undo step");
+    }
+
+    /// Adding a bookmark under a name in use moves it, and the old end goes too — it was only
+    /// looked for in the start's paragraph, so a bookmark across paragraphs left a stray end.
+    #[test]
+    fn adding_a_bookmark_again_moves_all_of_it() {
+        let mut s = Session::new(wordcraft_doc::Document::from_text("Alpha beta\ngamma delta"));
+        s.sel = Selection { anchor: Pos::body(0, 6), focus: Pos::body(1, 5) };
+        s.run("insert.bookmark", &json!({"name": "Spot"})).unwrap();
+        s.run("select.text", &json!({"text": "delta"})).unwrap();
+        s.run("insert.bookmark", &json!({"name": "Spot"})).unwrap();
+        assert_eq!(bookmark_marks(&s), vec![(1, true, "Spot".into()), (1, false, "Spot".into())]);
+        assert_eq!(crate::cmd::references::bookmark_text(&s.doc, "Spot").as_deref(), Some("delta"));
     }
 
     /// Insert › Symbol with a font: only the symbol takes it, the caret's font carries on after.
