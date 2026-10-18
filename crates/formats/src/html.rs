@@ -281,15 +281,8 @@ pub fn unescape(s: &str) -> String {
 }
 
 fn sniff_charset(head: &str) -> Option<&str> {
-    let after = if let Some(i) = head.find("charset") {
-        let rest = head[i + 7..].trim_start();
-        rest.strip_prefix('=')?
-    } else if let Some(i) = head.find("encoding") {
-        let rest = head[i + 8..].trim_start();
-        rest.strip_prefix('=')?
-    } else {
-        return None;
-    };
+    let (i, n) = head.find("charset").map(|i| (i, 7)).or_else(|| head.find("encoding").map(|i| (i, 8)))?;
+    let after = head.get(i + n..)?.trim_start().strip_prefix('=')?;
     let trimmed = after.trim_start().trim_start_matches(['"', '\'']);
     let end = trimmed.find(|c: char| c.is_whitespace() || matches!(c, '"' | '\'' | ';' | '>' | '/')).unwrap_or(trimmed.len());
     let label = trimmed[..end].trim();
@@ -302,10 +295,10 @@ pub fn decode(b: &[u8]) -> String {
         return crate::txt::decode(b);
     }
     let head = String::from_utf8_lossy(b.get(..b.len().min(2048)).unwrap_or(b)).to_ascii_lowercase();
-    if let Some(label) = sniff_charset(&head) {
-        if let Some(s) = crate::txt::decode_as(b, label) {
-            return s;
-        }
+    if let Some(label) = sniff_charset(&head)
+        && let Some(s) = crate::txt::decode_as(b, label)
+    {
+        return s;
     }
     if let Ok(s) = std::str::from_utf8(b) {
         return s.to_string();
