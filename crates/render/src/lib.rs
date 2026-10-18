@@ -1992,9 +1992,12 @@ mod tests {
             let line = Draw::Line { x0: 20.0, y0: 50.0, x1: 80.0, y1: 50.0, width: 6.0, color: Rgb(0, 0, 0), stroke, alpha: 1.0, text_bg: None };
             let r = render_items(&d, &[line], 0.0, 0.0, 100.0, 100.0, 4.0, &RenderOptions::default());
             let ink = |x: f32, y: f32| r.pixel((x * 4.0) as u32, (y * 4.0) as u32)[3] > 0;
-            let y = if stroke == Stroke::Double { 50.0 - 6.0 * 0.9 } else { 50.0 };
-            assert!(ink(21.0, y) && ink(79.0, y), "{stroke:?}: the rule is drawn from its start to its end");
-            assert!(!ink(81.5, y) && !ink(18.5, y), "{stroke:?}: nothing is drawn past the ends");
+            // A double rule's two strokes run 0.9 of its width above and below its centre line.
+            let ys: &[f32] = if stroke == Stroke::Double { &[50.0 - 6.0 * 0.9, 50.0 + 6.0 * 0.9] } else { &[50.0] };
+            for &y in ys {
+                assert!(ink(21.0, y) && ink(79.0, y), "{stroke:?} at {y}: the rule is drawn from its start to its end");
+                assert!(!ink(81.5, y) && !ink(18.5, y), "{stroke:?} at {y}: nothing is drawn past the ends");
+            }
         }
     }
 
