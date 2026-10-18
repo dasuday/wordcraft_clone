@@ -346,6 +346,10 @@ fn script_at(s: &Session) -> Script {
                 return found.unwrap_or(Script::Latin);
             }
             let Some(sc) = Script::of(c, cs_run(p, from + i)) else { continue };
+            // Any Latin letter makes the result Latin, so stop scanning.
+            if sc == Script::Latin {
+                return Script::Latin;
+            }
             match found {
                 None => found = Some(sc),
                 Some(f) if f != sc => return Script::Latin,
@@ -428,7 +432,7 @@ fn size(s: &mut Session, v: &Value) -> CmdResult {
 }
 
 fn current_size(s: &Session) -> f32 {
-    resolved(s).first().map(|r| r.size).unwrap_or(12.0)
+    shown(s).first().map(|r| r.size).unwrap_or(12.0)
 }
 
 fn step_size(s: &mut Session, dir: i32) -> CmdResult {

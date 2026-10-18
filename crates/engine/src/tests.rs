@@ -8341,6 +8341,21 @@ fn collapsed_caret_state_is_the_run_at_the_caret_not_the_whole_word() {
 }
 
 #[test]
+fn size_steps_at_a_caret_start_from_the_size_the_box_shows() {
+    // #1418 review: "Hel" 20 pt + "lo" 11 pt, caret after "l" shows 11; Shrink 1 Point gives 10, not 19.
+    let mut s = s();
+    run(&mut s, "document.setText", json!({"text": "Hello"}));
+    run(&mut s, "select.range", json!({"anchor": {"block": 0, "off": 0}, "focus": {"block": 0, "off": 3}}));
+    run(&mut s, "format.size", json!({"size": 20}));
+    run(&mut s, "select.range", json!({"anchor": {"block": 0, "off": 3}, "focus": {"block": 0, "off": 5}}));
+    run(&mut s, "format.size", json!({"size": 11}));
+    caret(&mut s, 4);
+    run(&mut s, "format.growFont1", json!({}));
+    let st = run(&mut s, "format.state", json!({}));
+    assert_eq!(st["size"].as_f64(), Some(12.0), "{st}");
+}
+
+#[test]
 fn collapsed_caret_inside_a_word_still_formats_the_whole_word() {
     // #1418: pinned (Word's default "Select entire word").
     let mut s = s();
