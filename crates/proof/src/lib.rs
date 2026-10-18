@@ -594,6 +594,14 @@ fn enclosing_token(text: &str, a: usize, b: usize) -> (usize, usize, bool) {
     (ts, te, token.contains("://") || token.contains('@') || token.starts_with("www."))
 }
 
+/// Whether `opts` says to leave the spelling issue at `a..b` of `text` unmarked (Ignore words in
+/// UPPERCASE, words with numbers, Internet and file addresses). For results from an external
+/// checker, which doesn't know these options (#575).
+pub fn spelling_ignored_by_options(text: &str, a: usize, b: usize, opts: &Options) -> bool {
+    let Some(w) = text.get(a..b) else { return false };
+    accepted_by_options(w, opts) || (opts.ignore_internet && enclosing_token(text, a, b).2)
+}
+
 /// The spelling issue of the word at `a..b` of `text`, if it is misspelled in `lang`. Words in
 /// web and e-mail addresses are skipped (unless `opts` says otherwise); `internet` is the
 /// classification of the word's enclosing token, from [`enclosing_token`].
@@ -1318,6 +1326,20 @@ mod tests {
     /// The checks a paragraph gets ([`check_external`] first, else the built-in English ones).
     fn check(text: &str) -> Vec<Issue> {
         check_external(text).unwrap_or_else(|| check_text_with(text, &[(0..text.len(), ProofLang::En)], &Options::default(), true))
+    }
+
+    /// #575: the spelling options apply to an external checker's spelling issues too.
+    #[test]
+    fn spelling_options_apply_to_external_issues() {
+        let text = "NASA b2b see https://exmple.org now";
+        let on = Options::default();
+        let off = Options { ignore_uppercase: false, ignore_numbers: false, ignore_internet: false };
+        for (a, b) in [(0, 4), (5, 8), (13, 19)] {
+            assert!(spelling_ignored_by_options(text, a, b, &on), "{a}..{b}");
+            assert!(!spelling_ignored_by_options(text, a, b, &off), "{a}..{b}");
+        }
+        assert!(!spelling_ignored_by_options(text, 9, 12, &on));
+        assert!(!spelling_ignored_by_options(text, 3, 99, &on));
     }
 
     /// #575: an external checker's result replaces the built-in checks for exactly the text it

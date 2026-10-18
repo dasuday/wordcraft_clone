@@ -96,7 +96,6 @@ fn configure(app: &mut WordApp, p: &Value) -> Result<Value, String> {
     }
     if let Some(server) = text("server")? {
         s.server = if server.is_empty() { wordcraft_languagetool::DEFAULT_SERVER.into() } else { server };
-        s.endpoint().map_err(|e| e.to_string())?;
     }
     if let Some(u) = text("username")? {
         s.username = u;
@@ -110,6 +109,7 @@ fn configure(app: &mut WordApp, p: &Value) -> Result<Value, String> {
         }
         s.language = l;
     }
+    s.endpoint().map_err(|e| e.to_string())?;
     if s.enabled && !http::available() {
         return Err(http::UNSUPPORTED_REASON.into());
     }

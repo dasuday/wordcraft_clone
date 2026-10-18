@@ -185,6 +185,19 @@ fn credentials_go_in_the_body_only_when_both_are_set_and_never_in_debug() {
 // ---- settings ----
 
 #[test]
+fn credentials_never_go_over_plain_http_to_another_host() {
+    let acct = |server: &str, user: &str| Settings { server: server.into(), username: user.into(), api_key: if user.is_empty() { String::new() } else { "k".into() }, ..on() };
+    assert!(matches!(acct("http://lt.example.org", "u").endpoint(), Err(LtError::BadServer(_))));
+    assert!(matches!(acct("HTTP://lt.example.org:8081/v2", "u").endpoint(), Err(LtError::BadServer(_))));
+    assert!(acct("https://lt.example.org", "u").endpoint().is_ok());
+    for ok in ["http://localhost:8081", "http://127.0.0.1:8081", "http://[::1]:8081"] {
+        assert!(acct(ok, "u").endpoint().is_ok(), "{ok}");
+    }
+    // Without an account nothing secret is sent, so plain http stays allowed.
+    assert!(acct("http://lt.example.org", "").endpoint().is_ok());
+}
+
+#[test]
 fn server_addresses_normalise_to_the_check_endpoint() {
     let ep = |s: &str| Settings { server: s.into(), ..on() }.endpoint();
     assert_eq!(ep("").unwrap(), "https://api.languagetool.org/v2/check");

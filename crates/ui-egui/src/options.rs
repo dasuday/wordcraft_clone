@@ -355,9 +355,8 @@ fn language_name(lang: wordcraft_engine::proof::ProofLang) -> &'static str {
 }
 
 /// Options › Proofing › LanguageTool (#575). Off by default: when on, paragraph
-/// text goes to the chosen server. The fields edit the settings directly (a half-typed address
-/// only takes effect once it's a web address); the switch and language go through
-/// `ui.languageTool`.
+/// text goes to the chosen server. The server and account are drafted and applied together; the
+/// switch and language go through `ui.languageTool`.
 fn language_tool(app: &mut WordApp, ui: &mut Ui) {
     use wordcraft_languagetool::{DEFAULT_SERVER, http};
     let mut on = app.ui.language_tool.enabled;
@@ -376,20 +375,40 @@ fn language_tool(app: &mut WordApp, ui: &mut Ui) {
         .small()
         .weak(),
     );
-    let s = &mut app.ui.language_tool;
+    // The address and account are edited as a draft and applied together: a half-typed address
+    // must never be used (every keystroke would send text, and the key, to it).
+    let saved = (app.ui.language_tool.server.clone(), app.ui.language_tool.username.clone(), app.ui.language_tool.api_key.clone());
+    let id = egui::Id::new("options_language_tool_draft");
+    let mut draft = ui.data(|d| d.get_temp::<(String, String, String)>(id)).unwrap_or_else(|| saved.clone());
+    let mut enter = false;
     ui.horizontal(|ui| {
         ui.label(tl!("Server:"));
-        ui.add(egui::TextEdit::singleline(&mut s.server).hint_text(DEFAULT_SERVER).desired_width(300.0));
+        let r = ui.add(egui::TextEdit::singleline(&mut draft.0).hint_text(DEFAULT_SERVER).desired_width(300.0));
+        enter |= r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
     });
     ui.label(egui::RichText::new(tl!("Use your own LanguageTool server by entering its address, such as http://localhost:8081.")).small().weak());
     ui.horizontal(|ui| {
         ui.label(tl!("Username:"));
-        ui.add(egui::TextEdit::singleline(&mut s.username).desired_width(220.0));
+        let r = ui.add(egui::TextEdit::singleline(&mut draft.1).desired_width(220.0));
+        enter |= r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
     });
     ui.horizontal(|ui| {
         ui.label(tl!("API key:"));
-        ui.add(egui::TextEdit::singleline(&mut s.api_key).password(true).desired_width(220.0));
+        let r = ui.add(egui::TextEdit::singleline(&mut draft.2).password(true).desired_width(220.0));
+        enter |= r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
     });
+    let changed = draft != saved;
+    if ui.add_enabled(changed, egui::Button::new(tl!("Apply"))).clicked() || (enter && changed) {
+        match app.run("ui.languageTool", json!({"server": draft.0, "username": draft.1, "apiKey": draft.2})) {
+            Ok(_) => {
+                let s = &app.ui.language_tool;
+                draft = (s.server.clone(), s.username.clone(), s.api_key.clone());
+            }
+            Err(e) => app.status(e),
+        }
+    }
+    ui.data_mut(|d| d.insert_temp(id, draft));
+    let s = &app.ui.language_tool;
     let current = s.language.clone();
     let label = |code: &str| match code {
         "auto" | "" => tl!("Detect automatically").to_string(),

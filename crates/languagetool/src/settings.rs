@@ -100,6 +100,14 @@ impl Settings {
         if rest.starts_with(['/', '?', '#']) || rest.is_empty() || server.contains(['?', '#']) {
             return Err(LtError::BadServer(clip(server)));
         }
+        // Credentials go in the request body: never over plain http to another machine.
+        if lower.starts_with("http://") && self.has_account() {
+            let host = rest.split(['/', ':']).next().unwrap_or("");
+            let host = if rest.starts_with('[') { rest.split(']').next().map(|h| format!("{h}]")).unwrap_or_default() } else { host.to_string() };
+            if !(host == "localhost" || host.ends_with(".localhost") || host == "[::1]" || host.starts_with("127.")) {
+                return Err(LtError::BadServer(clip(server)));
+            }
+        }
         let mut base = server.trim_end_matches('/');
         for suffix in ["/v2/check", "/v2"] {
             if base.len() >= suffix.len() && base.get(base.len() - suffix.len()..).is_some_and(|t| t.eq_ignore_ascii_case(suffix)) {

@@ -2924,6 +2924,7 @@ pub fn paragraph_issues(p: &Paragraph, runs: &[ProofRun], spelling: &wordcraft_p
         return found
             .into_iter()
             .filter(|i| !skip(i.start, i.end) && (grammar || i.kind != wordcraft_proof::IssueKind::Grammar))
+            .filter(|i| i.kind != wordcraft_proof::IssueKind::Spelling || !wordcraft_proof::spelling_ignored_by_options(&text, i.start, i.end, spelling))
             .map(|i| wordcraft_proof::Issue { lang: lang_at(i.start), ..i })
             .collect();
     }
@@ -2941,10 +2942,16 @@ fn proof_issues(p: &Paragraph, runs: &[ProofRun], opts: &crate::ProofOptions) ->
 /// Text for proofing with the same byte offsets: inline objects and tracked deletions become
 /// U+0001 bytes (neither words nor spaces).
 pub fn proof_text(p: &wordcraft_doc::Paragraph) -> String {
+    // Nothing to blank: the text as it is (the usual case, and no per-character work).
+    if !p.text.contains(wordcraft_doc::para::OBJ) && p.runs.iter().all(|r| r.props.del.is_none()) {
+        return p.text.clone();
+    }
     let mut out = String::with_capacity(p.text.len());
+    let mut ranges = p.run_ranges().peekable();
     for (i, c) in p.text.char_indices() {
-        let deleted = c == wordcraft_doc::para::OBJ || p.props_of_char(i).del.is_some();
-        if deleted {
+        while ranges.next_if(|(r, _)| r.end <= i).is_some() {}
+        let in_deleted = ranges.peek().is_some_and(|(r, props)| r.start <= i && props.del.is_some());
+        if c == wordcraft_doc::para::OBJ || in_deleted {
             for _ in 0..c.len_utf8() {
                 out.push('\u{1}');
             }
