@@ -248,3 +248,62 @@ fn hostile_themes_folder_is_survived() {
     assert!(list["themes"].as_array().unwrap().is_empty());
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// Names are matched case-insensitively, and so is the file behind a saved theme: deleting or
+/// re-saving "seaside" finds `Seaside.thmx` even on a case-sensitive file system.
+#[test]
+fn theme_files_are_found_whatever_the_case_of_the_name() {
+    let dir = temp_dir("case");
+    let mut s = s();
+    s.load_custom_themes(&dir);
+    run(&mut s, "design.saveTheme", json!({"name": "Seaside"}));
+    run(&mut s, "design.saveTheme", json!({"name": "seaside"}));
+    let files: Vec<_> = std::fs::read_dir(&dir).unwrap().flatten().map(|e| e.file_name().to_string_lossy().to_string()).collect();
+    assert_eq!(files.iter().filter(|f| f.ends_with(".thmx")).count(), 1, "{files:?}");
+    assert_eq!(run(&mut s, "design.customThemes", json!({}))["themes"], json!(["Seaside"]));
+    run(&mut s, "design.deleteCustom", json!({"kind": "theme", "name": "SEASIDE"}));
+    let left: Vec<_> = std::fs::read_dir(&dir).unwrap().flatten().filter(|e| e.path().extension().is_some_and(|x| x == "thmx")).collect();
+    assert!(left.is_empty(), "the theme file was removed: {left:?}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A saved theme can't take a built-in theme's name (the built-in would win when applied), and a
+/// file named like one in the themes folder is skipped.
+#[test]
+fn saved_themes_cant_shadow_built_ins() {
+    let dir = temp_dir("builtin");
+    let mut s = s();
+    s.load_custom_themes(&dir);
+    assert!(s.run("design.saveTheme", &json!({"name": "studio"})).is_err());
+    assert!(!dir.join("studio.thmx").exists());
+    let bytes = wordcraft_docx::write_thmx(&wordcraft_docx::Theme::of(&s.doc)).unwrap();
+    std::fs::write(dir.join("Studio.thmx"), &bytes).unwrap();
+    std::fs::write(dir.join("Mine.thmx"), &bytes).unwrap();
+    let mut t = Session::new(wordcraft_doc::Document::new());
+    t.load_custom_themes(&dir);
+    assert_eq!(run(&mut t, "design.customThemes", json!({}))["themes"], json!(["Mine"]));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Names that can't be file names on some system: Windows' reserved device names, a trailing dot
+/// or space, more than 255 bytes.
+#[test]
+fn names_that_cant_be_files_anywhere_are_errors() {
+    let mut s = s();
+    let long = "ä".repeat(128);
+    for name in ["CON", "nul", "Com1", "LPT9", "aux.thmx", "Name.", long.as_str()] {
+        assert!(s.run("design.customColors", &json!({"name": name, "colors": twelve(1)})).is_err(), "{name}");
+    }
+    run(&mut s, "design.customColors", json!({"name": "Console", "colors": twelve(1)}));
+}
+
+/// Deleting a custom set changes no document: it isn't an edit to repeat or refuse.
+#[test]
+fn delete_custom_is_not_a_document_edit() {
+    let mut s = s();
+    run(&mut s, "design.customFonts", json!({"name": "Bookish", "heading": "A", "body": "B"}));
+    s.dirty = false;
+    run(&mut s, "design.deleteCustom", json!({"kind": "fonts", "name": "Bookish"}));
+    assert!(!s.dirty);
+    assert_ne!(s.last_command.as_ref().map(|c| c.0.as_str()), Some("design.deleteCustom"));
+}

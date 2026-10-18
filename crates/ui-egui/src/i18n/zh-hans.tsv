@@ -2265,6 +2265,7 @@
 	Heading	标题
 	Heading font:	标题字体:
 	Body font:	正文字体:
-	Office Theme	Office 主题
+	Theme files	主题文件
+	Theme files can't be opened or saved in the browser.	无法在浏览器中打开或保存主题文件。
 	Custom theme settings could not be saved.	无法保存自定义主题设置。
 	Custom {n}	自定义 {n}

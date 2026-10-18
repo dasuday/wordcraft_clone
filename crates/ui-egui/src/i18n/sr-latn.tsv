@@ -2263,6 +2263,7 @@
 	Heading	Naslov
 	Heading font:	Font naslova:
 	Body font:	Font teksta:
-	Office Theme	Office tema
+	Theme files	Datoteke tema
+	Theme files can't be opened or saved in the browser.	Datoteke tema ne mogu da se otvore ni sačuvaju u pregledaču.
 	Custom theme settings could not be saved.	Podešavanja prilagođenih tema nije moguće sačuvati.
 	Custom {n}	Prilagođeno {n}

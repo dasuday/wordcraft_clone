@@ -2690,6 +2690,7 @@ template	Letter	Thư
 	Sample	Mẫu
 	Heading font:	Phông đầu đề:
 	Body font:	Phông nội dung:
-	Office Theme	Chủ đề Office
+	Theme files	Tệp chủ đề
+	Theme files can't be opened or saved in the browser.	Không thể mở hoặc lưu tệp chủ đề trong trình duyệt.
 	Custom theme settings could not be saved.	Không thể lưu cài đặt chủ đề tùy chỉnh.
 	Custom {n}	Tùy chỉnh {n}

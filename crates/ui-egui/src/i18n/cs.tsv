@@ -2642,6 +2642,7 @@ preview	Title	Ukázka
 	Sample	Ukázka
 	Heading font:	Písmo nadpisu:
 	Body font:	Písmo textu:
-	Office Theme	Motiv Office
+	Theme files	Soubory motivů
+	Theme files can't be opened or saved in the browser.	Soubory motivů nelze v prohlížeči otevřít ani uložit.
 	Custom theme settings could not be saved.	Nastavení vlastních motivů se nepodařilo uložit.
 	Custom {n}	Vlastní {n}

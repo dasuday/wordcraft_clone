@@ -2507,6 +2507,7 @@ preview	Title	제목
 	Heading	제목
 	Heading font:	제목 글꼴:
 	Body font:	본문 글꼴:
-	Office Theme	Office 테마
+	Theme files	테마 파일
+	Theme files can't be opened or saved in the browser.	브라우저에서는 테마 파일을 열거나 저장할 수 없습니다.
 	Custom theme settings could not be saved.	사용자 지정 테마 설정을 저장할 수 없습니다.
 	Custom {n}	사용자 지정 {n}

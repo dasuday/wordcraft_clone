@@ -2640,6 +2640,7 @@ preview	Title	Tytuł
 	Sample	Przykład
 	Heading font:	Czcionka nagłówka:
 	Body font:	Czcionka tekstu:
-	Office Theme	Motyw pakietu Office
+	Theme files	Pliki motywów
+	Theme files can't be opened or saved in the browser.	W przeglądarce nie można otwierać ani zapisywać plików motywów.
 	Custom theme settings could not be saved.	Nie można zapisać ustawień motywów niestandardowych.
 	Custom {n}	Niestandardowe {n}

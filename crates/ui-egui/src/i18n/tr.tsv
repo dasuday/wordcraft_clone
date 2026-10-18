@@ -2647,6 +2647,7 @@ preview	Title	Örnek
 	Sample	Örnek
 	Heading font:	Başlık yazı tipi:
 	Body font:	Gövde yazı tipi:
-	Office Theme	Office Teması
+	Theme files	Tema dosyaları
+	Theme files can't be opened or saved in the browser.	Tema dosyaları tarayıcıda açılamaz veya kaydedilemez.
 	Custom theme settings could not be saved.	Özel tema ayarları kaydedilemedi.
 	Custom {n}	Özel {n}

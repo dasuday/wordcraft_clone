@@ -2648,6 +2648,7 @@ preview	Title	Пример
 	Sample	Образец
 	Heading font:	Шрифт заголовка:
 	Body font:	Шрифт основного текста:
-	Office Theme	Тема Office
+	Theme files	Файлы тем
+	Theme files can't be opened or saved in the browser.	Файлы тем нельзя открыть или сохранить в браузере.
 	Custom theme settings could not be saved.	Не удалось сохранить настройки пользовательских тем.
 	Custom {n}	Другая {n}

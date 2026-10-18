@@ -2267,6 +2267,7 @@
 	Heading	Наслов
 	Heading font:	Фонт наслова:
 	Body font:	Фонт текста:
-	Office Theme	Office тема
+	Theme files	Датотеке тема
+	Theme files can't be opened or saved in the browser.	Датотеке тема не могу да се отворе ни сачувају у прегледачу.
 	Custom theme settings could not be saved.	Подешавања прилагођених тема није могуће сачувати.
 	Custom {n}	Прилагођено {n}

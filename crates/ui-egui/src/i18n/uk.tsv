@@ -2265,6 +2265,7 @@
 	Heading	Заголовок
 	Heading font:	Шрифт заголовків:
 	Body font:	Шрифт основного тексту:
-	Office Theme	Тема Office
+	Theme files	Файли тем
+	Theme files can't be opened or saved in the browser.	Файли тем не можна відкрити чи зберегти в браузері.
 	Custom theme settings could not be saved.	Не вдалося зберегти налаштування власних тем.
 	Custom {n}	Власна {n}

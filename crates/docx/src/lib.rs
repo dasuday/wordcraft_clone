@@ -31,7 +31,7 @@ pub use flat::{XmlKind, sniff_xml, write as write_flat};
 pub use fonts::embedded_fonts;
 pub use read::read;
 pub use smart_art::smart_art_items;
-pub use theme::{MAX_THEME_FILE, Theme, read_theme, write_thmx};
+pub use theme::{MAX_THEME_FILE, MAX_THEME_PART, Theme, read_theme, write_thmx};
 pub use wordml2003_write::write as write_wordml2003;
 pub use write::{write, write_as};
 

@@ -151,3 +151,40 @@ fn hostile_theme_files_give_errors() {
     let t = read_theme(&partial).unwrap();
     assert_eq!(t.colors, THEME_COLORS);
 }
+
+fn zip_bytes(entries: &[(String, Vec<u8>)]) -> Vec<u8> {
+    let mut zw = zip::ZipWriter::new(Cursor::new(Vec::new()));
+    for (n, b) in entries {
+        zw.start_file(n.as_str(), zip::write::SimpleFileOptions::default()).unwrap();
+        zw.write_all(b).unwrap();
+    }
+    zw.finish().unwrap().into_inner()
+}
+
+/// A theme part is a few kilobytes: one that unpacks past `MAX_THEME_PART` is refused before it
+/// is all inflated (a small zip bomb in the themes folder would otherwise cost hundreds of MB).
+#[test]
+fn theme_part_unpacking_past_the_cap_is_refused() {
+    let cap = wordcraft_docx::MAX_THEME_PART;
+    let mut parts = unzip(&write_thmx(&sample_theme()).unwrap());
+    let theme = parts.iter_mut().find(|(n, _)| n == "theme/theme/theme1.xml").unwrap();
+    let xml = String::from_utf8(theme.1.clone()).unwrap();
+    // Padding inside the root element: still a valid theme, just far too big.
+    theme.1 = xml.replacen("<a:themeElements>", &format!("{}<a:themeElements>", " ".repeat(cap + 1)), 1).into_bytes();
+    let bomb = zip_bytes(&parts);
+    assert!(bomb.len() < cap / 10, "the zip itself is small ({} bytes)", bomb.len());
+    let e = read_theme(&bomb).unwrap_err();
+    assert!(e.to_string().contains("limit"), "{e}");
+}
+
+/// Only the parts that lead to the theme are unpacked: a document's big pictures don't count
+/// against the theme caps.
+#[test]
+fn big_unrelated_parts_dont_stop_a_document_theme() {
+    let mut d = Document::default();
+    d.settings.theme_colors = sample_theme().colors.to_vec();
+    let mut parts = unzip(&wordcraft_docx::write(&d).unwrap());
+    parts.push(("word/media/big.bin".into(), vec![0u8; wordcraft_docx::MAX_THEME_PART * 3]));
+    let t = read_theme(&zip_bytes(&parts)).unwrap();
+    assert_eq!(t.colors, sample_theme().colors);
+}

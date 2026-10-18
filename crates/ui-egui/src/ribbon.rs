@@ -1337,9 +1337,12 @@ fn design(app: &mut WordApp, ui: &mut Ui) {
             for (name, ..) in wordcraft_engine::cmd::design::THEMES {
                 mi(ui, app, name, "design.theme", json!({"name": name}));
             }
-            ui.separator();
-            mi(ui, app, "Browse for Themes…", "design.openTheme", json!({}));
-            mi(ui, app, "Save Current Theme…", "design.saveTheme", json!({}));
+            // The browser's file picker opens what it picks as a document: no theme files there.
+            if app.services.open_async.is_none() {
+                ui.separator();
+                mi(ui, app, "Browse for Themes…", "design.openTheme", json!({}));
+                mi(ui, app, "Save Current Theme…", "design.saveTheme", json!({}));
+            }
         });
     });
     group(ui, "Document Formatting", None, app, |ui, app| {

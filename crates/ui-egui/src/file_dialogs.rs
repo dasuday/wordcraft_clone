@@ -42,7 +42,7 @@ pub fn open_filters(purpose: &str) -> &'static [(&'static str, &'static [&'stati
         "picture" => &[("Pictures", PICTURES)],
         "font" => &[("Fonts", wordcraft_fonts::FONT_FILE_EXTS)],
         "recipients" => &[("Recipient lists", wordcraft_engine::cmd::mailings::RECIPIENT_EXTENSIONS), ("All files", &["*"])],
-        "theme" => &[("Office Theme", &["thmx"]), ("Documents", &["docx", "docm", "dotx", "dotm"]), ("All files", &["*"])],
+        "theme" => &[("Theme files", &["thmx"]), ("Documents", &["docx", "docm", "dotx", "dotm"]), ("All files", &["*"])],
         _ => &[("Documents", DOCUMENTS), ("Word document", &["docx"]), ("All files", &["*"])],
     }
 }
@@ -326,15 +326,17 @@ impl WordApp {
     }
 
     /// Save Current Theme… (`save`) asks where to write the `.thmx`; Browse for Themes… asks for a
-    /// theme file or document whose theme to apply (#1869). The browser has neither: its picker
-    /// opens what it picks as a document.
+    /// theme file or document whose theme to apply (#1869). The browser has neither (its picker
+    /// opens what it picks as a document), so there the status bar says so; the ribbon leaves
+    /// both out.
     pub(crate) fn pick_theme(&mut self, save: bool) {
         if self.services.open_async.is_some() {
+            self.status(tl!("Theme files can't be opened or saved in the browser."));
             return;
         }
         let req = if save {
-            let name = self.session.doc.settings.theme_name.trim();
-            let name = if name.is_empty() { "Theme" } else { name };
+            // The theme's name comes from the document: suggest it only if it makes a file name.
+            let name = wordcraft_engine::cmd::themes::check_name(&self.session.doc.settings.theme_name).unwrap_or_else(|_| "Theme".into());
             FileDialogRequest::Save { name: format!("{name}.thmx") }
         } else {
             FileDialogRequest::Open { purpose: "theme".into() }

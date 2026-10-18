@@ -22,6 +22,9 @@ pub const THEME_CONTENT_TYPE: &str = "application/vnd.openxmlformats-officedocum
 
 /// Largest theme file read (a `.thmx` is a few kilobytes; a `.docx` may carry pictures).
 pub const MAX_THEME_FILE: usize = 64 * 1024 * 1024;
+/// Largest theme part (or relationships part on the way to it) unpacked: a theme is a few
+/// kilobytes, so anything near this is hostile.
+pub const MAX_THEME_PART: usize = 4 * 1024 * 1024;
 /// Longest theme or font name kept.
 const MAX_NAME: usize = 256;
 
@@ -130,16 +133,16 @@ pub fn read_theme(bytes: &[u8]) -> Result<Theme, DocxError> {
     if bytes.len() > MAX_THEME_FILE {
         return Err(DocxError::Limit(format!("theme file of {} bytes", bytes.len())));
     }
-    let pkg = Package::open(bytes)?;
-    let main = pkg.rels("").by_type(rt::OFFICE_DOC).filter(|r| !r.external).map(|r| r.target.clone());
+    // Only the relationship parts and then the theme part are unpacked, each capped at a theme's
+    // size: a document's pictures cost nothing, and a zip bomb in place of a theme stops early.
+    let cap = MAX_THEME_PART as u64;
+    let rels = Package::open_filtered(bytes, &|n| n.to_ascii_lowercase().ends_with(".rels"), cap, cap.saturating_mul(4))?;
+    let main = rels.rels("").by_type(rt::OFFICE_DOC).filter(|r| !r.external).map(|r| r.target.clone());
     let main = main.ok_or_else(|| DocxError::MissingPart("main part".into()))?;
-    let root = pkg.xml(&main)?.ok_or_else(|| DocxError::MissingPart(main.clone()))?;
-    if root.local() == "theme" {
-        return parse_theme(&root);
-    }
-    // A document: its theme relationship.
-    let part = pkg.rels(&main).list.into_iter().find(|r| rel_is(&r.kind, rt::THEME) && !r.external).map(|r| r.target);
-    let part = part.ok_or_else(|| DocxError::MissingPart("theme".into()))?;
+    // A document names its theme part; a theme file's main part is the theme.
+    let part = rels.rels(&main).list.into_iter().find(|r| rel_is(&r.kind, rt::THEME) && !r.external).map(|r| r.target).unwrap_or(main);
+    let want = part.trim_start_matches('/').to_string();
+    let pkg = Package::open_filtered(bytes, &|n| n.eq_ignore_ascii_case(&want), cap, cap)?;
     let root = pkg.xml(&part)?.ok_or_else(|| DocxError::MissingPart(part.clone()))?;
     if root.local() != "theme" {
         return Err(DocxError::MissingPart("theme".into()));

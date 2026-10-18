@@ -2253,6 +2253,7 @@
 	Heading	見出し
 	Heading font:	見出しのフォント:
 	Body font:	本文のフォント:
-	Office Theme	Office テーマ
+	Theme files	テーマ ファイル
+	Theme files can't be opened or saved in the browser.	ブラウザーではテーマ ファイルを開いたり保存したりできません。
 	Custom theme settings could not be saved.	カスタム テーマの設定を保存できませんでした。
 	Custom {n}	カスタム {n}

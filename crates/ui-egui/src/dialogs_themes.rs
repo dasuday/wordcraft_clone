@@ -146,7 +146,7 @@ fn colors_ui(app: &mut WordApp, ui: &mut Ui, f: &mut ColorsForm) -> bool {
                     };
                     ui.label(text);
                     if let Some(v) = f.colors.get_mut(i) {
-                        ui.push_id(i, |ui| color_field(ui, &theme, v, "Automatic", ""));
+                        ui.push_id(i, |ui| color_field(ui, &theme, v, "", ""));
                     }
                     ui.end_row();
                 }
@@ -375,5 +375,28 @@ mod tests {
         a.run("design.openTheme", json!({})).unwrap();
         assert_eq!(a.session.doc.settings.major_font, "Palatino");
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A theme colour is always a colour: the slots' menus offer no "Automatic" (an empty slot
+    /// would make Save fail).
+    #[test]
+    fn colour_slots_offer_no_automatic() {
+        use egui_kittest::kittest::Queryable;
+        let mut a = app();
+        a.run("design.customColors", json!({})).unwrap();
+        let dark1 = a.session.doc.settings.theme_colors[0].hex();
+        let mut h = egui_kittest::Harness::builder().with_size(vec2(1440.0, 900.0)).build_ui_state(
+            |ui, app: &mut WordApp| {
+                let ctx = ui.ctx().clone();
+                app.logic(&ctx);
+                app.ui(ui);
+            },
+            a,
+        );
+        h.run_steps(4);
+        h.get_all_by_label(&dark1).next().unwrap().click();
+        h.run_steps(4);
+        assert!(h.query_all_by_value("Theme Colors").next().is_some(), "the slot's menu is open");
+        assert!(h.query_by_label("Automatic").is_none(), "no Automatic in a theme colour's menu");
     }
 }

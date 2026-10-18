@@ -2618,6 +2618,7 @@ preview	Title	Título
 	Heading	Título
 	Heading font:	Fuente de encabezado:
 	Body font:	Fuente de cuerpo:
-	Office Theme	Tema de Office
+	Theme files	Archivos de tema
+	Theme files can't be opened or saved in the browser.	Los archivos de tema no se pueden abrir ni guardar en el navegador.
 	Custom theme settings could not be saved.	No se pudo guardar la configuración de temas personalizados.
 	Custom {n}	Personalizado {n}

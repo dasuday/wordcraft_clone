@@ -2260,6 +2260,7 @@
 	Heading	Titre
 	Heading font:	Police des titres :
 	Body font:	Police du corps :
-	Office Theme	Thème Office
+	Theme files	Fichiers de thème
+	Theme files can't be opened or saved in the browser.	Les fichiers de thème ne peuvent pas être ouverts ni enregistrés dans le navigateur.
 	Custom theme settings could not be saved.	Impossible d'enregistrer les thèmes personnalisés.
 	Custom {n}	Personnalisé {n}

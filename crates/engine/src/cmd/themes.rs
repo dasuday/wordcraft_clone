@@ -106,7 +106,7 @@ impl CustomThemes {
                 break;
             }
             let Some(stem) = path.file_stem().map(|s| s.to_string_lossy().to_string()) else { continue };
-            if check_name(&stem).is_err() || c.find_theme(&stem).is_some() {
+            if check_name(&stem).is_err() || is_builtin(&stem) || c.find_theme(&stem).is_some() {
                 continue;
             }
             let Some(bytes) = read_capped(&path, MAX_THMX) else { continue };
@@ -147,20 +147,34 @@ fn read_capped(path: &Path, cap: u64) -> Option<Vec<u8>> {
 }
 
 /// A custom set's name: trimmed, not empty, at most [`MAX_NAME`] characters, and usable as a
-/// file name (a theme is saved as `<name>.thmx`): no path separators, reserved characters,
-/// control characters or leading dot.
+/// file name on every system (a theme is saved as `<name>.thmx`): no path separators, reserved
+/// characters, control characters, leading dot or trailing dot, at most 250 bytes (room for the
+/// extension in a 255-byte file name), and not a Windows device name (`CON`, `NUL`, `COM1`…, with
+/// or without an extension).
 pub fn check_name(name: &str) -> Result<String, CmdError> {
     let n = name.trim();
     if n.is_empty() {
         return Err(CmdError::Params("the name is empty".into()));
     }
-    if n.chars().count() > MAX_NAME {
-        return Err(CmdError::Params(format!("the name is longer than {MAX_NAME} characters")));
+    if n.chars().count() > MAX_NAME || n.len() > 250 {
+        return Err(CmdError::Params(format!("the name is longer than {MAX_NAME} characters (or 250 bytes)")));
     }
-    if n.starts_with('.') || n.chars().any(|c| c.is_control() || matches!(c, '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|')) {
+    let bad_char = |c: char| c.is_control() || matches!(c, '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|');
+    if n.starts_with('.') || n.ends_with('.') || n.chars().any(bad_char) || is_device_name(n) {
         return Err(CmdError::Params(format!("`{n}` can't be used as a name")));
     }
     Ok(n.to_string())
+}
+
+/// Windows' reserved device names, which can't be file names whatever the extension.
+fn is_device_name(name: &str) -> bool {
+    let stem = name.split('.').next().unwrap_or(name).trim_end();
+    let upper = stem.to_ascii_uppercase();
+    if matches!(upper.as_str(), "CON" | "PRN" | "AUX" | "NUL") {
+        return true;
+    }
+    let (Some(head), Some(digit)) = (upper.get(..3), upper.get(3..)) else { return false };
+    matches!(head, "COM" | "LPT") && digit.len() == 1 && digit.bytes().all(|b| b.is_ascii_digit())
 }
 
 fn check_font(name: &str) -> Result<String, CmdError> {
@@ -188,6 +202,17 @@ fn is_builtin(name: &str) -> bool {
     THEMES.iter().any(|t| t.0.eq_ignore_ascii_case(name))
 }
 
+/// The file of the saved theme `name` in `dir`: an existing `.thmx` whose name matches whatever
+/// its case (names are matched case-insensitively, file systems may not be), else `<name>.thmx`.
+fn theme_file(dir: &Path, name: &str) -> PathBuf {
+    let files = crate::io::list_files(dir, MAX_CUSTOM * 4).unwrap_or_default();
+    let found = files.into_iter().find(|p| {
+        p.extension().is_some_and(|e| e.eq_ignore_ascii_case(THEME_EXT))
+            && p.file_stem().is_some_and(|s| s.to_string_lossy().eq_ignore_ascii_case(name))
+    });
+    found.unwrap_or_else(|| dir.join(format!("{name}.{THEME_EXT}")))
+}
+
 pub fn specs() -> Vec<CommandSpec> {
     const LOC: &str = "Design › Document Formatting";
     vec![
@@ -196,7 +221,8 @@ pub fn specs() -> Vec<CommandSpec> {
         CommandSpec::new("design.customFonts", "Customize Fonts", LOC, custom_fonts)
             .params(r#"{"name": string, "heading": string, "body"?: string (default: heading), "replace"?: bool} (from the ribbon, the app shows the dialog)"#),
         CommandSpec::new("design.deleteCustom", "Delete", LOC, delete_custom)
-            .params(r#"{"kind": "colors|fonts|theme", "name": string}"#),
+            .params(r#"{"kind": "colors|fonts|theme", "name": string}"#)
+            .pure(),
         CommandSpec::new("design.customThemes", "Custom", LOC, |s, _| Ok(s.custom_themes.to_json()))
             .params(r#"{} → {"colors": [{"name", "colors": [12 × "RRGGBB"]}], "fonts": [{"name", "heading", "body"}], "themes": [name]}"#)
             .pure(),
@@ -300,7 +326,7 @@ fn delete_custom(s: &mut Session, v: &Value) -> CmdResult {
     }
     if kind == "theme" {
         if let Some(dir) = &s.themes_dir {
-            let file = dir.join(format!("{name}.{THEME_EXT}"));
+            let file = theme_file(dir, &name);
             if let Err(e) = crate::io::remove_file(&file) {
                 log::warn!("custom themes: couldn't remove {}: {e}", file.display());
             }
@@ -313,6 +339,9 @@ fn delete_custom(s: &mut Session, v: &Value) -> CmdResult {
 
 fn save_theme(s: &mut Session, v: &Value) -> CmdResult {
     let name = p::str(v, "name").map(check_name).transpose()?;
+    if let Some(n) = name.as_deref().filter(|n| is_builtin(n)) {
+        return Err(CmdError::Params(format!("`{n}` is a built-in theme")));
+    }
     let mut theme = Theme::of(&s.doc);
     if let Some(n) = &name {
         theme.name = n.clone();
@@ -333,14 +362,17 @@ fn save_theme(s: &mut Session, v: &Value) -> CmdResult {
             };
             let dir = s.themes_dir.clone().ok_or_else(|| CmdError::Failed("there is no themes folder here: pass `path`".into()))?;
             crate::io::create_dir(&dir).map_err(CmdError::Failed)?;
-            dir.join(format!("{n}.{THEME_EXT}"))
+            theme_file(&dir, n)
         }
     };
     let bytes = wordcraft_docx::write_thmx(&theme).map_err(|e| CmdError::Failed(e.to_string()))?;
     crate::io::write_file(&path.to_string_lossy(), &bytes).map_err(CmdError::Failed)?;
     // Saved to the themes folder: it shows in the Themes gallery.
     let in_folder = s.themes_dir.as_deref().is_some_and(|d| path.parent() == Some(d));
-    if in_folder && let Some(stem) = path.file_stem().map(|x| x.to_string_lossy().to_string()) {
+    if in_folder
+        && let Some(stem) = path.file_stem().map(|x| x.to_string_lossy().to_string())
+        && !is_builtin(&stem)
+    {
         let mut t = theme.clone();
         t.name = stem.clone();
         let list = &mut s.custom_themes.themes;
