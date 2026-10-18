@@ -6539,7 +6539,7 @@ mod tests {
             ..Default::default()
         };
         let mut a = WordApp::new(Session::new(wordcraft_doc::Document::new()), services);
-        for name in ["../../etc/passwd", "CON", "Office", "Harbour"] {
+        for name in ["../../etc/passwd", "CON", "Craft", "Harbour"] {
             a.session.doc.settings.theme_name = name.into();
             let _ = a.run("design.saveTheme", json!({}));
         }
