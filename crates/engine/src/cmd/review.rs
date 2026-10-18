@@ -548,9 +548,8 @@ fn resolve_row(s: &mut Session, story: StoryRef, tp: &wordcraft_doc::Path, r: us
     let Some((ins, del)) = marks.filter(|m| *m != (None, None)) else { return Ok(false) };
     let t = s.doc.table_mut(story, tp)?;
     if (accept && del.is_some()) || (!accept && ins.is_some()) {
-        if r < t.rows.len() {
-            t.rows.remove(r);
-        }
+        // A vertical merge that starts in the row then starts in the row below.
+        t.delete_row(r);
         if t.rows.is_empty() {
             s.doc.remove_block(story, tp)?;
             s.doc.ensure_nonempty();
@@ -571,7 +570,13 @@ fn resolve_rows(blocks: &mut wordcraft_doc::Blocks, accept: bool, depth: usize) 
     let has = |b: &wordcraft_doc::Block| matches!(b, wordcraft_doc::Block::Table(_));
     for b in blocks.iter_mut().filter(|b| has(b)) {
         if let wordcraft_doc::Block::Table(t) = std::sync::Arc::make_mut(b) {
-            t.rows.retain(|r| !((accept && r.props.del.is_some()) || (!accept && r.props.ins.is_some())));
+            // Last first, each through `delete_row` so vertical merges stay valid.
+            let gone: Vec<usize> = (0..t.rows.len())
+                .filter(|&i| t.rows.get(i).is_some_and(|r| (accept && r.props.del.is_some()) || (!accept && r.props.ins.is_some())))
+                .collect();
+            for i in gone.into_iter().rev() {
+                t.delete_row(i);
+            }
             for r in &mut t.rows {
                 r.props.ins = None;
                 r.props.del = None;

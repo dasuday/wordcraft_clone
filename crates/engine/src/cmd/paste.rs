@@ -430,8 +430,19 @@ fn adopt(s: &mut Session, src: Document) -> Fragment {
         imported.remap_block(b);
     }
     unlink_sections(&mut blocks);
-    // Text box stories the imported shapes show; pasting gives each a new story of its own.
-    let parts = src.parts.into_iter().filter(|(_, p)| p.kind == wordcraft_doc::PartKind::TextBox).collect();
+    // Text box stories the imported shapes show (their content pointed at our copies too);
+    // pasting gives each a new story of its own.
+    let parts = src
+        .parts
+        .into_iter()
+        .filter(|(_, p)| p.kind == wordcraft_doc::PartKind::TextBox)
+        .map(|(k, mut p)| {
+            for b in &mut p.blocks {
+                imported.remap_block(Arc::make_mut(b));
+            }
+            (k, p)
+        })
+        .collect();
     Fragment { blocks, parts }
 }
 
@@ -547,4 +558,41 @@ pub(crate) fn import_resources(doc: &mut Document, src: &Document, reuse: bool) 
     let rev_base = u32::try_from(doc.revisions.len()).unwrap_or(u32::MAX);
     doc.revisions.extend(src.revisions.iter().cloned());
     Imported { media, nums, rev_base, src_revs: src.revisions.len() }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use wordcraft_doc::para::InlineObject;
+    use wordcraft_doc::{CharProps, PartKind, para_block};
+
+    /// #1317 review: a picture in a pasted text box shows the pasted picture, which is stored
+    /// under a new key when ours already uses the source's key.
+    #[test]
+    fn pasted_text_box_stories_point_at_the_imported_media() {
+        let mut ours = Document::from_text("Ours");
+        ours.media.insert("image1.png".into(), Arc::new(vec![1, 1, 1]));
+        let mut s = Session::new(ours);
+        let mut src = Document::from_text("Theirs");
+        src.media.insert("image1.png".into(), Arc::new(vec![2, 2, 2]));
+        let pic = InlineObject::Image {
+            media: "image1.png".into(),
+            w: 20.0,
+            h: 10.0,
+            alt: String::new(),
+            float: Default::default(),
+            crop: [0.0; 4],
+            ole: None,
+        };
+        let mut p = Paragraph::new();
+        p.insert_object(0, pic, &CharProps::default()).unwrap();
+        let story = src.try_add_part(PartKind::TextBox, vec![para_block(p)]).unwrap();
+        let frag = adopt(&mut s, src);
+        let media = frag.parts[&story].blocks[0].as_para().and_then(|p| match p.objects.first() {
+            Some(InlineObject::Image { media, .. }) => Some(media.clone()),
+            _ => None,
+        });
+        let bytes = media.and_then(|m| s.doc.media.get(&m).map(|d| d.to_vec()));
+        assert_eq!(bytes, Some(vec![2, 2, 2]));
+    }
 }

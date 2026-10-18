@@ -1464,38 +1464,19 @@ fn import_revised(doc: &mut Document, revised: Document, dropped: &mut Vec<Value
             }
         });
     }
-    doc.adopt_text_box_stories(&mut blocks, &boxes);
-    let mut refs = Refs { doc, src: &revised, im: &im, notes: BTreeMap::new(), comments: BTreeMap::new() };
-    let (mut lost_notes, mut lost_comments) = (0usize, 0usize);
+    // Note references and comment marks, in the body and in the text boxes, point at our copies.
+    let mut refs =
+        Refs { doc: &mut *doc, src: &revised, im: &im, notes: BTreeMap::new(), comments: BTreeMap::new(), lost_notes: 0, lost_comments: 0 };
     for b in &mut blocks {
-        super::paste::each_para(b, 0, &mut |p| {
-            let mut gone = Vec::new();
-            for (k, o) in p.objects.iter_mut().enumerate() {
-                // Whether the reference is lost: `Some(true)` a note's, `Some(false)` a comment's.
-                let lost = match o {
-                    InlineObject::NoteRef { id, .. } => refs.note(*id).map(|n| *id = n).is_none().then_some(true),
-                    InlineObject::CommentStart { id } | InlineObject::CommentEnd { id } => {
-                        refs.comment(*id).map(|n| *id = n).is_none().then_some(false)
-                    }
-                    _ => None,
-                };
-                match lost {
-                    Some(true) => lost_notes += 1,
-                    Some(false) => lost_comments += 1,
-                    None => continue,
-                }
-                gone.push(k);
-            }
-            if !gone.is_empty() {
-                let offsets = p.object_offsets();
-                for k in gone.iter().rev() {
-                    if let Some(off) = offsets.get(*k) {
-                        let _ = p.delete(*off, off + wordcraft_doc::para::OBJ.len_utf8());
-                    }
-                }
-            }
-        });
+        refs.remap(b, 0);
     }
+    for part in boxes.values_mut() {
+        for b in &mut part.blocks {
+            refs.remap(Arc::make_mut(b), 0);
+        }
+    }
+    let (lost_notes, lost_comments) = (refs.lost_notes, refs.lost_comments);
+    doc.adopt_text_box_stories(&mut blocks, &boxes);
     for (what, count, why) in [
         ("textBoxStory", lost_boxes, "a text box whose text the revised document lacks shows none"),
         ("noteReference", lost_notes, "a note reference whose note the revised document lacks"),
@@ -1516,39 +1497,90 @@ struct Refs<'a> {
     im: &'a super::paste::Imported,
     notes: std::collections::BTreeMap<u32, Option<u32>>,
     comments: std::collections::BTreeMap<u32, Option<u32>>,
+    /// Note references and comment marks left out: their story couldn't be brought over.
+    lost_notes: usize,
+    lost_comments: usize,
 }
 
+/// How deep notes and comments whose text refers to more notes and comments are followed.
+const MAX_REF_DEPTH: usize = 8;
+
 impl Refs<'_> {
+    /// Point the note references and comment marks in `b` at our copies of their stories; one
+    /// whose story can't be brought over (missing, a cycle, or deeper than [`MAX_REF_DEPTH`]) is
+    /// deleted and counted.
+    fn remap(&mut self, b: &mut Block, depth: usize) {
+        super::paste::each_para(b, 0, &mut |p| {
+            let mut gone = Vec::new();
+            for (k, o) in p.objects.iter_mut().enumerate() {
+                // Whether the reference is lost: `Some(true)` a note's, `Some(false)` a comment's.
+                let lost = match o {
+                    InlineObject::NoteRef { id, .. } => self.note(*id, depth).map(|n| *id = n).is_none().then_some(true),
+                    InlineObject::CommentStart { id } | InlineObject::CommentEnd { id } => {
+                        self.comment(*id, depth).map(|n| *id = n).is_none().then_some(false)
+                    }
+                    _ => None,
+                };
+                match lost {
+                    Some(true) => self.lost_notes += 1,
+                    Some(false) => self.lost_comments += 1,
+                    None => continue,
+                }
+                gone.push(k);
+            }
+            if !gone.is_empty() {
+                let offsets = p.object_offsets();
+                for k in gone.iter().rev() {
+                    if let Some(off) = offsets.get(*k) {
+                        let _ = p.delete(*off, off + wordcraft_doc::para::OBJ.len_utf8());
+                    }
+                }
+            }
+        });
+    }
+
     /// A copy of the source's story `id` when it is one of `kinds`; its content points at our
     /// copies of what it refers to.
-    fn part(&mut self, id: u32, kinds: &[wordcraft_doc::PartKind]) -> Option<u32> {
+    fn part(&mut self, id: u32, kinds: &[wordcraft_doc::PartKind], depth: usize) -> Option<u32> {
         let part = self.src.parts.get(&id).filter(|p| kinds.contains(&p.kind))?;
         let mut blocks = part.blocks.clone();
         for b in &mut blocks {
-            self.im.remap_block(Arc::make_mut(b));
+            let b = Arc::make_mut(b);
+            self.im.remap_block(b);
+            self.remap(b, depth.saturating_add(1));
         }
         self.doc.try_add_part(part.kind, blocks).ok()
     }
 
     /// Our id for the source's footnote or endnote story `id`.
-    fn note(&mut self, id: u32) -> Option<u32> {
+    fn note(&mut self, id: u32, depth: usize) -> Option<u32> {
         use wordcraft_doc::PartKind;
         if let Some(n) = self.notes.get(&id) {
             return *n;
         }
-        let n = self.part(id, &[PartKind::Footnote, PartKind::Endnote]);
+        if depth > MAX_REF_DEPTH {
+            return None;
+        }
+        // Lost while it is being copied, so a note that refers back to itself ends.
+        self.notes.insert(id, None);
+        let n = self.part(id, &[PartKind::Footnote, PartKind::Endnote], depth);
         self.notes.insert(id, n);
         n
     }
 
     /// Our id for the source's comment `id` (its text copied, a reply kept a reply when its
     /// parent came first).
-    fn comment(&mut self, id: u32) -> Option<u32> {
+    fn comment(&mut self, id: u32, depth: usize) -> Option<u32> {
         if let Some(n) = self.comments.get(&id) {
             return *n;
         }
+        if depth > MAX_REF_DEPTH {
+            return None;
+        }
+        // Lost while it is being copied, so a comment that refers back to itself ends.
+        self.comments.insert(id, None);
         let n = self.src.comments.get(&id).cloned().and_then(|c| {
-            let part = self.part(c.part, &[wordcraft_doc::PartKind::Comment])?;
+            let part = self.part(c.part, &[wordcraft_doc::PartKind::Comment], depth)?;
             let new = match self.doc.comments.keys().next_back() {
                 None => Some(0),
                 Some(k) => k.checked_add(1),
@@ -2672,7 +2704,8 @@ mod tests {
             let n = p.len();
             p.insert_text(n, " page ", &CharProps::default()).unwrap();
             let n = p.len();
-            let field = InlineObject::Field { instr: "PAGE".into(), result: "1".into(), locked: false, dirty: false, code: false, form: String::new() };
+            let field =
+                InlineObject::Field { instr: "PAGE".into(), result: "1".into(), locked: false, dirty: false, code: false, form: String::new() };
             p.insert_object(n, field, &CharProps::default()).unwrap();
             d.body = vec![para_block(p)];
             d
@@ -3001,6 +3034,131 @@ mod tests {
         let t = s.doc.body.get(1).and_then(|b| b.as_table()).expect("the table stays");
         assert_eq!(t.rows.len(), 1);
         assert_eq!(block_text(&s.doc.body[1], 0), "cell 2\tcell 3");
+    }
+
+    /// A 2 × 2 table whose first column is one cell merged down both rows.
+    fn vmerged_table() -> Arc<Block> {
+        use wordcraft_doc::props::VMerge;
+        use wordcraft_doc::table::Cell;
+        let mut t = wordcraft_doc::Table::new(2, 2, 200.0);
+        t.rows[0].cells[0] = Cell::with_text("merged");
+        t.rows[0].cells[0].props.vmerge = VMerge::Restart;
+        t.rows[0].cells[1] = Cell::with_text("top");
+        t.rows[1].cells[0].props.vmerge = VMerge::Continue;
+        t.rows[1].cells[1] = Cell::with_text("bottom");
+        Arc::new(Block::Table(t))
+    }
+
+    /// Select row `r` of the 2 × 2 table at body index 1.
+    fn select_row(s: &mut Session, r: u32) {
+        let end = s.doc.para(StoryRef::Body, &wordcraft_doc::Path(vec![1, r, 1, 0])).map(|p| p.len()).unwrap();
+        s.sel = Selection {
+            anchor: Pos { story: StoryRef::Body, path: wordcraft_doc::Path(vec![1, r, 0, 0]), off: 0 },
+            focus: Pos { story: StoryRef::Body, path: wordcraft_doc::Path(vec![1, r, 1, 0]), off: end },
+        };
+    }
+
+    /// #1317 review: a row removed by resolving its change hands a vertical merge that starts in
+    /// it to the row below, which never keeps a merge with no start.
+    #[test]
+    fn resolving_a_row_keeps_vertical_merges_valid() {
+        use wordcraft_doc::props::VMerge;
+        let first_col = |s: &Session| {
+            let t = s.doc.body.get(1).and_then(|b| b.as_table()).expect("the table stays");
+            t.rows.iter().map(|r| r.cells[0].props.vmerge).collect::<Vec<_>>()
+        };
+        let mut revised = Document::from_text("Intro\nOutro");
+        revised.body.insert(1, vmerged_table());
+        // Reject All after the lower row was accepted by selection.
+        let mut s = Session::new(Document::from_text("Intro\nOutro"));
+        compare_with(&mut s, revised.clone(), &json!({})).unwrap();
+        select_row(&mut s, 1);
+        s.run("review.accept", &json!({})).unwrap();
+        s.run("review.rejectAll", &json!({})).unwrap();
+        assert_eq!(first_col(&s), [VMerge::None]);
+        // The upper row rejected by selection.
+        let mut s = Session::new(Document::from_text("Intro\nOutro"));
+        compare_with(&mut s, revised, &json!({})).unwrap();
+        select_row(&mut s, 0);
+        s.run("review.reject", &json!({})).unwrap();
+        assert_eq!(first_col(&s), [VMerge::None]);
+    }
+
+    /// #1317 review: comment marks inside a text box and inside a footnote the revised document
+    /// brings point at the revised comment's copy, never at the original comment with its id.
+    #[test]
+    fn compare_gives_comment_marks_in_text_boxes_and_notes_our_ids() {
+        use wordcraft_doc::{Comment, PartKind, para::NoteKind};
+        let plain = CharProps::default();
+        let commented = |text: &str| {
+            let mut p = Paragraph::new();
+            p.insert_object(0, InlineObject::CommentStart { id: 0 }, &plain).unwrap();
+            let n = p.len();
+            p.insert_text(n, text, &plain).unwrap();
+            let n = p.len();
+            p.insert_object(n, InlineObject::CommentEnd { id: 0 }, &plain).unwrap();
+            para_block(p)
+        };
+        let mut original = Document::from_text("Intro");
+        let part = original.try_add_part(PartKind::Comment, vec![para_block(Paragraph::with_text("Mine", plain.clone()))]).unwrap();
+        original.comments.insert(0, Comment { author: "Me".into(), part, ..Default::default() });
+        let mut revised = Document::from_text("Intro");
+        let part = revised.try_add_part(PartKind::Comment, vec![para_block(Paragraph::with_text("Theirs", plain.clone()))]).unwrap();
+        revised.comments.insert(0, Comment { author: "Ann".into(), part, ..Default::default() });
+        let story = revised.try_add_part(PartKind::TextBox, vec![commented("Boxed")]).unwrap();
+        let shape = InlineObject::Shape {
+            kind: Default::default(),
+            w: 50.0,
+            h: 20.0,
+            fill: None,
+            stroke: None,
+            stroke_width: 1.0,
+            float: Default::default(),
+            story: Some(story),
+            freeform: None,
+            effects: Default::default(),
+            extra: Default::default(),
+        };
+        revised.body.push(para_with_object("Box ", shape));
+        let note = revised.try_add_part(PartKind::Footnote, vec![commented("Noted")]).unwrap();
+        revised.body.push(para_with_object("Note", InlineObject::NoteRef { kind: NoteKind::Footnote, id: note, custom: String::new() }));
+        let mut s = Session::new(original);
+        compare_with(&mut s, revised, &json!({})).unwrap();
+        let first = |b: &Arc<Block>| b.as_para().and_then(|p| p.objects.first().cloned());
+        let story = match first(&s.doc.body[1]) {
+            Some(InlineObject::Shape { story: Some(id), .. }) => id,
+            o => panic!("no text box: {o:?}"),
+        };
+        let note = match first(&s.doc.body[2]) {
+            Some(InlineObject::NoteRef { id, .. }) => id,
+            o => panic!("no note: {o:?}"),
+        };
+        for id in [story, note] {
+            let marks: Vec<u32> = s.doc.parts[&id]
+                .blocks
+                .iter()
+                .filter_map(|b| b.as_para())
+                .flat_map(|p| p.objects.iter())
+                .filter_map(|o| match o {
+                    InlineObject::CommentStart { id } | InlineObject::CommentEnd { id } => Some(*id),
+                    _ => None,
+                })
+                .collect();
+            assert_eq!(marks.len(), 2, "story {id} keeps both marks");
+            for m in marks {
+                assert_eq!(s.doc.comments.get(&m).map(|c| c.author.as_str()), Some("Ann"), "story {id}");
+            }
+        }
+        assert_eq!(s.doc.comments.get(&0).map(|c| c.author.as_str()), Some("Me"));
+        // A comment whose own text holds a mark of itself ends: the inner mark is left out.
+        let mut revised = Document::from_text("Intro");
+        let part = revised.try_add_part(PartKind::Comment, vec![commented("Loop")]).unwrap();
+        revised.comments.insert(0, Comment { author: "Ann".into(), part, ..Default::default() });
+        revised.body.push(commented("Text"));
+        let mut s = Session::new(Document::from_text("Intro"));
+        let r = compare_with(&mut s, revised, &json!({})).unwrap();
+        assert_eq!(s.doc.comments.len(), 1);
+        assert_eq!(r["dropped"][0]["what"], "commentAnchor", "{r}");
     }
 
     /// #1317 (N4): a row inserted or deleted whole is listed as a change, even with empty cells.
