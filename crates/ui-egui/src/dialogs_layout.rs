@@ -1125,6 +1125,20 @@ pub struct SizeForm {
     /// The original size before the crop, and a bitmap's pixels, as shown.
     pub uncropped: Option<(f32, f32)>,
     pub pixels: Option<(u32, u32)>,
+    /// What the form was read from (see [`seen`]).
+    #[serde(skip)]
+    seen: Seen,
+}
+
+/// An object's picture, crop and size, bit for bit: what [`SizeForm::follow`] compares.
+type Seen = (String, [u32; 4], [u32; 2]);
+
+fn seen(o: &wordcraft_doc::para::InlineObject) -> Seen {
+    let (w, h) = o.frame().map_or((0.0, 0.0), |(w, h, _)| (w, h));
+    match o {
+        wordcraft_doc::para::InlineObject::Image { media, crop, .. } => (media.clone(), crop.map(f32::to_bits), [w.to_bits(), h.to_bits()]),
+        _ => (String::new(), [0; 4], [w.to_bits(), h.to_bits()]),
+    }
 }
 
 impl SizeForm {
@@ -1148,15 +1162,17 @@ impl SizeForm {
             original,
             uncropped: full.map(|f| (f.w, f.h)),
             pixels: full.and_then(|f| f.pixels),
+            seen: seen(&o),
         })
     }
 
     /// Follow the selection: dialogs aren't modal, so a click on the page may pick another object,
-    /// which the form starts over on, or nothing to size (false: close the dialog). OK then never
-    /// sizes one object with the numbers read from another.
+    /// and the ribbon or the handles may crop, change or resize this one. The form then starts over
+    /// on what is selected, or there is nothing to size (false: close the dialog). OK and Reset
+    /// never work from numbers read from another object or an older state of this one.
     pub fn follow(&mut self, app: &WordApp) -> bool {
         match wordcraft_engine::cmd::objects::selected(&app.session) {
-            Some((at, _)) if at == self.at => true,
+            Some((at, o)) if at == self.at && seen(&o) == self.seen => true,
             Some(_) => SizeForm::read(app).map(|f| *self = f).is_some(),
             None => false,
         }
@@ -1831,9 +1847,9 @@ mod tests {
         assert_eq!((f.width, f.height), (4000.0, 2.0), "unlocked, one side alone");
     }
 
-    /// #2573 review: dialogs aren't modal. Picking another picture while the Size dialog is open
-    /// starts the form over on it, so OK never sizes one picture with another's numbers; with
-    /// nothing left to size the dialog closes.
+    /// #2573 review: dialogs aren't modal. Cropping the picture or picking another one while the
+    /// Size dialog is open starts the form over, so OK never sizes a picture with stale numbers;
+    /// with nothing left to size the dialog closes.
     #[test]
     fn size_dialog_follows_the_selection() {
         let mut a = picture_app(40, 20);
@@ -1841,6 +1857,10 @@ mod tests {
         let LayoutDialog::Size(mut f) = form(&mut a) else { panic!("size") };
         f.set_width(300.0);
         assert!(f.follow(&a) && f.width == 300.0, "the same picture keeps the edits");
+        // Cropped from the ribbon meanwhile: read again, Reset is what the new crop leaves.
+        a.run("picture.crop", json!({"left": 0.25, "right": 0.25})).unwrap();
+        assert!(f.follow(&a));
+        assert_eq!((f.width, f.original), (30.0, Some((15.0, 15.0))));
         a.run("select.collapse", json!({"end": true})).unwrap();
         a.run("insert.picture", json!({"data": png_data(20, 40)})).unwrap();
         assert!(f.follow(&a), "another picture selected");
@@ -1848,5 +1868,39 @@ mod tests {
         a.run("select.collapse", json!({"end": true})).unwrap();
         a.run("text.insert", json!({"text": " caption"})).unwrap();
         assert!(!f.follow(&a), "nothing to size");
+    }
+
+    /// #2573 review: the Size dialog end to end. Its launcher (`picture.size` without a size)
+    /// opens it; a height typed in pixels changes nothing until OK, which sizes the picture in
+    /// proportion as one undo step and closes the dialog.
+    #[test]
+    fn size_dialog_typed_height_applies_on_ok_in_proportion() {
+        use egui::accesskit::Role;
+        use egui_kittest::kittest::Queryable;
+        let mut a = picture_app(40, 20);
+        a.run("picture.size", json!({})).unwrap();
+        let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(1440.0, 900.0)).build_ui_state(
+            |ui, app: &mut WordApp| {
+                let ctx = ui.ctx().clone();
+                app.logic(&ctx);
+                app.ui(ui);
+            },
+            a,
+        );
+        h.run_steps(4);
+        // The Size section's Height (the Scale section has one too, after it).
+        h.get_all_by_role_and_label(Role::SpinButton, "Height:").next().expect("the height field").click();
+        h.run_steps(2);
+        h.get_all_by_role_and_label(Role::SpinButton, "Height:").next().expect("editing").type_text("60 px");
+        h.key_press(egui::Key::Enter);
+        h.run_steps(2);
+        assert!(h.state().dialog.is_some());
+        assert_eq!(selected_size(h.state()), (30.0, 15.0), "nothing applies before OK");
+        h.get_by_role_and_label(Role::Button, "OK").click();
+        h.run_steps(2);
+        assert!(h.state().dialog.is_none(), "OK closes the dialog");
+        assert_eq!(selected_size(h.state()), (90.0, 45.0), "60 px = 45 pt high, the width follows");
+        h.state_mut().run("edit.undo", json!({})).unwrap();
+        assert_eq!(selected_size(h.state()), (30.0, 15.0), "one undo step");
     }
 }
