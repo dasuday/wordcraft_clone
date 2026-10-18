@@ -338,12 +338,13 @@ pub fn group_titled(ui: &mut Ui, id_title: &str, title: &str, launcher: Option<&
     let t = Tokens::get(ui.ctx());
     let start = ui.cursor().min;
     // #662: the window may be too narrow for the tab; the plan says how this group fits.
+    let position = crate::ribbon_fit::position(ui.ctx());
     let level = crate::ribbon_fit::level(ui.ctx(), id_title);
     if level == crate::ribbon_fit::COLLAPSED {
-        collapsed_group(ui, id_title, title, launcher, app, add);
+        collapsed_group(ui, id_title, position, title, launcher, app, add);
     } else {
         // Not folded: a drop-down left open while it was folded doesn't come back by itself.
-        ui.data_mut(|d| d.remove::<bool>(collapsed_open_id(ui, id_title)));
+        ui.data_mut(|d| d.remove::<bool>(collapsed_open_id(ui, id_title, position)));
         let label_w = ui.ctx().fonts_mut(|f| f.layout_no_wrap(title.to_string(), regular(11.0), t.group_label).size().x);
         let inner = ui.vertical(|ui| {
             ui.set_min_width(label_w + if launcher.is_some() { 22.0 } else { 10.0 });
@@ -396,8 +397,8 @@ fn title_row(ui: &mut Ui, r: Rect, id_title: &str, title: &str, launcher: Option
 }
 
 /// Where a collapsed group remembers whether its drop-down is open.
-fn collapsed_open_id(ui: &Ui, id_title: &str) -> egui::Id {
-    ui.id().with(("collapsed_group", id_title))
+fn collapsed_open_id(ui: &Ui, id_title: &str, position: usize) -> egui::Id {
+    ui.id().with(("collapsed_group", id_title, position))
 }
 
 /// A group folded into one drop-down button (the window is too narrow, #662): the button, as tall
@@ -405,12 +406,20 @@ fn collapsed_open_id(ui: &Ui, id_title: &str) -> egui::Id {
 /// designed with its title and launcher. The drop-down stays open while it is used (#1285): only a
 /// click outside it, or on the button, closes it; clicks in the menus and lists its controls open
 /// (font and size lists, Change Case, colours) count as inside.
-fn collapsed_group(ui: &mut Ui, id_title: &str, title: &str, launcher: Option<&str>, app: &mut WordApp, add: impl FnOnce(&mut Ui, &mut WordApp)) {
+fn collapsed_group(
+    ui: &mut Ui,
+    id_title: &str,
+    position: usize,
+    title: &str,
+    launcher: Option<&str>,
+    app: &mut WordApp,
+    add: impl FnOnce(&mut Ui, &mut WordApp),
+) {
     let t = Tokens::get(ui.ctx());
     let text_w = ui.ctx().fonts_mut(|f| f.layout_no_wrap(title.to_string(), regular(11.5), t.text).size().x);
     let (r, resp) = ui.allocate_exact_size(vec2((text_w + DROPDOWN + 14.0).max(48.0), CONTENT_H + LABEL_H), Sense::click());
     resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, title));
-    let open_id = collapsed_open_id(ui, id_title);
+    let open_id = collapsed_open_id(ui, id_title, position);
     let was_open = ui.data(|d| d.get_temp::<bool>(open_id)).unwrap_or(false);
     bg(ui, r, &resp, was_open, &t);
     icons::paint(
