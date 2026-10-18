@@ -2675,3 +2675,7 @@ preview	Title	Tytuł
 	Lines to drop:	Wysokość w wierszach:
 	Distance from text:	Odległość od tekstu:
 	Distance from text	Odległość od tekstu
+
+# Drop Cap disabled reasons (#2601)
+	the paragraph is empty	akapit jest pusty
+	the paragraph starts with a space	akapit zaczyna się od spacji

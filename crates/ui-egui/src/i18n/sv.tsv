@@ -2685,3 +2685,7 @@ preview	Title	Titel
 	Lines to drop:	Antal rader:
 	Distance from text:	Avstånd från text:
 	Distance from text	Avstånd från text
+
+# Drop Cap disabled reasons (#2601)
+	the paragraph is empty	stycket är tomt
+	the paragraph starts with a space	stycket börjar med ett blanksteg

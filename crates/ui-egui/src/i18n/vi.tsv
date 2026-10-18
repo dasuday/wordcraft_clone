@@ -2710,3 +2710,7 @@ template	Letter	Thư
 	Lines to drop:	Số dòng chiếm:
 	Distance from text:	Khoảng cách tới văn bản:
 	Distance from text	Khoảng cách tới văn bản
+
+# Drop Cap disabled reasons (#2601)
+	the paragraph is empty	đoạn văn trống
+	the paragraph starts with a space	đoạn văn bắt đầu bằng dấu cách

@@ -2666,3 +2666,7 @@
 	Lines to drop:	Sorok száma:
 	Distance from text:	Távolság a szövegtől:
 	Distance from text	Távolság a szövegtől
+
+# Drop Cap disabled reasons (#2601)
+	the paragraph is empty	a bekezdés üres
+	the paragraph starts with a space	a bekezdés szóközzel kezdődik

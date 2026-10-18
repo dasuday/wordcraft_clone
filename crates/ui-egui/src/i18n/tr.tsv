@@ -2667,3 +2667,7 @@ preview	Title	Örnek
 	Lines to drop:	Kaplayacağı satır:
 	Distance from text:	Metinden uzaklık:
 	Distance from text	Metinden uzaklık
+
+# Drop Cap disabled reasons (#2601)
+	the paragraph is empty	paragraf boş
+	the paragraph starts with a space	paragraf boşlukla başlıyor

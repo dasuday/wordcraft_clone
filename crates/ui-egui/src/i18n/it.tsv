@@ -2679,3 +2679,7 @@ preview	Title	Esempio
 	Lines to drop:	Altezza in righe:
 	Distance from text:	Distanza dal testo:
 	Distance from text	Distanza dal testo
+
+# Drop Cap disabled reasons (#2601)
+	the paragraph is empty	il paragrafo è vuoto
+	the paragraph starts with a space	il paragrafo inizia con uno spazio

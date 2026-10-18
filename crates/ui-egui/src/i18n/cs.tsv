@@ -2662,3 +2662,7 @@ preview	Title	Ukázka
 	Lines to drop:	Výška v řádcích:
 	Distance from text:	Vzdálenost od textu:
 	Distance from text	Vzdálenost od textu
+
+# Drop Cap disabled reasons (#2601)
+	the paragraph is empty	odstavec je prázdný
+	the paragraph starts with a space	odstavec začíná mezerou

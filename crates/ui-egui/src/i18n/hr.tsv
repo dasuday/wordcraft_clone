@@ -2670,3 +2670,7 @@ preview	Title	Naslov
 	Lines to drop:	Broj redaka:
 	Distance from text:	Udaljenost od teksta:
 	Distance from text	Udaljenost od teksta
+
+# Drop Cap disabled reasons (#2601)
+	the paragraph is empty	odlomak je prazan
+	the paragraph starts with a space	odlomak počinje razmakom

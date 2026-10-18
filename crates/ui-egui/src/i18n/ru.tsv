@@ -2668,3 +2668,7 @@ preview	Title	Пример
 	Lines to drop:	Высота в строках:
 	Distance from text:	Расстояние от текста:
 	Distance from text	Расстояние от текста
+
+# Drop Cap disabled reasons (#2601)
+	the paragraph is empty	абзац пуст
+	the paragraph starts with a space	абзац начинается с пробела

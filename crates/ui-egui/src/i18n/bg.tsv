@@ -2659,3 +2659,7 @@
 	Lines to drop:	Редове на буквата:
 	Distance from text:	Разстояние от текста:
 	Distance from text	Разстояние от текста
+
+# Drop Cap disabled reasons (#2601)
+	the paragraph is empty	абзацът е празен
+	the paragraph starts with a space	абзацът започва с интервал
