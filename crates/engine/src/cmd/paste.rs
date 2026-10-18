@@ -390,6 +390,8 @@ fn remap_table_changes(b: &mut Block, depth: usize, rev: &dyn Fn(&mut Option<u32
     if let Block::Table(t) = b {
         remap_change(&mut t.props.fmt_change, rev);
         for row in &mut t.rows {
+            rev(&mut row.props.ins);
+            rev(&mut row.props.del);
             remap_change(&mut row.props.fmt_change, rev);
             for cell in &mut row.cells {
                 remap_change(&mut cell.props.fmt_change, rev);
@@ -565,6 +567,19 @@ mod tests {
     use super::*;
     use wordcraft_doc::para::InlineObject;
     use wordcraft_doc::{CharProps, PartKind, para_block};
+
+    /// #1317 review: tracked row insertions and deletions follow the revisions' new indices.
+    #[test]
+    fn row_revision_marks_are_remapped_on_import() {
+        let mut t = wordcraft_doc::Table::new(2, 1, 100.0);
+        t.rows[0].props.ins = Some(0);
+        t.rows[1].props.del = Some(1);
+        let mut b = Block::Table(t);
+        remap_table_changes(&mut b, 0, &|r| *r = r.map(|v| v + 5));
+        let Block::Table(t) = b else { panic!("table") };
+        assert_eq!(t.rows[0].props.ins, Some(5));
+        assert_eq!(t.rows[1].props.del, Some(6));
+    }
 
     /// #1317 review: a picture in a pasted text box shows the pasted picture, which is stored
     /// under a new key when ours already uses the source's key.
