@@ -2418,6 +2418,8 @@ fn input_dialog(id: &str, params: &Value) -> Option<&'static str> {
         "file.encrypt" if params.get("password").is_none() => Some("encryptPassword"),
         // Define New Multilevel List and Track Changes Options without settings show their dialogs.
         "list.define" if params.get("levels").is_none() => Some("defineList"),
+        // Define New Number Format without settings shows its dialog (#2787).
+        "para.defineNumber" if params.as_object().is_none_or(|m| m.is_empty()) => Some("defineNumber"),
         "review.trackingOptions" if params.as_object().is_none_or(|m| m.is_empty()) => Some("trackChangesOptions"),
         // Compare / Combine without a revised document, AutoCorrect Options without settings and
         // Restrict Editing without settings show their dialogs or pane (#412).

@@ -1076,6 +1076,8 @@ fn home(app: &mut WordApp, ui: &mut Ui) {
                     ui.separator();
                     mi(ui, app, "Restart at 1", "para.restartNumbering", json!({}));
                     mi(ui, app, "None", "para.numbering", json!({"off": true}));
+                    ui.separator();
+                    mi(ui, app, "Define New Number Format…", "para.defineNumber", json!({}));
                 });
                 split(ui, app, "multilevel", "Multilevel List", "para.multilevel", json!({}), lists.multilevel, None, |ui, app| {
                     mi(ui, app, "1. 1.1. 1.1.1.", "para.multilevel", json!({"kind": "legal"}));

@@ -263,6 +263,9 @@
 	Default	Par défaut
 	Define New Bullet	Définir une nouvelle puce
 	Define New Number Format	Définir un nouveau format de numérotation
+	Define New Number Format…	Définir un nouveau format de numérotation…
+	Number style:	Style de numéros :
+	Number format:	Format des numéros :
 	Delete	Supprimer
 	Delete Cells	Supprimer les cellules
 	Delete Columns	Supprimer les colonnes
