@@ -44,6 +44,12 @@ pub(crate) struct PenStroke {
 /// The ribbon buttons (no page coordinates): turn the tool on, or off when it already is.
 /// `{"on": bool}` sets it. With coordinates the command goes to the engine instead (`None`).
 pub fn toggle(app: &mut WordApp, id: &str, p: &Value) -> Option<Result<Value, String>> {
+    // View Gridlines while a tool is on is the user's choice: it works at once, and stopping
+    // the tool doesn't put back the setting from before (the engine runs the command).
+    if id == "table.viewGridlines" {
+        app.canvas.table_gridlines = None;
+        return None;
+    }
     let tool = match id {
         "table.draw" => TableTool::Draw,
         "table.eraser" => TableTool::Erase,
@@ -301,6 +307,39 @@ mod tests {
         // With coordinates it is the engine's command (an error here: nothing to split).
         assert!(a.run("table.draw", json!({"page": 0, "x0": 1, "y0": 1, "x1": 2, "y1": 2})).is_err());
         assert!(a.canvas.table_tool.is_none());
+    }
+
+    /// A tool shows the gridlines and stopping it puts View Gridlines back as it was, unless
+    /// the user set View Gridlines while the tool was on: then that choice works at once and
+    /// stays after the tool stops.
+    #[test]
+    fn view_gridlines_while_a_tool_is_on_stays() {
+        let mut a = WordApp::new(wordcraft_engine::Session::new(wordcraft_doc::Document::new()), crate::Services::default());
+        a.run("insert.table", json!({"rows": 2, "cols": 2})).unwrap();
+        for tool in ["table.draw", "table.eraser"] {
+            for before in [false, true] {
+                // None: no click; Some(None): the button (a toggle); Some(Some(v)): set to v.
+                for click in [None, Some(None), Some(Some(false)), Some(Some(true))] {
+                    let case = format!("{tool}, gridlines {before}, click {click:?}");
+                    a.session.view.table_gridlines = before;
+                    a.run(tool, json!({"on": true})).unwrap();
+                    assert!(a.session.view.table_gridlines, "{case}: the tool shows the gridlines");
+                    let after = match click {
+                        None => before,
+                        Some(v) => {
+                            let p = v.map_or(json!({}), |v| json!({ "value": v }));
+                            let r = a.run("table.viewGridlines", p).unwrap();
+                            let want = v.unwrap_or(false);
+                            assert_eq!(r["value"], want, "{case}");
+                            assert_eq!(a.session.view.table_gridlines, want, "{case}: at once");
+                            want
+                        }
+                    };
+                    assert!(stop(&mut a), "{case}");
+                    assert_eq!(a.session.view.table_gridlines, after, "{case}: after the tool stops");
+                }
+            }
+        }
     }
 
     /// Deleting a table or removing its last cells turns off the eraser.
