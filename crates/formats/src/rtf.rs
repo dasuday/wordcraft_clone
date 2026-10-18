@@ -1933,11 +1933,7 @@ fn hyperlink(instr: &str) -> Option<String> {
     match (url, local) {
         (Some(u), Some(l)) if !u.is_empty() && !l.is_empty() => {
             let frag = l.trim_start_matches('#');
-            if u.contains('#') {
-                Some(u)
-            } else {
-                Some(format!("{u}#{frag}"))
-            }
+            if u.contains('#') { Some(u) } else { Some(format!("{u}#{frag}")) }
         }
         (Some(u), _) if !u.is_empty() => Some(u),
         (None, Some(l)) if !l.is_empty() => {
