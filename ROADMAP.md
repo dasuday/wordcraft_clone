@@ -524,7 +524,7 @@ Imported Word 97–2003 `.doc`/`.dot` files now ask for a supported DOCX target 
 | 2026-10-16 | trivial | Zero-extent drawing anchors contribute no inline font height. Synthetic regressions. |
 | 2026-10-16 | trivial | Control keyboard/text input works in the inactive native window (#2420) |
 | 2026-10-15 | trivial | Progress log: DOCX tracked table-row insertions and deletions (#1998) |
-| 2026-10-15 | trivial | Progress log: Compare results resolve to exactly the original or the revised document (#1317) |
+| 2026-10-15 | trivial | Progress log: Compare results resolve to the original or revised state; unsupported content is reported as dropped (#1317) |
 | 2026-10-14 | trivial | Progress log: row table border exceptions |
 | 2026-10-12 | minor | Czech proofing review: short-word splits rank after deletion, NOSUGGEST excludes suggestions while accepting typed forms, affix comments apply only to headers, ratios keep spaces and repeated-word messages use Czech quotes; synthetic engine end-to-end and latency checks |
 | 2026-10-12 | minor | Czech spelling from the installed Hunspell dictionary, runtime-table suggestions and generic checks; Czech interface writes cs-CZ documents; no Czech hyphenation patterns bundled; estimates unchanged |
