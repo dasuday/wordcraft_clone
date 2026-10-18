@@ -4,6 +4,7 @@
 //! caret). Picture adjustments re-encode the bitmap (originals are kept for Reset Picture).
 
 use serde_json::{Value, json};
+use wordcraft_doc::graphic::GraphicKind;
 use wordcraft_doc::para::{Float, InlineObject, Wrap, WrapText};
 use wordcraft_doc::props::{Rgb, TextVert, VAlign};
 use wordcraft_doc::{Pos, StoryRef, TextBody};
@@ -61,7 +62,7 @@ fn has_movable(s: &Session) -> Option<&'static str> {
 const INK_GROUP: &str = "a group holding Word ink can't be ungrouped yet";
 /// Does group `o` hold a member that can't stand on its own (Word's ink)?
 fn holds_ink(o: &InlineObject) -> bool {
-    matches!(o, InlineObject::Group { children, .. } if children.iter().any(|c| matches!(c.obj, InlineObject::Graphic { .. })))
+    matches!(o, InlineObject::Group { children, .. } if children.iter().any(|c| matches!(&c.obj, InlineObject::Graphic { graphic, .. } if graphic.kind == GraphicKind::Ink)))
 }
 fn has_group(s: &Session) -> Option<&'static str> {
     match selected(s) {
@@ -2297,5 +2298,23 @@ mod tests {
         assert_eq!(rels.matches("/customXml\"").count(), 1, "one ink relationship: {rels}");
         let back = wordcraft_docx::read(&bytes).unwrap();
         assert_eq!(ink_members(&back), 1);
+    }
+
+    /// Review: only Word's ink pins a group; a group of charts or diagrams ungroups as before.
+    #[test]
+    fn only_ink_members_pin_a_group() {
+        let s = Session::new(wordcraft_docx::read(&group_with_word_ink()).unwrap());
+        let pos = Pos::body(0, 0);
+        let mut s = s;
+        s.sel = Selection { anchor: pos.clone(), focus: Pos { off: pos.off + wordcraft_doc::para::OBJ.len_utf8(), ..pos } };
+        let Some((_, mut group)) = selected(&s) else { panic!("no group") };
+        assert!(holds_ink(&group));
+        let InlineObject::Group { children, .. } = &mut group else { panic!("not a group") };
+        for c in children.iter_mut() {
+            if let InlineObject::Graphic { graphic, .. } = &mut c.obj {
+                std::sync::Arc::make_mut(graphic).kind = GraphicKind::Chart;
+            }
+        }
+        assert!(!holds_ink(&group), "a group of charts is not pinned");
     }
 }
