@@ -192,9 +192,7 @@ fn shown_text(s: &mut Session, f: &FieldAt) -> String {
     let section_pages = page
         .map(|p| l.pages.iter().filter(|pg| pg.section == p.section).count() as u32)
         .unwrap_or_else(|| u32::try_from(l.pages.len()).unwrap_or(u32::MAX));
-    let page_format = page
-        .and_then(|p| s.doc.sections().get(p.section).map(|(_, sec)| sec.page_num_format))
-        .unwrap_or_default();
+    let page_format = page.and_then(|p| s.doc.sections().get(p.section).map(|(_, sec)| sec.page_num_format)).unwrap_or_default();
     let ctx = wordcraft_layout::fields::FieldCtx {
         page: page.map(|p| p.number).unwrap_or(1),
         page_format,
