@@ -52,8 +52,9 @@ pub(crate) enum AfterPick {
     OpenDocument,
     /// Insert the picked picture, or replace the pending Change Picture target.
     Picture,
-    /// Fill the selected shape with the picked picture (Shape Fill › Picture).
-    FillPicture,
+    /// Fill the shape that was selected when the dialog opened with the picked picture (Shape
+    /// Fill › Picture): the document's path and the shape's position, checked again on return.
+    FillPicture { target: Option<(Option<std::path::PathBuf>, wordcraft_doc::Pos)> },
     /// Save the document there, then carry on.
     SaveAs(AfterSave),
     /// Save a copy there in this format (`pdf`, `docx`, `png`…).
@@ -196,8 +197,12 @@ impl WordApp {
                 };
                 self.insert_or_change_picture(json!({"path": path}))
             }
-            AfterPick::FillPicture => {
+            AfterPick::FillPicture { target } => {
                 let Some(path) = picked else { return Ok(json!({"cancelled": true})) };
+                // The selection (or document) may have changed while the dialog was open.
+                if target != self.selected_shape_target() {
+                    return Ok(json!({"cancelled": true}));
+                }
                 self.run("shape.fill", json!({"picture": {"path": path}}))
             }
             AfterPick::Font => {
@@ -322,7 +327,14 @@ impl WordApp {
             self.status(tl!("Picture fills aren't available in the browser yet."));
             return;
         }
-        let _ = self.ask_file(FileDialogRequest::Open { purpose: "picture".into() }, AfterPick::FillPicture);
+        let target = self.selected_shape_target();
+        let _ = self.ask_file(FileDialogRequest::Open { purpose: "picture".into() }, AfterPick::FillPicture { target });
+    }
+
+    /// Which shape is selected, and in which document: what a pending picture fill is bound to.
+    fn selected_shape_target(&self) -> Option<(Option<std::path::PathBuf>, wordcraft_doc::Pos)> {
+        let (pos, _) = wordcraft_engine::cmd::objects::selected(&self.session)?;
+        Some((self.session.path.clone(), pos))
     }
 
     /// Pick a font file to add (Add Font…; web: it arrives through the inbox).
@@ -634,5 +646,30 @@ mod tests {
         let mut a = WordApp::new(Session::new(wordcraft_doc::Document::new()), Services::default());
         a.run("font.loadSystem", json!({})).unwrap();
         assert_eq!(a.status_msg.as_ref().map(|(s, _)| s.as_str()), Some("All system fonts are already available."));
+    }
+
+    /// Shape Fill › Picture belongs to the shape that was selected when the dialog opened: if the
+    /// selection moved while the dialog was up, the picked picture is dropped, not applied to
+    /// whatever is selected now.
+    #[test]
+    fn picture_fill_is_dropped_when_the_selection_changed() {
+        let mut a = WordApp::new(Session::new(wordcraft_doc::Document::new()), Services::default());
+        a.run("insert.shape", json!({"kind": "rectangle", "width": 100, "height": 50})).unwrap();
+        let target = a.selected_shape_target();
+        assert!(target.is_some());
+        let png = crate::paste_picture::png_from_rgba(2, 2, vec![255; 16]).unwrap();
+        let path = std::env::temp_dir().join(format!("wc-fill-{}.png", std::process::id()));
+        std::fs::write(&path, png).unwrap();
+        let path = path.to_string_lossy().into_owned();
+        // Same selection: the fill is applied.
+        let r = a.finish_pick(AfterPick::FillPicture { target: target.clone() }, Some(path.clone())).unwrap();
+        assert!(r.get("cancelled").is_none(), "{r}");
+        // The selection moved off the shape: nothing is applied.
+        a.run("select.all", json!({})).unwrap();
+        a.session.sel.anchor = wordcraft_doc::Pos::default();
+        a.session.sel.focus = wordcraft_doc::Pos::default();
+        let r = a.finish_pick(AfterPick::FillPicture { target }, Some(path.clone())).unwrap();
+        assert_eq!(r, json!({"cancelled": true}));
+        let _ = std::fs::remove_file(path);
     }
 }
