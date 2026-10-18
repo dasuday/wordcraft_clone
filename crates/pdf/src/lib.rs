@@ -942,7 +942,7 @@ impl Exporter<'_> {
             }
             Draw::Line { x0, y0, x1, y1, width, color, stroke, alpha, .. } => self.line(s, (*x0, *y0, *x1, *y1), *width, *color, *stroke, *alpha),
             Draw::Image { rect, media, crop, alpha, .. } => self.picture(s, rect, media, crop, *alpha),
-            Draw::Path { segs, fill: f, stroke, stroke_width } => {
+            Draw::Path { segs, fill: f, stroke, stroke_width, dash } => {
                 let mut pb = PathBuilder::new();
                 append_path(&mut pb, &wordcraft_layout::display::seg_path(segs));
                 let Some(p) = pb.finish() else { return };
@@ -951,6 +951,7 @@ impl Exporter<'_> {
                     paint: rgb::Color::new(c.0, c.1, c.2).into(),
                     // Width 0 (or none) is a hairline.
                     width: if stroke_width.is_finite() && *stroke_width > 0.0 { stroke_width.clamp(0.25, 200.0) } else { 0.75 },
+                    dash: (!dash.is_empty()).then(|| StrokeDash { array: dash.clone(), offset: 0.0 }),
                     ..Default::default()
                 }));
                 if f.is_some() || stroke.is_some() {
@@ -989,7 +990,7 @@ impl Exporter<'_> {
                 s.draw_path(&p);
                 s.set_stroke(None);
             }
-            Draw::Shape { rect, kind, fill: f, stroke, stroke_width, effects, corner } => {
+            Draw::Shape { rect, kind, fill: f, stroke, stroke_width, effects, corner, dash } => {
                 let Some(p) = shape_path(*kind, rect, *corner) else { return };
                 let can_fill = *kind != ShapeKind::Line;
                 let fx = effects.sanitized();
@@ -1013,6 +1014,7 @@ impl Exporter<'_> {
                 s.set_stroke(stroke.map(|c| Stroke {
                     paint: rgb::Color::new(c.0, c.1, c.2).into(),
                     width: if stroke_width.is_finite() { stroke_width.clamp(0.25, 200.0) } else { 0.75 },
+                    dash: (!dash.is_empty()).then(|| StrokeDash { array: dash.clone(), offset: 0.0 }),
                     ..Default::default()
                 }));
                 if f.is_some() && can_fill || stroke.is_some() {
@@ -1021,7 +1023,7 @@ impl Exporter<'_> {
                 s.set_fill(None);
                 s.set_stroke(None);
             }
-            Draw::Art { path, fx, color, alpha } => {
+            Draw::Art { path, fx, color, alpha, .. } => {
                 for l in wordcraft_layout::wordart::art_layers(path, fx, *color, *alpha) {
                     let mut pb = PathBuilder::new();
                     append_path(&mut pb, &l.path);
@@ -1678,10 +1680,18 @@ fn path_from(b: &kurbo::BezPath) -> Option<Path> {
 /// Decode a picture for embedding (validated with the `image` crate first, so a broken file
 /// can't fail the whole export).
 fn load_image(data: &Arc<Vec<u8>>) -> Option<Image> {
+    load_image_within(data, wordcraft_geom::MAX_DECODED_BYTES)
+}
+
+/// [`load_image`] with an explicit RGBA byte budget (a small one in tests).
+fn load_image_within(data: &Arc<Vec<u8>>, budget: u64) -> Option<Image> {
     let fmt = image::guess_format(data).ok()?;
-    // The side check below used to run only after a full decode; applying it as a decode limit
-    // rejects a small file that declares a huge image at header time instead. The default
-    // allocation cap (512 MB, what `load_from_memory_with_format` applied) stays in force.
+    // Header-only size check before anything is allocated (decode buffer + RGBA conversion are
+    // charged); the side limits and the default 512 MB allocation cap stay as a second guard.
+    let (hw, hh) = image::ImageReader::new(std::io::Cursor::new(data.as_slice())).with_guessed_format().ok()?.into_dimensions().ok()?;
+    if !wordcraft_geom::decode_fits(hw, hh, budget) {
+        return None;
+    }
     let mut reader = image::ImageReader::new(std::io::Cursor::new(data.as_slice())).with_guessed_format().ok()?;
     let mut limits = image::Limits::default();
     limits.max_image_width = Some(MAX_IMAGE_SIDE);
@@ -1695,7 +1705,7 @@ fn load_image(data: &Arc<Vec<u8>>) -> Option<Image> {
     if fmt == image::ImageFormat::Jpeg && matches!(dec.color(), image::ColorType::L8 | image::ColorType::Rgb8) {
         return Image::from_jpeg(data.clone().into(), true).ok();
     }
-    Some(Image::from_rgba8(dec.to_rgba8().into_raw(), w, h))
+    Some(Image::from_rgba8(dec.into_rgba8().into_raw(), w, h))
 }
 
 #[cfg(test)]
