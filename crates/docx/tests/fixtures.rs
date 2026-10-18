@@ -1122,6 +1122,39 @@ fn vml_textpath_in_header_is_the_watermark() {
     assert_eq!(read(r#"<v:shape id="PowerPlusWaterMarkObject2"><v:textpath string="  "/></v:shape>"#, true).0, None);
 }
 
+/// Issue #2875: Word 2007 WordArt, a body `v:shape` with a `v:textpath`, is shown as a text shape
+/// holding its string in the textpath's font and the shape's colour, bent by the warp of its WordArt
+/// shape, not dropped; a textpath turned off or with an empty string draws nothing.
+#[test]
+fn vml_textpath_in_body_is_shown() {
+    let read = |shape: &str| {
+        let body = format!("<w:p><w:r><w:t>Before</w:t></w:r><w:r><w:pict>{shape}</w:pict></w:r></w:p>");
+        wordcraft_docx::read(&docx(&body, &[], &[])).unwrap()
+    };
+    let art = r##"<v:shape type="#_x0000_t136" style="position:absolute;width:300pt;height:60pt" fillcolor="#336699" stroked="f"><v:textpath style="font-family:&quot;Impact&quot;;font-size:1pt" string="Sale"/></v:shape>"##;
+    let d = read(art);
+    let objs = &paras(&d)[0].objects;
+    assert_eq!(objs.len(), 1);
+    let InlineObject::Shape { story: Some(id), w, h, .. } = &objs[0] else { panic!("not a text shape: {:?}", objs[0]) };
+    assert_eq!((*w, *h), (300.0, 60.0));
+    let p = d.parts.get(id).unwrap().blocks[0].as_para().unwrap();
+    assert_eq!(p.text, "Sale");
+    assert_eq!(p.runs[0].props.font.as_deref(), Some("Impact"));
+    assert_eq!(p.runs[0].props.color, Some(TextColor::Rgb(Rgb(0x33, 0x66, 0x99))));
+
+    // Its WordArt shape bends the text: shapetype 144 (Arch Up) is DrawingML's `textArchUp`.
+    let warp = |shape: &str| match &paras(&read(shape))[0].objects[..] {
+        [InlineObject::Shape { extra, .. }] => extra.warp.as_ref().map(|w| w.preset.clone()),
+        other => panic!("not one shape: {other:?}"),
+    };
+    assert_eq!(warp(&art.replace("_x0000_t136", "_x0000_t144")).as_deref(), Some("textArchUp"));
+    assert_eq!(warp(&art.replace("_x0000_t136", "_x0000_t175")).as_deref(), Some("textCanDown"));
+    assert_eq!(warp(art).as_deref(), Some("textPlain"));
+
+    assert!(paras(&read(&art.replace("<v:textpath ", r#"<v:textpath on="f" "#)))[0].objects.is_empty());
+    assert!(paras(&read(&art.replace(r#"string="Sale""#, r#"string=" ""#)))[0].objects.is_empty());
+}
+
 /// Issue #1290: a file with Word's watermark keeps it through save and reopen: the same
 /// watermark, the same headers with the same text and paragraphs, one shape per header written;
 /// header WordArt that isn't a watermark doesn't become one on the way.
@@ -1167,6 +1200,79 @@ fn word_watermark_survives_save() {
     assert_eq!(d.settings.watermark, None);
     let d2 = wordcraft_docx::read(&wordcraft_docx::write(&d).unwrap()).unwrap();
     assert_eq!(d2.settings.watermark, None);
+}
+
+/// Issue #1775: a picture watermark in a header that starts with a table is anchored in a cell
+/// but placed on the page: any VML shape in a header (Word's picture watermark, `o:allowincell="f"`; user-checked
+/// in Word for Mac, the attribute makes no difference) or DrawingML `layoutInCell="0"`. That survives save and reopen; a shape laid out in its cell stays so.
+#[test]
+fn header_cell_picture_placed_on_the_page() {
+    let vml = |allow: &str| {
+        format!(
+            r##"<w:r><w:pict><v:shape id="WordPictureWatermark1" o:spid="_x0000_s2049" type="#_x0000_t75" style="position:absolute;margin-left:0;margin-top:0;width:300pt;height:200pt;z-index:-251657216;mso-position-horizontal:center;mso-position-horizontal-relative:margin;mso-position-vertical:center;mso-position-vertical-relative:margin" {allow}><v:imagedata r:id="rIdP" o:title="" gain="19661f" blacklevel="22938f"/></v:shape></w:pict></w:r>"##
+        )
+    };
+    let anchor = |in_cell: &str| {
+        format!(
+            r#"<w:r><w:drawing><wp:anchor distT="0" distB="0" distL="0" distR="0" simplePos="0" relativeHeight="1" behindDoc="1" locked="0" layoutInCell="{in_cell}" allowOverlap="1"><wp:simplePos x="0" y="0"/><wp:positionH relativeFrom="margin"><wp:align>center</wp:align></wp:positionH><wp:positionV relativeFrom="margin"><wp:align>center</wp:align></wp:positionV><wp:extent cx="3810000" cy="2540000"/><wp:wrapNone/><wp:docPr id="1" name="Picture 1"/><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic><pic:nvPicPr><pic:cNvPr id="1" name="p.png"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="rIdP"/></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="3810000" cy="2540000"/></a:xfrm><a:prstGeom prst="rect"/></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:anchor></w:drawing></w:r>"#
+        )
+    };
+    let read = |run: &str| {
+        let hdr = format!(
+            r#"<w:hdr {W_NS}><w:tbl><w:tblGrid><w:gridCol w:w="4680"/><w:gridCol w:w="4680"/></w:tblGrid><w:tr><w:tc><w:p><w:r><w:t>Left</w:t></w:r></w:p></w:tc><w:tc><w:p>{run}<w:r><w:t>Right</w:t></w:r></w:p></w:tc></w:tr></w:tbl><w:p/></w:hdr>"#
+        );
+        let hrels = rels(&[("rIdP", "image", "media/p.png")]);
+        let body = r#"<w:p><w:r><w:t>Body</w:t></w:r></w:p><w:sectPr><w:headerReference w:type="default" r:id="rIdH"/></w:sectPr>"#;
+        let parts = [("word/header1.xml", hdr.as_str()), ("word/_rels/header1.xml.rels", hrels.as_str()), ("word/media/p.png", "\u{89}PNG stand-in")];
+        wordcraft_docx::read(&docx(body, &[("rIdH", "header", "header1.xml")], &parts)).unwrap()
+    };
+    let floats = |d: &Document| -> Vec<(bool, Wrap)> {
+        let hid = d.last_section.headers.default.unwrap();
+        let mut out = Vec::new();
+        for b in &d.parts[&hid].blocks {
+            if let Block::Table(t) = &**b {
+                for c in &t.rows[0].cells {
+                    for p in c.blocks.iter().filter_map(|b| b.as_para()) {
+                        out.extend(p.objects.iter().filter_map(|o| o.frame()).map(|(_, _, f)| (f.outside_cell, f.wrap)));
+                    }
+                }
+            }
+        }
+        out
+    };
+    for (run, outside) in [
+        (vml(r#"o:allowincell="f""#), true),
+        (vml(r#"o:allowincell="false""#), true),
+        // Word for Mac draws every VML picture in a header cell on the page, ticked or not.
+        (vml(""), true),
+        (vml(r#"o:allowincell="t""#), true),
+        (anchor("0"), true),
+        (anchor("false"), true),
+        (anchor("1"), false),
+    ] {
+        let d = read(&run);
+        assert_eq!(floats(&d), vec![(outside, Wrap::BehindText)], "{run}");
+        let d2 = wordcraft_docx::read(&wordcraft_docx::write(&d).unwrap()).unwrap();
+        assert_eq!(floats(&d2), vec![(outside, Wrap::BehindText)], "saved: {run}");
+    }
+}
+
+/// Issue #1775: only header and footer shapes are placed on the page from a cell (what was checked
+/// in Word); a VML picture in a body table cell stays laid out in its cell.
+#[test]
+fn body_cell_vml_picture_stays_in_its_cell() {
+    let pic = r##"<w:r><w:pict><v:shape type="#_x0000_t75" style="position:absolute;margin-left:0;margin-top:0;width:100pt;height:80pt;z-index:-1;mso-position-horizontal:center;mso-position-horizontal-relative:margin;mso-position-vertical:center;mso-position-vertical-relative:margin"><v:imagedata r:id="rIdP"/></v:shape></w:pict></w:r>"##;
+    let body = format!(r#"<w:tbl><w:tblGrid><w:gridCol w:w="4680"/></w:tblGrid><w:tr><w:tc><w:p>{pic}</w:p></w:tc></w:tr></w:tbl><w:p/>"#);
+    let parts = [("word/media/p.png", "\u{89}PNG stand-in")];
+    let d = wordcraft_docx::read(&docx(&body, &[("rIdP", "image", "media/p.png")], &parts)).unwrap();
+    let Block::Table(t) = &*d.body[0] else { panic!("table first") };
+    let floats: Vec<bool> = t.rows[0].cells[0]
+        .blocks
+        .iter()
+        .filter_map(|b| b.as_para())
+        .flat_map(|p| p.objects.iter().filter_map(|o| o.frame()).map(|(_, _, f)| f.outside_cell))
+        .collect();
+    assert_eq!(floats, vec![false]);
 }
 
 /// Issue #149: an absolutely positioned VML text box in a header floats where its style puts it
@@ -3488,4 +3594,42 @@ fn zero_effects_stay_zero_rotated() {
             assert!((h + 2.0 * py - expected.1).abs() < 0.001);
         }
     }
+}
+
+/// The math namespace, declared on the math element itself (the fixture root doesn't).
+const M_NS: &str = r#"xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math""#;
+
+fn equations(p: &Paragraph) -> Vec<(String, bool)> {
+    p.objects
+        .iter()
+        .filter_map(|o| match o {
+            InlineObject::Equation { linear, display, .. } => Some((linear.clone(), *display)),
+            _ => None,
+        })
+        .collect()
+}
+
+/// #1273: an equation straight in the body (EG_BlockLevelElts allows math content) gets a
+/// paragraph of its own instead of vanishing.
+#[test]
+fn body_level_equation_is_kept() {
+    let d = read_body(&format!(
+        r#"<w:p><w:r><w:t>before</w:t></w:r></w:p><m:oMathPara {M_NS}><m:oMath><m:r><m:t>a=b</m:t></m:r></m:oMath></m:oMathPara><m:oMath {M_NS}><m:r><m:t>c</m:t></m:r></m:oMath><w:p><w:r><w:t>after</w:t></w:r></w:p>"#
+    ));
+    let ps = paras(&d);
+    assert_eq!(ps.len(), 4, "{:?}", ps.iter().map(|p| p.plain_text()).collect::<Vec<_>>());
+    assert_eq!(equations(ps[1]), vec![("a=b".to_string(), true)]);
+    assert_eq!(equations(ps[2]), vec![("c".to_string(), false)]);
+}
+
+/// #1273: an equation guarded by markup compatibility (`Requires="m"`) is read as an equation,
+/// not replaced by its fallback.
+#[test]
+fn equation_in_alternate_content_is_read() {
+    let d = read_body(&format!(
+        r#"<w:p><mc:AlternateContent {M_NS}><mc:Choice Requires="m"><m:oMath><m:r><m:t>x+1</m:t></m:r></m:oMath></mc:Choice><mc:Fallback><w:r><w:t>[picture]</w:t></w:r></mc:Fallback></mc:AlternateContent></w:p>"#
+    ));
+    let p = paras(&d)[0];
+    assert_eq!(equations(p), vec![("x+1".to_string(), false)]);
+    assert!(!p.plain_text().contains("[picture]"));
 }

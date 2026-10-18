@@ -133,6 +133,8 @@ pub struct Para {
     pub list: Option<ListInfo>,
     pub align: Option<Align>,
     pub page_break: bool,
+    /// Keep the paragraph on the same page as the next one (ODT `fo:keep-with-next`).
+    pub keep_next: bool,
     pub inlines: Vec<Inline>,
     pub spacing: Spacing,
     /// Borders the source puts on the paragraph itself (RTF `\brdrb`…).
@@ -517,6 +519,9 @@ impl<'a> Builder<'a> {
             let old = para_props(&c.old, old_num);
             out.props.fmt_change = PropChange::boxed(self.revision(RevisionKind::Format, &c.mark), old);
         }
+        if p.keep_next {
+            out.props.keep_next = Some(true);
+        }
         out.section.clone_from(&p.section);
         // Inlines are appended in order, so build the runs directly: inserting each one through
         // `Paragraph::insert_text` rescans every earlier run and is quadratic in their number.
@@ -882,14 +887,16 @@ pub fn flow_paras(doc: &Document, p: &Paragraph) -> Vec<Para> {
 fn flow_paras_in(doc: &Document, p: &Paragraph, tracked: bool) -> Vec<Para> {
     let (kind, list) = para_kind(doc, p);
     let mut done: Vec<Para> = Vec::new();
+    let borders = if kind == Kind::Rule { None } else { p.props.borders.filter(|b| b.any_visible()) };
     let mut out = Para {
         kind,
         list,
         align: p.props.align,
         page_break: p.props.page_break_before.unwrap_or(false),
+        keep_next: p.props.keep_next.unwrap_or(false),
         inlines: Vec::new(),
         spacing: Spacing::default(),
-        borders: None,
+        borders,
         section: None,
         mark_ins: None,
         mark_del: None,
@@ -917,9 +924,10 @@ fn flow_paras_in(doc: &Document, p: &Paragraph, tracked: bool) -> Vec<Para> {
                         list: None,
                         align: p.props.align,
                         page_break: true,
+                        keep_next: p.props.keep_next.unwrap_or(false),
                         inlines: Vec::new(),
                         spacing: Spacing::default(),
-                        borders: None,
+                        borders,
                         section: None,
                         mark_ins: None,
                         mark_del: None,

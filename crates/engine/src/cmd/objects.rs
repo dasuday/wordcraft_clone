@@ -92,7 +92,11 @@ fn has_shape(s: &Session) -> Option<&'static str> {
 
 pub fn specs() -> Vec<CommandSpec> {
     vec![
-        CommandSpec::new("picture.size", "Size", "Picture Format › Size", size).params(r#"{"width"?: pt, "height"?: pt, "lockAspect"?: bool, "scale"?: percent}"#).when(has_sizable),
+        CommandSpec::new("picture.size", "Size", "Picture Format › Size", size)
+            .params(
+                r#"{"width"?: pt, "height"?: pt, "lockAspect"?: bool, "scale"?: percent, "original"?: bool} (scale: of the current size, or with original of the picture's original size, its pixels at 96 ppi less what is cropped; original alone restores that size; one side alone keeps the proportions unless lockAspect is false; 1–4000 pt: when the proportions are kept, a side past 4000 pt shrinks the other with it)"#,
+            )
+            .when(has_sizable),
         CommandSpec::new("picture.crop", "Crop", "Picture Format › Size", crop)
             .params(
                 r#"{"left"?, "top"?, "right"?, "bottom"? (fractions of the source 0–0.45; a side left out is uncropped), "width"?: pt, "height"?: pt (the new display size, in the same undo step; a floating picture also moves by what a left/top crop trims, so the visible part stays put)}"#,
@@ -715,15 +719,39 @@ fn copy_to(s: &mut Session, v: &Value) -> CmdResult {
 /// text it lands on flows around it, and it moves with that text. On a page where no paragraph
 /// starts, it anchors to the nearest line and is positioned on the page. Returns the object's
 /// position afterwards.
+///
+/// A drop across pages can be thrown back: while the object sits on its old page it wraps text
+/// away from the paragraph it is anchored to, so once it has moved, that paragraph can move back
+/// onto the old page itself — and the object goes with it. Dropping near the top of the next
+/// page does it every time (the anchor is that page's first paragraph, which fits on the old page
+/// again once the object's wrap is gone). So a cross-page drop is anchored again until the object
+/// really stays on the page asked for: the later passes see the pagination as it now is. A
+/// same-page move (a resize, a nudge) places once, and a drop that still won't stay keeps its
+/// last place rather than failing.
 fn move_object(s: &mut Session, pos: Pos, page: Option<u64>, x: f32, y: f32, (w, h): (f32, f32)) -> Result<Pos, CmdError> {
+    let cur = s.layout().object(&pos, s.page_hint).ok_or_else(|| CmdError::Failed("the object isn't laid out".into()))?.page;
+    let target = page.map_or(cur, |n| usize::try_from(n).unwrap_or(usize::MAX));
+    let tries = if target == cur { 1 } else { 3 };
+    let mut at = pos;
+    for _ in 0..tries {
+        at = move_object_once(s, &at, target, x, y, (w, h))?;
+        s.touch();
+        if s.layout().object(&at, target).is_some_and(|hit| hit.page == target) {
+            break;
+        }
+    }
+    Ok(at)
+}
+
+/// [`move_object`]'s one placement: move the object's character to the anchor under (x, y) on
+/// `page` and offset it from there.
+fn move_object_once(s: &mut Session, pos: &Pos, page: usize, x: f32, y: f32, (w, h): (f32, f32)) -> Result<Pos, CmdError> {
     use wordcraft_doc::para::Anchor;
     if pos.path.depth() > 0 || !movable_story(s, pos.story) {
         return Err(CmdError::Disabled("only objects in the body text, headers and footers can be moved".into()));
     }
     let story = pos.story;
     let layout = s.layout();
-    let cur = layout.object(&pos, s.page_hint).ok_or_else(|| CmdError::Failed("the object isn't laid out".into()))?;
-    let page = page.map_or(cur.page, |n| usize::try_from(n).unwrap_or(usize::MAX));
     let pg = layout.pages.get(page).ok_or_else(|| CmdError::Params(format!("no page {page}")))?;
     // Keep a corner of it on the page.
     let x = x.max(12.0 - w).min(pg.w - 12.0);
@@ -735,11 +763,11 @@ fn move_object(s: &mut Session, pos: Pos, page: Option<u64>, x: f32, y: f32, (w,
     };
     // Move its character to the anchor (unless it's already in that paragraph).
     let at = if anchor.story == pos.story && anchor.path == pos.path && !on_page {
-        pos
+        pos.clone()
     } else {
-        let obj = s.doc.para_at(&pos).and_then(|p| p.object_at(pos.off)).cloned().ok_or_else(|| CmdError::Failed("object vanished".into()))?;
+        let obj = s.doc.para_at(pos).and_then(|p| p.object_at(pos.off)).cloned().ok_or_else(|| CmdError::Failed("object vanished".into()))?;
         let len = wordcraft_doc::para::OBJ.len_utf8();
-        s.doc.delete_range(&pos, &Pos { off: pos.off + len, ..pos.clone() })?;
+        s.doc.delete_range(pos, &Pos { off: pos.off + len, ..pos.clone() })?;
         let mut at = anchor;
         if at.story == pos.story && at.path == pos.path && at.off > pos.off {
             at.off = at.off.saturating_sub(len);
@@ -979,35 +1007,83 @@ fn crop(s: &mut Session, v: &Value) -> CmdResult {
     })
 }
 
+/// A picture's original size: its image's pixels at 96 ppi (the size Insert › Pictures gives it)
+/// or a metafile's own frame, before any crop.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct OriginalSize {
+    /// Points.
+    pub w: f32,
+    pub h: f32,
+    /// A bitmap's pixels (None for a metafile).
+    pub pixels: Option<(u32, u32)>,
+}
+
+/// The original size of the picture showing `media`, read from the image its Picture Format
+/// adjustments started from (Compress Pictures may have resampled the current one); None when the
+/// image can't be read.
+pub fn original_size(s: &Session, media: &str) -> Option<OriginalSize> {
+    let key = s.originals.get(media).map_or(media, String::as_str);
+    let bytes = s.doc.media.get(key).or_else(|| s.doc.media.get(media))?;
+    if let Some((pw, ph)) = wordcraft_render::image_size(bytes) {
+        return Some(OriginalSize { w: pw as f32 * 0.75, h: ph as f32 * 0.75, pixels: Some((pw, ph)) });
+    }
+    let (w, h, _) = wordcraft_render::metafile_size(bytes)?;
+    Some(OriginalSize { w, h, pixels: None })
+}
+
+/// What a picture's crop leaves of its original size: the size Reset gives back and what a scale
+/// of the original counts from. None for anything but a picture whose image can be read.
+pub fn cropped_original_size(s: &Session, o: &InlineObject) -> Option<(f32, f32)> {
+    let InlineObject::Image { media, crop, .. } = o else { return None };
+    let orig = original_size(s, media)?;
+    let part = |lo: f32, hi: f32| (1.0 - lo - hi).max(0.1);
+    Some((orig.w * part(crop[0], crop[2]), orig.h * part(crop[1], crop[3])))
+}
+
+/// Size: `scale` is a percentage of the current size, or with `original` of what the crop leaves
+/// of the original size (`original` alone gives that back: the Size dialog's Reset); then `width`
+/// and `height`, where one alone keeps the proportions unless `lockAspect` is false.
 fn size(s: &mut Session, v: &Value) -> CmdResult {
     let (_, o) = selected(s).ok_or_else(|| CmdError::Disabled("no object".into()))?;
-    let (w0, h0) = obj_size(&o);
     let lock = p::bool(v, "lockAspect").unwrap_or(true);
-    let (mut w, mut h) = (w0, h0);
-    if let Some(sc) = p::f32(v, "scale") {
+    let (mut w, mut h) = obj_size(&o);
+    let scale = p::f32(v, "scale");
+    if p::bool(v, "original").unwrap_or(false) {
+        let (ow, oh) =
+            cropped_original_size(s, &o).ok_or_else(|| CmdError::Disabled("only a picture whose image can be read has an original size".into()))?;
+        let k = scale.unwrap_or(100.0) / 100.0;
+        (w, h) = (ow * k, oh * k);
+    } else if let Some(sc) = scale {
         w *= sc / 100.0;
         h *= sc / 100.0;
     }
-    match (p::f32(v, "width"), p::f32(v, "height")) {
+    let (nw, nh) = (p::f32(v, "width"), p::f32(v, "height"));
+    match (nw, nh) {
         (Some(nw), Some(nh)) => {
             w = nw;
             h = nh;
         }
         (Some(nw), None) => {
-            if lock && w0 > 0.0 {
-                h = h0 * nw / w0;
+            if lock && w > 0.0 {
+                h *= nw / w;
             }
             w = nw;
         }
         (None, Some(nh)) => {
-            if lock && h0 > 0.0 {
-                w = w0 * nh / h0;
+            if lock && h > 0.0 {
+                w *= nh / h;
             }
             h = nh;
         }
         _ => {}
     }
-    let (w, h) = (w.clamp(1.0, 4000.0), h.clamp(1.0, 4000.0));
+    // A size that keeps the proportions shrinks on both sides to fit, rather than flattening.
+    let keep = match (nw, nh) {
+        (Some(_), Some(_)) => false,
+        (None, None) => true,
+        _ => lock,
+    };
+    let (w, h) = fit_size(w, h, keep);
     // Any drawing: a group's members scale with its frame (its child space is kept); a chart or
     // SmartArt graphic lays itself out again at the new size.
     let theme = s.doc.settings.theme_colors.clone();
@@ -1016,6 +1092,27 @@ fn size(s: &mut Session, v: &Value) -> CmdResult {
         super::chart::redraw(o, &theme);
         super::smart_art::redraw(o, &theme);
     })
+}
+
+/// An object size within 1–4000 pt. With `keep`, both sides scale by one factor, the one nearest
+/// 1 that brings them within the limits, so the proportions hold; a shape too long and thin for any
+/// such factor is clamped side by side.
+pub fn fit_size(w: f32, h: f32, keep: bool) -> (f32, f32) {
+    let side = |x: f32| if x.is_nan() { 1.0 } else { x.clamp(1.0, 4000.0) };
+    if keep && w.is_finite() && h.is_finite() && w > 0.0 && h > 0.0 {
+        let (lo, hi) = ((1.0 / w).max(1.0 / h), (4000.0 / w).min(4000.0 / h));
+        if lo <= hi {
+            let k = if lo > 1.0 {
+                lo
+            } else if hi < 1.0 {
+                hi
+            } else {
+                1.0
+            };
+            return (side(w * k), side(h * k));
+        }
+    }
+    (side(w), side(h))
 }
 
 /// Apply an image operation to the selected picture's bitmap (stored as a new PNG).
@@ -2226,6 +2323,67 @@ mod tests {
         let InlineObject::Image { alt, crop, .. } = o else { panic!("expected image") };
         assert_eq!(alt, "A red box");
         assert_eq!(crop, [0.1, 0.2, 0.05, 0.0]);
+    }
+
+    /// #2573: Size from the original. `original` alone gives the picture back its original size
+    /// (its pixels at 96 ppi, less what is cropped) and `scale` is a percentage of it; Compress
+    /// Pictures doesn't change what the original is. Only a picture has one.
+    #[test]
+    fn picture_size_counts_from_the_original() {
+        let mut s = Session::new(wordcraft_doc::Document::new());
+        let data = super::super::insert::base64_encode(&png(40, 20));
+        s.run("insert.picture", &json!({"data": data})).unwrap();
+        let size = |s: &Session| obj_size(&selected(s).unwrap().1);
+        assert_eq!(size(&s), (30.0, 15.0), "40×20 px at 96 ppi");
+        s.run("picture.size", &json!({"width": 300.0, "height": 100.0, "lockAspect": false})).unwrap();
+        s.run("picture.compress", &json!({"maxPixels": 32})).unwrap();
+        let Some((_, InlineObject::Image { media, .. })) = selected(&s) else { panic!("a picture") };
+        assert_eq!(wordcraft_render::image_size(&s.doc.media[&media]), Some((32, 16)), "compressed");
+        assert_eq!(original_size(&s, &media), Some(OriginalSize { w: 30.0, h: 15.0, pixels: Some((40, 20)) }));
+        s.run("picture.size", &json!({"original": true})).unwrap();
+        assert_eq!(size(&s), (30.0, 15.0));
+        s.run("picture.size", &json!({"original": true, "scale": 250})).unwrap();
+        assert_eq!(size(&s), (75.0, 37.5));
+        // Half the width cropped away: half the original width is left.
+        s.run("picture.crop", &json!({"left": 0.25, "right": 0.25})).unwrap();
+        s.run("picture.size", &json!({"original": true})).unwrap();
+        assert_eq!(size(&s), (15.0, 15.0));
+        s.run("edit.undo", &json!({})).unwrap();
+        assert_eq!(size(&s), (75.0, 37.5), "one undo step");
+        s.run("insert.shape", &json!({"kind": "rectangle"})).unwrap();
+        assert!(s.run("picture.size", &json!({"original": true})).is_err(), "a shape has no original size");
+    }
+
+    /// #2573: a size past 4000 pt (or under 1 pt) that keeps the proportions scales as a whole
+    /// instead of flattening against the limit; both sides given are clamped each on its own.
+    #[test]
+    fn picture_size_past_the_limit_keeps_the_proportions() {
+        let mut s = Session::new(wordcraft_doc::Document::new());
+        let data = super::super::insert::base64_encode(&png(40, 20));
+        s.run("insert.picture", &json!({"data": data})).unwrap();
+        let size = |s: &Session| obj_size(&selected(s).unwrap().1);
+        s.run("picture.size", &json!({"width": 9000.0})).unwrap();
+        assert_eq!(size(&s), (4000.0, 2000.0));
+        s.run("picture.size", &json!({"scale": 1000})).unwrap();
+        assert_eq!(size(&s), (4000.0, 2000.0));
+        s.run("picture.size", &json!({"width": 9000.0, "height": 10.0})).unwrap();
+        assert_eq!(size(&s), (4000.0, 10.0));
+        s.run("picture.size", &json!({"height": 30.0, "lockAspect": false})).unwrap();
+        assert_eq!(size(&s), (4000.0, 30.0));
+        // Below 1 pt as well: a 1% scale of 50×200 pt is 1×4 pt, not 1×2.
+        s.run("picture.size", &json!({"width": 50.0, "height": 200.0})).unwrap();
+        s.run("picture.size", &json!({"scale": 1})).unwrap();
+        assert_eq!(size(&s), (1.0, 4.0));
+        // Too long and thin for one factor: side by side. NaN and infinity stay in range.
+        assert_eq!(fit_size(0.5, 5000.0, true), (1.0, 4000.0));
+        assert_eq!(fit_size(f32::NAN, 10.0, true), (1.0, 10.0));
+        assert_eq!(fit_size(f32::INFINITY, 10.0, true), (4000.0, 10.0));
+        // Hostile values never leave the 1–4000 pt range.
+        for v in [json!({"scale": -50}), json!({"width": -1.0}), json!({"original": "yes", "scale": 1e30}), json!({"height": 1e30})] {
+            s.run("picture.size", &v).unwrap();
+            let (w, h) = size(&s);
+            assert!((1.0..=4000.0).contains(&w) && (1.0..=4000.0).contains(&h), "{v}: {w}×{h}");
+        }
     }
 
     /// A crop handle drop: `picture.crop` with the new size is one edit, one undo step.

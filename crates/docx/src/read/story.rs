@@ -179,7 +179,8 @@ fn clean_text(s: &str) -> String {
 
 fn children_of_choice(ac: &El) -> Option<&El> {
     // Prefer a Choice whose requirements we understand; else the Fallback; else any Choice.
-    const KNOWN: &[&str] = &["wps", "wpg", "wpc", "wpi", "w14", "w15", "wp14", "a14", "w16se", "w16cid", "w16", "w16cex", "w16sdtdh", "v"];
+    // `m`: Office Math (a producer may guard an equation with a picture fallback, #1273).
+    const KNOWN: &[&str] = &["wps", "wpg", "wpc", "wpi", "w14", "w15", "wp14", "a14", "w16se", "w16cid", "w16", "w16cex", "w16sdtdh", "v", "m"];
     let ok = |c: &El| c.attr("Requires").unwrap_or("").split_whitespace().all(|r| KNOWN.contains(&r));
     ac.children("mc:Choice").find(|c| ok(c)).or_else(|| ac.child("mc:Fallback")).or_else(|| ac.child("mc:Choice"))
 }
@@ -202,10 +203,21 @@ impl Reader<'_> {
                         && p.props.drop_cap.is_none()
                         && let Some(Block::Para(mut first)) = out.pop().map(|b| (*b).clone())
                     {
-                        let lines = first.props.drop_cap;
                         let mut props = p.props.clone();
+                        props.drop_cap = first.props.drop_cap;
+                        props.drop_cap_margin = first.props.drop_cap_margin;
+                        props.drop_cap_distance = first.props.drop_cap_distance;
+                        // A letter in a font of its own: the drop cap's font, the letter itself
+                        // in the text's (so taking the drop cap away gives the letter its font back).
+                        let cap_font = first.runs.first().and_then(|r| r.props.font.clone());
+                        let text_font = p.runs.first().and_then(|r| r.props.font.clone());
+                        if cap_font.is_some() && cap_font != text_font {
+                            for r in &mut first.runs {
+                                r.props.font = text_font.clone();
+                            }
+                            props.drop_cap_font = cap_font;
+                        }
                         first.append(p);
-                        props.drop_cap = lines;
                         first.props = props;
                         out.push(para_block(first));
                         continue;
@@ -221,6 +233,13 @@ impl Reader<'_> {
                 }
                 "w:sdt" => self.read_block_sdt(sc, e, rels, out, depth),
                 "w:customXml" | "w:smartTag" | "w:ins" | "w:moveTo" => self.read_blocks(sc, e, rels, out, depth + 1),
+                // Math is allowed straight in a story (EG_BlockLevelElts takes EG_RunLevelElements,
+                // which takes EG_MathContent): it gets a paragraph of its own (#1273).
+                "m:oMathPara" | "m:oMath" => {
+                    let wrapped = El { name: "w:p".into(), attrs: Vec::new(), kids: vec![Node::El(e.clone())] };
+                    let p = self.read_para(sc, &wrapped, rels, depth);
+                    out.push(para_block(p));
+                }
                 "mc:AlternateContent" => {
                     if let Some(c) = children_of_choice(e) {
                         self.read_blocks(sc, c, rels, out, depth + 1);
@@ -1511,7 +1530,7 @@ impl Reader<'_> {
         let style = grp.attr("style").unwrap_or("");
         let len = |k: &str| vml_style(style, k).and_then(|v| measure(v, 1.0)).unwrap_or(0.0).clamp(0.0, crate::units::MAX_LEN_PT);
         let (w, h) = (len("width"), len("height"));
-        let float = vml_float(grp, style);
+        let float = vml_float(grp, style, sc.in_hf);
         // The members' space; without a usable `coordsize` it is the group's own box.
         let (ch_w, ch_h) = vml_coordpair(grp, "coordsize").filter(|(cw, ch)| *cw > 0.0 && *ch > 0.0).unwrap_or((w.max(1.0), h.max(1.0)));
         let (cx, cy) = vml_coordpair(grp, "coordorigin").unwrap_or((0.0, 0.0));
@@ -1591,7 +1610,7 @@ impl Reader<'_> {
                 f.set_spin(vml_spin(style));
                 f
             }
-            None => vml_float(shape, style),
+            None => vml_float(shape, style, sc.in_hf),
         };
         if let Some(img) = shape.find("v:imagedata") {
             let id = img.attr("r:id").or_else(|| img.attr("r:pict"))?;
@@ -1622,6 +1641,52 @@ impl Reader<'_> {
             }
             _ => None,
         };
+        // Word 2007 WordArt: a `v:shape` whose `v:textpath` draws its `string` (the header watermark
+        // is taken before this). Shown as a text box holding that text, in the textpath's font and the
+        // shape's `fillcolor`; the box itself has neither fill nor outline, as the letters are the art.
+        if shape.local() == "shape"
+            && let Some(tp) = shape.child("v:textpath")
+            && !tp.attr("on").is_some_and(|v| matches!(v, "f" | "false" | "0"))
+            && let Some(text) = tp.attr("string").map(|t| t.chars().take(200).collect::<String>()).filter(|t| !t.trim().is_empty())
+            && sc.story_depth < MAX_STORY_DEPTH
+        {
+            let font = tp
+                .attr("style")
+                .and_then(|s| vml_style(s, "font-family"))
+                .map(|f| f.trim_matches(|c: char| c == '"' || c == '\'' || c.is_whitespace()).chars().take(100).collect::<String>())
+                .filter(|f| !f.is_empty());
+            // The shapetype's WordArt shape (`o:spt` 136-175) bends the text like DrawingML's warp.
+            let warp = vml_spt(shape, shapetype, type_id)
+                .and_then(|spt| spt.checked_sub(136))
+                .and_then(|i| VML_TEXT_WARPS.get(i as usize))
+                .copied()
+                .and_then(TextWarp::new);
+            // The letters fill the box (`fitshape`): sized to its height.
+            let props = CharProps {
+                font,
+                size: Some((h * 0.75).clamp(8.0, 200.0)),
+                color: attr("fillcolor").and_then(vml_color).map(TextColor::Rgb),
+                ..CharProps::default()
+            };
+            let id = self.doc.add_part(PartKind::TextBox, vec![para_block(Paragraph::with_text(&text, props))]);
+            if let Some(part) = self.doc.parts.get_mut(&id) {
+                part.body.anchor = wordcraft_doc::props::VAlign::Center;
+                part.body.inset = Some([0; 4]);
+            }
+            return Some(InlineObject::Shape {
+                kind: ShapeKind::TextBox,
+                w,
+                h,
+                fill: None,
+                stroke: None,
+                stroke_width,
+                float,
+                story: Some(id),
+                freeform: None,
+                effects: Default::default(),
+                extra: ShapeExtra { warp, ..ShapeExtra::default() },
+            });
+        }
         if let Some((tb, t)) = vml_textbox(shape, 0)
             && sc.story_depth < MAX_STORY_DEPTH
         {
@@ -1934,6 +1999,8 @@ fn anchor_float(c: &El) -> Float {
     f.dist = dist("distL").max(dist("distR"));
     f.dist_top = dist("distT");
     f.dist_bottom = dist("distB");
+    // Required by the schema; a file leaving it out lays out in the cell, as before.
+    f.outside_cell = !on_off_attr(c, "layoutInCell") && c.attr("layoutInCell").is_some();
     f
 }
 
@@ -1960,6 +2027,51 @@ fn wrap_polygon(e: &El) -> Option<wordcraft_doc::wrap::WrapPolygon> {
     }
     wordcraft_doc::wrap::WrapPolygon::new(edited, pts)
 }
+
+/// The DrawingML text warps of VML's WordArt shapes, `o:spt` 136 (plain text) to 175 (can down), in
+/// order: the same shapes under their DrawingML names (`ST_TextShapeType`).
+const VML_TEXT_WARPS: [&str; 40] = [
+    "textPlain",
+    "textStop",
+    "textTriangle",
+    "textTriangleInverted",
+    "textChevron",
+    "textChevronInverted",
+    "textRingInside",
+    "textRingOutside",
+    "textArchUp",
+    "textArchDown",
+    "textCircle",
+    "textButton",
+    "textArchUpPour",
+    "textArchDownPour",
+    "textCirclePour",
+    "textButtonPour",
+    "textCurveUp",
+    "textCurveDown",
+    "textCascadeUp",
+    "textCascadeDown",
+    "textWave1",
+    "textWave2",
+    "textDoubleWave1",
+    "textWave4",
+    "textInflate",
+    "textDeflate",
+    "textInflateBottom",
+    "textDeflateBottom",
+    "textInflateTop",
+    "textDeflateTop",
+    "textDeflateInflate",
+    "textDeflateInflateDeflate",
+    "textFadeRight",
+    "textFadeLeft",
+    "textFadeUp",
+    "textFadeDown",
+    "textSlantUp",
+    "textSlantDown",
+    "textCanUp",
+    "textCanDown",
+];
 
 /// A VML shape's preset type (`o:spt`): its own, its shapetype's, or the number in Word's
 /// shapetype id `_x0000_tNN` (`type_id`), Word writing each shapetype only at its first use.
@@ -2004,7 +2116,7 @@ fn vml_style<'a>(style: &'a str, key: &str) -> Option<&'a str> {
 /// `mso-position-horizontal` / `mso-position-vertical`), wrapped as its `w10:wrap` says. Without
 /// wrapping (`none`, or no `w10:wrap`) it's in front of the text, or behind it at a negative
 /// `z-index`. Anything else stays inline.
-fn vml_float(shape: &El, style: &str) -> Float {
+fn vml_float(shape: &El, style: &str, in_hf: bool) -> Float {
     let get = |k: &str| vml_style(style, k);
     let hidden = get("visibility").is_some_and(|v| v.eq_ignore_ascii_case("hidden"));
     if !get("position").is_some_and(|p| p.eq_ignore_ascii_case("absolute")) {
@@ -2057,6 +2169,9 @@ fn vml_float(shape: &El, style: &str) -> Float {
         dist_top: dist("mso-wrap-distance-top"),
         dist_bottom: dist("mso-wrap-distance-bottom"),
         hidden,
+        // Word for Mac draws a VML shape anchored in a header table cell on the page whatever
+        // `o:allowincell` says (user-checked), as for Word's picture and text watermarks.
+        outside_cell: in_hf,
         ..Float::default()
     };
     f.set_spin(vml_spin(style));
