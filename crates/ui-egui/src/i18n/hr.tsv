@@ -2640,6 +2640,28 @@ preview	Title	Naslov
 	Bottom Right Cell	Donja desna ćelija
 	Inside Horizontal Border	Unutarnji vodoravni obrub
 	Inside Vertical Border	Unutarnji okomiti obrub
+# Custom theme colours, fonts and themes (#1869)
+	Customize Colors	Prilagodi boje
+	Customize Fonts	Prilagodi fontove
+	Save Current Theme	Spremi trenutnu temu
+	Browse for Themes	Potraži teme
+	Customize Colors…	Prilagodi boje…
+	Customize Fonts…	Prilagodi fontove…
+	Save Current Theme…	Spremi trenutnu temu…
+	Browse for Themes…	Potraži teme…
+	Theme colors	Boje teme
+	Text/Background - Dark 1	Tekst/pozadina – tamna 1
+	Text/Background - Light 1	Tekst/pozadina – svijetla 1
+	Text/Background - Dark 2	Tekst/pozadina – tamna 2
+	Text/Background - Light 2	Tekst/pozadina – svijetla 2
+	Followed Hyperlink	Posjećena hiperveza
+	Sample	Uzorak
+	Heading font:	Font naslova:
+	Body font:	Font tijela teksta:
+	Theme files	Datoteke tema
+	Theme files can't be opened or saved in the browser.	Datoteke tema ne mogu se otvoriti ni spremiti u pregledniku.
+	Custom theme settings could not be saved.	Postavke prilagođenih tema nije moguće spremiti.
+	Custom {n}	Prilagođeno {n}
 # Split Cells and Convert Text to Table (#2592)
 	Merge cells before split	Spoji ćelije prije razdvajanja
 	Table size	Veličina tablice

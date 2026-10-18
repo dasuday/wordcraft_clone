@@ -2255,6 +2255,30 @@
 # Reading Mode column widths (#1040)
 	Narrow	Вузька
 	Medium	Середня
+# Custom theme colours, fonts and themes (#1869)
+	Customize Colors	Налаштувати кольори
+	Customize Fonts	Налаштувати шрифти
+	Save Current Theme	Зберегти поточну тему
+	Browse for Themes	Пошук тем
+	Customize Colors…	Налаштувати кольори…
+	Customize Fonts…	Налаштувати шрифти…
+	Save Current Theme…	Зберегти поточну тему…
+	Browse for Themes…	Пошук тем…
+	Theme colors	Кольори теми
+	Text/Background - Dark 1	Текст/тло – темний 1
+	Text/Background - Light 1	Текст/тло – світлий 1
+	Text/Background - Dark 2	Текст/тло – темний 2
+	Text/Background - Light 2	Текст/тло – світлий 2
+	Hyperlink	Гіперпосилання
+	Followed Hyperlink	Переглянуте гіперпосилання
+	Sample	Зразок
+	Heading	Заголовок
+	Heading font:	Шрифт заголовків:
+	Body font:	Шрифт основного тексту:
+	Theme files	Файли тем
+	Theme files can't be opened or saved in the browser.	Файли тем не можна відкрити чи зберегти в браузері.
+	Custom theme settings could not be saved.	Не вдалося зберегти налаштування власних тем.
+	Custom {n}	Власна {n}
 # Split Cells and Convert Text to Table (#2592)
 	Merge cells before split	Об'єднати клітинки перед розділенням
 	Table size	Розмір таблиці

@@ -2250,6 +2250,28 @@
 # Reading Mode column widths (#1040)
 	Narrow	Étroite
 	Medium	Moyenne
+# Custom theme colours, fonts and themes (#1869)
+	Customize Colors	Personnaliser les couleurs
+	Customize Fonts	Personnaliser les polices
+	Save Current Theme	Enregistrer le thème actif
+	Browse for Themes	Rechercher des thèmes
+	Customize Colors…	Personnaliser les couleurs…
+	Customize Fonts…	Personnaliser les polices…
+	Save Current Theme…	Enregistrer le thème actif…
+	Browse for Themes…	Rechercher des thèmes…
+	Theme colors	Couleurs du thème
+	Text/Background - Dark 1	Texte/arrière-plan - foncé 1
+	Text/Background - Light 1	Texte/arrière-plan - clair 1
+	Text/Background - Dark 2	Texte/arrière-plan - foncé 2
+	Text/Background - Light 2	Texte/arrière-plan - clair 2
+	Followed Hyperlink	Lien hypertexte visité
+	Sample	Aperçu
+	Heading font:	Police des titres :
+	Body font:	Police du corps :
+	Theme files	Fichiers de thème
+	Theme files can't be opened or saved in the browser.	Les fichiers de thème ne peuvent pas être ouverts ni enregistrés dans le navigateur.
+	Custom theme settings could not be saved.	Impossible d'enregistrer les thèmes personnalisés.
+	Custom {n}	Personnalisé {n}
 # Split Cells and Convert Text to Table (#2592)
 	Merge cells before split	Fusionner les cellules avant le fractionnement
 	Table size	Taille du tableau

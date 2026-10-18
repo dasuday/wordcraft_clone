@@ -2638,6 +2638,28 @@
 # Reading Mode column widths (#1040)
 	Narrow	Keskeny
 	Medium	Közepes
+# Custom theme colours, fonts and themes (#1869)
+	Customize Colors	Színek testreszabása
+	Customize Fonts	Betűtípusok testreszabása
+	Save Current Theme	Aktuális téma mentése
+	Browse for Themes	Témák keresése
+	Customize Colors…	Színek testreszabása…
+	Customize Fonts…	Betűtípusok testreszabása…
+	Save Current Theme…	Aktuális téma mentése…
+	Browse for Themes…	Témák keresése…
+	Theme colors	Témaszínek
+	Text/Background - Dark 1	Szöveg/háttér – sötét 1
+	Text/Background - Light 1	Szöveg/háttér – világos 1
+	Text/Background - Dark 2	Szöveg/háttér – sötét 2
+	Text/Background - Light 2	Szöveg/háttér – világos 2
+	Followed Hyperlink	Meglátogatott hivatkozás
+	Sample	Minta
+	Heading font:	Címsor betűtípusa:
+	Body font:	Szövegtörzs betűtípusa:
+	Theme files	Témafájlok
+	Theme files can't be opened or saved in the browser.	A böngészőben nem lehet témafájlokat megnyitni vagy menteni.
+	Custom theme settings could not be saved.	Az egyéni témabeállításokat nem sikerült menteni.
+	Custom {n}	Egyéni {n}
 # Split Cells and Convert Text to Table (#2592)
 	Merge cells before split	Cellák egyesítése felosztás előtt
 	Table size	Táblázat mérete

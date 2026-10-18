@@ -2655,6 +2655,28 @@ preview	Title	Titel
 	Bottom Right Cell	Nedre högra cellen
 	Inside Horizontal Border	Inre vågrät kantlinje
 	Inside Vertical Border	Inre lodrät kantlinje
+# Custom theme colours, fonts and themes (#1869)
+	Customize Colors	Anpassa färger
+	Customize Fonts	Anpassa teckensnitt
+	Save Current Theme	Spara aktuellt tema
+	Browse for Themes	Sök efter teman
+	Customize Colors…	Anpassa färger…
+	Customize Fonts…	Anpassa teckensnitt…
+	Save Current Theme…	Spara aktuellt tema…
+	Browse for Themes…	Sök efter teman…
+	Theme colors	Temafärger
+	Text/Background - Dark 1	Text/bakgrund – mörk 1
+	Text/Background - Light 1	Text/bakgrund – ljus 1
+	Text/Background - Dark 2	Text/bakgrund – mörk 2
+	Text/Background - Light 2	Text/bakgrund – ljus 2
+	Followed Hyperlink	Besökt hyperlänk
+	Sample	Exempel
+	Heading font:	Teckensnitt för rubriker:
+	Body font:	Teckensnitt för brödtext:
+	Theme files	Temafiler
+	Theme files can't be opened or saved in the browser.	Temafiler kan inte öppnas eller sparas i webbläsaren.
+	Custom theme settings could not be saved.	Inställningarna för anpassade teman kunde inte sparas.
+	Custom {n}	Anpassad {n}
 # Split Cells and Convert Text to Table (#2592)
 	Merge cells before split	Sammanfoga celler före delning
 	Table size	Tabellstorlek
