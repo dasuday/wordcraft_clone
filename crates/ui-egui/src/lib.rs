@@ -1116,7 +1116,14 @@ impl WordApp {
         if !go {
             return Ok(json!({"done": false}));
         }
-        self.execute_user(&then, params).map(|r| json!({"done": true, "result": r}))
+        // An open that waited on this prompt and then failed: name the file, as other opens do.
+        let opening = (then == "file.open").then(|| params.get("path").and_then(Value::as_str).map(str::to_owned)).flatten();
+        let result = self.execute_user(&then, params);
+        if let (Err(e), Some(path)) = (&result, opening) {
+            self.report_open_failure(&path, e);
+            self.ui.backstage = false;
+        }
+        result.map(|r| json!({"done": true, "result": r}))
     }
 
     /// [`WordApp::execute`] for something the user did: a document that turns out to be
@@ -4418,6 +4425,23 @@ mod tests {
         let mut s = Session::new(wordcraft_doc::Document::from_text(text));
         s.run("file.save", &json!({"path": path.to_string_lossy()})).unwrap();
         path
+    }
+
+    /// An open that waits on "Save changes?" and then fails still names the file and the cause (#1103).
+    #[test]
+    fn failed_open_after_save_prompt_names_the_file() {
+        let dir = scratch("open-after-prompt");
+        let bad = dir.join("broken.docx").to_string_lossy().to_string();
+        std::fs::write(&bad, b"PK\x03\x04 not really a zip").unwrap();
+        let mut a = typed();
+        a.run("file.open", json!({"path": bad})).unwrap();
+        assert_eq!(prompt(&a), Some("saveChanges"));
+        a.ui.backstage = true;
+        let _ = a.run("ui.saveChanges", json!({"answer": "dontSave"}));
+        let shown = a.status_msg.as_ref().map(|(m, _)| m.clone()).unwrap_or_default();
+        assert!(shown.contains("broken.docx"), "{shown}");
+        assert!(!a.ui.backstage, "Backstage hides the status bar");
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     /// Surfaces finding 1: Mod+N (and the File › New tiles) replaced unsaved work without asking.
