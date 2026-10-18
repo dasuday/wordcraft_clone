@@ -2216,7 +2216,10 @@ fn break_lines(pl: &mut ParaLayout, env: &ParaEnv, mark_style: u32, level: Optio
                 if !hyph {
                     last_break = Some(j);
                     last_plain = Some((j, x));
-                } else if hyph_ok && x + hyphen_glyph(pl, c.style, &mut hcache).2 <= right_edge + shrink + 0.01 {
+                } else if hyph_ok
+                    && !pl.clusters.get(j + 1).is_some_and(|n| n.kind == ClKind::Text && n.g1 <= n.g0)
+                    && x + hyphen_glyph(pl, c.style, &mut hcache).2 <= right_edge + shrink + 0.01
+                {
                     last_break = Some(j);
                 }
             }

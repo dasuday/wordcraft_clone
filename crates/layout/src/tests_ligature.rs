@@ -189,3 +189,22 @@ fn a_long_word_never_wraps_inside_a_ligature() {
     }
     assert!(seen_ligature, "the default font should draw ffi as a ligature");
 }
+
+#[test]
+fn a_hyphenation_point_never_splits_a_ligature() {
+    // Soft hyphens sit between the letters of "ffi"; a line never ends between a ligature's glyph
+    // and its glyphless letters, whether or not the soft hyphen leaves the ligature intact.
+    for k in 0..24 {
+        let mut d = Document::from_text(&format!("{}f\u{ad}f\u{ad}i", "x".repeat(k)));
+        d.last_section.margin_left = 250.0;
+        d.last_section.margin_right = 250.0;
+        let l = lay(&d);
+        let pl = para_layout(&l);
+        for line in &pl.lines {
+            if let Some(next) = pl.clusters.get(line.c1) {
+                let inside = next.g1 <= next.g0 && next.kind == crate::para::ClKind::Text && line.c1 > line.c0;
+                assert!(!inside, "k={k}: line ends at {} inside a ligature", line.c1);
+            }
+        }
+    }
+}
