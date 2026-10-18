@@ -1725,6 +1725,35 @@ fn cut_rows_and_cells_clears_their_text() {
     }
 }
 
+/// #1744 review: Cut clears every cell Copy takes: a cell merged across the selected columns
+/// widens them, so the cell below the merge's second column is copied and cleared too.
+#[test]
+fn cut_clears_the_cells_a_merged_cell_widens_the_copy_to() {
+    let mut s = table3_doc();
+    select_table_cells(&mut s, (0, 0), (0, 1));
+    run(&mut s, "table.merge", json!({}));
+    select_table_cells(&mut s, (0, 1), (0, 0));
+    run(&mut s, "edit.copy", json!({}));
+    run(&mut s, "edit.cut", json!({}));
+    let cells = body_table_cells(&s).remove(0);
+    assert_eq!(cells.len(), 8, "one merged cell and seven others: {cells:?}");
+    assert_eq!(cells[1], "C1");
+    assert!(cells[2..4].iter().all(String::is_empty), "A2 and B2 are cleared: {cells:?}");
+    assert_eq!(cells[4..], ["C2", "A3", "B3", "C3"], "the rest stays");
+}
+
+/// #1744 review: an empty cell's selection enables Cut but not the Spike, which takes text only.
+#[test]
+fn spike_stays_disabled_on_an_empty_cell_selection() {
+    let mut s = s();
+    run(&mut s, "document.setText", json!({"text": "Intro"}));
+    run(&mut s, "caret.docEnd", json!({}));
+    run(&mut s, "insert.table", json!({"rows": 2, "cols": 2}));
+    select_table_cells(&mut s, (0, 0), (0, 0));
+    let r = s.run("edit.spike", &json!({}));
+    assert!(matches!(r, Err(crate::CmdError::Disabled(_))), "{r:?}");
+}
+
 fn clip_is_table(s: &Session) -> bool {
     matches!(s.clipboard.as_ref().map(|f| f.blocks.as_slice()), Some([wordcraft_doc::Block::Table(_)]))
 }

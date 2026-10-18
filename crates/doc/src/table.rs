@@ -60,11 +60,9 @@ pub const MAX_ROWS: usize = 32_767;
 pub const MAX_COLS: usize = 63;
 
 impl Table {
-    /// A copy of rows `rows` of this table holding, of each row, the cells that reach into grid
-    /// columns `cols` (both inclusive): what Copy takes from selected rows or cells. Content
-    /// controls around rows and the table aren't copied (they'd lose their other end); a cell
-    /// that continues a vertical merge from a row left out starts the merge instead.
-    pub fn slice(&self, rows: (usize, usize), cols: (usize, usize)) -> Table {
+    /// Grid columns `lo..hi` that [`Table::slice`] copies for `rows`/`cols` (widened over merged cells),
+    /// and whether any cell touches them (Cut clears the same cells it copies).
+    pub fn slice_bounds(&self, rows: (usize, usize), cols: (usize, usize)) -> (usize, usize, bool) {
         let ((r0, r1), (g0, g1)) = (rows, cols);
         let kept = || self.rows.iter().take(r1.saturating_add(1)).skip(r0);
         // Grid columns `lo..hi` the cells touching them cover: a cell merged across that is partly
@@ -90,6 +88,17 @@ impl Table {
             }
             (lo, hi) = (nlo, nhi);
         }
+        (lo, hi, any)
+    }
+
+    /// A copy of rows `rows` of this table holding, of each row, the cells that reach into grid
+    /// columns `cols` (both inclusive): what Copy takes from selected rows or cells. Content
+    /// controls around rows and the table aren't copied (they'd lose their other end); a cell
+    /// that continues a vertical merge from a row left out starts the merge instead.
+    pub fn slice(&self, rows: (usize, usize), cols: (usize, usize)) -> Table {
+        let (r0, r1) = rows;
+        let kept = || self.rows.iter().take(r1.saturating_add(1)).skip(r0);
+        let (lo, hi, any) = self.slice_bounds(rows, cols);
         let mut out_rows = Vec::new();
         for row in kept() {
             let mut g = 0usize;

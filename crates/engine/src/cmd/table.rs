@@ -637,7 +637,10 @@ pub(super) fn selected_table(s: &Session) -> Option<Path> {
 /// tracked when Track Changes is on. The caret goes to the first cell.
 pub(super) fn clear_cells(s: &mut Session, range: &crate::CellRange) -> Result<(), CmdError> {
     let Some(t) = s.doc.table(range.story, &range.table) else { return Ok(()) };
-    let prefixes: Vec<Vec<u32>> = range.cells(t).into_iter().map(|(r, c)| cell_prefix(&range.table, r, c)).collect();
+    // The cells Copy takes: columns widened over merged cells, as `Table::slice` does.
+    let (lo, hi, any) = t.slice_bounds(range.rows, range.cols);
+    let cells = if any { crate::CellRange { cols: (lo, hi.saturating_sub(1)), ..range.clone() }.cells(t) } else { Vec::new() };
+    let prefixes: Vec<Vec<u32>> = cells.into_iter().map(|(r, c)| cell_prefix(&range.table, r, c)).collect();
     let spans = text_spans(s, range.story, &prefixes);
     let first = spans.first().map(|(a, _)| a.clone());
     if guard_delete(s, &spans)?.is_none() {

@@ -27,6 +27,11 @@ fn undo_to(s: &mut Session, v: &Value) -> CmdResult {
     Ok(r)
 }
 
+/// Something the Spike can collect: text (it doesn't take empty cells).
+fn has_text_sel(s: &Session) -> Option<&'static str> {
+    if s.sel.is_collapsed() { Some("nothing is selected") } else { None }
+}
+
 /// Something to cut: text, or whole table cells (an empty cell's selection has no length, #1744).
 fn has_sel(s: &Session) -> Option<&'static str> {
     if s.sel.is_collapsed() && s.cell_range().is_none() { Some("nothing is selected") } else { None }
@@ -64,7 +69,7 @@ pub fn specs() -> Vec<CommandSpec> {
         CommandSpec::new("edit.copy", "Copy", "Home › Clipboard", copy).key("Mod+C / Mod+Insert").pure(),
         // Word's Spike (Ctrl+F3, Ctrl+Shift+F3; ⌘ on the Mac): the AutoText entry "Spike", so Quick
         // Parts and AutoText insert it without emptying it, as in Word.
-        CommandSpec::new("edit.spike", "Spike", "Editing", spike).key("Mod+F3").when(has_sel),
+        CommandSpec::new("edit.spike", "Spike", "Editing", spike).key("Mod+F3").when(has_text_sel),
         CommandSpec::new("edit.insertSpike", "Insert Spike", "Editing", insert_spike).key("Mod+Shift+F3").when(|s| {
             if s.math.is_some() {
                 Some("leave the equation first")
