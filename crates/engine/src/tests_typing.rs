@@ -1317,6 +1317,25 @@ fn arrows_skip_what_a_collapsed_heading_hides() {
     assert_eq!((s.sel.anchor.clone(), s.sel.focus.clone()), (Pos::body(0, 5), Pos::body(4, 0)));
 }
 
+/// A collapsed last heading hides the rest of the document: Ctrl+End, Ctrl+Shift+End and Down at
+/// the bottom go to the end of what shows instead of staying put.
+#[test]
+fn moves_to_the_end_stop_at_a_trailing_collapsed_heading() {
+    let mut s = collapsed_doc();
+    run(&mut s, "outline.toggleHeading", json!({"block": 0}));
+    run(&mut s, "outline.toggleHeading", json!({"block": 4}));
+    assert!(shown(&mut s, 2) && shown(&mut s, 4) && !shown(&mut s, 5));
+    s.sel = crate::Selection::caret(Pos::body(0, 2));
+    run(&mut s, "caret.docEnd", json!({}));
+    assert_eq!(s.sel.focus, Pos::body(4, 4));
+    s.sel = crate::Selection::caret(Pos::body(0, 2));
+    run(&mut s, "caret.docEnd", json!({"extend": true}));
+    assert_eq!((s.sel.anchor.clone(), s.sel.focus.clone()), (Pos::body(0, 2), Pos::body(4, 4)));
+    s.sel = crate::Selection::caret(Pos::body(4, 1));
+    run(&mut s, "caret.down", json!({}));
+    assert_eq!(s.sel.focus.path, wordcraft_doc::Path::top(4));
+}
+
 /// Word for Mac: typing at the end of a collapsed heading doesn't expand it.
 #[test]
 fn typing_at_the_end_of_a_collapsed_heading_keeps_it_collapsed() {

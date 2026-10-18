@@ -119,16 +119,21 @@ pub(crate) fn shown_pos(s: &Session, from: &Pos, to: Pos, start: bool) -> Pos {
     }
     let paths = s.doc.para_paths(StoryRef::Body);
     let first = |path: &wordcraft_doc::Path| path.0.first().map_or(0, |b| *b as usize);
+    let back = |start: bool| {
+        (0..top).rev().find(|i| !hidden(*i)).and_then(|j| paths.iter().rfind(|p| first(p) == j)).map(|path| {
+            let len = s.doc.para(StoryRef::Body, path).map_or(0, |p| p.len());
+            Pos::new(StoryRef::Body, path.clone(), if start { 0 } else { len })
+        })
+    };
     let found = if to > *from {
         (top..s.doc.body.len())
             .find(|i| !hidden(*i))
             .and_then(|j| paths.iter().find(|p| first(p) >= j))
             .map(|path| Pos::new(StoryRef::Body, path.clone(), 0))
+            // Nothing shown after the fold (the last heading is collapsed): the end of what shows.
+            .or_else(|| back(false))
     } else {
-        (0..top).rev().find(|i| !hidden(*i)).and_then(|j| paths.iter().rfind(|p| first(p) == j)).map(|path| {
-            let len = s.doc.para(StoryRef::Body, path).map_or(0, |p| p.len());
-            Pos::new(StoryRef::Body, path.clone(), if start { 0 } else { len })
-        })
+        back(start)
     };
     found.unwrap_or_else(|| from.clone())
 }

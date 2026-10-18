@@ -4031,6 +4031,53 @@ mod tests {
         assert_eq!((para_props(&app, 0).outline_level, para_props(&app, 0).collapsed), (Some(BODY_LEVEL), Some(false)));
     }
 
+    /// #1745: the same through the dialog's controls: pick a heading level in the Outline level
+    /// box, which enables "Collapsed by default", tick it and press OK.
+    #[test]
+    fn paragraph_dialog_controls_set_outline_level_and_collapsed() {
+        use egui_kittest::kittest::{NodeT, Queryable};
+        let mut app = app_with("Intro\nBody\nMore");
+        app.session.sel = wordcraft_engine::Selection::caret(wordcraft_doc::Pos::body(0, 0));
+        app.dialog = Dialog::open("paragraph", &mut app);
+        let depth = app.session.undo_depth();
+        let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(1440.0, 900.0)).build_ui_state(
+            |ui, app: &mut WordApp| {
+                let ctx = ui.ctx().clone();
+                app.logic(&ctx);
+                app.ui(ui);
+            },
+            app,
+        );
+        let steps = |h: &mut egui_kittest::Harness<'_, WordApp>| {
+            for _ in 0..4 {
+                h.step();
+            }
+        };
+        steps(&mut h);
+        assert!(h.get_by_label("Collapsed by default").accesskit_node().is_disabled(), "greyed for body text");
+        let outline_box = h
+            .query_all_by_role(egui::accesskit::Role::ComboBox)
+            .find(|n| n.accesskit_node().value().as_deref() == Some("Body Text"))
+            .expect("the outline level box");
+        outline_box.click();
+        steps(&mut h);
+        h.get_by_label("Level 1").click();
+        steps(&mut h);
+        assert!(!h.get_by_label("Collapsed by default").accesskit_node().is_disabled(), "a heading level enables it");
+        h.get_by_label("Collapsed by default").click();
+        steps(&mut h);
+        h.get_by_role_and_label(egui::accesskit::Role::Button, "OK").click();
+        steps(&mut h);
+        let app = h.state_mut();
+        assert!(app.dialog.is_none(), "OK closes the dialog");
+        let p = para_props(app, 0);
+        assert_eq!((p.outline_level, p.collapsed), (Some(0), Some(true)));
+        assert_eq!(app.session.undo_depth(), depth + 1, "one undo step");
+        let _ = app.run("edit.undo", json!({}));
+        let p = para_props(app, 0);
+        assert_eq!((p.outline_level, p.collapsed), (None, None), "undo takes both back");
+    }
+
     #[test]
     fn paragraph_dialog_leaves_what_the_selected_paragraphs_differ_in() {
         // #1346: OK gave every selected paragraph the caret paragraph's formatting, as three

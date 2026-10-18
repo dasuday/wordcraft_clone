@@ -2303,6 +2303,10 @@ fn mouse(app: &mut WordApp, ui: &Ui, resp: &egui::Response, rects: &[Rect], layo
         None
     };
     if resp.double_clicked() {
+        // The second press on a heading's fold arrow already toggled it: its release selects nothing.
+        if story == StoryRef::Body && !mods.shift && !mods.alt && folds_headings(app) && layout.fold_arrow_at(page, x, y).is_some() {
+            return;
+        }
         // Also from another header/footer: with Different First Page on, page 1's header is not
         // the one being edited on page 2 (#2826).
         if let Some((shown, header)) = hf_zone
@@ -3774,8 +3778,12 @@ mod tests {
         click(&mut h);
         assert_eq!(shown(&mut h), [0, 2], "collapsed");
         assert!(h.state().session.sel.is_collapsed(), "no line selected");
+        // A quick second click on the arrow (a double-click) only toggles again; its release
+        // doesn't select the word under the pointer.
+        let sel = h.state().session.sel.clone();
         click(&mut h);
         assert_eq!(shown(&mut h), [0, 1, 2], "expanded again");
+        assert_eq!(h.state().session.sel, sel, "the arrow's double-click doesn't change the selection");
     }
 
     /// #856: the left margin beside body text is Word's selection bar. A click selects the line,
