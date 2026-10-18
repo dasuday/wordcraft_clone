@@ -830,7 +830,7 @@ pub(crate) fn merge_order(fields: &[String], rows: &[Vec<String>], filter: &Reci
 /// The Recipient List grid's rows (#1576): real indices into `rows`, in list order, matching
 /// `find` and, with `only_merged`, kept by the filter (`order` from [`merge_order`]).
 pub(crate) fn visible_recipients(rows: &[Vec<String>], order: Option<&[Option<usize>]>, find: &str, only_merged: bool) -> Vec<usize> {
-    let needle: Vec<char> = find.trim().chars().flat_map(char::to_lowercase).collect();
+    let needle: Vec<char> = find.trim().chars().flat_map(fold_char).collect();
     let kept = |i: usize| !only_merged || order.is_none_or(|o| o.get(i).copied().flatten().is_some());
     let found = |row: &Vec<String>| needle.is_empty() || row.iter().any(|c| contains_folded(c, &needle));
     rows.iter().enumerate().filter(|(i, row)| kept(*i) && found(row)).map(|(i, _)| i).collect()
@@ -862,10 +862,15 @@ impl RecipientFilter {
     }
 }
 
-/// Whether `hay` contains `needle` (lower-cased chars) in any case, without allocating.
+/// Lower-cases a char for searching; final sigma `ς` counts as `σ`, so `ΟΣ` matches `ος`.
+fn fold_char(c: char) -> impl Iterator<Item = char> {
+    c.to_lowercase().map(|l| if l == 'ς' { 'σ' } else { l })
+}
+
+/// Whether `hay` contains `needle` (folded chars) in any case, without allocating.
 fn contains_folded(hay: &str, needle: &[char]) -> bool {
     hay.char_indices().any(|(i, _)| {
-        let mut h = hay.get(i..).unwrap_or_default().chars().flat_map(char::to_lowercase);
+        let mut h = hay.get(i..).unwrap_or_default().chars().flat_map(fold_char);
         needle.iter().all(|n| h.next() == Some(*n))
     })
 }

@@ -7016,6 +7016,8 @@ mod tests {
         assert_eq!(dialogs::visible_recipients(&rows, None, "london", false), [0, 2]);
         assert_eq!(dialogs::visible_recipients(&rows, None, "  AL ", false), [1], "trimmed, any case");
         assert_eq!(dialogs::visible_recipients(&rows, None, "émi", false), [3]);
+        let greek = vec![vec!["ΟΣ".to_string()], vec!["ος".to_string()], vec!["Αλφα".to_string()]];
+        assert_eq!(dialogs::visible_recipients(&greek, None, "ος", false), [0, 1], "final sigma matches capital sigma");
         assert_eq!(dialogs::visible_recipients(&rows, None, "ÉMI", false), [3]);
         assert!(dialogs::visible_recipients(&rows, None, "zzz", false).is_empty());
         // Filter only: City = London keeps Ada and Grace.
