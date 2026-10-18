@@ -342,7 +342,7 @@ pub fn specs() -> Vec<CommandSpec> {
             sel_result(s)
         }),
         CommandSpec::new("insert.crossReference", "Cross-reference", "Insert › Links", cross_ref)
-            .params(r#"{"to": "heading|bookmark|figure|table|equation", "target": string (text / name / number), "show"?: "text|page|number|aboveBelow"} or {} to list targets"#),
+            .params(r#"{"to": "heading|bookmark|figure|table|equation|label:<Name> (a caption label of your own)", "target": string (text / name / number), "show"?: "text|page|number|aboveBelow"} or {} to list targets"#),
         CommandSpec::new("references.noteOptions", "Footnote and Endnote", "References › Footnotes", super::references::note_options).params(
             r#"{"kind"?: "footnote|endnote", "pos"?: "pageBottom|beneathText" (footnotes) | "sectEnd|docEnd" (endnotes), "numFmt"?: "decimal|lowerRoman|upperRoman|lowerLetter|upperLetter|…", "numStart"?: 1-32767, "numRestart"?: "continuous|eachSect|eachPage" (each page: footnotes only), "scope"?: "document|section", "footnoteFormat"?: …, "endnoteFormat"?: …} — no settings: the options in effect at the caret"#,
         ),
@@ -995,11 +995,48 @@ fn cross_ref(s: &mut Session, v: &Value) -> CmdResult {
     Ok(json!({"inserted": result}))
 }
 
+/// The label of a caption's text: what comes before its first digit ("Plate" in "Plate 1: A rock").
+fn caption_label_of(text: &str) -> Option<&str> {
+    let label = text.get(..text.find(|c: char| c.is_ascii_digit())?)?.trim();
+    (!label.is_empty() && label.chars().count() <= 40).then_some(label)
+}
+
+/// The caption paragraphs of the body: (text, position).
+fn captions(s: &Session) -> Vec<(String, Pos)> {
+    s.doc
+        .para_paths(StoryRef::Body)
+        .into_iter()
+        .filter_map(|path| {
+            let p = s.doc.para(StoryRef::Body, &path).filter(|p| p.props.style.as_deref() == Some("Caption"))?;
+            Some((p.plain_text(), Pos { story: StoryRef::Body, path, off: 0 }))
+        })
+        .collect()
+}
+
+/// The labels the body's captions use, first seen first: Figure, Table and Equation, and any the
+/// person made with Insert Caption › New Label. Each is a cross-reference type, `label:<Name>` (#2940).
+pub fn caption_labels(s: &Session) -> Vec<String> {
+    let mut labels: Vec<String> = Vec::new();
+    for (text, _) in captions(s) {
+        if let Some(l) = caption_label_of(&text)
+            && !labels.iter().any(|x| x == l)
+        {
+            labels.push(l.to_string());
+        }
+    }
+    labels
+}
+
 /// Cross-reference targets of a kind: (shown text or bookmark name, position).
 pub fn ref_targets(s: &Session, to: &str) -> Vec<(String, Pos)> {
     let mut targets: Vec<(String, Pos)> = Vec::new();
     match to {
         "bookmark" => targets = s.doc.bookmarks(),
+        // A caption label of the person's own: the captions that use exactly that label.
+        t if t.starts_with("label:") => {
+            let want = t.get("label:".len()..).unwrap_or_default();
+            targets = captions(s).into_iter().filter(|(text, _)| !want.is_empty() && caption_label_of(text) == Some(want)).collect();
+        }
         "figure" | "table" | "equation" => {
             let label = match to {
                 "table" => "Table",
@@ -1192,6 +1229,24 @@ mod tests {
         let (name, _) = s.doc.bookmarks().into_iter().find(|(n, _)| n.starts_with("_Ref")).unwrap();
         assert_eq!(crate::cmd::references::bookmark_text(&s.doc, &name).as_deref(), Some("Figure 1"));
         assert!(fields(&s).contains(&(format!("REF {name} \\h"), "Figure 1".to_string())), "{:?}", fields(&s));
+    }
+
+    /// #2940: a caption with a label of the person's own (Insert Caption › New Label) is a
+    /// cross-reference type of its own, `label:<Name>`, next to Figure, Table and Equation.
+    #[test]
+    fn cross_reference_to_a_custom_caption_label() {
+        let mut s = Session::new(wordcraft_doc::Document::from_text("Rock\nSee "));
+        s.run("select.text", &json!({"text": "Rock"})).unwrap();
+        s.run("references.caption", &json!({"label": "Plate", "text": "A rock"})).unwrap();
+        assert_eq!(caption_labels(&s), vec!["Plate".to_string()]);
+        let list = s.run("insert.crossReference", &json!({"to": "label:Plate"})).unwrap();
+        assert_eq!(list, json!(["Plate 1: A rock"]));
+        assert!(ref_targets(&s, "label:Figure").is_empty(), "only that label's captions");
+        assert!(ref_targets(&s, "label:").is_empty() && ref_targets(&s, "label:Pla").is_empty(), "the whole label");
+        s.run("caret.docEnd", &json!({})).unwrap();
+        s.run("insert.crossReference", &json!({"to": "label:Plate", "target": "Plate 1", "show": "number"})).unwrap();
+        assert!(s.doc.plain_text(StoryRef::Body).ends_with("See Plate 1"), "{}", s.doc.plain_text(StoryRef::Body));
+        assert!(fields(&s).iter().any(|(i, r)| i.starts_with("REF _Ref") && r == "Plate 1"), "{:?}", fields(&s));
     }
 
     /// #661: References › Table of Authorities › Update Table picks up citations marked after the table.
