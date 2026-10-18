@@ -2258,6 +2258,12 @@
 	All Fonts	所有字型
 	Spike	收集區
 	Insert Spike	插入收集區
+# Add Font status (#1789)
+	Added 1 font	已新增 1 個字型
+	Added {n} fonts	已新增 {n} 個字型
+	{added}; {count} couldn't be read: {names}	{added}；{count} 個無法讀取：{names}
+	{names} and {n} more	{names} 等另外 {n} 個
+	{added}; {n} skipped (limit {max})	{added}；已略過 {n} 個（上限 {max}）
 # Why a ribbon control is off (#2678)
 	a drawing canvas can't be ungrouped	繪圖畫布無法取消群組
 	a drawing canvas can't go inside a text box	繪圖畫布不能放在文字方塊內

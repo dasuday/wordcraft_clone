@@ -2267,6 +2267,12 @@
 	All Fonts	Svi fontovi
 	Spike	Sakupljač
 	Insert Spike	Umetni iz sakupljača
+# Add Font status (#1789)
+	Added 1 font	Dodat je 1 font
+	Added {n} fonts	Dodato fontova: {n}
+	{added}; {count} couldn't be read: {names}	{added}; nije moguće pročitati ({count}): {names}
+	{names} and {n} more	{names} i još {n}
+	{added}; {n} skipped (limit {max})	{added}; preskočeno: {n} (ograničenje {max})
 # Why a ribbon control is off (#2678)
 	a drawing canvas can't be ungrouped	platno za crtanje ne može da se razgrupiše
 	a drawing canvas can't go inside a text box	platno za crtanje ne može da se stavi u okvir za tekst
