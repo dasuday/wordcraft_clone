@@ -173,6 +173,17 @@ pub struct LayoutOptions {
     pub outline: Option<outline::OutlineView>,
     /// What the spelling check skips, and whether grammar is marked too (File › Options › Proofing).
     pub proof: ProofOptions,
+    /// The word being typed, which gets no spelling squiggle until the caret leaves it (#1552).
+    pub typing_word: Option<TypingWord>,
+}
+
+/// The word being typed ([`LayoutOptions::typing_word`]): the paragraph by its revision
+/// ([`Paragraph::rev`]) and the word's byte range in it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct TypingWord {
+    pub rev: u64,
+    pub start: usize,
+    pub end: usize,
 }
 
 /// File › Options › Proofing choices that change the squiggles.
@@ -502,6 +513,8 @@ struct Key {
     hide_deleted: HideDeleted,
     /// STYLEREF results in headers and footers ([`FieldCtx::styleref_key`]).
     sref: u64,
+    /// The word being typed in this paragraph, left without a spelling squiggle.
+    typing: Option<(usize, usize)>,
 }
 
 /// Memoised paragraph layouts.
@@ -729,6 +742,7 @@ impl Ctx<'_> {
             hide_deleted: Default::default(),
             table: None,
             proofing: None,
+            typing_word: None,
             numeral: self.opts.numeral,
             exclusions: &[],
             eq_number: 0,
@@ -773,7 +787,8 @@ impl Ctx<'_> {
             return pl.clone();
         }
         self.cache.misses += 1;
-        let pl = Arc::new(para::layout_para(p, &self.para_env(width, label, table, exclusions, eq_number)));
+        let typing = key.typing;
+        let pl = Arc::new(para::layout_para(p, &self.para_env(width, label, table, exclusions, eq_number, typing)));
         self.cache.paras.insert(key, pl.clone());
         pl
     }
@@ -796,7 +811,8 @@ impl Ctx<'_> {
             return *m;
         }
         self.cache.misses += 1;
-        let m = measure(&para::layout_para(p, &self.para_env(width, label, table, &[], eq_number)));
+        let typing = key.typing;
+        let m = measure(&para::layout_para(p, &self.para_env(width, label, table, &[], eq_number, typing)));
         self.cache.measures.insert(key, m);
         m
     }
@@ -841,6 +857,7 @@ impl Ctx<'_> {
             fit: self.boxes.inside(),
             hide_deleted: self.hide_deleted,
             sref: if self.fields.styleref.is_some() && styleref::has_styleref(p) { self.fields.styleref_key(p) } else { 0 },
+            typing: self.opts.typing_word.filter(|t| t.rev == p.rev).map(|t| (t.start, t.end)),
         };
         (key, eq_number)
     }
@@ -867,6 +884,7 @@ impl Ctx<'_> {
         table: Option<&'b para::CellText>,
         exclusions: &'b [para::Exclusion],
         eq_number: u32,
+        typing_word: Option<(usize, usize)>,
     ) -> para::ParaEnv<'b> {
         para::ParaEnv {
             doc: self.doc,
@@ -878,6 +896,7 @@ impl Ctx<'_> {
             hide_deleted: self.hide_deleted,
             table,
             proofing: self.opts.proofing.then_some(self.opts.proof),
+            typing_word,
             numeral: self.opts.numeral,
             exclusions,
             eq_number,
@@ -1036,9 +1055,10 @@ fn layout_box(
     // Deletions in balloons leave the body's text only: a header, note or text box keeps its own
     // inline (restored for the story around this box when it's done).
     let outer_hide = std::mem::replace(&mut ctx.hide_deleted, ctx.opts.hides_deleted(story));
+    let empty_cell = para::CellText::default();
     let (table, in_cell) = match context {
         BoxContext::Other => (None, false),
-        BoxContext::Cell(table) => (table, true),
+        BoxContext::Cell(table) => (Some(table.unwrap_or(&empty_cell)), true),
     };
     // Word 16.113.3: the override applies in modes 11/12/14, but not mode 15.
     let allow_same_style_space =
@@ -3683,6 +3703,7 @@ fn next_first_line(ctx: &mut Ctx, block: usize, width: f32, depth: usize) -> f32
                 hide_deleted: ctx.opts.hides_deleted(StoryRef::Body),
                 table: None,
                 proofing: None,
+                typing_word: None,
                 numeral: ctx.opts.numeral,
                 exclusions: &[],
                 eq_number: ctx.eq_count,
