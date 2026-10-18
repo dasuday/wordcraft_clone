@@ -494,7 +494,28 @@ fn reading_size(avail: egui::Vec2, scale: f32, requested: Option<f32>) -> (f32, 
         let count = (width / 295.0).round().clamp(1.0, 5.0);
         ((width - (count + 1.0) * GAP) / count).max(192.0)
     };
-    (px / scale, (height - 2.0 * GAP).max(192.0) / scale)
+    // The columns end above the page-turn bar, which used to cover their last lines (#1772).
+    (px / scale, (height - GAP - READ_NAV_BAR).max(192.0) / scale)
+}
+
+/// Height kept free under Read Mode's columns for the page-turn bar at the bottom right.
+const READ_NAV_BAR: f32 = 44.0;
+
+/// The part of the canvas Read Mode scrolls in: as many whole columns as fit, centred. A chosen
+/// column width (or a resize) otherwise left the last column cut off at the right edge (#1772).
+/// `scale` is pixels per point: the column width is only re-laid out when it moves by more than
+/// half a point, so each column may overrun by that much before one is dropped.
+fn reading_viewport(full: Rect, column_px: f32, scale: f32) -> Rect {
+    if !column_px.is_finite() || column_px <= 0.0 || !full.width().is_finite() {
+        return full;
+    }
+    let step = column_px + GAP;
+    let slack = if scale.is_finite() { (0.5 * scale).clamp(0.0, 4.0) } else { 0.0 };
+    // A hair of tolerance too: columns sized to fill the canvas exactly come back from points
+    // as 2.9999998 of them, and flooring that dropped a whole column.
+    let whole = ((full.width() - GAP) / (step - slack) + 1e-3).floor().max(1.0);
+    let width = (whole * step + GAP).min(full.width());
+    Rect::from_min_size(pos2(full.center().x - width / 2.0, full.min.y), vec2(width, full.height()))
 }
 
 /// A single horizontal row of reflowed reading pages; no wrapping at the viewport edge.
@@ -918,6 +939,12 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
     } else {
         (None, None, full)
     };
+    let area = if app.session.view.read_mode {
+        let column = app.session.view.read_width * app.session.view.read_zoom.clamp(0.75, 1.5) * PX_PER_PT;
+        reading_viewport(area, column, app.session.view.read_zoom.clamp(0.75, 1.5) * PX_PER_PT)
+    } else {
+        area
+    };
     app.canvas.canvas_rect = Some(area);
     // Ctrl/⌘ + wheel (and trackpad pinch) zooms the document, like Word. egui reports both as a
     // zoom factor and doesn't scroll for them. Start from the shown scale so fit modes zoom too.
@@ -1023,7 +1050,9 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
     // momentum, wheel notches eased in (or all at once with animation effects off). Applied
     // before drawing, so it shows this frame. In reading mode, wheel and touchpad events turn
     // whole columns instead.
-    let hovered = wheel_hovered(ui.rect_contains_pointer(area), ui.ctx().dragged_id().is_some(), app.canvas.drag_selecting());
+    // Read Mode's centred columns leave margins at the sides; the wheel turns pages over them too.
+    let wheel_area = if app.session.view.read_mode { full } else { area };
+    let hovered = wheel_hovered(ui.rect_contains_pointer(wheel_area), ui.ctx().dragged_id().is_some(), app.canvas.drag_selecting());
     let notch = crate::scroll::notch_px(app.canvas.scale / PX_PER_PT);
     let wheel_delta = if app.session.view.read_mode {
         let turns = ui.input(|i| read_wheel_turns(&i.events, hovered, &mut app.canvas.read_wheel_accum));
@@ -1109,11 +1138,18 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
     let out = scroll_area.show_viewport(&mut ui_area, |ui, viewport| {
         origin = ui.min_rect().min - viewport.min.to_vec2();
         let content = Rect::from_min_size(ui.min_rect().min, geo.size);
-        let resp = ui.allocate_rect(content, Sense::click_and_drag());
+        // A fixed id: an automatic one follows how many widgets came before, which Read Mode's
+        // chrome changes, and a new id dropped the keyboard focus, so the arrows, Page Up/Down
+        // and Escape did nothing in Read Mode until the reader clicked a page (#1772).
+        ui.advance_cursor_after_rect(content);
+        let resp = ui.interact(content, egui::Id::new("wordcraft_canvas"), Sense::click_and_drag());
         if let Some(tr) = scroll_target {
             ui.scroll_to_rect(Rect::from_min_size(ui.min_rect().min + tr.min.to_vec2(), tr.size()), None);
         }
-        let painter = ui.painter_at(ui.clip_rect());
+        // Read Mode's neighbouring columns end right at the viewport's edges: keep their
+        // shadows from showing there as hairlines.
+        let clip = if app.session.view.read_mode { ui.clip_rect().shrink2(vec2(3.0, 0.0)) } else { ui.clip_rect() };
+        let painter = ui.painter_at(clip);
         let ppp = ui.ctx().pixels_per_point();
         let max_tex = ui.ctx().input(|i| i.max_texture_side).min(wordcraft_render::MAX_SIDE as usize).max(1) as f32;
         let mut visible_tile_keys = HashSet::new();
@@ -1743,7 +1779,8 @@ fn balloons(app: &mut WordApp, ui: &mut Ui, painter: &egui::Painter, rects: &[Re
         let text = format!("{}: {}", tl!("Deleted"), d.text);
         by_page.entry(c.page).or_default().push((c.x, c.top + c.height, Balloon::Format(d.author, text), d.at));
     }
-    let palette = [t.blue, Color32::from_rgb(0xB0, 0x3A, 0x2E), Color32::from_rgb(0x2E, 0x7D, 0x32), Color32::from_rgb(0x8E, 0x44, 0xAD), t.orange];
+    let palette = t.author_colors;
+    let leaders = t.leader_colors;
     let mut authors: Vec<String> = Vec::new();
     let mut clicked: Option<(u32, Pos)> = None;
     // The markup area extends each page.
@@ -1751,8 +1788,8 @@ fn balloons(app: &mut WordApp, ui: &mut Ui, painter: &egui::Painter, rects: &[Re
         let page_scale = layout.pages.get(pi).map_or(scale, |page| page_screen_scale(*pr, page, scale));
         let area = Rect::from_min_max(pos2(pr.max.x, pr.min.y), pos2(pr.max.x + mw * page_scale, pr.max.y));
         if mw > 0.0 && area.intersects(clip) {
-            painter.rect_filled(area, 0.0, Color32::from_rgb(0xF3, 0xF3, 0xF3));
-            painter.line_segment([area.left_top(), area.left_bottom()], Stroke::new(1.0, Color32::from_rgb(0xE0, 0xE0, 0xE0)));
+            painter.rect_filled(area, 0.0, t.markup_area);
+            painter.line_segment([area.left_top(), area.left_bottom()], Stroke::new(1.0, t.markup_edge));
         }
     }
     let mut pages: Vec<usize> = by_page.keys().copied().collect();
@@ -1796,7 +1833,8 @@ fn balloons(app: &mut WordApp, ui: &mut Ui, painter: &egui::Painter, rects: &[Re
                         continue;
                     }
                     let lead = Stroke::new(1.0, color.linear_multiply(0.7));
-                    dashed(painter, anchor, pos2(pr.max.x, anchor.y), lead);
+                    let on_page = Stroke::new(1.0, leaders.get(ai % leaders.len()).copied().unwrap_or(color).linear_multiply(0.7));
+                    dashed(painter, anchor, pos2(pr.max.x, anchor.y), on_page);
                     painter.line_segment([pos2(pr.max.x, anchor.y), pos2(x0, top + 10.0)], lead);
                     card_shapes(painter, &t, card, color, false, None);
                     let y = card.min.y + 6.0;
@@ -1846,7 +1884,11 @@ fn balloons(app: &mut WordApp, ui: &mut Ui, painter: &egui::Painter, rects: &[Re
             // Leader: from the anchor along the text to the page edge, then to the card.
             let lead = Stroke::new(if selected { 1.5 } else { 1.0 }, color.linear_multiply(if selected { 1.0 } else { 0.7 }));
             if !over_page {
-                dashed(painter, anchor, pos2(pr.max.x, anchor.y), lead);
+                let on_page = Stroke::new(
+                    lead.width,
+                    leaders.get(ai % leaders.len()).copied().unwrap_or(color).linear_multiply(if selected { 1.0 } else { 0.7 }),
+                );
+                dashed(painter, anchor, pos2(pr.max.x, anchor.y), on_page);
                 painter.line_segment([pos2(pr.max.x, anchor.y), pos2(x0, top + 10.0)], lead);
             }
             let card = if active {
@@ -1900,7 +1942,7 @@ fn author_name(a: &str) -> String {
 fn card_shapes(painter: &egui::Painter, t: &Tokens, card: Rect, color: Color32, selected: bool, slot: Option<egui::layers::ShapeIdx>) {
     let shapes = vec![
         egui::Shape::rect_filled(card.translate(vec2(0.0, 1.0)), 4.0, t.page_shadow),
-        egui::Shape::rect_filled(card, 4.0, if selected { t.checked } else { Color32::WHITE }),
+        egui::Shape::rect_filled(card, 4.0, if selected { t.checked } else { t.balloon }),
         egui::Shape::rect_stroke(card, 4.0, Stroke::new(if selected { 1.5 } else { 1.0 }, color), egui::StrokeKind::Inside),
         egui::Shape::rect_filled(Rect::from_min_size(card.min, vec2(4.0, card.height())), egui::CornerRadius { nw: 4, sw: 4, ne: 0, se: 0 }, color),
     ];
@@ -2033,7 +2075,7 @@ fn active_balloon(app: &mut WordApp, ui: &mut Ui, painter: &egui::Painter, id: u
     child.horizontal(|ui| {
         ui.label(egui::RichText::new(name(app, id)).font(bold.clone()).color(t.text));
         if resolved {
-            ui.label(egui::RichText::new(tl!("Resolved")).font(small.clone()).color(t.green));
+            ui.label(egui::RichText::new(tl!("Resolved")).font(small.clone()).color(t.resolved_text));
         }
     });
     crate::panes::comment_editor(app, &mut child, id, Some(font.clone()), focus && !app.canvas.balloon_reply);
@@ -2239,8 +2281,10 @@ fn mouse(app: &mut WordApp, ui: &Ui, resp: &egui::Response, rects: &[Rect], layo
         None
     };
     if resp.double_clicked() {
-        if let Some((_, header)) = hf_zone
-            && story == StoryRef::Body
+        // Also from another header/footer: with Different First Page on, page 1's header is not
+        // the one being edited on page 2 (#2826).
+        if let Some((shown, header)) = hf_zone
+            && (story == StoryRef::Body || (shown != Some(story) && matches!(part_kind(app, story), Some(PartKind::Header | PartKind::Footer))))
         {
             let id = if header { "insert.editHeader" } else { "insert.editFooter" };
             if app.run(id, json!({ "page": page })).is_ok()
@@ -3189,6 +3233,105 @@ mod tests {
         assert!(!wheel_hovered(false, true, true));
     }
 
+    /// #1772: the page-turn bar at the bottom right covered the last lines of the column under it.
+    #[test]
+    fn reading_columns_end_above_the_page_turn_bar() {
+        let scale = PX_PER_PT;
+        for (w, h) in [(1280.0, 740.0), (900.0, 700.0), (2000.0, 1200.0)] {
+            for requested in [None, Some(180.0), Some(350.0), Some(612.0)] {
+                let (_, ph) = reading_size(vec2(w, h), scale, requested);
+                let bottom = GAP + ph * scale;
+                assert!(bottom <= h - READ_NAV_BAR + 0.5, "{w}×{h} {requested:?}: column ends at {bottom}, bar starts at {}", h - READ_NAV_BAR);
+            }
+        }
+    }
+
+    /// #1772: a chosen column width (or a resized window) left the last visible column cut off at
+    /// the right edge. The reading viewport shows only whole columns, centred.
+    #[test]
+    fn reading_viewport_shows_whole_columns() {
+        let scale = PX_PER_PT;
+        for (w, h) in [(1280.0, 740.0), (900.0, 700.0), (1440.0, 820.0), (500.0, 600.0)] {
+            let full = Rect::from_min_size(pos2(10.0, 20.0), vec2(w, h));
+            for requested in [None, Some(180.0), Some(240.0), Some(350.0), Some(612.0)] {
+                for zoom in [0.75, 1.0, 1.5] {
+                    let (cw, _) = reading_size(full.size(), scale * zoom, requested);
+                    let column = cw * scale * zoom;
+                    let area = reading_viewport(full, column, scale * zoom);
+                    assert!(full.contains_rect(area), "inside the canvas");
+                    assert_eq!(area.height(), full.height());
+                    assert!((area.center().x - full.center().x).abs() < 0.5, "centred");
+                    // Columns at rest start at GAP + k·step from the viewport's left edge. Past
+                    // the whole ones, only a column short by under half a point each may show.
+                    let step = column + GAP;
+                    let whole = ((area.width() - GAP) / step + 1e-3).floor().max(1.0);
+                    let used = whole * step + GAP;
+                    let short = used + step - area.width();
+                    assert!(
+                        area.width() <= used + 0.5 || whole == 1.0 || short <= (whole + 1.0) * 0.5 * scale * zoom + 0.5,
+                        "{w}×{h} {requested:?} {zoom}: {} wide shows a cut column (columns use {used})",
+                        area.width()
+                    );
+                }
+            }
+        }
+        // With no width chosen the columns are sized to fill the canvas exactly, so none may be
+        // dropped: the stored width (pt) and back to px must still fit every one of them.
+        for zoom in [0.75, 1.0, 1.25, 1.5] {
+            let scale = PX_PER_PT * zoom;
+            for w in (300..=4000).step_by(7) {
+                let full = Rect::from_min_size(pos2(0.0, 0.0), vec2(w as f32, 700.0));
+                let count = (full.width() / 295.0).round().clamp(1.0, 5.0);
+                let px = (full.width() - (count + 1.0) * GAP) / count;
+                if px < 192.0 {
+                    continue; // the minimum width overflows; whole columns then shrink the view
+                }
+                let (cw, _) = reading_size(full.size(), scale, None);
+                let column = cw * scale;
+                let area = reading_viewport(full, column, scale);
+                let needed = count * column + (count + 1.0) * GAP;
+                assert!(area.width() >= needed - 0.5, "{w} at {zoom}: {} wide drops a column of {count} ({needed})", area.width());
+            }
+        }
+        // Junk sizes never panic and fall back to the whole canvas.
+        let full = Rect::from_min_size(pos2(0.0, 0.0), vec2(800.0, 600.0));
+        assert_eq!(reading_viewport(full, f32::NAN, 1.0), full);
+        assert_eq!(reading_viewport(full, 0.0, f32::NAN), full);
+    }
+
+    #[test]
+    fn reading_viewport_keeps_columns_when_the_window_shrinks_a_little() {
+        // The column width is only re-laid out when it changes by more than half a point, so a
+        // window a few pixels narrower keeps slightly too wide columns: none may drop out.
+        for (zoom, shrink) in [(1.0, 1.0), (1.0, 3.0), (1.5, 1.0), (1.5, 3.0), (0.75, 1.0)] {
+            let scale = PX_PER_PT * zoom;
+            for w in (300..=4000).step_by(7) {
+                let before = vec2(w as f32, 700.0);
+                let count = (before.x / 295.0).round().clamp(1.0, 5.0);
+                if (before.x - (count + 1.0) * GAP) / count < 192.0 {
+                    continue;
+                }
+                let after = before - vec2(shrink, 0.0);
+                if (after.x / 295.0).round() != count {
+                    continue; // a different column count reflows anyway
+                }
+                let (kept, _) = reading_size(before, scale, None);
+                let (fresh, _) = reading_size(after, scale, None);
+                if (kept - fresh).abs() > 0.5 {
+                    continue; // re-laid out at once
+                }
+                let full = Rect::from_min_size(pos2(0.0, 0.0), after);
+                let area = reading_viewport(full, kept * scale, scale);
+                assert!(
+                    area.width() >= full.width() - 0.5,
+                    "{w}-{shrink} at {zoom}: kept {kept}pt columns, view narrowed to {} of {}",
+                    area.width(),
+                    full.width()
+                );
+            }
+        }
+    }
+
     #[test]
     fn reading_animation_eases_then_lands_exactly_on_column_start() {
         let goal = 330.0;
@@ -3827,6 +3970,49 @@ mod tests {
         double_click(&mut h, body);
         assert_eq!(h.state().session.sel.focus.story, StoryRef::Body);
         assert_eq!(h.state().session.doc.plain_text(footer), "Page foot");
+    }
+
+    /// #2826: editing the default header, then turning on Different First Page: a double-click in
+    /// page 1's top margin goes into page 1's own (new) header, and typing lands there.
+    #[test]
+    fn double_click_reaches_the_first_page_header_from_another_header() {
+        use egui::{Event, PointerButton};
+        let mut a = WordApp::new(wordcraft_engine::Session::new(wordcraft_doc::Document::new()), Default::default());
+        a.run("text.insert", json!({"text": "Body text"})).unwrap();
+        a.run("view.commentsPane", json!({"value": false})).unwrap();
+        a.run("insert.header", json!({"text": "Head"})).unwrap();
+        let head = a.session.sel.focus.story;
+        a.run("layout.differentFirstPage", json!({"value": true})).unwrap();
+        let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(1440.0, 2200.0)).with_step_dt(1.0 / 60.0).build_ui_state(
+            |ui, app: &mut WordApp| {
+                let ctx = ui.ctx().clone();
+                app.logic(&ctx);
+                app.ui(ui);
+            },
+            a,
+        );
+        for _ in 0..6 {
+            h.step();
+        }
+        let page = h.state_mut().session.layout().pages[0].clone();
+        assert!(page.header_story.is_none());
+        let at = page_to_screen(h.state_mut(), 0, page.body.x + 20.0, page.body.y / 2.0).expect("top margin on screen");
+        h.event(Event::PointerMoved(at));
+        for _ in 0..2 {
+            h.event(Event::PointerButton { pos: at, button: PointerButton::Primary, pressed: true, modifiers: Default::default() });
+            h.step();
+            h.event(Event::PointerButton { pos: at, button: PointerButton::Primary, pressed: false, modifiers: Default::default() });
+            h.step();
+        }
+        let first = h.state().session.sel.focus.story;
+        assert_eq!(part_kind(h.state(), first), Some(PartKind::Header));
+        assert_ne!(first, head, "page 1's own header, not the default one");
+        h.event(Event::Text("Cover".into()));
+        for _ in 0..3 {
+            h.step();
+        }
+        assert_eq!(h.state().session.doc.plain_text(first), "Cover");
+        assert_eq!(h.state_mut().session.layout().pages[0].header_story.map(StoryRef::Part), Some(first));
     }
 
     /// #513: right-clicking a picture selects it and offers Wrap Text, as in Word; choosing
