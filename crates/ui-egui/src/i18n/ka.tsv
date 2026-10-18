@@ -2631,3 +2631,60 @@ preview	Title	სათაური
 	Two-sided printing	ორმხრივი ბეჭდვა
 	Two-sided: long edge	ორმხრივი: გრძელი კიდე
 	Two-sided: short edge	ორმხრივი: მოკლე კიდე
+	Added 1 font	დაემატა 1 შრიფტი
+	Added {n} fonts	დაემატა შრიფტი: {n}
+	All Fonts	ყველა შრიფტი
+	Any field	ნებისმიერი ველი
+	Article I.	მუხლი I.
+	AutoFit behavior	ავტომორგების რეჟიმი
+	AutoFit to contents	შიგთავსზე მორგება
+	AutoFit to window	ფანჯარაში ჩატევა
+	Chapter 1	თავი 1
+	Commas	მძიმეები
+	Distance from text	დაშორება ტექსტიდან
+	Distance from text:	დაშორება ტექსტიდან:
+	Drop Cap Options…	ინიციალის პარამეტრები…
+	Dropped	ტექსტში
+	Find in list:	სიაში ძებნა:
+	Hide Quick Access Toolbar	სწრაფი წვდომის პანელის დამალვა
+	Import…	იმპორტი…
+	In margin	ველზე
+	Indonesian	ინდონეზიური
+	Initial column width:	სვეტის საწყისი სიგანე:
+	Insert Spike	კრებულის ჩასმა
+	Kerning for fonts:	შრიფტების კერნინგი:
+	Lines to drop:	სიმაღლე სტრიქონებში:
+	Lock aspect ratio	თანაფარდობის ჩაკეტვა
+	Matches: {count}	დამთხვევა: {count}
+	Merge cells before split	უჯრების შერწყმა დაყოფამდე
+	Moved from:	გადატანილია აქედან:
+	Moved to:	გადატანილია აქ:
+	Multilevel List Library	მრავალდონიანი სიების ნაკრები
+	Original size	საწყისი ზომა
+	Other:	სხვა:
+	Points and above	პუნქტი და მეტი
+	Recently Used Fonts	ბოლოს გამოყენებული შრიფტები
+	Relative to original picture size	სურათის საწყის ზომასთან შეფარდებით
+	Section 1.01	განყოფილება 1.01
+	Selected text	მონიშნული ტექსტი
+	Separate text at	ტექსტის გამყოფი
+	Show Quick Access Toolbar	სწრაფი წვდომის პანელის ჩვენება
+	Show only records that will be merged	მხოლოდ შესარწყმელი ჩანაწერების ჩვენება
+	Spike	კრებულში ამოჭრა
+	Table size	ცხრილის ზომა
+	The measurement must be between {min} and {max}.	ზომა უნდა იყოს {min}–{max} შუალედში.
+	The number must be between 1 and {max}.	რიცხვი უნდა იყოს 1–{max} შუალედში.
+	Type a size in any unit, such as 5 cm or 300 px. The other side follows, so the picture keeps its proportions.	შეიყვანეთ ზომა ნებისმიერ ერთეულში, მაგალითად 5 cm ან 300 px. მეორე მხარე თავად შეიცვლება, ასე რომ სურათი პროპორციებს შეინარჩუნებს.
+	nothing is selected	არაფერია მონიშნული
+	select a picture or shape first	ჯერ მონიშნეთ სურათი ან ფიგურა
+	select recipients first	ჯერ აირჩიეთ მიმღებები
+	select two or more pictures or shapes first (Shift+click)	ჯერ მონიშნეთ ორი ან მეტი სურათი ან ფიგურა (Shift+დაწკაპუნება)
+	text boxes can't go inside a text box	ტექსტურ ბლოკში ტექსტური ბლოკის ჩასმა შეუძლებელია
+	the cursor isn't in a table	კურსორი ცხრილში არ არის
+	the paragraph is empty	აბზაცი ცარიელია
+	the paragraph starts with a space	აბზაცი ჰარით იწყება
+	{added}; {count} couldn't be read: {names}	{added}; ვერ წაიკითხა ({count}): {names}
+	{added}; {n} skipped (limit {max})	{added}; გამოტოვებულია {n} (ზღვარი: {max})
+	{names} and {n} more	{names} და კიდევ {n}
+	{name} options	{name}: პარამეტრები
+	{width} × {height} pixels	{width} × {height} პიქსელი

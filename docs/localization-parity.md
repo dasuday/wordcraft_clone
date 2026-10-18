@@ -80,7 +80,7 @@ hyphenated by the Bulgarian syllable rules (#826); Bulgarian spelling and gramma
 Hungarian follows `hu-HU` system locales and `{"value":"hu"}`, with a complete catalog of 2,419 entries: every key of
 the Russian catalog, built-in style names shown translated, plus the citation style names. Hungarian proofing is not included; terminology and conventions:
 [`localization-hu.md`](localization-hu.md).
-Georgian (`ka`, ქართული) has 2,610 entries: every key of the reference catalogs and everything the
+Georgian (`ka`, ქართული) has 2,667 entries: every key of the reference catalogs and everything the
 interface audit finds. It follows `ka-GE` system locales and `{"value":"ka"}`, and was reviewed
 string by string by a native speaker against one shared glossary. Georgian has no sentence
 capitals, so AutoCorrect, the grammar check and Change Case leave Mkhedruli as typed; counts use
