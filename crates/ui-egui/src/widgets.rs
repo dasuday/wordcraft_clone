@@ -227,12 +227,12 @@ pub fn split(
     let (r, resp) = ui.allocate_exact_size(vec2(24.0, 22.0), Sense::click());
     keytip_badge(ui, r, id, tip);
     let (ar, aresp) = ui.allocate_exact_size(vec2(11.0, 22.0), Sense::click());
+    let on = enabled(app, id);
     bg(ui, r, &resp, checked, &t);
     bg(ui, ar, &aresp, false, &t);
     let ic = Rect::from_center_size(r.center(), vec2(16.0, 16.0));
     // Colour commands (font colour, highlight, shading) draw their colour bar in the accent, so the
     // swatch is the colour that will be applied.
-    let on = enabled(app, id);
     let (c, a) = if on { (t.icon, swatch.unwrap_or(t.accent)) } else { (t.text_disabled, t.text_disabled) };
     icons::paint(ui.painter(), ic, icon, c, a);
     icons::paint(ui.painter(), Rect::from_center_size(ar.center(), vec2(DROPDOWN, DROPDOWN)), "dropdown", c, c);
@@ -240,6 +240,10 @@ pub fn split(
     command_menu(&resp, app, id);
     if resp.clicked() && on {
         run_from_ribbon(app, id, params);
+    }
+    resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, on, tip));
+    if !on {
+        return;
     }
     egui::Popup::menu(&aresp).show(|ui| {
         ui.set_min_width(180.0);
