@@ -3042,8 +3042,11 @@ pub(crate) fn recipient_list(
         filter.editing = focused;
     }
     if remove_field.is_some() || remove_row.is_some() {
-        // Row numbers move: hold nothing.
+        // Row numbers move: hold nothing, and let go of the focused cell (its id names a row).
         filter.held = None;
+        if let Some(id) = filter.editing.take() {
+            ui.memory_mut(|m| m.surrender_focus(id));
+        }
     }
     if let Some(i) = remove_field.filter(|_| fields.len() > 1) {
         fields.remove(i);
