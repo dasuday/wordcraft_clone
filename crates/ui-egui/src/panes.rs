@@ -474,10 +474,12 @@ fn current(app: &WordApp) -> Option<&CommentDrafts> {
 }
 
 /// Whether the open document has a comment or reply draft not yet written to it (typed, or
-/// kept after the document refused it): closing the page would lose it.
+/// kept after the document refused it): closing the page would lose it. A new comment counts
+/// once something is typed in its field.
 pub(crate) fn has_comment_drafts(app: &WordApp) -> bool {
     let d = &app.comment_drafts;
-    d.document == app.session.document_id() && !(d.edits.is_empty() && d.replies.is_empty())
+    let typed = d.new.as_ref().is_some_and(|n| !n.text.trim().is_empty());
+    d.document == app.session.document_id() && !(d.edits.is_empty() && d.replies.is_empty() && !typed)
 }
 
 fn drafts(app: &mut WordApp) -> &mut CommentDrafts {

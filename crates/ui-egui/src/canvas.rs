@@ -4565,7 +4565,7 @@ mod tests {
     fn an_agent_cannot_replace_the_document_over_a_pending_comment_draft() {
         let (mut h, id) = comment_harness();
         h.state_mut().session.dirty = false;
-        click_balloon(&mut h, id);
+        open_edit(&mut h, id);
         type_in(&mut h, "Typed ");
         let open = json!({"path": "/nonexistent/other.docx"});
         assert!(crate::control::close_refused(h.state(), "file.open", &open).is_some());
@@ -4573,6 +4573,25 @@ mod tests {
         assert!(crate::control::close_refused(h.state(), "file.close", &json!({})).is_some());
         assert!(crate::control::close_refused(h.state(), "file.close", &json!({"force": true})).is_none());
         assert!(crate::control::close_refused(h.state(), "text.insert", &json!({"text": "x"})).is_none());
+    }
+
+    /// #1348: a new comment with text typed in its field is unsaved work too, so an agent can't
+    /// replace the document over it without `force`. An empty field is no change.
+    #[test]
+    fn an_agent_cannot_replace_the_document_over_a_comment_being_written() {
+        let mut h = compose_harness(false);
+        h.state_mut().run("review.newComment", json!({})).unwrap();
+        for _ in 0..3 {
+            h.step();
+        }
+        let open = json!({"path": "/nonexistent/other.docx"});
+        assert!(crate::control::close_refused(h.state(), "file.open", &open).is_none(), "nothing typed yet");
+        type_in(&mut h, "Needs a source.");
+        assert!(crate::control::close_refused(h.state(), "file.open", &open).is_some());
+        assert!(crate::control::close_refused(h.state(), "file.close", &json!({})).is_some());
+        assert!(crate::control::close_refused(h.state(), "file.close", &json!({"force": true})).is_none());
+        assert!(crate::panes::cancel_comment(h.state_mut()));
+        assert!(crate::control::close_refused(h.state(), "file.close", &json!({})).is_none(), "cancelled, nothing to lose");
     }
 
     /// #1348: a comment edit typed, then refused (the document became read-only).
