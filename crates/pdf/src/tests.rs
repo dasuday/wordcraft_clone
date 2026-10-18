@@ -1059,7 +1059,15 @@ fn ref_fields_export_cached_links() {
         let mut p = Paragraph::new();
         p.insert_object(
             0,
-            InlineObject::Field { instr: instr.into(), result: "Cached label".into(), locked: true, dirty: false, code, form: String::new() },
+            InlineObject::Field {
+                instr: instr.into(),
+                result: "Cached label".into(),
+                locked: true,
+                dirty: false,
+                code,
+                form: String::new(),
+                code_xml: String::new(),
+            },
             &CharProps { link: outer.map(str::to_owned), ..Default::default() },
         )
         .unwrap();
@@ -1135,7 +1143,15 @@ fn outline_keeps_visible_objects() {
     let mut base = Document::from_text("Earlier text");
     let media = base.add_media(png(), "png");
     for object in [
-        InlineObject::Field { instr: "QUOTE Visible".into(), result: "Visible".into(), locked: true, dirty: false, code: false, form: String::new() },
+        InlineObject::Field {
+            instr: "QUOTE Visible".into(),
+            result: "Visible".into(),
+            locked: true,
+            dirty: false,
+            code: false,
+            form: String::new(),
+            code_xml: String::new(),
+        },
         InlineObject::Image { media, w: 16.0, h: 8.0, alt: String::new(), float: Default::default(), crop: [0.0; 4], ole: None },
     ] {
         let mut d = base.clone();

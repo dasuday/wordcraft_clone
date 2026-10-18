@@ -1256,6 +1256,7 @@ mod tests {
             dirty: false,
             code: false,
             form: String::new(),
+            code_xml: String::new(),
         };
         let mut doc = wordcraft_doc::Document::from_text("one two three");
         doc.core.creator = "Ada".into();

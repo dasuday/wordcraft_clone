@@ -8038,6 +8038,7 @@ fn toc_collects_cell_headings() {
             dirty: true,
             code: false,
             form: String::new(),
+            code_xml: String::new(),
         },
         &CharProps::default(),
     )
