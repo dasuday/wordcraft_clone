@@ -1768,9 +1768,30 @@ fn standalone_ink(src: &wordcraft_doc::graphic::Embedded) -> bool {
     match crate::xml::parse(src.xml.as_bytes()) {
         Ok(root) => match root.name.as_str() {
             "a:graphic" | "w:contentPart" => true,
-            "mc:AlternateContent" => root.child("mc:Choice").and_then(|c| c.child("w:drawing")).is_some(),
+            "mc:AlternateContent" => root.child("mc:Choice").and_then(|c| c.child("w:drawing")).is_some_and(|d| d.find("a:graphic").is_some()),
             _ => false,
         },
         Err(_) => false,
+    }
+}
+
+#[cfg(test)]
+mod standalone_ink_tests {
+    use super::standalone_ink;
+    use wordcraft_doc::graphic::Embedded;
+
+    fn emb(xml: &str) -> Embedded {
+        Embedded { xml: xml.into(), ..Default::default() }
+    }
+
+    /// Review: an alternate whose choice has a drawing but no `a:graphic` is not writable as ink.
+    #[test]
+    fn alternate_content_needs_a_graphic() {
+        let ns = r#"xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main""#;
+        let with =
+            format!("<mc:AlternateContent {ns}><mc:Choice Requires=\"w14\"><w:drawing><a:graphic/></w:drawing></mc:Choice></mc:AlternateContent>");
+        let without = format!("<mc:AlternateContent {ns}><mc:Choice Requires=\"w14\"><w:drawing/></mc:Choice></mc:AlternateContent>");
+        assert!(standalone_ink(&emb(&with)));
+        assert!(!standalone_ink(&emb(&without)));
     }
 }
