@@ -1417,10 +1417,7 @@ impl Exporter<'_> {
             }
             m
         });
-        let pos = marks
-            .get(name)
-            .or_else(|| marks.iter().find(|(k, _)| k.eq_ignore_ascii_case(name)).map(|(_, v)| v))?
-            .clone();
+        let pos = marks.get(name).or_else(|| marks.iter().find(|(k, _)| k.eq_ignore_ascii_case(name)).map(|(_, v)| v))?.clone();
         if let Some(c) = self.lay.caret(&pos)
             && let Some(out) = self.out_index.get(&c.page)
         {
@@ -1437,12 +1434,7 @@ impl Exporter<'_> {
                     _ => None,
                 })
                 .unwrap_or(c.x);
-            let (x, y) = self
-                .lay
-                .pages
-                .get(c.page)
-                .map(|p| Fit::of(p).point(x, c.top))
-                .unwrap_or((x, c.top));
+            let (x, y) = self.lay.pages.get(c.page).map(|p| Fit::of(p).point(x, c.top)).unwrap_or((x, c.top));
             return Some((*out, x, y));
         }
         self.locate(pos.story, &pos.path)
