@@ -13,7 +13,7 @@ use wordcraft_doc::{Document, Paragraph};
 use wordcraft_fonts::FaceRef;
 
 use crate::NumeralMode;
-use crate::fields::{FIELD_SHADING, FieldCtx, field_code_text, field_text_on};
+use crate::fields::{FIELD_SHADING, FieldCtx, field_code_text, field_text_on, reference_link};
 
 /// How a run set in one of Word's symbol fonts (Symbol, Wingdings, Wingdings 2/3, Webdings)
 /// shows its characters. Those fonts are proprietary and usually missing: a substitute has other
@@ -674,7 +674,15 @@ const MISSING_ROMAN_FONT: &str = "Cambria";
 fn lookup_family<'f>(doc: &Document, font: &'f str) -> &'f str {
     let db = wordcraft_fonts::FontDb::global();
     let roman = doc.settings.roman_fonts.iter().any(|f| f.eq_ignore_ascii_case(font));
-    if roman && !db.has_family(font) && !db.has_family(wordcraft_fonts::word::charset_base_family(font)) { MISSING_ROMAN_FONT } else { font }
+    if roman
+        && !wordcraft_doc::symbol_fonts::is_symbol_font(font)
+        && !db.has_family(font)
+        && !db.has_family(wordcraft_fonts::word::charset_base_family(font))
+    {
+        MISSING_ROMAN_FONT
+    } else {
+        font
+    }
 }
 
 impl<'a> Builder<'a> {
@@ -1384,6 +1392,15 @@ pub fn layout_para(p: &Paragraph, env: &ParaEnv) -> ParaLayout {
                                     None => {
                                         let (t, page_dep) = field_text_on(instr, result, env.fields, env.fields.page_at(start));
                                         has_page_fields |= page_dep;
+                                        let rc = if rc.link.is_none()
+                                            && let Some(link) = reference_link(instr)
+                                        {
+                                            let mut linked = (*rc).clone();
+                                            linked.link = Some(link);
+                                            Arc::new(linked)
+                                        } else {
+                                            rc.clone()
+                                        };
                                         b.shape_atomic(&t, start, end, &rc);
                                     }
                                 }
@@ -2794,5 +2811,20 @@ mod label_spacing_tests {
         for line in &lines[1..] {
             assert!((line.height - 17.52).abs() <= 0.25, "{}", line.height);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn symbols_ignore_roman_hint() {
+        let mut d = Document::new();
+        d.settings.roman_fonts = vec!["Symbol (PCL6)".into(), "Wingdings".into(), "No Such Roman Font".into()];
+        for family in ["Symbol (PCL6)", "Wingdings"] {
+            assert_eq!(lookup_family(&d, family), family);
+        }
+        assert_eq!(lookup_family(&d, "No Such Roman Font"), MISSING_ROMAN_FONT);
     }
 }
