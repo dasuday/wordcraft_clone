@@ -12,6 +12,8 @@ pagination and object placement in `crates/layout`. Typing behaviour is in
 rules, but nothing has been compared page-for-page with Word on real documents, and the default
 font can't match Word's metrics.
 
+Additive paragraph spacing retains the full before-space after a section page break; ordinary overlapping spacing is unchanged. Synthetic control: `layout::tests::section_start_summed_spacing`.
+
 ## Checklist
 
 ✅ matches Word as far as our tests show · 🟡 implemented, differs or untested against Word · ❌ missing
@@ -21,6 +23,7 @@ font can't match Word's metrics.
 | 2026-10-16 | trivial | Split-cell content retains its resolved top margin and border band on continuation pages, matching original Word Mac16.113.2 controls. Synthetic regressions cover margins, borders, line spacing and image frames. |
 | Hint-reliant CJK glyph outlines (DFKai-SB / 標楷體) | 🟡 | Required TrueType interpreter runs at units-per-em size; local Windows glyph-bounds regression and synthetic DOCX page/window comparison pass. Other platforms and hint-reliant families remain unmeasured; no native Word comparison. | — |
 | Line breaking (UAX #14 with Word's exceptions: no break after `/`) | ✅ | `layout::tests::no_line_break_right_after_a_slash` | — |
+| Narrow table cells | ✅ | `layout::tests::narrow_cells_keep_their_width`: usable widths below 12 pt wrap without expansion; oversized glyphs still make progress | 0 |
 | Justification, Word 2013+ space shrinking (compat mode 15) | ✅ | #109 | — |
 | Spaces at the end of a line hang past the right margin instead of wrapping; the caret after them stays at the margin, in the body and in headers and footers | ✅ | `layout::tests::caret_after_hanging_spaces_stays_at_the_margin` (#2146): a letter typed after them wraps to the next line | — |
 | Complex scripts (Myanmar, Khmer, Indic): shaped per script run with OpenType fallback fonts, one cluster per syllable, Myanmar wraps between syllables | 🟡 | `layout::tests_complex` (#604). Khmer, Thai and Lao still wrap only at spaces (need a dictionary) | 4–8 |
@@ -35,6 +38,7 @@ font can't match Word's metrics.
 | Indents in characters (`w:firstLineChars`, `w:leftChars`…), measured in the paragraph mark's font size | ✅ | #534, `layout::tests::character_indents_use_the_paragraph_mark_size`; spacing in lines (`w:beforeLines`/`w:afterLines`) uses the stored points (needs the document grid) | — |
 | Line spacing (single, 1.5, double, at least, exactly, multiple), spacing before/after, contextual spacing | 🟡 | Contextual spacing measured in body paragraphs and headers (below), with a four-paragraph table-cell regression; list-label ascent overflow is unscaled by multiple spacing and uses descent for automatic and at-least spacing (#601); other line-spacing combinations remain (#108, #135 open) | 3–5 |
 | Kerning only where Kerning for fonts asks for it (`w:kern`, at or above its size) | ✅ | Measured in Word for Windows: no `w:kern` or `w:kern="0"` is unkerned; WordCraft kerned every run, so its lines held more text than Word's. `layout::tests::kerning_follows_kerning_for_fonts_like_word` | — |
+| OpenType ligatures as the document asks (`w14:ligatures`: standard `liga`, contextual `clig`, historical `hlig`, discretional `dlig`, any combination, in runs, styles and defaults) | 🟡 | `layout::tests::ligatures_follow_w14_ligatures`, `ligature_flags_map_to_opentype_features`. Without the property WordCraft keeps drawing standard and contextual ligatures, while Word draws none; the Font dialog's Ligatures choice is still missing | 1 |
 | Automatic (HTML-style) paragraph spacing (`w:beforeAutospacing`, `w:afterAutospacing`) | ✅ | Measured in Word for Windows: 14 pt at any size, none at the top of the document or a cell or after a cell's last paragraph, the larger of two neighbouring spaces. `layout::tests::automatic_paragraph_spacing_like_word`, `…_drops_at_cell_edges` | — |
 | Paragraph boundaries inside field instructions | ✅ | Synthetic DOCX observed in Word: instruction-only paragraphs add no height; the empty result keeps a line. `docx::fixtures::field_code_spans_paragraphs`, `layout::tests::hidden_marks_take_no_space`. Other field-code display modes remain unverified | — |
 | Widow/orphan control, keep with next, keep lines together, page break before | ✅ | `lib.rs` keep_next/keep_lines; a line holding only a page break stays at the bottom of a full page instead of leaving a blank page (#534); a paragraph ending with a page break keeps its space after on the old page, so the next page starts at the top (compatibility modes 12 to 15, `layout::tests::space_before_at_the_top_of_a_page_like_word`); a three-line paragraph with room for two moves whole (neither a widow nor an orphan is allowed), as in Word | — |
@@ -206,6 +210,10 @@ Behind-text pictures in table cells participate in centre and bottom vertical al
 | 2026-10-16 | trivial | `w:autoSpaceDE` and `w:autoSpaceDN` are laid out: a quarter em between Asian text and Latin text or digits (#2358) |
 | 2026-10-16 | trivial | AutoFit donors lose equal widths, bounded by content minima |
 | 2026-10-16 | trivial | Behind-text pictures in table cells participate in centre and bottom vertical alignment without increasing row flow height. |
+| 2026-10-15 | trivial | Absent or zero DrawingML effect extents remain zero on rotated pictures; contracted axes no longer reserve invented effects room. Synthetic quarter-turn import regression (`zero_effects_stay_zero_rotated`). |
+| 2026-10-15 | trivial | Additive paragraph spacing retains the full before-space after a section page break; ordinary overlapping spacing is unchanged. |
+| 2026-10-15 | trivial | Removed the 12 pt line-width floor in narrow cells and float spans; synthetic wrapping and oversized-glyph controls |
+| 2026-10-15 | trivial | Partial cell margins retain omitted edges through DOCX save and inherit current table defaults during layout. Original import/write and row-height regressions. |
 | 2026-10-14 | trivial | Row table border exceptions draw without leaking into other rows |
 | 2026-10-14 | trivial | Consistent cell widths override a stale table grid |
 | 2026-10-14 | trivial | Paragraphs inside complex-field instructions take no flow height; empty result paragraphs keep their line. |
@@ -242,6 +250,7 @@ Behind-text pictures in table cells participate in centre and bottom vertical al
 | 2026-10-12 | trivial | A list label's font raises the first line's ascent but never its descent (Word keeps the text's descent below the baseline) |
 | 2026-10-12 | trivial | Hidden end-of-cell mark (`w:hideMark`): a cell's empty last paragraph takes no room, spacing and all; a row of only such empty cells is just its borders |
 | 2026-10-12 | trivial | Text frames in headers, footers, cells and text boxes are placed like floating objects with the text wrapping around them; body frames still lay out in line |
+| 2026-10-16 | trivial | Framed paragraphs inside a text box (a frame from their style, usually) run with the box's text as in Word, instead of being placed apart on top of each other (#2357) |
 | 2026-10-12 | trivial | List indents and style indents combine like Word's: a numbered style's own indents (and those of styles based on it) beat the list level's, its base styles' don't, the paragraph's own list beats every style; a paragraph that switches its list off (`numId` 0) drops the styles' indents |
 | 2026-10-12 | trivial | Keep with next: a paragraph that doesn't fit on the page anyway breaks as usual (its last lines go over with the next paragraph) instead of moving whole; a chain of kept paragraphs moves together |
 | 2026-10-12 | trivial | Continuous section breaks: an empty paragraph carrying only the break takes no room (text after it follows on; balanced columns ignore it) |
@@ -282,6 +291,7 @@ Behind-text pictures in table cells participate in centre and bottom vertical al
 | 2026-10-10 | trivial | Long display equations wrap across lines (#326) |
 | 2026-10-10 | trivial | AutoFit Contents measures the text (#44) |
 | 2026-10-10 | major | First version: layout and pagination checklist with evidence from `crates/layout`, PRs and issues |
+| 2026-10-16 | trivial | OpenType ligatures follow `w14:ligatures` (none, standard, contextual, historical, discretional and their combinations); without it WordCraft's default stays |
 
 Maintenance on 2026-10-12 retains current tracked-deletion, endnote, footer-total, text-box
 and balloon layout while supplying explicit cell identity at every box call. The native Word
