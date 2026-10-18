@@ -24,6 +24,7 @@ Exact line spacing keeps the run font baseline around tall equations; automatic 
 |---|---|---|---|
 | 2026-10-16 | trivial | Split-cell content retains its resolved top margin and border band on continuation pages, matching original Word Mac16.113.2 controls. Synthetic regressions cover margins, borders, line spacing and image frames. |
 | Hint-reliant CJK glyph outlines (DFKai-SB / 標楷體) | 🟡 | Required TrueType interpreter runs at units-per-em size; local Windows glyph-bounds regression and synthetic DOCX page/window comparison pass. Other platforms and hint-reliant families remain unmeasured; no native Word comparison. | — |
+| Subpoint table grid columns | 🟡 | Preserve positive grid widths rather than imposing a text-box minimum; ECMA-376 §17.4.16. Native Word for Mac 16.113.2 build26092012 confirms narrow trailing grid units. `layout::tests::subpoint_grid_keeps_widths`, `tiny_grid_scales_to_width`. Tiny totals normalize without overflowing the scale factor. Zero and invalid widths retain their fallback. Border painting remains separate. | n/a |
 | Line breaking (UAX #14 with Word's exceptions: no break after `/`) | ✅ | `layout::tests::no_line_break_right_after_a_slash` | — |
 | Narrow table cells | ✅ | `layout::tests::narrow_cells_keep_their_width`: usable widths below 12 pt wrap without expansion; oversized glyphs still make progress | 0 |
 | Justification, Word 2013+ space shrinking (compat mode 15) | ✅ | #109 | — |
@@ -193,6 +194,10 @@ Behind-text pictures in table cells participate in centre and bottom vertical al
 
 TOC refresh reuses direct tab formatting from the first cached entry with a number-separator stop at each level for numbered entries, including imported range fields. Page-number tabs still use the TOC section width. No new default number-tab position is inferred.
 
+Explicit cell page breaks (Word for Mac 16.113.2, compatibility modes 14 and 15): leading, interior and trailing breaks take no line height. Ordinary line breaks retain their lines; body page breaks still paginate. Synthetic regressions preserve UTF-8 cluster boundaries, bookmark objects and source offsets, including body/cell cache reuse without table-style formatting. Width, border strokes and residual row metrics remain outside this change.
+
+Footer flow-table strokes reserve their drawn top edge, including the half-width above the cell box. Original Word for Mac 16.113.2 mode-15 controls confirm the three footer cases move to the next page. The 3 pt row-end border case without a footer still differs. Tight row-end and continuation border fitting remain separate.
+
 ## Revision history
 
 | Date | Change | Summary |
@@ -221,6 +226,9 @@ TOC refresh reuses direct tab formatting from the first cached entry with a numb
 | 2026-10-15 | trivial | Exact line spacing keeps the run font baseline around tall equations; automatic and minimum spacing still grow for math. |
 | 2026-10-16 | trivial | Zero-extent drawing anchors contribute no inline font height. Synthetic regressions. |
 | 2026-10-16 | trivial | Preserve direct TOC number tabs during regeneration |
+| 2026-10-16 | trivial | Explicit cell page breaks take no line height; original native Word controls in modes 14 and 15 and synthetic cluster/cache regressions. |
+| 2026-10-16 | trivial | Flow-table top border strokes in footers reserve body clearance; original mode-15 Word controls and a synthetic layout regression. |
+| 2026-10-16 | trivial | Subpoint grid units retain their declared widths without shrinking adjacent cells; tiny totals normalize without scale-factor overflow |
 | 2026-10-18 | trivial | Any VML float in a header or footer cell is placed on the page, as Word for Mac does (user-checked, #1775) |
 | 2026-10-16 | trivial | A header or footer cell's float placed relative to the page and not laid out in its cell (a picture watermark in a header that starts with a table) is placed on the page, behind the text (#1775) |
 | 2026-10-14 | trivial | Row table border exceptions draw without leaking into other rows |

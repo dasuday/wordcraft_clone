@@ -8378,3 +8378,287 @@ fn float_font_keeps_line_height() {
     }
     assert!(pitch(Wrap::Inline, 40.0) > pitch(Wrap::Inline, 9.0));
 }
+
+/// Native ink inside a group is drawn as drawing-level ink is: its fallback picture, in its place.
+#[test]
+fn ink_member_of_a_group_draws_its_fallback_picture() {
+    use crate::display::Draw;
+    use std::sync::Arc;
+    use wordcraft_doc::graphic::{Graphic, GraphicItem, GraphicKind};
+    use wordcraft_doc::para::{Float, GroupChild};
+    let items = vec![GraphicItem::Image { rect: [0.0, 0.0, 60.0, 30.0], media: "preview".into() }];
+    let ink = InlineObject::Graphic {
+        w: 60.0,
+        h: 30.0,
+        alt: String::new(),
+        float: Float::default(),
+        graphic: Arc::new(Graphic { kind: GraphicKind::Ink, items, w: 60.0, h: 30.0, ..Default::default() }),
+    };
+    let group = InlineObject::Group {
+        w: 200.0,
+        h: 100.0,
+        float: Float::default(),
+        ch_w: 200.0,
+        ch_h: 100.0,
+        children: vec![GroupChild { x: 20.0, y: 30.0, obj: ink }],
+        canvas: None,
+    };
+    let mut d = Document::from_text("Text by the group.");
+    d.insert_object(&Pos::body(0, 0), group, &Default::default()).unwrap();
+    let l = lay(&d);
+    let frame = l.object(&Pos::body(0, 0), 0).unwrap().rect;
+    fn images(draws: &[Draw], out: &mut Vec<Rect>) {
+        for d in draws {
+            match d {
+                Draw::Image { rect, media, .. } if media == "preview" => out.push(*rect),
+                Draw::Rotated { items, .. } | Draw::Clip { items, .. } => images(items, out),
+                Draw::Figure { draws, .. } => images(draws, out),
+                _ => {}
+            }
+        }
+    }
+    let mut found = Vec::new();
+    images(&crate::display::page_display(&d, &l.pages[0], &Default::default()), &mut found);
+    let [r] = found.as_slice() else { panic!("ink preview not drawn: {found:?}") };
+    assert!((r.x - (frame.x + 20.0)).abs() < 0.01 && (r.y - (frame.y + 30.0)).abs() < 0.01, "{r:?} in {frame:?}");
+    assert!((r.w - 60.0).abs() < 0.01 && (r.h - 30.0).abs() < 0.01, "{r:?}");
+}
+
+/// The word being typed gets no spelling squiggle until the caret leaves it (#1552): only in the
+/// paragraph with that revision, only spelling, and a change to it lays that one paragraph out
+/// again without clearing the cache.
+#[test]
+fn the_word_being_typed_has_no_spelling_squiggle() {
+    let d = Document::from_text("helo wrld\nfine text here");
+    let rev = d.para(StoryRef::Body, &Path::top(0)).unwrap().rev;
+    let marks = |l: &DocLayout, grammar: bool| -> Vec<String> {
+        l.pages[0]
+            .items
+            .iter()
+            .filter_map(|i| match i {
+                Placed::Lines { para, path, .. } if *path == Path::top(0) => {
+                    Some(para.issues.iter().filter(|i| i.2 == grammar).map(|i| "helo wrld"[i.0..i.1].to_string()).collect::<Vec<_>>())
+                }
+                _ => None,
+            })
+            .flatten()
+            .collect()
+    };
+    let mut c = LayoutCache::new();
+    let opts = LayoutOptions { proofing: true, ..LayoutOptions::default() };
+    let both = layout(&d, &mut c, &opts);
+    assert_eq!(marks(&both, false), ["helo", "wrld"]);
+    let misses = c.misses;
+    // "wrld" is being typed: only "helo" is marked; grammar is as before.
+    let typing = layout(&d, &mut c, &LayoutOptions { typing_word: Some(TypingWord { rev, start: 5, end: 9 }), ..opts.clone() });
+    assert_eq!(marks(&typing, false), ["helo"]);
+    assert_eq!(marks(&typing, true), marks(&both, true));
+    assert_eq!(c.misses, misses + 1, "only the paragraph with the word is laid out again");
+    // A range overlapping the word counts too (the checker's word may be longer than the caret's).
+    let typing = layout(&d, &mut c, &LayoutOptions { typing_word: Some(TypingWord { rev, start: 7, end: 9 }), ..opts.clone() });
+    assert_eq!(marks(&typing, false), ["helo"]);
+    // A different paragraph revision leaves everything marked.
+    let other = layout(&d, &mut c, &LayoutOptions { typing_word: Some(TypingWord { rev: rev.wrapping_add(1), start: 5, end: 9 }), ..opts.clone() });
+    assert_eq!(marks(&other, false), ["helo", "wrld"]);
+    // The caret left the word: the layout without the exemption comes back from the cache.
+    let misses = c.misses;
+    let left = layout(&d, &mut c, &opts);
+    assert_eq!(marks(&left, false), ["helo", "wrld"]);
+    assert_eq!(c.misses, misses);
+}
+
+fn cell_break_doc(text: &str) -> Document {
+    use wordcraft_doc::props::{HeightRule, LineSpacing, VAlign};
+    let mut d = Document::new();
+    d.last_section.page_w = 344.0;
+    d.last_section.margin_left = 72.0;
+    d.last_section.margin_right = 72.0;
+    let mut p = Paragraph::with_text(text, CharProps { size: Some(11.0), ..Default::default() });
+    p.props.line_spacing = Some(LineSpacing::Exactly(12.0));
+    p.props.space_before = Some(3.0);
+    p.props.space_after = Some(3.0);
+    let prefix = text.bytes().take_while(|&c| c == wordcraft_doc::para::PAGE_BREAK as u8 || c == b'\n').count();
+    p.format(0, prefix, &|props| props.size = Some(3.0)).unwrap();
+    let mut t = Table::new(1, 1, 200.0);
+    t.props.cell_margins = Some([0.0; 4]);
+    t.rows[0].props.height = Some(20.0);
+    t.rows[0].props.height_rule = HeightRule::AtLeast;
+    t.rows[0].cells[0].props.valign = Some(VAlign::Center);
+    t.rows[0].cells[0].blocks = vec![wordcraft_doc::para_block(p)];
+    d.body = vec![Arc::new(Block::Table(t))];
+    d
+}
+
+#[test]
+fn cell_breaks_take_no_height() {
+    let height = |d: &Document| {
+        lay(d).pages[0]
+            .items
+            .iter()
+            .find_map(|it| match it {
+                Placed::Cell { rect, .. } => Some(rect.h),
+                _ => None,
+            })
+            .unwrap()
+    };
+    let plain = height(&cell_break_doc("Heading"));
+    for text in ["\u{000c}Heading", "\u{000c}\u{000c}\u{000c}Heading", "Head\u{000c}ing", "Heading\u{000c}\u{000c}\u{000c}", "é\u{000c}界"] {
+        let d = cell_break_doc(text);
+        assert_eq!(height(&d), plain, "cell page breaks take no height: {text:?}");
+        let l = lay(&d);
+        let para = l.pages[0]
+            .items
+            .iter()
+            .find_map(|it| match it {
+                Placed::Lines { para, .. } => Some(para),
+                _ => None,
+            })
+            .unwrap();
+        assert_eq!(para.lines.len(), 1);
+        assert!(!para.clusters.iter().any(|c| c.kind == para::ClKind::PageBreak));
+        for c in &para.clusters {
+            assert!(text.is_char_boundary(c.start) && text.is_char_boundary(c.end));
+            if text.get(c.start..c.end) == Some("\u{000c}") {
+                assert_eq!(c.kind, para::ClKind::Marker);
+            }
+        }
+        let starts: Vec<_> = para.clusters.iter().filter(|c| c.kind == para::ClKind::Text).map(|c| c.start).collect();
+        let expected: Vec<_> = text.char_indices().filter_map(|(i, c)| (c != '\u{000c}').then_some(i)).collect();
+        assert_eq!(starts, expected, "visible clusters retain source offsets");
+    }
+    assert!(height(&cell_break_doc("\n\n\nHeading")) > plain, "ordinary line breaks retain their lines");
+}
+
+#[test]
+fn cell_break_cache_is_scoped() {
+    let mut d = cell_break_doc("\u{000c}Heading");
+    let Block::Table(t) = &*d.body[0] else { panic!("table") };
+    let p = t.rows[0].cells[0].blocks[0].clone();
+    d.body.push(p);
+    assert_eq!(lay(&d).pages.len(), 2, "a reused paragraph's body page break still starts a page");
+}
+
+#[test]
+fn cell_breaks_with_bookmarks() {
+    for offset in [0, 1, 3] {
+        let mut d = cell_break_doc("\u{000c}\u{000c}\u{000c}Heading");
+        let Block::Table(t) = Arc::make_mut(&mut d.body[0]) else { panic!("table") };
+        let Block::Para(p) = Arc::make_mut(&mut t.rows[0].cells[0].blocks[0]) else { panic!("paragraph") };
+        p.insert_object(offset, InlineObject::BookmarkStart { name: "control".into() }, &Default::default()).unwrap();
+        let original = p.clone();
+        let l = lay(&d);
+        let para = l.pages[0]
+            .items
+            .iter()
+            .find_map(|it| match it {
+                Placed::Lines { para, .. } => Some(para),
+                _ => None,
+            })
+            .unwrap();
+        assert!(!para.clusters.iter().any(|c| c.kind == para::ClKind::PageBreak));
+        assert_eq!(para.lines.len(), 1);
+        assert_eq!(para.clusters.iter().find(|c| c.kind == para::ClKind::Text).unwrap().start, 6);
+        let Block::Table(t) = &*d.body[0] else { panic!("table") };
+        let Block::Para(p) = &*t.rows[0].cells[0].blocks[0] else { panic!("paragraph") };
+        assert_eq!(p, &original, "layout preserves bookmark objects and source bytes");
+    }
+}
+
+#[test]
+fn cell_break_only_is_marker() {
+    let d = cell_break_doc("\u{000c}");
+    let l = lay(&d);
+    let para = l.pages[0]
+        .items
+        .iter()
+        .find_map(|it| match it {
+            Placed::Lines { para, .. } => Some(para),
+            _ => None,
+        })
+        .unwrap();
+    assert!(para.clusters.iter().all(|c| c.kind == para::ClKind::Marker));
+}
+
+#[test]
+fn subpoint_grid_keeps_widths() {
+    for gap in [0.05, 0.5, 1.0, 3.0] {
+        let mut d = Document::new();
+        let mut table = Table::new(1, 3, 300.0);
+        table.props.fixed = true;
+        table.props.width = Some(300.0);
+        table.grid = vec![100.0, 200.0 - gap, gap];
+        let row = &mut table.rows[0];
+        row.props.grid_after = 1;
+        row.props.w_after = Some(gap);
+        row.cells.truncate(1);
+        row.cells[0].props.span = 2;
+        row.cells[0].props.width = Some(300.0 - gap);
+        d.body = vec![Arc::new(Block::Table(table))];
+        let l = lay(&d);
+        let width = l.pages[0]
+            .items
+            .iter()
+            .find_map(|item| match item {
+                Placed::Cell { rect, .. } => Some(rect.w),
+                _ => None,
+            })
+            .unwrap();
+        assert!((width - (300.0 - gap)).abs() < 0.001, "gap {gap}: cell width {width}");
+    }
+}
+
+#[test]
+fn invalid_grid_keeps_fallback() {
+    for width in [0.0, -1.0, f32::NAN, f32::INFINITY] {
+        let mut d = Document::new();
+        let mut table = Table::new(1, 2, 300.0);
+        table.props.fixed = true;
+        table.props.width = Some(300.0);
+        table.grid = vec![width; 2];
+        for cell in &mut table.rows[0].cells {
+            cell.props.width = None;
+        }
+        d.body = vec![Arc::new(Block::Table(table))];
+        let l = lay(&d);
+        let widths: Vec<_> = l.pages[0]
+            .items
+            .iter()
+            .filter_map(|item| match item {
+                Placed::Cell { rect, .. } => Some(rect.w),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(widths, [150.0, 150.0], "grid {width}");
+    }
+}
+
+#[test]
+fn tiny_grid_scales_to_width() {
+    for unit in [0.05, 0.25, 0.5, f32::MIN_POSITIVE, f32::from_bits(1)] {
+        for ratio in [1.0, 3.0] {
+            let mut d = Document::new();
+            let mut table = Table::new(1, 2, 300.0);
+            table.props.fixed = true;
+            table.props.width = Some(300.0);
+            table.grid = vec![unit, unit * ratio];
+            for cell in &mut table.rows[0].cells {
+                cell.props.width = None;
+            }
+            d.body = vec![Arc::new(Block::Table(table))];
+            let l = lay(&d);
+            let widths: Vec<_> = l.pages[0]
+                .items
+                .iter()
+                .filter_map(|item| match item {
+                    Placed::Cell { rect, .. } => Some(rect.w),
+                    _ => None,
+                })
+                .collect();
+            let first = 300.0 / (1.0 + ratio);
+            assert_eq!(widths.len(), 2);
+            for (width, want) in widths.iter().zip([first, 300.0 - first]) {
+                assert!(width.is_finite() && (width - want).abs() < 0.001, "unit {unit}, ratio {ratio}: {widths:?}");
+            }
+        }
+    }
+}

@@ -140,6 +140,7 @@ Imported Word 97–2003 `.doc`/`.dot` files now ask for a supported DOCX target 
 
 | Date | What landed |
 | 2026-10-18 | Symbols keep their font (#2036): a `w:sym` or Insert › Symbol character in Wingdings, Symbol or Webdings remembers its symbol font apart from the text's font, so selecting all and changing the font (or Clear Formatting) no longer turns the symbols into boxes; saved back to DOCX as `w:sym`, so Word shows them too. Typed text and the Format Painter don't pick up the symbol font. |
+| 2026-10-16 | `wordcraft-cli run --script FILE.json` (`-` for stdin) runs a JSON list of commands, then saves to one or more outputs (docx and pdf in one run); errors name the command number and id and nothing is saved, #1963 |
 | 2026-10-14 | RTF export writes every section (gap 19): `\sect` ends each section and `\sectd` carries its break type, page size and orientation, margins, columns, page numbering and title page, so multi-section documents survive an RTF round trip |
 | 2026-10-14 | `ASK` and `SET` fields no longer show their stored result on the page or in PDFs (#1765): like Word, they only assign text to a bookmark and draw nothing; the stored result is kept and saved |
 | 2026-10-15 | Table rows with an at-least height start the next page whole when less than their minimum is left on a page that already holds something, so one-row-per-page booklets keep their pages; rows taller than a page split from the top of the next page and repeated header rows go with the row (#1742) |
@@ -170,6 +171,11 @@ Imported Word 97–2003 `.doc`/`.dot` files now ask for a supported DOCX target 
 | 2026-10-15 | Exact line spacing keeps the run font baseline around tall equations; automatic and minimum spacing still grow for math. |
 | 2026-10-16 | Zero-extent drawing anchors contribute no inline font height. |
 | 2026-10-16 | Control-channel keyboard and text input reaches the focused widget while the native window is inactive, without activating it; normal widget targets, dialogs and document protection remain in force (#2420) |
+| 2026-10-15 | Hide Quick Access Toolbar (#1945): the toolbar's menu ends with Hide Quick Access Toolbar, as Word's does; the ribbon's right-click menu and Customize Ribbon › Quick Access Toolbar offer Show Quick Access Toolbar; kept between runs; `ui.quickAccessToolbar {"value"?}` for scripts and MCP |
+| 2026-10-15 | Rulers: the numbers thin out as the page shrinks on screen (every 1, 2, 4… units, at least 30 px apart, the small ticks at least 4 px apart), give way to the indent, tab and column markers, and the margins get ticks only; both rulers span the caret's page at its own scale in One Page and Multiple Pages and follow the caret to another page (#1878) |
+| 2026-10-15 | Spelling as you type no longer flags the word being typed; the squiggle comes when the word ends or the caret leaves it, as in Word (#1552) |
+| 2026-10-15 | Text Highlight Color: No Color becomes the Highlight button's choice, as in Word, so the next click on the button removes highlighting instead of applying the colour picked before; the ribbon and the mini toolbar share one menu (#2105) |
+| 2026-10-16 | Footnote and endnote editing keeps the body and active note text at normal opacity (#2545), without changing document colours or print/PDF output. |
 | 2026-10-16 | A picture watermark in a header that starts with a table is drawn centred on the page behind the body text, on every page, instead of in the header's cell at the top of the page (#1775); `layoutInCell="0"` and VML `o:allowincell="f"` survive save and reopen |
 |---|---|
 | 2026-10-16 | Save Changes gives assistive technology a named alert dialog with the loss warning and any save failure; visual layout and save policy unchanged (#1015). Native screen-reader verification remains pending. |
@@ -204,6 +210,7 @@ Imported Word 97–2003 `.doc`/`.dot` files now ask for a supported DOCX target 
 | 2026-10-17 | Language dialog keeps inherited proofing language and no-proof choices (#2717). Opening and accepting unchanged no longer replaces style-derived values with English US and proofing enabled. |
 | 2026-10-16 | Text with the legacy Outline, Shadow, Emboss or Engrave font effects (`w:outline`, `w:shadow`, `w:emboss`, `w:imprint`) is drawn with them on screen and in PDFs, no longer as plain text: hollow outlined letters, or a grey copy behind the letters; the PDF keeps the text (#2534) |
 | 2026-10-15 | Table Layout › Cell Margins opens an editable dialog initialized from the table defaults; confirming an unchanged dialog preserves imported margins, and changing one side retains the others (#1960) |
+| 2026-10-15 | Word's native ink inside groups and drawing canvases survives DOCX saves (gap 2): the ink member keeps its InkML part, relationship, content type and picture fallback, stays in its place among the members, moves with the group and is drawn from its fallback picture; deleting the group drops its part |
 | 2026-10-14 | Consistent preferred cell widths override a stale table grid when both totals agree, for fixed and AutoFit tables. Conflicting widths, spans and percentages remain unchanged. |
 | 2026-10-14 | Legacy VML freeforms (`v:shape` with its own `path`), such as the rule lines in many older headers, are read as freeform shapes: they show on screen and in PDFs and are saved back as DrawingML custom geometry instead of vanishing |
 | 2026-10-14 | Field instructions spanning paragraphs no longer add blank lines during pagination; empty result paragraphs still take a line. |
@@ -469,6 +476,7 @@ Imported Word 97–2003 `.doc`/`.dot` files now ask for a supported DOCX target 
 | 2026-10-13 | The interface-translation audit runs in CI again (#1128): the size labels of Envelopes, Labels and Layout › Size are translated (`4,13 × 9,5 дюйма`) and use the region's decimal separator, and status-bar messages (table split and merge, ink replay, citations, SmartArt, Researcher, Design defaults), the Reading Mode toolbar, Go To and Search's Suggested heading are translated in every interface language, and the Read Aloud player no longer shows a speech error a frame before the status bar does, the race behind the audit's rare failure under load |
 | 2026-10-15 | Lists (#1683): a bullet stored as a private-use character its font can't draw (the font isn't installed) shows the level's default bullet (• ○ ▪); it used to be whatever an installed icon font has at that code, such as Font Awesome's Twitter logo |
 | 2026-10-15 | The web app keeps its preferences between visits (#2132): theme (dark mode), interface size, editing options and the rest of what the desktop app saves in `ui.json` are kept in the browser's `localStorage`, written as soon as they change |
+| 2026-10-17 | Saving into a folder that refuses a temporary file (macOS privacy protection, read-only folders, #2138) never overwrites an existing document in place: it is left untouched and the error says to use Save As to another folder or allow WordCraft access to the folder (System Settings › Privacy & Security › Files and Folders on macOS). A new file is created directly. Unit tests on Linux; not yet confirmed on a Mac |
 
 ## Revision history
 
@@ -492,6 +500,7 @@ Imported Word 97–2003 `.doc`/`.dot` files now ask for a supported DOCX target 
 | 2026-10-15 | trivial | Progress log: move options in Track Changes Options (gap #5) |
 | 2026-10-15 | trivial | Progress log: image size limits checked before allocation (#1321) |
 | 2026-10-17 | trivial | Progress log: Read Aloud speaks each sentence in its own language, #1843 |
+| 2026-10-18 | trivial | Progress log: `wordcraft-cli run --script` (#1963) |
 | 2026-10-18 | trivial | Progress log: header-cell picture watermarks drawn behind the text (#1775); readiness estimates unchanged |
 | 2026-10-17 | trivial | Language dialog keeps inherited proofing language and no-proof choices (#2717); readiness estimates unchanged |
 | 2026-10-14 | trivial | Progress log: ASK and SET fields show nothing (#1765) |
@@ -526,6 +535,11 @@ Imported Word 97–2003 `.doc`/`.dot` files now ask for a supported DOCX target 
 | 2026-10-15 | trivial | Exact line spacing keeps the run font baseline around tall equations; automatic and minimum spacing still grow for math. |
 | 2026-10-16 | trivial | Zero-extent drawing anchors contribute no inline font height. Synthetic regressions. |
 | 2026-10-16 | trivial | Control keyboard/text input works in the inactive native window (#2420) |
+| 2026-10-15 | trivial | Progress log: Hide Quick Access Toolbar (#1945) |
+| 2026-10-15 | trivial | Progress log: native ink nested in groups and drawing canvases kept on save |
+| 2026-10-15 | trivial | Progress log: the word being typed gets no squiggle until the caret leaves it (#1552) |
+| 2026-10-15 | trivial | Progress log: Highlight No Color sticks to the button (#2105) |
+| 2026-10-16 | trivial | Body and active note text keep normal opacity while editing footnotes or endnotes (#2545); header/footer dimming is unchanged |
 | 2026-10-14 | trivial | Progress log: row table border exceptions |
 | 2026-10-12 | minor | Czech proofing review: short-word splits rank after deletion, NOSUGGEST excludes suggestions while accepting typed forms, affix comments apply only to headers, ratios keep spaces and repeated-word messages use Czech quotes; synthetic engine end-to-end and latency checks |
 | 2026-10-12 | minor | Czech spelling from the installed Hunspell dictionary, runtime-table suggestions and generic checks; Czech interface writes cs-CZ documents; no Czech hyphenation patterns bundled; estimates unchanged |
@@ -717,3 +731,5 @@ Imported Word 97–2003 `.doc`/`.dot` files now ask for a supported DOCX target 
 | 2026-10-12 | trivial | Progress log: recipient filter and sort, .xls and legacy-encoding recipient lists (#778) |
 | 2026-10-15 | trivial | Progress log: dialog close box (#1885) |
 | 2026-10-15 | trivial | Progress log: mixed Hebrew/Latin text keeps its order in Word (#1543) |
+| 2026-10-15 | trivial | Progress log: ruler numbers by zoom, rulers follow the caret's page (#1878) |
+| 2026-10-17 | trivial | Progress log: saving into a folder that refuses a temporary file (#2138) |
