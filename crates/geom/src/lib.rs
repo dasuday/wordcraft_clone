@@ -367,6 +367,7 @@ mod tests {
         assert_eq!(a.inset(1.0, 2.0, 3.0, 4.0), Rect::new(1.0, 2.0, 6.0, 4.0));
     }
 
+    /// Paper-size lookup by dimensions, in both orientations, including F4 (Folio).
     #[test]
     fn paper_names() {
         assert_eq!(paper_name(612.0, 792.0), Some("Letter"));

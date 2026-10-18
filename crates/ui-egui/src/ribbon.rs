@@ -635,9 +635,9 @@ pub(crate) fn size_menu(ui: &mut Ui, app: &mut WordApp) {
     ui.label(egui::RichText::new(tl!(l.custom)).small().strong());
     ui.horizontal(|ui| {
         ui.label(egui::RichText::new(tl!(l.width)).small());
-        let wr = ui.add(egui::DragValue::new(&mut w).speed(3.6 / ppu).range(range.clone()).measure(unit).max_decimals(2));
+        let wr = ui.add(egui::DragValue::new(&mut w).id_source("size_custom_width").speed(3.6 / ppu).range(range.clone()).measure(unit).max_decimals(2));
         ui.label(egui::RichText::new(tl!(l.height)).small());
-        let hr = ui.add(egui::DragValue::new(&mut h).speed(3.6 / ppu).range(range).measure(unit).max_decimals(2));
+        let hr = ui.add(egui::DragValue::new(&mut h).id_source("size_custom_height").speed(3.6 / ppu).range(range).measure(unit).max_decimals(2));
         if wr.changed() || hr.changed() {
             let (w_pt, h_pt) = (w * ppu, h * ppu);
             let dragged = (wr.dragged() && !wr.drag_started()) || (hr.dragged() && !hr.drag_started());
