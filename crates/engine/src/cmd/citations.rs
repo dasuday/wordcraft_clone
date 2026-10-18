@@ -996,8 +996,9 @@ fn cross_ref(s: &mut Session, v: &Value) -> CmdResult {
 }
 
 /// The label of a caption: the text before its first field (`Plate ` in `Plate `, `SEQ Plate`,
-/// `: A rock`), or the `SEQ` identifier when the label text was left out. A caption without a
-/// `SEQ` field (typed by hand) has what comes before its first digit.
+/// `: A rock`). When the caption starts with its chapter number, the text between that field and
+/// the `SEQ` number, unless it is only a separator. Failing both, the `SEQ` identifier names it.
+/// A caption without a `SEQ` field (typed by hand) has what comes before its first digit.
 fn caption_label(p: &Paragraph, text: &str) -> Option<String> {
     let fields: Vec<(usize, &str)> = p
         .object_offsets()
@@ -1007,14 +1008,19 @@ fn caption_label(p: &Paragraph, text: &str) -> Option<String> {
             _ => None,
         })
         .collect();
-    let label = match fields.iter().find(|(_, instr)| instr.split_whitespace().next().is_some_and(|w| w.eq_ignore_ascii_case("SEQ"))) {
-        Some((_, seq)) => {
+    let seq = fields.iter().position(|(_, instr)| instr.split_whitespace().next().is_some_and(|w| w.eq_ignore_ascii_case("SEQ")));
+    let label = match seq.and_then(|i| Some((i, fields.get(i)?))) {
+        Some((i, (seq_at, instr))) => {
+            // The text in `from..to` with the bookmark marks dropped, if it says anything.
+            let said = |from: usize, to: usize| {
+                let t: String = p.text.get(from..to).unwrap_or_default().chars().filter(|c| *c != wordcraft_doc::para::OBJ).collect();
+                let t = t.trim();
+                t.chars().any(char::is_alphanumeric).then(|| t.to_string())
+            };
             let first = fields.first().map_or(0, |(o, _)| *o);
-            let before: String = p.text.get(..first)?.chars().filter(|c| *c != wordcraft_doc::para::OBJ).collect();
-            match before.trim() {
-                "" => seq.split_whitespace().nth(1)?.replace('_', " "),
-                label => label.to_string(),
-            }
+            let after_previous =
+                i.checked_sub(1).and_then(|k| fields.get(k)).map_or(0, |(o, _)| o.saturating_add(wordcraft_doc::para::OBJ.len_utf8()));
+            said(0, first).or_else(|| said(after_previous, *seq_at)).or_else(|| instr.split_whitespace().nth(1).map(|id| id.replace('_', " ")))?
         }
         None => text.get(..text.find(|c: char| c.is_ascii_digit())?)?.trim().to_string(),
     };
@@ -1289,6 +1295,44 @@ mod tests {
         s.run("caret.docEnd", &json!({})).unwrap();
         s.run("insert.crossReference", &json!({"to": "label:Photo Plate", "target": "Photo Plate I", "show": "number"})).unwrap();
         assert!(s.doc.plain_text(StoryRef::Body).ends_with("See Photo Plate I"), "{}", s.doc.plain_text(StoryRef::Body));
+    }
+
+    /// #2940: a caption may start with its chapter number (`STYLEREF`) and carry its label text
+    /// between that and the `SEQ` number; the text is the label, not the `SEQ` identifier.
+    #[test]
+    fn caption_label_after_a_chapter_number_field() {
+        let mut s = Session::new(wordcraft_doc::Document::from_text("Rock\nSee "));
+        let field = |instr: &str| InlineObject::Field {
+            instr: instr.into(),
+            result: String::new(),
+            locked: false,
+            dirty: false,
+            code: false,
+            form: String::new(),
+        };
+        let plain = CharProps::default();
+        // STYLEREF, " Specimen ", SEQ Figure, ": A rock"
+        let mut imported = Paragraph::new().styled("Caption");
+        imported.insert_object(0, field("STYLEREF 1 \\s"), &plain).unwrap();
+        imported.insert_text(imported.len(), " Specimen ", &plain).unwrap();
+        imported.insert_object(imported.len(), field("SEQ Figure \\* ARABIC"), &plain).unwrap();
+        imported.insert_text(imported.len(), ": A rock", &plain).unwrap();
+        s.doc.insert_block(StoryRef::Body, &Path::top(1), Block::Para(imported)).unwrap();
+        // A generated caption with a chapter number: label, STYLEREF, separator, SEQ.
+        s.run("select.text", &json!({"text": "Rock"})).unwrap();
+        s.run("references.caption", &json!({"label": "Plate", "chapter": 1, "separator": "-"})).unwrap();
+        // No label text at all: the SEQ identifier names it, after the chapter number's separator.
+        let mut bare = Paragraph::new().styled("Caption");
+        bare.insert_object(0, field("STYLEREF 1 \\s"), &plain).unwrap();
+        bare.insert_text(bare.len(), "-", &plain).unwrap();
+        bare.insert_object(bare.len(), field("SEQ Photo_Plate"), &plain).unwrap();
+        let end = s.doc.body.len();
+        s.doc.insert_block(StoryRef::Body, &Path::top(end), Block::Para(bare)).unwrap();
+        let labels = caption_labels(&s);
+        assert!(labels.contains(&"Specimen".to_string()), "{labels:?}");
+        assert!(labels.contains(&"Plate".to_string()), "{labels:?}");
+        assert!(labels.contains(&"Photo Plate".to_string()), "{labels:?}");
+        assert!(!labels.iter().any(|l| l == "-" || l.is_empty() || l == "Figure"), "{labels:?}");
     }
 
     /// #661: References › Table of Authorities › Update Table picks up citations marked after the table.
