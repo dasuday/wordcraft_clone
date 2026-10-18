@@ -991,6 +991,8 @@ fn settings_xml(doc: &Document, footnotes: bool, endnotes: bool, template_rel: O
     }
     // §17.15.1.47. Word for Mac writes it for 2 pages per sheet on a portrait sheet (user-checked),
     // not on a landscape one nor for Book fold; with Normal pages it is Page Setup's own choice.
+    // "Portrait" is the sheet's orientation flag, the same rule that cuts it in two
+    // (`MultiplePages::page_size`), so the gutter sits on the cut whatever the sheet's shape.
     let gutter_at_top = match s.multiple_pages() {
         MultiplePages::Normal => s.gutter_at_top,
         MultiplePages::TwoPerSheet => !doc.last_section.landscape,

@@ -1369,7 +1369,7 @@ fn page_layout_commands(
     let turned = |on: bool, (a, b): (f32, f32)| if on { (a.max(b), a.min(b)) } else { (a.min(b), a.max(b)) };
     // The margins must fit the page, which is half the sheet in a multiple-pages mode.
     let sheet = turned(landscape, paper);
-    if !margins_fit(multiple.page_size(sheet.0, sheet.1), m, cur.gutter) {
+    if !margins_fit(multiple.page_size(sheet.0, sheet.1, landscape), m, cur.gutter) {
         return Err(MARGINS_DONT_FIT);
     }
     let ((w0, h0), (w1, h1)) = (turned(false, paper), turned(false, was));

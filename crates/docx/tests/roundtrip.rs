@@ -2712,6 +2712,60 @@ fn multiple_pages_write_word_page_sizes() {
     assert!(at("<w:zoom") < at("<w:gutterAtTop/>") && at("<w:gutterAtTop/>") < at("<w:defaultTabStop"));
 }
 
+/// #1836 review: under 2 pages per sheet and Book fold any sheet, of any shape and either
+/// orientation flag, comes back from a save as it was, and so does any page a file holds
+/// (a Book fold file's 5.5 x 8.5 in page included); `w:gutterAtTop` follows the same cut.
+#[test]
+fn multiple_pages_round_trip_any_sheet_shape() {
+    use wordcraft_doc::section::MultiplePages as M;
+    let sheets = [
+        (612.0, 792.0, false),
+        (792.0, 612.0, true),
+        (612.0, 612.0, true),
+        (612.0, 612.0, false),
+        (612.0, 792.0, true),
+        (792.0, 612.0, false),
+        (1584.0, 300.0, true),
+        (300.0, 1584.0, false),
+        (1584.0, 300.0, false),
+    ];
+    for mode in [M::TwoPerSheet, M::BookFold] {
+        for (w, h, landscape) in sheets {
+            let mut d = Document::new();
+            (d.last_section.page_w, d.last_section.page_h, d.last_section.landscape) = (w, h, landscape);
+            d.settings.set_multiple_pages(mode);
+            let bytes = wordcraft_docx::write(&d).expect("write");
+            let s = wordcraft_docx::read(&bytes).expect("read").last_section;
+            assert_eq!((s.page_w, s.page_h, s.landscape), (w, h, landscape), "{mode:?}");
+            let gutter_at_top = zip_part(&bytes, "word/settings.xml").contains("<w:gutterAtTop/>");
+            assert_eq!(gutter_at_top, mode == M::TwoPerSheet && !landscape, "{mode:?} {w} {h} {landscape}");
+        }
+    }
+    // A file's page survives open and save, whatever its shape.
+    let plain = wordcraft_docx::write(&Document::new()).expect("write");
+    let body = zip_part(&plain, "word/document.xml");
+    let settings = zip_part(&plain, "word/settings.xml");
+    for flags in ["<w:bookFoldPrinting/>", "<w:printTwoOnOne/>"] {
+        for pg_sz in [
+            r#"<w:pgSz w:w="7920" w:h="12240" w:orient="landscape"/>"#,
+            r#"<w:pgSz w:w="12240" w:h="7920" w:orient="landscape"/>"#,
+            r#"<w:pgSz w:w="6120" w:h="15840" w:orient="landscape"/>"#,
+            r#"<w:pgSz w:w="12240" w:h="7920"/>"#,
+            r#"<w:pgSz w:w="7920" w:h="12240"/>"#,
+            r#"<w:pgSz w:w="6000" w:h="31680"/>"#,
+        ] {
+            let doc = body.replacen(r#"<w:pgSz w:w="12240" w:h="15840"/>"#, pg_sz, 1);
+            let set = settings.replacen("<w:defaultTabStop", &format!("{flags}<w:defaultTabStop"), 1);
+            let file = replace_part(&replace_part(&plain, "word/document.xml", doc.as_bytes()), "word/settings.xml", set.as_bytes());
+            let again = wordcraft_docx::write(&wordcraft_docx::read(&file).expect("read")).expect("write");
+            let out = zip_part(&again, "word/document.xml");
+            let at = out.find("<w:pgSz").unwrap_or(0);
+            let written = out.get(at..).and_then(|t| t.find("/>").map(|e| &t[..e + 2])).unwrap_or("");
+            assert_eq!(written, pg_sz, "{flags}");
+        }
+    }
+}
+
 /// #1836: files with Word for Mac's own numbers (1-2 twips of rounding noise) read back as a
 /// Letter sheet in the right orientation; hostile page sizes don't panic.
 #[test]

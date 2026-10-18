@@ -588,8 +588,10 @@ pub struct HfRef {
 /// 3 twips of a named paper size snaps to it.
 pub fn sheet_from_page(s: &mut SectionProps, e: &El, mode: wordcraft_doc::section::MultiplePages) {
     let Some(pg) = e.child("w:pgSz").filter(|_| mode.halves_page()) else { return };
-    let orient = pg.attr("w:orient").map(|o| o == "landscape");
-    let (w, h, landscape) = mode.sheet_size(s.page_w, s.page_h, orient);
+    // `w:orient` alone says how the sheet is turned, which also says how it was cut (see
+    // `MultiplePages::page_size`), so any sheet comes back as it was saved.
+    let landscape = pg.attr("w:orient") == Some("landscape");
+    let (w, h) = mode.sheet_size(s.page_w, s.page_h, landscape);
     let near = |a: f32, b: f32| (a - b).abs() <= 0.15;
     let (w, h) = wordcraft_geom::PAPER_SIZES
         .iter()

@@ -1334,7 +1334,7 @@ fn sectpr_body(w: &mut W, s: &SectionProps, mode: wordcraft_doc::section::Multip
             SectionStart::NextColumn => "nextColumn",
         };
         w.val("w:type", start);
-        let (pw, ph) = mode.page_size(s.page_w, s.page_h);
+        let (pw, ph) = mode.page_size(s.page_w, s.page_h, s.landscape);
         let (pw, ph) = (pw.clamp(36.0, crate::units::MAX_LEN_PT), ph.clamp(36.0, crate::units::MAX_LEN_PT));
         if s.landscape {
             w.empty("w:pgSz", &[("w:w", &twips(pw)), ("w:h", &twips(ph)), ("w:orient", "landscape")]);

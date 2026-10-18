@@ -502,7 +502,7 @@ fn margins(s: &mut Session, v: &Value) -> CmdResult {
     } else {
         mode
     };
-    if !margins_fit(target.page_size(cur.page_w, cur.page_h), (t, b, l, r), gutter.unwrap_or(cur.gutter)) {
+    if !margins_fit(target.page_size(cur.page_w, cur.page_h, cur.landscape), (t, b, l, r), gutter.unwrap_or(cur.gutter)) {
         return Err(CmdError::Params("margins leave no room for text".into()));
     }
     if target != mode {
@@ -568,7 +568,7 @@ fn fits_turned(x: &SectionProps, landscape: Option<bool>, mode: MultiplePages) -
     if let Some(on) = landscape {
         t.set_landscape(on);
     }
-    margins_fit(mode.page_size(t.page_w, t.page_h), (t.margin_top, t.margin_bottom, t.margin_left, t.margin_right), t.gutter)
+    margins_fit(mode.page_size(t.page_w, t.page_h, t.landscape), (t.margin_top, t.margin_bottom, t.margin_left, t.margin_right), t.gutter)
 }
 
 /// Layout › Orientation for the section(s) of the selection. A booklet is printed on a landscape
@@ -629,7 +629,11 @@ fn size(s: &mut Session, v: &Value) -> CmdResult {
     let sections = s.doc.sections();
     let fits = |block: usize| {
         sections.iter().find(|(e, _)| *e == block).is_none_or(|(_, x)| {
-            margins_fit(mode.page_size(oriented(x).0, oriented(x).1), (x.margin_top, x.margin_bottom, x.margin_left, x.margin_right), x.gutter)
+            margins_fit(
+                mode.page_size(oriented(x).0, oriented(x).1, x.landscape),
+                (x.margin_top, x.margin_bottom, x.margin_left, x.margin_right),
+                x.gutter,
+            )
         })
     };
     if !selected_section_ends(s).into_iter().all(fits) {
