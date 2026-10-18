@@ -382,3 +382,18 @@ fn saving_to_a_built_in_name_by_path_in_the_themes_folder_is_refused() {
     assert!(!file.exists(), "nothing was written");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn the_themes_folder_is_recognised_however_the_path_is_spelled() {
+    let dir = temp_dir("spelled");
+    let mut t = s();
+    t.load_custom_themes(&dir);
+    let sneaky = dir.join("..").join(dir.file_name().unwrap()).join("Craft.thmx");
+    assert!(t.run("design.saveTheme", &json!({"path": sneaky.to_string_lossy()})).is_err(), "built-in name via `..`");
+    assert!(!dir.join("Craft.thmx").exists());
+    let wrong_ext = dir.join("Mine.txt");
+    let err = t.run("design.saveTheme", &json!({"path": wrong_ext.to_string_lossy()})).unwrap_err();
+    assert!(err.to_string().contains(".thmx"), "{err}");
+    assert!(!wrong_ext.exists());
+    let _ = std::fs::remove_dir_all(&dir);
+}

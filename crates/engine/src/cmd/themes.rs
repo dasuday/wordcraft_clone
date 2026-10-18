@@ -362,6 +362,36 @@ fn drop_renamed<T>(list: &mut Vec<T>, name_of: impl Fn(&T) -> &str, v: &Value, n
     Ok(())
 }
 
+/// Whether `path` is a file directly inside `dir`, however it is spelled (`a/../themes/x`). A path
+/// that climbs out of its start can't be placed, so it is an error rather than a guess.
+fn directly_in(dir: &Path, path: &Path) -> Result<bool, CmdError> {
+    use std::path::Component;
+    fn tidy(p: &Path) -> Option<PathBuf> {
+        let mut out = PathBuf::new();
+        for c in p.components() {
+            match c {
+                Component::CurDir => {}
+                Component::ParentDir => {
+                    if !out.pop() {
+                        return None;
+                    }
+                }
+                c => out.push(c.as_os_str()),
+            }
+        }
+        Some(out)
+    }
+    let (Some(d), Some(f)) = (tidy(dir), tidy(path)) else {
+        return Err(CmdError::Params("`path` climbs out of its folder".into()));
+    };
+    if f.parent() == Some(d.as_path()) {
+        return Ok(true);
+    }
+    // Links: the same folder reached another way.
+    let real = |p: &Path| std::fs::canonicalize(p).ok();
+    Ok(matches!((f.parent().and_then(real), real(&d)), (Some(a), Some(b)) if a == b))
+}
+
 fn save_theme(s: &mut Session, v: &Value) -> CmdResult {
     let name = p::str(v, "name").map(check_name).transpose()?;
     if let Some(n) = name.as_deref().filter(|n| is_builtin(n)) {
@@ -390,7 +420,10 @@ fn save_theme(s: &mut Session, v: &Value) -> CmdResult {
             theme_file(&dir, n)
         }
     };
-    let in_folder = s.themes_dir.as_deref().is_some_and(|d| path.parent() == Some(d));
+    let in_folder = s.themes_dir.as_deref().map(|d| directly_in(d, &path)).transpose()?.unwrap_or(false);
+    if in_folder && !path.extension().is_some_and(|e| e.eq_ignore_ascii_case(THEME_EXT)) {
+        return Err(CmdError::Params(format!("a theme in the themes folder must end in `.{THEME_EXT}`")));
+    }
     let stem = path.file_stem().map(|x| x.to_string_lossy().to_string());
     // The gallery and startup skip built-in names in the themes folder, so don't write one there.
     if in_folder && let Some(stem) = stem.as_deref().filter(|n| is_builtin(n)) {
