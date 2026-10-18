@@ -598,6 +598,23 @@ fn edge_cue(ui: &mut Ui, rect: Rect, glyph: &str, hint: &str, t: &Tokens) -> boo
     resp.clicked()
 }
 
+/// Whether Esc just ended typing in a field (`r`, remembered under `id`). egui 0.36 keeps a
+/// `DragValue`'s typed text after Esc and applies it a frame later, when the field still counts as
+/// having just lost focus but Esc is no longer pressed: a change reported within two frames of the
+/// Esc is that late value, to be dropped so that Esc cancels as in Word.
+fn esc_cancelled(ui: &Ui, r: &egui::Response, id: egui::Id) -> bool {
+    let now = ui.ctx().cumulative_pass_nr();
+    let (focus_key, esc_key) = (id.with("focused"), id.with("esc"));
+    // Read outside `data_mut`: both lock the context.
+    let focused = r.has_focus();
+    let had_focus = ui.data(|d| d.get_temp::<bool>(focus_key)).unwrap_or(false);
+    ui.data_mut(|d| d.insert_temp(focus_key, focused));
+    if had_focus && !focused && ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+        ui.data_mut(|d| d.insert_temp(esc_key, now));
+    }
+    ui.data(|d| d.get_temp::<u64>(esc_key)).is_some_and(|at| now.saturating_sub(at) <= 2)
+}
+
 fn stack(ui: &mut Ui, add: impl FnOnce(&mut Ui)) {
     ui.vertical(|ui| {
         ui.spacing_mut().item_spacing = vec2(1.0, 0.0);
@@ -2563,7 +2580,8 @@ fn picture_format(app: &mut WordApp, ui: &mut Ui) {
         };
         // `picture.size` locks the aspect ratio unless told otherwise, so one dimension suffices.
         // The fields show the interface unit and take a size typed in any unit, pixels too
-        // (`300 px`, #1901), applied on Enter; a drag applies as it goes, one undo step.
+        // (`300 px`, #1901), applied once typed (Enter, Tab or a click elsewhere; Esc cancels),
+        // never per keystroke; a drag applies as it goes, one undo step.
         let unit = crate::options::unit();
         let k = unit.pt_per_unit();
         stack(ui, |ui| {
@@ -2584,8 +2602,9 @@ fn picture_format(app: &mut WordApp, ui: &mut Ui) {
                         "Type a size in any unit, such as 5 cm or 300 px. The other side follows, so the picture keeps its proportions."
                     ));
                     // While typing, the field reports each keystroke as a change; only a new
-                    // value (Enter, a drag) resizes.
-                    if r.changed() && v != was {
+                    // value (Enter, Tab, a click elsewhere, a drag) resizes, and Esc cancels.
+                    let cancelled = esc_cancelled(ui, &r, egui::Id::new(("picture_size_field", key)));
+                    if r.changed() && v != was && !cancelled {
                         if r.dragged() && !r.drag_started() {
                             app.session.join_next_undo();
                         }
@@ -3283,7 +3302,7 @@ mod tests {
     }
 
     /// #2573, #1901: Picture Format › Size's width shows the interface unit and takes a size typed
-    /// in pixels. It applies on Enter, not while typing, keeping the picture's proportions, as one
+    /// in pixels. It applies once typed (Enter), not while typing, keeping the picture's proportions, as one
     /// undo step.
     #[test]
     fn picture_width_typed_in_pixels_keeps_the_proportions() {
@@ -3321,6 +3340,13 @@ mod tests {
         assert!((w - 225.0).abs() < 0.01 && (ht - 112.5).abs() < 0.01, "300 px = 225 pt, the height follows: {w}×{ht}");
         h.state_mut().run("edit.undo", json!({})).unwrap();
         assert_eq!(size(h.state()), Some((15.0, 7.5)), "one undo step");
+        // Esc throws a typed size away.
+        h.get_by_role_and_label(Role::SpinButton, "W:").click();
+        h.run_steps(2);
+        h.get_by_role_and_label(Role::SpinButton, "W:").type_text("500 px");
+        h.key_press(egui::Key::Escape);
+        h.run_steps(2);
+        assert_eq!(size(h.state()), Some((15.0, 7.5)), "Esc cancels the typing");
     }
 
     /// #2573 review: showing Picture Format never resizes a picture whose size is outside the

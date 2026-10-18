@@ -1242,8 +1242,9 @@ fn size_ui(app: &mut WordApp, ui: &mut Ui, f: &mut SizeForm) -> bool {
     }
     let unit = unit();
     let k = unit.pt_per_unit();
-    // A length in the interface unit that takes any typed unit (`300 px` too), applied on Enter
-    // so a half-typed number never resizes the other side; `None` until its value changes (while
+    // A length in the interface unit that takes any typed unit (`300 px` too), applied once typed
+    // (Enter, Tab or a click elsewhere, OK included) so a half-typed number never resizes the other
+    // side; `None` until its value changes (while
     // typing, the field reports each keystroke as a change). The range bounds what is typed or
     // dragged only: a value already outside it (a 1 px picture is 0.75 pt) is shown as it is, not
     // clamped, which egui would report as a change and so apply unasked.
@@ -1929,5 +1930,53 @@ mod tests {
         assert!((f.scale().0 - 100.0 / 0.75 * 100.0).abs() < 1.0, "13333%: {:?}", f.scale());
         assert_eq!((f.width, f.height), (100.0, 100.0), "the form keeps the size");
         assert_eq!(selected_size(h.state()), (100.0, 100.0));
+    }
+
+    /// #2573 review: a typed size is kept when the field loses focus, as text fields do: typing a
+    /// height and going straight for OK (a real click: press, then release frames later) applies
+    /// it. Taking it only on Enter would throw the typed size away. Esc cancels, applying nothing.
+    #[test]
+    fn size_dialog_typed_height_then_ok_without_enter_applies_it() {
+        use egui::accesskit::Role;
+        use egui_kittest::kittest::Queryable;
+        let harness = |a: WordApp| {
+            egui_kittest::Harness::builder().with_size(egui::vec2(1440.0, 900.0)).build_ui_state(
+                |ui, app: &mut WordApp| {
+                    let ctx = ui.ctx().clone();
+                    app.logic(&ctx);
+                    app.ui(ui);
+                },
+                a,
+            )
+        };
+        let mut a = picture_app(40, 20);
+        a.run("picture.size", json!({})).unwrap();
+        let mut h = harness(a);
+        h.run_steps(4);
+        h.get_all_by_role_and_label(Role::SpinButton, "Height:").next().expect("the height field").click();
+        h.run_steps(2);
+        h.get_all_by_role_and_label(Role::SpinButton, "Height:").next().expect("editing").type_text("60 px");
+        h.run_steps(2);
+        let ok = h.get_by_role_and_label(Role::Button, "OK").rect().center();
+        h.event(egui::Event::PointerMoved(ok));
+        h.event(egui::Event::PointerButton { pos: ok, button: egui::PointerButton::Primary, pressed: true, modifiers: Default::default() });
+        h.run_steps(2);
+        h.event(egui::Event::PointerButton { pos: ok, button: egui::PointerButton::Primary, pressed: false, modifiers: Default::default() });
+        h.run_steps(2);
+        assert!(h.state().dialog.is_none(), "OK closes the dialog");
+        assert_eq!(selected_size(h.state()), (90.0, 45.0), "the typed height, in proportion");
+
+        // Esc throws the typing away and, as Cancel, closes the dialog: nothing applied.
+        let mut a = picture_app(40, 20);
+        a.run("picture.size", json!({})).unwrap();
+        let mut h = harness(a);
+        h.run_steps(4);
+        h.get_all_by_role_and_label(Role::SpinButton, "Height:").next().expect("the height field").click();
+        h.run_steps(2);
+        h.get_all_by_role_and_label(Role::SpinButton, "Height:").next().expect("editing").type_text("60 px");
+        h.key_press(egui::Key::Escape);
+        h.run_steps(2);
+        assert!(h.state().dialog.is_none(), "Esc cancels the dialog");
+        assert_eq!(selected_size(h.state()), (30.0, 15.0), "nothing applied");
     }
 }
