@@ -3108,11 +3108,8 @@ fn context_menu(app: &mut WordApp, ui: &mut Ui) {
         ui.menu_button(tl!("Synonyms"), |ui| {
             for w in syn.iter().filter_map(|x| x.as_str()) {
                 if ui.button(w).clicked() {
+                    // select.word takes the word alone (#2927); the space after it stays.
                     let _ = app.run("select.word", json!({}));
-                    let (a, b) = app.session.sel.ordered();
-                    let trimmed = app.session.doc.para_at(&a).and_then(|p| p.text.get(a.off..b.off)).map(|t| t.trim_end().len()).unwrap_or(0);
-                    let end = wordcraft_doc::Pos { off: a.off + trimmed, ..b };
-                    app.session.sel = wordcraft_engine::Selection { anchor: a, focus: end };
                     let _ = app.run("text.insert", json!({"text": w, "raw": true}));
                     ui.close();
                 }
@@ -3747,7 +3744,8 @@ mod tests {
         multi_drag(&mut h, from, to, 3);
         let sel = h.state().session.sel.clone();
         assert_eq!((sel.anchor, sel.focus), (Pos::body(1, 0), Pos::body(2, 10)), "whole paragraphs");
-        // A plain double-click (no drag) still selects just the word.
+        // A plain double-click (no drag) selects just the word, without the space after it
+        // (#2927); only the drag extends with the separators.
         h.state_mut().run("select.collapse", json!({})).unwrap();
         for _ in 0..40 {
             h.step();
@@ -3755,7 +3753,7 @@ mod tests {
         let at = screen(&mut h, Pos::body(0, 1));
         multi_drag(&mut h, at, at, 2);
         let (s, e) = h.state().session.sel.ordered();
-        assert_eq!((s, e), (Pos::body(0, 0), Pos::body(0, 6)));
+        assert_eq!((s, e), (Pos::body(0, 0), Pos::body(0, 5)));
     }
 
     /// #2551: dragging the vertical scrollbar shows the page at the top of the window beside the
