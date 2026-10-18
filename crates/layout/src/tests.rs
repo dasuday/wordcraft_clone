@@ -5590,6 +5590,35 @@ fn document_note_separators_and_continuation_notice() {
     assert_ne!(l.story_at(0, 80.0, ny + 2.0), Some(DECOR_STORY));
 }
 
+#[test]
+fn changed_note_separators_invalidate_the_incremental_pass() {
+    // #554: the separators shape the note area on every page, so a pass resuming from a checkpoint
+    // must not reuse pagination made with other ones.
+    let notice = |text: &str| {
+        let mut p = wordcraft_doc::Paragraph::with_text(text, Default::default());
+        p.props.space_after = Some(0.0);
+        Some(vec![wordcraft_doc::para_block(p)])
+    };
+    for endnotes in [false, true] {
+        let mut d = Document::from_text(&(1..=200).map(|i| format!("Line {i}")).collect::<Vec<_>>().join("\n"));
+        footnote(&mut d, &Pos::body(2, 2), "A footnote.");
+        let (mut cache, opts) = (LayoutCache::new(), LayoutOptions::default());
+        let _ = layout(&d, &mut cache, &opts);
+        let seps =
+            wordcraft_doc::NoteSeparators { continuation_notice: notice("(continued)"), separator: notice("a\n\n\n\nb"), ..Default::default() };
+        if endnotes {
+            d.endnote_separators = seps;
+        } else {
+            d.footnote_separators = seps;
+        }
+        d.para_mut(StoryRef::Body, &Path::top(150)).unwrap().rev = 1_000_000;
+        let inc = layout(&d, &mut cache, &opts);
+        let full = lay(&d);
+        let sig = |l: &DocLayout| l.pages.iter().map(|p| format!("{:?}", p.items)).collect::<Vec<_>>();
+        assert_eq!(sig(&inc), sig(&full), "endnotes={endnotes}: incremental differs from a full layout");
+    }
+}
+
 /// #344 with #332: a Drawing Canvas turns as a whole, like a group: its background and outline,
 /// then its members clipped to its frame, all drawn inside its turn (the clip in the unturned
 /// frame, so the clip turns too); floating or inline. Hit testing follows the turned canvas.

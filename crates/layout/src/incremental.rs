@@ -240,6 +240,8 @@ impl PassKey {
             &doc.core.creator,
             &doc.revisions,
             &doc.sources,
+            &doc.footnote_separators,
+            &doc.endnote_separators,
             doc.comments.keys().collect::<Vec<_>>(),
             doc.media.keys().collect::<Vec<_>>(),
         ))
