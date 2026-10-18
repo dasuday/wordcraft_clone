@@ -873,10 +873,28 @@ pub fn flow_paras(doc: &Document, p: &Paragraph) -> Vec<Para> {
     flow_paras_in(doc, p, false)
 }
 
+/// A paragraph's spacing, line spacing and indents as they resolve in its document (defaults,
+/// style chain, its own formatting), points: what formats that don't carry the document's styles
+/// (HTML, RTF) need to show it the same. A list paragraph leaves its indents to the list.
+fn resolved_spacing(doc: &Document, p: &Paragraph, listed: bool) -> Spacing {
+    let r = doc.styles.resolve_para(&p.props);
+    let pt = |v: f32| v.is_finite().then(|| v.clamp(-1584.0, 1584.0));
+    let indent = |v: f32| if listed { None } else { pt(v) };
+    Spacing {
+        before: pt(r.space_before),
+        after: pt(r.space_after),
+        line: Some(r.line_spacing),
+        left: indent(r.indent_left),
+        right: indent(r.indent_right),
+        first: indent(r.indent_first),
+    }
+}
+
 /// [`flow_paras`]; `tracked` keeps tracked changes: deleted text stays, and text carries its
 /// insertion and deletion marks.
 fn flow_paras_in(doc: &Document, p: &Paragraph, tracked: bool) -> Vec<Para> {
     let (kind, list) = para_kind(doc, p);
+    let spacing = resolved_spacing(doc, p, list.is_some());
     let mut done: Vec<Para> = Vec::new();
     let borders = if kind == Kind::Rule { None } else { p.props.borders.filter(|b| b.any_visible()) };
     let mut out = Para {
@@ -886,7 +904,7 @@ fn flow_paras_in(doc: &Document, p: &Paragraph, tracked: bool) -> Vec<Para> {
         page_break: p.props.page_break_before.unwrap_or(false),
         keep_next: p.props.keep_next.unwrap_or(false),
         inlines: Vec::new(),
-        spacing: Spacing::default(),
+        spacing,
         borders,
         section: None,
         mark_ins: None,
@@ -917,7 +935,7 @@ fn flow_paras_in(doc: &Document, p: &Paragraph, tracked: bool) -> Vec<Para> {
                         page_break: true,
                         keep_next: p.props.keep_next.unwrap_or(false),
                         inlines: Vec::new(),
-                        spacing: Spacing::default(),
+                        spacing,
                         borders,
                         section: None,
                         mark_ins: None,
