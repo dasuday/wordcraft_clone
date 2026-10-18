@@ -274,13 +274,26 @@ RISC-V (riscv64): `wordcraft-<ver>-linux-riscv64.tar.gz`, a tarball cross-compil
 (Ubuntu 24.04, Debian 13 and newer).
 
 **Wayland:** on a Wayland desktop the app runs through XWayland when it is available, because
-winit (the windowing library) supports dragging files into the window only on X11. To use the
-native Wayland backend instead (for example for sharper text with fractional scaling, at the cost
-of file drag-and-drop), start it with `WORDCRAFT_WAYLAND=1`:
+winit (the windowing library) supports dragging files into the window only on X11. When Fcitx is
+set up, it runs on native Wayland instead (#2950), because Fcitx over XIM garbled Vietnamese Telex
+typing (#2932). Fcitx counts as set up when `XMODIFIERS` names `fcitx` or `fcitx5` after `@im=`,
+or `GTK_IM_MODULE`, `QT_IM_MODULE`, `QT_IM_MODULES` or `SDL_IM_MODULE` names one of them. Native
+Wayland reaches fcitx5 only when the compositor connects it: on GNOME through fcitx5's IBus
+frontend, on KDE when Fcitx 5 is picked under Virtual Keyboard, and directly on wlroots
+compositors and niri. If the input method stops working, start the app with
+`WORDCRAFT_WAYLAND=0`. IBus and other input methods stay on XIM through XWayland.
+`WORDCRAFT_WAYLAND` overrides the choice: `1` for native Wayland (for IBus and other input
+methods, or for sharper text with fractional scaling), `0` for XWayland (for file drag-and-drop,
+or when Fcitx doesn't reach the window):
 
 ```sh
-WORDCRAFT_WAYLAND=1 wordcraft
+WORDCRAFT_WAYLAND=1 wordcraft   # native Wayland
+WORDCRAFT_WAYLAND=0 wordcraft   # XWayland
 ```
+
+The log file records the choice and why, on the line containing `display:`. On GNOME the native
+Wayland window has winit's plain frame, window buttons with no title, above WordCraft's own title
+bar (#78). `WORDCRAFT_WAYLAND=0` brings GNOME's title bar back.
 
 **Arch Linux (AUR).** Community members maintain three AUR packages; the project doesn't publish
 to the AUR itself. Install one of them:

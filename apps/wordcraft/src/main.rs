@@ -15,6 +15,8 @@ mod apple_events;
 mod clipboard;
 mod control_server;
 mod default_apps;
+#[cfg(any(all(unix, not(target_os = "macos")), test))]
+mod display_backend;
 mod file_dialogs;
 #[cfg(any(target_os = "windows", target_os = "macos", test))]
 mod graphics;
@@ -397,15 +399,17 @@ fn main() -> eframe::Result {
     if let Some(window) = restored {
         options.viewport = window.apply(options.viewport);
     }
+    // XWayland for file drag-and-drop, native Wayland when Fcitx is set up (#2950).
     #[cfg(all(unix, not(target_os = "macos")))]
-    // winit has no file drag-and-drop on Wayland (only on X11), so dropping files from the file
-    // manager showed a "no" cursor. Run through XWayland when it's there; WORDCRAFT_WAYLAND=1
-    // keeps the native Wayland backend.
-    if std::env::var_os("DISPLAY").is_some() && std::env::var_os("WORDCRAFT_WAYLAND").is_none() {
-        options.event_loop_builder = Some(Box::new(|b| {
-            use winit::platform::x11::EventLoopBuilderExtX11;
-            b.with_x11();
-        }));
+    {
+        let display = display_backend::choose(std::env::var_os);
+        log::info!("display: {display}");
+        if display.backend == display_backend::Backend::X11 {
+            options.event_loop_builder = Some(Box::new(|b| {
+                use winit::platform::x11::EventLoopBuilderExtX11;
+                b.with_x11();
+            }));
+        }
     }
     // Registered before the event loop starts, so it catches the Finder event that launched us as
     // well as later ones. Lives until the event loop returns; the app creator only borrows it.
