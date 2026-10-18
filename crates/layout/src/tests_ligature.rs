@@ -167,3 +167,25 @@ fn an_indic_conjunct_stays_one_cluster() {
     let offs = para_layout(&l).line_offsets(0);
     assert!(!offs.contains(&3) && !offs.contains(&6), "no caret inside the conjunct: {offs:?}");
 }
+
+#[test]
+fn a_long_word_never_wraps_inside_a_ligature() {
+    // A narrow page forces an emergency break in the unbroken word; whatever the offset, a line
+    // never ends between a ligature's glyph and its glyphless letters.
+    let mut seen_ligature = false;
+    for k in 0..24 {
+        let mut d = Document::from_text(&format!("{}ffi", "x".repeat(k)));
+        d.last_section.margin_left = 250.0;
+        d.last_section.margin_right = 250.0;
+        let l = lay(&d);
+        let pl = para_layout(&l);
+        seen_ligature |= pl.glyphs.len() < pl.clusters.len();
+        for line in &pl.lines {
+            if let Some(next) = pl.clusters.get(line.c1) {
+                let inside = next.g1 <= next.g0 && next.kind == crate::para::ClKind::Text && line.c1 > line.c0;
+                assert!(!inside, "k={k}: line ends at {} inside a ligature", line.c1);
+            }
+        }
+    }
+    assert!(seen_ligature, "the default font should draw ffi as a ligature");
+}

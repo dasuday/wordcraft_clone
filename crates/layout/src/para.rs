@@ -2137,6 +2137,22 @@ fn break_lines(pl: &mut ParaLayout, env: &ParaEnv, mark_style: u32, level: Optio
                         .sum();
                     let full = base_right - row_lo;
                     skip = narrowed && skipped < 50 && word <= full + 0.01;
+                    // Never split a ligature's letters across lines: the glyph sits on the first
+                    // letter, so back up to it (unless it starts the line).
+                    let glyphless = |k: usize| pl.clusters.get(k).is_some_and(|c| c.kind == ClKind::Text && c.g1 <= c.g0);
+                    let mut b = j;
+                    while b > c0 + 1 && glyphless(b) {
+                        b -= 1;
+                    }
+                    if b < j
+                        && b > c0
+                        && !skip
+                        && let Some(bx) = xs.get(b - c0).copied()
+                    {
+                        xs.truncate(b - c0);
+                        x = bx;
+                        j = b;
+                    }
                 }
                 break;
             }
