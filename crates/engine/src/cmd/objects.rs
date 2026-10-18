@@ -1084,8 +1084,11 @@ fn crop_to_box(s: &mut Session, fit: bool) -> CmdResult {
     } else {
         let cut = (1.0 - pic / boxed) / 2.0;
         [0.0, cut, 0.0, cut]
+    };
+    // A side the model would clamp stretches the picture: refuse, changing nothing.
+    if c.iter().any(|v| !v.is_finite() || crop_side(*v) != *v) {
+        return Err(CmdError::Failed("the picture's shape is too different from its box to fit it".into()));
     }
-    .map(crop_side);
     with_obj(s, |o| {
         if let InlineObject::Image { crop, .. } = o {
             *crop = c;
@@ -2284,6 +2287,19 @@ mod tests {
         let mut s = picture_at(400.0, 100.0);
         s.run("picture.cropFit", &json!({})).unwrap();
         assert!(close(cropped(&s).2, [-0.5, 0.0, -0.5, 0.0]), "{:?}", cropped(&s).2);
+    }
+
+    /// A picture too unlike its box for the padding the model keeps is refused, not stretched.
+    #[test]
+    fn crop_fit_refuses_an_extreme_aspect_without_changing_anything() {
+        let mut s = picture_at(1.0, 4000.0);
+        let before = cropped(&s);
+        assert!(s.run("picture.cropFit", &json!({})).is_err());
+        assert_eq!(cropped(&s), before);
+        let mut s = picture_at(4000.0, 1.0);
+        let before = cropped(&s);
+        assert!(s.run("picture.cropFit", &json!({})).is_err());
+        assert_eq!(cropped(&s), before);
     }
 
     /// `picture.crop` takes negative sides (padding, as a Fit picture has), within limits.
