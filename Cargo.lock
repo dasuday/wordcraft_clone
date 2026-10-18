@@ -5141,6 +5141,7 @@ dependencies = [
  "egui",
  "fmv-macos-events",
  "getrandom 0.3.4",
+ "image",
  "log",
  "objc2 0.6.5",
  "objc2-app-kit 0.3.2",
@@ -5382,6 +5383,7 @@ dependencies = [
 name = "wordcraft-ui-egui"
 version = "0.8.0"
 dependencies = [
+ "cfb",
  "craft-ui",
  "egui",
  "egui_kittest",

@@ -72,8 +72,7 @@ fn set_html_text(html: &str, text: &str) -> bool {
     })
 }
 
-/// Windows: keep pixels, HTML and text in the same clipboard offer. The secondary writes
-/// explicitly avoid clearing the bitmap formats arboard has just published.
+/// Windows: publish pixels, HTML and text while holding one clipboard lock.
 #[cfg(target_os = "windows")]
 pub fn set_image(image: &wordcraft_ui_egui::system_clipboard::CopyImage, html: &str, text: &str) -> Result<(), String> {
     let pixels = image.width.checked_mul(image.height);
@@ -85,19 +84,10 @@ pub fn set_image(image: &wordcraft_ui_egui::system_clipboard::CopyImage, html: &
     {
         return Err("invalid picture dimensions".into());
     }
-    WRITER.with(|w| {
-        let mut slot = w.try_borrow_mut().map_err(|e| e.to_string())?;
-        if slot.is_none() {
-            *slot = open();
-        }
-        let clipboard = slot.as_mut().ok_or("the system clipboard couldn't be opened")?;
-        clipboard
-            .set_image(arboard::ImageData { width: image.width, height: image.height, bytes: std::borrow::Cow::Borrowed(&image.rgba) })
-            .map_err(|e| e.to_string())?;
-        platform::add_copy_formats(html, text)
-    })
+    platform::set_image(image, html, text)
 }
 
+/// Whether the system offer still has the marker from this process's latest successful write.
 #[cfg(target_os = "windows")]
 pub fn is_own() -> bool {
     platform::is_own()
@@ -108,6 +98,19 @@ mod image_tests {
     use super::*;
     use wordcraft_ui_egui::system_clipboard::CopyImage;
 
+    /// Supply an explicit BMP pixel offset: image 0.25.10's headerless decoder skips an
+    /// extra twelve mask bytes after a V5 header even though its masks are inside the header.
+    pub(super) fn decode_dib(bytes: &[u8]) -> Vec<u8> {
+        let mut bmp = b"BM".to_vec();
+        bmp.extend_from_slice(&((bytes.len() + 14) as u32).to_le_bytes());
+        bmp.extend_from_slice(&[0; 4]);
+        bmp.extend_from_slice(&138u32.to_le_bytes());
+        bmp.extend_from_slice(bytes);
+        let decoder = image::codecs::bmp::BmpDecoder::new(std::io::Cursor::new(bmp)).unwrap();
+        image::DynamicImage::from_decoder(decoder).unwrap().into_rgba8().into_raw()
+    }
+
+    /// Invalid pixel buffers fail before acquiring or changing the clipboard.
     #[test]
     fn invalid_pixels_are_rejected_before_opening_the_clipboard() {
         let image = CopyImage { width: usize::MAX, height: 2, rgba: Vec::new() };
@@ -120,13 +123,19 @@ mod image_tests {
     #[test]
     #[ignore = "writes the real Windows clipboard; run explicitly during desktop validation"]
     fn windows_image_offer_keeps_pixels_html_and_text_together() {
-        let rgba = vec![200; 2049 * 4];
-        let image = CopyImage { width: 2049, height: 1, rgba: rgba.clone() };
+        let rgba: Vec<u8> = (0..4098).flat_map(|i| [(i % 251) as u8, 37, 219, (i % 255) as u8]).collect();
+        let image = CopyImage { width: 2049, height: 2, rgba: rgba.clone() };
         let html = "<p>Картинка</p>";
         set_image(&image, html, "").unwrap();
+        {
+            let _open = clipboard_win::Clipboard::new_attempts(10).unwrap();
+            let mut bytes = Vec::new();
+            clipboard_win::raw::get_vec(clipboard_win::formats::CF_DIBV5, &mut bytes).unwrap();
+            assert_eq!(decode_dib(&bytes), rgba);
+        }
         let mut clipboard = open().unwrap();
         let got = clipboard.get_image().unwrap();
-        assert_eq!((got.width, got.height), (2049, 1));
+        assert_eq!((got.width, got.height), (2049, 2));
         assert_eq!(got.bytes.as_ref(), rgba);
         assert_eq!(clipboard.get_text().unwrap(), "");
         assert_eq!(clipboard.get().html().unwrap(), html);
@@ -261,32 +270,124 @@ mod platform {
 
     const OWNER_FORMAT: &str = "WordCraft Copy Owner";
 
-    fn write_owner() -> Result<(), String> {
-        let format = raw::register_format(OWNER_FORMAT).ok_or("couldn't register clipboard owner")?;
-        raw::set_without_clear(format.get(), &std::process::id().to_le_bytes()).map_err(|e| e.to_string())
+    thread_local! {
+        static OWNER: std::cell::Cell<Option<[u8; 12]>> = const { std::cell::Cell::new(None) };
     }
 
+    /// Bind the private fragment to this publication, rather than any copy from the same PID.
+    fn write_owner() -> Result<(), String> {
+        static GENERATION: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+        OWNER.set(None);
+        let generation = GENERATION.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let mut marker = [0; 12];
+        marker[..4].copy_from_slice(&std::process::id().to_le_bytes());
+        marker[4..].copy_from_slice(&generation.to_le_bytes());
+        let format = raw::register_format(OWNER_FORMAT).ok_or("couldn't register clipboard owner")?;
+        raw::set_without_clear(format.get(), &marker).map_err(|e| e.to_string())?;
+        OWNER.set(Some(marker));
+        Ok(())
+    }
+
+    /// An optional marker failure cannot undo an otherwise successful public offer.
     pub fn mark_own() -> Result<(), String> {
+        OWNER.set(None);
         let _open = Clipboard::new_attempts(10).map_err(|e| e.to_string())?;
         write_owner()
     }
 
-    pub fn add_copy_formats(html: &str, text: &str) -> Result<(), String> {
+    /// Encode a top-down 32-bit sRGB DIBV5, with straight alpha and BGRA channels.
+    /// Layout: learn.microsoft.com/windows/win32/api/wingdi/ns-wingdi-bitmapv5header.
+    fn dibv5(image: &wordcraft_ui_egui::system_clipboard::CopyImage) -> Result<Vec<u8>, String> {
+        let mut bytes = Vec::new();
+        bytes.try_reserve_exact(124 + image.rgba.len()).map_err(|e| e.to_string())?;
+        for word in [
+            124,
+            image.width as u32,
+            (-(image.height as i32)) as u32,
+            1 | (32 << 16),
+            3,
+            image.rgba.len() as u32,
+            0,
+            0,
+            0,
+            0,
+            0x00ff_0000,
+            0x0000_ff00,
+            0x0000_00ff,
+            0xff00_0000,
+            0x7352_4742,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            4,
+            0,
+            0,
+            0,
+        ] {
+            bytes.extend_from_slice(&word.to_le_bytes());
+        }
+        for pixel in image.rgba.chunks_exact(4) {
+            if let [r, g, b, a] = pixel {
+                bytes.extend_from_slice(&[*b, *g, *r, *a]);
+            }
+        }
+        Ok(bytes)
+    }
+
+    /// Keep all image formats under one open clipboard so another writer cannot interleave.
+    pub fn set_image(image: &wordcraft_ui_egui::system_clipboard::CopyImage, html: &str, text: &str) -> Result<(), String> {
+        OWNER.set(None);
+        let pixels = dibv5(image)?;
+        let mut png = Vec::new();
+        image::ImageEncoder::write_image(
+            image::codecs::png::PngEncoder::new(&mut png),
+            &image.rgba,
+            image.width as u32,
+            image.height as u32,
+            image::ExtendedColorType::Rgba8,
+        )
+        .map_err(|e| e.to_string())?;
+        let png_format = raw::register_format("PNG").ok_or("couldn't register PNG clipboard format")?;
         let format = raw::register_format("HTML Format").ok_or("couldn't register HTML clipboard format")?;
         let _open = Clipboard::new_attempts(10).map_err(|e| e.to_string())?;
+        raw::empty().map_err(|e| e.to_string())?;
+        raw::set_without_clear(clipboard_win::formats::CF_DIBV5, &pixels).map_err(|e| e.to_string())?;
+        raw::set_without_clear(png_format.get(), &png).map_err(|e| e.to_string())?;
         raw::set_string_with(text, clipboard_win::options::NoClear).map_err(|e| e.to_string())?;
         raw::set_html_with(format.get(), html, clipboard_win::options::NoClear).map_err(|e| e.to_string())?;
-        write_owner()
+        if let Err(e) = write_owner() {
+            log::warn!("clipboard owner: {e}");
+        }
+        Ok(())
     }
 
+    /// A stale marker from an earlier copy cannot claim the current private fragment.
     pub fn is_own() -> bool {
+        let Some(expected) = OWNER.get() else { return false };
         let Some(format) = raw::register_format(OWNER_FORMAT) else { return false };
         let Ok(_open) = Clipboard::new_attempts(10) else { return false };
-        if raw::size(format.get()).is_none_or(|n| n.get() != 4) {
-            return false;
-        }
-        let mut bytes = Vec::new();
-        raw::get_vec(format.get(), &mut bytes).is_ok() && bytes == std::process::id().to_le_bytes()
+        let mut bytes = [0; 12];
+        raw::get(format.get(), &mut bytes).ok() == Some(bytes.len()) && bytes == expected
+    }
+
+    /// The public bitmap representation must preserve orientation, channels and alpha without
+    /// depending on a PNG format masking malformed DIB data in the integration test.
+    #[test]
+    fn dibv5_roundtrip_keeps_all_pixels() {
+        let rgba = vec![255, 0, 0, 255, 0, 255, 0, 128, 0, 0, 255, 0, 73, 91, 127, 192];
+        let image = wordcraft_ui_egui::system_clipboard::CopyImage { width: 2, height: 2, rgba: rgba.clone() };
+        let bytes = dibv5(&image).unwrap();
+        assert_eq!(bytes.len(), 124 + rgba.len());
+        assert_eq!(super::image_tests::decode_dib(&bytes), rgba);
     }
 
     pub fn formats() -> Vec<String> {

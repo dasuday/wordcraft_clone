@@ -37,6 +37,10 @@ pub(crate) fn fill(app: &mut WordApp, id: &str, params: &mut Value) -> Option<Re
         return None;
     }
     let o = params.as_object_mut()?;
+    if app.services.clipboard_is_own.is_some() {
+        let own = app.clipboard_published && app.services.clipboard_is_own.as_ref().is_some_and(|f| f());
+        o.insert("privateClipboard".into(), Value::Bool(own));
+    }
     if !o.contains_key("text")
         && let Some(text) = app.services.clipboard_text.as_ref().and_then(|f| f()).filter(|t| !t.is_empty())
     {
@@ -65,7 +69,7 @@ pub(crate) fn fill(app: &mut WordApp, id: &str, params: &mut Value) -> Option<Re
     }
     // Native bitmap formats are for other programs. Our own paste keeps the original
     // fragment (size, cropping and floating-picture properties), while its owner mark lasts.
-    if app.session.clipboard.is_some() && app.services.clipboard_is_own.as_ref().is_some_and(|f| f()) {
+    if app.session.clipboard.is_some() && o.get("privateClipboard").and_then(Value::as_bool) == Some(true) {
         o.insert("text".into(), Value::String(app.session.clipboard_text.clone()));
     }
     if id == "edit.pasteSpecial"
@@ -82,38 +86,46 @@ pub(crate) fn fill(app: &mut WordApp, id: &str, params: &mut Value) -> Option<Re
 /// Put a copy on the system clipboard: its HTML beside the text (the formatting, #1523, and
 /// equations as MathML, #816; a lone equation in the MathML formats too, #1297) when the host can
 /// set it, else the text through egui. Only one write runs, so egui cannot replace native formats.
-pub(crate) fn put(app: &WordApp, ctx: &egui::Context, text: &str, html: &str, mathml: &str) {
+pub(crate) fn put(app: &WordApp, ctx: &egui::Context, text: &str, html: &str, mathml: &str) -> bool {
     if text.is_empty() && html.is_empty() {
-        return;
+        return false;
     }
     if !html.is_empty() && app.services.set_clipboard_html.as_ref().is_some_and(|f| f(html, text, mathml)) {
-        return;
+        return true;
     }
     ctx.copy_text(text.to_string());
+    false
 }
 
 /// Put what Copy or Cut returned on the system clipboard (see [`put`]).
 pub(crate) fn put_result(app: &mut WordApp, ctx: &egui::Context, r: &Value) {
     let s = |k: &str| r.get(k).and_then(Value::as_str).unwrap_or("");
+    if r.get("html").is_none() {
+        return;
+    }
+    app.clipboard_published = false;
     // No HTML means Copy took no selection. Never re-publish a previous picture in that case.
     if r.get("html").is_some() && app.services.set_clipboard_image.is_some() {
         match copied_image(app) {
             Some(Ok(image)) => {
                 let result = app.services.set_clipboard_image.as_ref().map(|f| f(&image, s("html"), s("text")));
-                if let Some(Err(e)) = result {
-                    app.status(format!("Couldn't copy the picture: {e}"));
+                match result {
+                    Some(Ok(())) => {
+                        app.clipboard_published = true;
+                        // A later HTML/text write would replace the bitmap formats.
+                        return;
+                    }
+                    Some(Err(e)) => app.status(format!("Couldn't copy the picture: {e}")),
+                    None => {}
                 }
-                // No subsequent text/HTML write: it would replace the bitmap formats.
-                return;
             }
             Some(Err(e)) => {
                 app.status(format!("Couldn't copy the picture: {e}"));
-                return;
             }
             None => {}
         }
     }
-    put(app, ctx, s("text"), s("html"), s("mathml"));
+    app.clipboard_published = put(app, ctx, s("text"), s("html"), s("mathml"));
 }
 
 /// Only a selection consisting of one image becomes a bitmap. Mixed selections use HTML,
@@ -141,6 +153,7 @@ fn copied_image(app: &WordApp) -> Option<Result<CopyImage, String>> {
     })
 }
 
+/// Inspect raster dimensions before allowing the decoder to allocate its pixel buffer.
 fn decode_image(bytes: &[u8]) -> Result<CopyImage, String> {
     if bytes.len() as u64 > paste_picture::MAX_FILE_BYTES {
         return Err("the picture file is larger than 200 MB".into());
@@ -362,6 +375,7 @@ mod tests {
         assert!(got_now[2].2.starts_with("<math") && got_now[2].2.contains("<msub>") && got_now[2].1 == "y=2x_s", "{got_now:?}");
     }
 
+    /// A wide picture reaches the native hook once, without a subsequent clearing write.
     #[test]
     fn image_copy_accepts_more_than_2048_pixels_and_publishes_once() {
         use std::{cell::RefCell, rc::Rc};
@@ -394,6 +408,58 @@ mod tests {
         assert_eq!(sizes.borrow().len(), 2);
     }
 
+    /// Native and decoding errors each use exactly one HTML fallback; total failure must
+    /// not let a previous owner marker select the newly copied private fragment.
+    #[test]
+    fn image_failures_fall_back_without_reusing_a_stale_owner() {
+        use std::{cell::Cell, rc::Rc};
+        for corrupt in [false, true] {
+            for fallback_ok in [false, true] {
+                let writes = Rc::new(Cell::new(0));
+                let sink = writes.clone();
+                let mut a = app(Services {
+                    set_clipboard_image: Some(Box::new(|_, _, _| Err("synthetic native failure".into()))),
+                    set_clipboard_html: Some(Box::new(move |html, _, _| {
+                        assert!(html.contains("<img"));
+                        sink.set(sink.get() + 1);
+                        fallback_ok
+                    })),
+                    clipboard_is_own: Some(Box::new(|| true)),
+                    clipboard_html: Some(Box::new(|| Some("<p>Previous public copy</p>".into()))),
+                    ..Default::default()
+                });
+                let png = paste_picture::png_from_rgba(2, 2, vec![200; 16]).unwrap();
+                a.run("insert.picture", json!({"data": wordcraft_engine::cmd::insert::base64_encode(&png)})).unwrap();
+                let r = a.run("edit.copy", json!({})).unwrap();
+                if corrupt {
+                    for bytes in a.session.doc.media.values_mut() {
+                        *bytes = std::sync::Arc::new(b"corrupt raster".to_vec());
+                    }
+                }
+                // A previous successful publication does not validate this new fragment.
+                a.clipboard_published = true;
+                let ctx = egui::Context::default();
+                put_result(&mut a, &ctx, &r);
+                assert_eq!(writes.get(), 1);
+                assert_eq!(a.clipboard_published, fallback_ok);
+                assert_eq!(ctx.output(|o| o.commands.len()), usize::from(!fallback_ok));
+                if !fallback_ok {
+                    let mut params = json!({});
+                    fill(&mut a, "edit.paste", &mut params);
+                    assert!(params.get("text").is_none(), "stale ownership must not force the private fragment");
+                    assert_eq!(params["html"], "<p>Previous public copy</p>");
+                    assert_eq!(params["privateClipboard"], false);
+                    params["text"] = json!("");
+                    assert!(matches!(
+                        wordcraft_engine::cmd::paste::paste_content(&mut a.session, &params).unwrap(),
+                        wordcraft_engine::cmd::paste::Pasted::Fragment(f) if f.plain_text() == "Previous public copy"
+                    ));
+                }
+            }
+        }
+    }
+
+    /// Mixed selections retain both text and embedded image data in the public HTML.
     #[test]
     fn mixed_copy_embeds_the_image_and_keeps_text_in_one_html_write() {
         use std::{cell::RefCell, rc::Rc};
@@ -419,10 +485,12 @@ mod tests {
         assert!(got[0].contains("Caption") && got[0].contains("data:image/png;base64,"));
     }
 
+    /// A successfully published local image retains its original crop and document size.
     #[test]
     fn own_image_paste_keeps_crop_and_display_size() {
         let mut a = app(Services {
             clipboard_is_own: Some(Box::new(|| true)),
+            set_clipboard_image: Some(Box::new(|_, _, _| Ok(()))),
             clipboard_picture: Some(Box::new(|| panic!("our fragment must win over the bitmap"))),
             ..Default::default()
         });
@@ -431,7 +499,8 @@ mod tests {
         a.run("picture.size", json!({"width": 123.5, "height": 45.25, "lockAspect": false})).unwrap();
         a.run("picture.crop", json!({"left": 0.1, "right": 0.2})).unwrap();
         let original = crate::objects::selected(&a).unwrap().1.clone();
-        a.run("edit.copy", json!({})).unwrap();
+        let r = a.run("edit.copy", json!({})).unwrap();
+        put_result(&mut a, &egui::Context::default(), &r);
         a.run("caret.docEnd", json!({})).unwrap();
         a.run("edit.paste", json!({})).unwrap();
         let paragraph = a.session.doc.para_at(&a.session.sel.focus).unwrap();
@@ -439,6 +508,7 @@ mod tests {
         assert_eq!(paragraph.objects[1], original);
     }
 
+    /// Hostile metadata is rejected before allocating its claimed pixel dimensions.
     #[test]
     fn image_decode_rejects_hostile_dimensions_before_reading_pixels() {
         let png = paste_picture::png_from_rgba(1, 1, vec![255; 4]).unwrap();
@@ -458,6 +528,7 @@ mod tests {
         assert_eq!(decode_image(&png).unwrap().rgba, [255; 4]);
     }
 
+    /// Metafiles use the existing bounded renderer to produce pixels for other programs.
     #[test]
     fn copied_emf_is_rasterized_for_other_programs() {
         let words = |values: &[i32]| values.iter().flat_map(|v| v.to_le_bytes()).collect::<Vec<_>>();
