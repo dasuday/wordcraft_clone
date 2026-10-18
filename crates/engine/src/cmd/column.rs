@@ -160,6 +160,13 @@ pub(crate) fn dispatch(s: &mut Session, id: &str, mutates: bool, run: fn(&mut Se
         }
         return super::sel_result(s);
     }
+    // Backspace over whole rows, whole columns or the whole table deletes them, as in Word
+    // (Delete only clears them, as for any other cells).
+    if id == "text.backspace"
+        && let Some(r) = super::table::backspace_cells(s)
+    {
+        return r;
+    }
     let Some(segs) = s.column_segments().map(<[(Pos, Pos)]>::to_vec) else { return run(s, v) };
     let cells = s.cell_range().is_some();
     // Separate pieces of text are deleted whole (one across paragraphs joins them).
