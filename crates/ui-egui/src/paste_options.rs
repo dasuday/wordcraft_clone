@@ -71,6 +71,12 @@ impl PasteOptionsUi {
     }
 }
 
+/// Whether the Paste Options offer is showing, so that Escape closes it first and does nothing
+/// else (it must not also leave full screen).
+pub fn wants_escape(app: &WordApp) -> bool {
+    !wordcraft_engine::cmd::paste::paste_options(&app.session).is_empty() && app.paste_options.hidden_rev != Some(app.session.rev())
+}
+
 /// Draw the button below the caret while the engine offers paste options.
 pub fn show(app: &mut WordApp, ctx: &Context) {
     let tapped = ctx.input(|i| app.paste_options.ctrl_tapped(&i.events));
@@ -106,6 +112,8 @@ pub fn show(app: &mut WordApp, ctx: &Context) {
     egui::Area::new(egui::Id::new("wc_paste_options")).order(Order::Foreground).fixed_pos(at).show(ctx, |ui| {
         egui::Frame::popup(ui.style()).fill(t.menu).inner_margin(2.0).show(ui, |ui| {
             let (rect, resp) = ui.allocate_exact_size(vec2(BUTTON_W, BUTTON_H), Sense::click());
+            // Screen readers (and tests) find the button by its name; its icon and "(Ctrl)" are drawn.
+            resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, tl!("Paste Options")));
             button_rect = rect;
             if resp.hovered() || app.paste_options.open {
                 ui.painter().rect_filled(rect, 3.0, t.hover);
@@ -160,6 +168,7 @@ pub fn show(app: &mut WordApp, ctx: &Context) {
 mod tests {
     use super::*;
     use egui::{Event, Key, Modifiers};
+    use egui_kittest::kittest::Queryable;
 
     fn key(key: Key, pressed: bool, modifiers: Modifiers) -> Event {
         Event::Key { key, physical_key: None, pressed, repeat: false, modifiers }
@@ -184,5 +193,90 @@ mod tests {
             Event::PointerButton { pos: egui::pos2(1.0, 1.0), button: egui::PointerButton::Primary, pressed: true, modifiers: Modifiers::CTRL };
         assert!(!ui.ctrl_tapped(&[click]));
         assert!(!ui.ctrl_tapped(&[Event::ModifiersChanged(Modifiers::NONE)]));
+    }
+
+    fn harness(app: WordApp) -> egui_kittest::Harness<'static, WordApp> {
+        let mut h = egui_kittest::Harness::builder().with_size(vec2(1440.0, 900.0)).build_ui_state(
+            |ui, app: &mut WordApp| {
+                let ctx = ui.ctx().clone();
+                app.logic(&ctx);
+                app.ui(ui);
+            },
+            app,
+        );
+        for _ in 0..6 {
+            h.step();
+        }
+        h
+    }
+
+    /// A blank document with a formatted paste in it: a blue bold heading and a paragraph.
+    fn pasted() -> WordApp {
+        let mut a = WordApp::new(wordcraft_engine::Session::new(wordcraft_doc::Document::new()), Default::default());
+        a.run("view.commentsPane", serde_json::json!({"value": false})).unwrap();
+        let html = "<h2 style=\"color:#1f4e79;font-weight:bold\">Shopping day</h2><p>Apples</p>";
+        a.run("edit.paste", serde_json::json!({"text": "Shopping day\nApples", "html": html})).unwrap();
+        a
+    }
+
+    fn press(h: &mut egui_kittest::Harness<'static, WordApp>, k: Key) {
+        h.event(Event::Key { key: k, physical_key: None, pressed: true, repeat: false, modifiers: Modifiers::NONE });
+        h.event(Event::Key { key: k, physical_key: None, pressed: false, repeat: false, modifiers: Modifiers::NONE });
+        for _ in 0..3 {
+            h.step();
+        }
+    }
+
+    #[test]
+    fn the_button_opens_a_menu_and_keep_text_only_redoes_the_paste() {
+        let mut h = harness(pasted());
+        assert!(wordcraft_engine::cmd::paste::paste_options(&h.state().session).len() == 4);
+        assert!(
+            h.state()
+                .session
+                .doc
+                .para_at(&h.state().session.doc.start_of(wordcraft_doc::StoryRef::Body))
+                .is_some_and(|p| p.props.style.is_some() || p.runs.iter().any(|r| r.props.color.is_some()))
+        );
+        h.get_by_label("Paste Options").click();
+        for _ in 0..3 {
+            h.step();
+        }
+        h.get_by_label("Keep Text Only").click();
+        for _ in 0..3 {
+            h.step();
+        }
+        let s = &h.state().session;
+        assert_eq!(s.doc.plain_text(wordcraft_doc::StoryRef::Body), "Shopping day\nApples");
+        assert_eq!(wordcraft_engine::cmd::paste::paste_mode(s), Some("text"));
+        let first = s.doc.para_at(&s.doc.start_of(wordcraft_doc::StoryRef::Body)).unwrap();
+        assert!(first.props.style.is_none() && first.runs.iter().all(|r| r.props.color.is_none()), "plain text in the destination's formatting");
+    }
+
+    #[test]
+    fn escape_and_typing_hide_the_button() {
+        let mut h = harness(pasted());
+        assert!(h.query_by_label("Paste Options").is_some());
+        press(&mut h, Key::Escape);
+        assert!(h.query_by_label("Paste Options").is_none(), "Escape hides the offer");
+        let mut h = harness(pasted());
+        h.event(Event::Text("x".into()));
+        for _ in 0..3 {
+            h.step();
+        }
+        assert!(h.query_by_label("Paste Options").is_none(), "typing ends the offer");
+    }
+
+    #[test]
+    fn escape_closes_the_offer_without_leaving_full_screen() {
+        let mut a = pasted();
+        a.run("view.fullScreen", serde_json::json!({"value": true})).unwrap();
+        let mut h = harness(a);
+        assert!(h.query_by_label("Paste Options").is_some());
+        press(&mut h, Key::Escape);
+        assert!(h.query_by_label("Paste Options").is_none());
+        assert!(h.state().session.view.full_screen, "the first Escape only closed the offer");
+        press(&mut h, Key::Escape);
+        assert!(!h.state().session.view.full_screen, "the next one leaves full screen");
     }
 }

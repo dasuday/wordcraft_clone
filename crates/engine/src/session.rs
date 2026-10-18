@@ -1329,6 +1329,10 @@ impl Session {
             }
             Err(e) => {
                 self.autocap = None;
+                // A paste this command made was rolled back with it (it has no revision yet).
+                if self.last_paste.as_ref().is_some_and(|lp| lp.rev.is_none()) {
+                    self.last_paste = None;
+                }
                 if let Some((d, s, h, r, t, ev, c)) = before_doc {
                     self.doc = d;
                     self.sel = s;

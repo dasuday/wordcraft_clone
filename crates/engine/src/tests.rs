@@ -1386,6 +1386,22 @@ fn pasted_formatted_paragraphs_without_alignment_take_the_destination_alignment(
     assert!(aligns.iter().all(|a| *a == Some(Align::Center)), "browser-computed left is not a choice: {aligns:?}");
 }
 
+#[test]
+fn only_pastes_offer_paste_options_and_a_failed_command_drops_its_offer() {
+    let mut s = s();
+    let html = "<p style=\"color:#ff0000\">red</p><p>two</p>";
+    // Copy To (a plain insertion) is not a paste.
+    let frag = wordcraft_doc::edit::Fragment::from_text("a\nb");
+    crate::cmd::paste::insert_plain(&mut s, frag).unwrap();
+    assert!(s.last_paste.is_none());
+    run(&mut s, "edit.paste", json!({"text": "red\ntwo", "html": html}));
+    assert!(!wordcraft_engine_paste_options(&s).is_empty());
+    // A paste the failed command made was rolled back with it: no stale offer.
+    s.last_paste = s.last_paste.take().map(|lp| crate::cmd::paste::LastPaste { rev: None, ..lp });
+    assert!(s.run("text.insert", &json!({})).is_err());
+    assert!(s.last_paste.is_none());
+}
+
 fn wordcraft_engine_paste_options(s: &Session) -> Vec<&'static str> {
     crate::cmd::paste::paste_options(s)
 }

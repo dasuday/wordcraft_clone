@@ -417,6 +417,10 @@ fn leave_full_screen(app: &mut WordApp, key: Key, m: Modifiers, canvas: bool) ->
     if key != Key::Escape || !m.is_none() || !app.session.view.full_screen || !app.escape_free {
         return false;
     }
+    // A Paste Options button showing takes this Escape: it closes first.
+    if crate::paste_options::wants_escape(app) {
+        return false;
+    }
     let c = &app.canvas;
     if c.obj_drag.is_some() || c.table_resize.is_some() || c.table_drag.is_some() || c.link_from.is_some() {
         return false;

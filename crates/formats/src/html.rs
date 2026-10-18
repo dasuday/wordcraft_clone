@@ -507,6 +507,24 @@ pub fn css_len_pt(v: &str) -> Option<f32> {
     }
 }
 
+/// The colour in a `background` value: the whole value, else an `rgb()` / `rgba()` call inside a
+/// shorthand (`rgb(255, 255, 0) repeat-x`, whose spaces would split it apart), else the first
+/// word that is a colour.
+fn background_color(v: &str) -> Option<wordcraft_doc::Rgb> {
+    parse_color(v).or_else(|| {
+        let lower = v.to_ascii_lowercase();
+        for call in ["rgba(", "rgb("] {
+            if let Some(i) = lower.find(call)
+                && let Some(len) = lower.get(i..).and_then(|t| t.find(')'))
+                && let Some(c) = v.get(i..=i + len).and_then(parse_color)
+            {
+                return Some(c);
+            }
+        }
+        v.split_whitespace().find_map(parse_color)
+    })
+}
+
 /// Apply a `style` attribute to formatting / block properties.
 fn apply_style(css: &str, f: &mut Fmt, align: &mut Option<Align>, preserve: &mut bool, page_break: &mut bool) {
     for decl in css.split(';').take(64) {
@@ -537,7 +555,7 @@ fn apply_style(css: &str, f: &mut Fmt, align: &mut Option<Align>, preserve: &mut
             "background-color" | "background" => {
                 // The whole value first: browsers write `rgb(255, 255, 0)`, whose spaces would
                 // split a function apart. A shorthand (`#ff0 url(…) no-repeat`) goes word by word.
-                if let Some(c) = parse_color(v).or_else(|| v.split_whitespace().find_map(parse_color)) {
+                if let Some(c) = background_color(v) {
                     f.background = Some(c);
                 }
             }
@@ -572,6 +590,9 @@ fn apply_style(css: &str, f: &mut Fmt, align: &mut Option<Align>, preserve: &mut
                     rest = after;
                 }
                 if let Some(pt) = size {
+                    // The shorthand sets the family too: an outer span's font or code styling goes.
+                    f.code = false;
+                    f.font = None;
                     // Keep the family's original case (the match above was on the lowercased text).
                     let at = v.len().saturating_sub(family.len());
                     let family = v.get(at..).unwrap_or("");
@@ -1745,7 +1766,13 @@ mod tests {
     #[test]
     fn background_colour_functions_and_shorthands_become_character_shading() {
         // Browsers copy highlighted text as `rgb(255, 255, 0)`, spaces included.
-        for css in ["background-color: rgb(255, 255, 0);", "background-color:#ffff00", "background:#ff0 none no-repeat"] {
+        for css in [
+            "background-color: rgb(255, 255, 0);",
+            "background-color:#ffff00",
+            "background:#ff0 none no-repeat",
+            "background: rgb(255, 255, 0) repeat-x",
+            "background: url(x.png) no-repeat rgba(255,255,0,1)",
+        ] {
             let f = parse(&format!("<p><span style=\"{css}\">hi</span></p>"));
             let FBlock::Para(p) = &f.blocks[0] else { panic!() };
             assert!(
@@ -1777,6 +1804,19 @@ mod tests {
         let t = d.body.iter().find_map(|b| if let wordcraft_doc::Block::Table(t) = &**b { Some(t) } else { None }).unwrap();
         assert_eq!(t.props.width, None);
         assert!(t.rows[0].cells.iter().all(|c| c.props.width.is_none()), "automatic widths, so AutoFit sizes them");
+    }
+
+    #[test]
+    fn a_font_shorthand_replaces_the_family_of_an_outer_span() {
+        let f = parse(
+            "<p><span style=\"font-family:Georgia\"><span style=\"font: 12pt serif\">a</span> <span style=\"font: 12pt Arial\">b</span></span><span style=\"font-family:'Courier New'\"><span style=\"font: 12pt Georgia\">c</span></span></p>",
+        );
+        let FBlock::Para(p) = &f.blocks[0] else { panic!() };
+        let font =
+            |text: &str| p.inlines.iter().find_map(|i| if let Inline::Text(t, f) = i { (t == text).then(|| (f.font.clone(), f.code)) } else { None });
+        assert_eq!(font("a"), Some((None, false)), "a generic family clears Georgia");
+        assert_eq!(font("b"), Some((Some("Arial".into()), false)));
+        assert_eq!(font("c"), Some((Some("Georgia".into()), false)), "and the code styling of the outer span");
     }
 
     #[test]

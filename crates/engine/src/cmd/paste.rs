@@ -39,7 +39,7 @@ pub fn specs() -> Vec<CommandSpec> {
             .key("Mod+Alt+V")
             .params(r#"{"as"?: "formatted"|"rtf"|"html"|"picture"|"text", "text"?: string, "html"?: string, "rtf"?: string, "picture"?: base64}"#),
         CommandSpec::new("edit.pasteChange", "Paste Options", "Home › Clipboard › Paste", change_paste)
-            .params(r#"{"mode": "source"|"merge"|"text" (Keep Source Formatting, Merge Formatting, Keep Text Only)}"#)
+            .params(r#"{"mode": "source"|"text"|"merge"|"picture" (Keep Source Formatting, Keep Text Only, Merge Formatting, Picture)}"#)
             .when(|s| if paste_options(s).is_empty() { Some("there is no paste to change") } else { None }),
     ]
 }
@@ -389,6 +389,15 @@ fn fragment_picture(s: &Session, frag: &Fragment) -> Result<(Vec<u8>, f32), CmdE
     sect.footers = Default::default();
     let layout = wordcraft_layout::layout(&d, &mut wordcraft_layout::LayoutCache::new(), &Default::default());
     let page = layout.pages.first().ok_or_else(|| CmdError::Failed("nothing to turn into a picture".into()))?;
+    // Draw only as much page as the content takes, not the whole tall one it was laid out on.
+    let used = page.content_bottom();
+    let layout = if used > 0.0 && used + 8.0 < PICTURE_MAX_H {
+        d.last_section.page_h = (used + 8.0).ceil();
+        wordcraft_layout::layout(&d, &mut wordcraft_layout::LayoutCache::new(), &Default::default())
+    } else {
+        layout
+    };
+    let page = layout.pages.first().ok_or_else(|| CmdError::Failed("nothing to turn into a picture".into()))?;
     let img = wordcraft_render::render_page(&d, page, PICTURE_SCALE, &Default::default());
     // Crop to the ink: everything that isn't paper, with a small margin.
     // The page's own corner: a table at the margin touches the top-left one.
@@ -524,30 +533,54 @@ pub fn change_paste(s: &mut Session, v: &Value) -> CmdResult {
         }
         return sel_result(s);
     }
-    s.sel = Selection { anchor: lp.start, focus: lp.end };
+    // Back to the source: take the earlier paste out, give the paragraph it restyled back its own
+    // properties, and paste the source again from that clean spot.
+    super::controls::prepare_edit(s)?;
+    s.sel = Selection { anchor: lp.start.clone(), focus: lp.end.clone() };
+    let at = delete_selection(s)?;
+    if at.off == 0
+        && let Ok(para) = s.doc.para_mut(at.story, &at.path)
+    {
+        para.props = lp.dest.1.clone();
+        para.touch();
+    }
+    s.sel = Selection::caret(at);
     insert_from(s, frag, Some(lp.source))?;
     if let Some(now) = s.last_paste.as_mut() {
-        now.mode = PASTE_OPTIONS.iter().map(|o| o.0).find(|id| *id == mode).unwrap_or("source");
+        now.mode = "source";
         // The destination is what the first paste landed in, not the pasted text now there.
         now.dest = lp.dest;
     }
     sel_result(s)
 }
 
-/// Replace the selection with `frag`, marking it as an insertion under Track Changes.
+/// Replace the selection with `frag`, marking it as an insertion under Track Changes. This is a
+/// paste: the Paste Options button is offered after it when it had a choice.
 pub fn insert(s: &mut Session, frag: Fragment) -> Result<(), CmdError> {
     insert_from(s, frag, None)
 }
 
+/// [`insert`] for content that is not a paste (Copy To): the fragment goes in as it is, and no
+/// Paste Options are offered.
+pub fn insert_plain(s: &mut Session, frag: Fragment) -> Result<(), CmdError> {
+    insert_inner(s, frag, None, false)
+}
+
 /// [`insert`], remembering `source` (the fragment before Merge Formatting changed it) as what a
 /// later Paste Options choice starts from.
-pub fn insert_from(s: &mut Session, mut frag: Fragment, source: Option<Fragment>) -> Result<(), CmdError> {
+pub fn insert_from(s: &mut Session, frag: Fragment, source: Option<Fragment>) -> Result<(), CmdError> {
+    insert_inner(s, frag, source, true)
+}
+
+fn insert_inner(s: &mut Session, mut frag: Fragment, source: Option<Fragment>, paste: bool) -> Result<(), CmdError> {
     super::controls::prepare_edit(s)?;
     let source = source.unwrap_or_else(|| frag.clone());
     let dest = destination_formatting(s);
     // Plain text has no paragraph formatting of its own: every paragraph it makes takes the
     // destination's (a centered paragraph stays centered through all of them), as in Word.
-    if !has_choices(&frag) {
+    if !paste {
+        // Not a paste: keep the paragraphs as they are.
+    } else if !has_choices(&frag) {
         for b in &mut frag.blocks {
             each_para(b, 0, &mut |p| p.props = dest.1.clone());
         }
@@ -607,7 +640,8 @@ pub fn insert_from(s: &mut Session, mut frag: Fragment, source: Option<Fragment>
             }
         }
     }
-    s.last_paste = has_choices(&source).then(|| LastPaste { start: at.clone(), end: end.clone(), source, dest, mode: "source", rev: None });
+    s.last_paste =
+        (paste && has_choices(&source)).then(|| LastPaste { start: at.clone(), end: end.clone(), source, dest, mode: "source", rev: None });
     s.sel = Selection::caret(end);
     Ok(())
 }
