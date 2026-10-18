@@ -1026,6 +1026,84 @@ mod tests {
         assert!(h <= LABEL_LINE_H, "label line is {h} px tall");
     }
 
+    fn press(h: &mut egui_kittest::Harness<'static, WordApp>, at: egui::Pos2) {
+        h.event(egui::Event::PointerMoved(at));
+        for pressed in [true, false] {
+            h.event(egui::Event::PointerButton { pos: at, button: egui::PointerButton::Primary, pressed, modifiers: Default::default() });
+        }
+        h.run_steps(4);
+    }
+
+    fn doc_app() -> WordApp {
+        use serde_json::json;
+        let mut a = WordApp::new(wordcraft_engine::Session::new(wordcraft_doc::Document::new()), crate::Services::default());
+        a.run("text.insert", json!({"text": "The quick brown fox"})).unwrap();
+        a.run("select.text", json!({"text": "brown fox"})).unwrap();
+        a
+    }
+
+    /// The left part of a split button is a no-op while its command is disabled (here: no document
+    /// is open); the same press runs it when the command is enabled.
+    #[test]
+    fn a_press_on_a_disabled_split_button_runs_nothing() {
+        use serde_json::json;
+        let probe = egui::Id::new("split_probe");
+        let build = |app: WordApp| {
+            egui_kittest::Harness::builder().with_size(egui::vec2(300.0, 100.0)).build_ui_state(
+                move |ui, app: &mut WordApp| {
+                    let at = ui.cursor().min;
+                    ui.ctx().data_mut(|d| d.insert_temp(probe, at));
+                    split(ui, app, "highlight", "Text Highlight Color", "format.highlight", json!({"color": "yellow"}), false, None, |_, _| {});
+                },
+                app,
+            )
+        };
+        // The icon half is the first 24 x 22 box at the ui's cursor.
+        let centre = |h: &egui_kittest::Harness<'static, WordApp>| {
+            h.ctx.data(|d| d.get_temp::<egui::Pos2>(probe)).expect("the split button was laid out") + vec2(12.0, 11.0)
+        };
+
+        let mut h = build(doc_app());
+        h.run_steps(2);
+        let (rev, at) = (h.state().session.rev(), centre(&h));
+        press(&mut h, at);
+        assert_ne!(h.state().session.rev(), rev, "enabled: the press runs format.highlight");
+
+        let mut a = doc_app();
+        a.no_document = Some(a.session.document_id());
+        assert!(!enabled(&a, "format.highlight"), "no document open disables the command");
+        let mut h = build(a);
+        h.run_steps(2);
+        let (rev, at) = (h.state().session.rev(), centre(&h));
+        press(&mut h, at);
+        assert_eq!(h.state().session.rev(), rev, "disabled: the press must not run the command");
+    }
+
+    /// The group launcher is a 16 x 16 box (it was 11 x 11): a press in the added margin opens the
+    /// dialog.
+    #[test]
+    fn the_group_launcher_takes_a_press_in_its_outer_margin() {
+        let launcher = |ui: &egui::Ui| ui.id().with(("launch", "Page Setup"));
+        let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(300.0, 120.0)).build_ui_state(
+            move |ui, app: &mut WordApp| {
+                let id = launcher(ui);
+                ui.ctx().data_mut(|d| d.insert_temp(egui::Id::new("launcher_probe"), id));
+                group_titled(ui, "Page Setup", "Page Setup", Some("layout.pageSetup"), app, |ui, _| {
+                    ui.allocate_space(vec2(60.0, 10.0));
+                });
+            },
+            doc_app(),
+        );
+        h.run_steps(3);
+        let id = h.ctx.data(|d| d.get_temp::<egui::Id>(egui::Id::new("launcher_probe"))).expect("the group was drawn");
+        let lr = h.ctx.read_response(id).expect("the launcher was laid out").rect;
+        assert_eq!(lr.size(), vec2(16.0, 16.0));
+        assert!(h.state().dialog.is_none());
+        // 7 points right of the centre: inside the 16-point box, outside the old 11-point one.
+        press(&mut h, lr.center() + vec2(7.0, 0.0));
+        assert_eq!(h.state().dialog.as_ref().map(|d| d.name()), Some("pageSetup"));
+    }
+
     #[test]
     fn drawn_buttons_fade_in_on_hover_and_darken_while_pressed() {
         // #305's drawn replacements for ✕, 💬, ✎ and ➕ must react like egui's buttons.
