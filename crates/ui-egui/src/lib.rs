@@ -1284,7 +1284,7 @@ impl WordApp {
         }
         // A comment draft the document refuses is an unsaved change: the prompt can drop it.
         let refused = panes::flush_comment_drafts(self).is_err();
-        if !self.session.dirty && !refused {
+        if !self.session.dirty && !self.save_unconfirmed() && !refused {
             return true;
         }
         // `quit`: once the prompt is answered the window closes too, not just the document.
