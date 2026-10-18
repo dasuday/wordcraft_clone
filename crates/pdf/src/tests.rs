@@ -1672,7 +1672,7 @@ fn text_in_a_rotated_text_box_is_turned_in_the_pdf() {
     let body = angle("B").expect("the body's B");
     let turned = angle("T").expect("the box's T");
     assert!(body.abs() < 0.5, "body text is upright: {body}");
-    assert!((turned.abs() - 30.0).abs() < 0.5, "the box's text is drawn at 30°: {turned}");
+    assert!((turned + 30.0).abs() < 0.5, "the box turns clockwise, 30° (-30° in the PDF's y-up page space): {turned}");
 }
 
 /// A PNG signature, an IHDR declaring `w`×`h` 8-bit RGBA and a short IDAT (all CRCs valid, so
