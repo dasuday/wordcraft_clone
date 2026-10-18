@@ -3,8 +3,10 @@
 
 mod automation_args;
 
+use std::ffi::{OsStr, OsString};
 use std::fmt;
 use std::io::Write;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use serde_json::{Value, json};
@@ -14,9 +16,10 @@ const USAGE: &str = "\
 wordcraft-cli — WordCraft from the command line
 
 USAGE:
-  wordcraft-cli convert <in> <out> [--markup] [--format wordml2003|flatopc]
+  wordcraft-cli convert <in> <out> [--markup] [--update-fields] [--format wordml2003|flatopc]
                                               convert between formats (docx, doc [read], pdf, odt, rtf, html, md, tex, txt, json, png,
-                                              xml); an .xml file is a Word XML Document (Flat OPC), or with
+                                              xml); --update-fields refreshes unlocked fields before saving;
+                                              an .xml file is a Word XML Document (Flat OPC), or with
                                               --format wordml2003 a Word 2003 XML Document;
                                               --markup (Print Markup): comments beside each page and
                                               tracked changes in pdf/png, a comment list in html/md/txt
@@ -42,14 +45,121 @@ USAGE:
                                               running): addEditCitation, addEditBibliography,
                                               addNote, refresh, removeCodes, setDocPrefs
                                               (--cmd runs first, e.g. --cmd caret.docEnd)
+  wordcraft-cli [<command>] -h | --help       this help
   wordcraft-cli --version
+
+A password-protected Word file is opened with --password PASS, --password-file PATH or the
+WORDCRAFT_PASSWORD environment variable; a password given on the command line is readable by
+every other process, so the other two are better. A file opened with a password is written with
+it again, as the app does. Exports that cannot carry a password (pdf, html, txt) stay plain.
+
+Paper: documents created here, and HTML, Markdown and text files (which give no page size), use
+the system region's paper (A4, or Letter in the US and other Letter regions), read from
+LC_ALL / LC_PAPER / LANG or the platform. Set WORDCRAFT_REGION=en-US (or another tag) for the
+same output on every machine.
 ";
 
-fn open(path: &str) -> Result<Session, String> {
-    let doc = wordcraft_engine::io::open_path(std::path::Path::new(path))?;
-    let mut s = Session::new(doc);
+/// The subcommands, in `USAGE` order; `--help` or `-h` after any of them prints `USAGE` (#968).
+const SUBCOMMANDS: &[&str] = &["convert", "info", "text", "inspect", "render", "run", "commands", "parity", "mcp", "zotero"];
+
+fn wants_help(cmd: &str, rest: &[String]) -> bool {
+    SUBCOMMANDS.contains(&cmd) && rest.iter().any(|a| a == "--help" || a == "-h")
+}
+
+/// The error every subcommand gives when a required path is not there.
+fn missing_argument() -> Failure {
+    format!("missing argument\n\n{USAGE}").into()
+}
+
+/// Open a document for a subcommand. A password-protected Word file needs its password
+/// ([`password_from`]). As in the app, a document opened with one is saved with it again, so
+/// `convert` does not quietly write a copy the password no longer protects.
+fn open(path: &Path, password: Option<&str>) -> Result<Session, String> {
+    // A file that gives no page size (HTML, Markdown, plain text) opens on the system region's
+    // paper, as in the app: A4 in Italy, Letter in the US (#1381).
+    let region = system_region();
+    let (doc, encrypted) = wordcraft_engine::io::open_path_in(path, password, &region)?;
+    let mut s = session(doc);
     s.path = Some(path.into());
+    if encrypted {
+        s.password = password.map(wordcraft_engine::io::Password::new);
+    }
     Ok(s)
+}
+
+/// The commands that open a file, and which of their arguments not starting with `--` it is (as
+/// `pos` counts). `run` opens the value of `--file`.
+const OPENS_FILE: &[(&str, usize)] = &[("convert", 0), ("info", 0), ("text", 0), ("inspect", 0), ("render", 0), ("zotero", 1)];
+
+/// The arguments as text. Only the file the command opens may have a name that isn't valid Unicode,
+/// such as a Latin-1 one (#1440): it comes back as the path to open, and lossy among the arguments.
+/// Any other such argument is an error naming it.
+fn text_args<S: AsRef<OsStr>>(raw: &[S]) -> Result<(Vec<String>, Option<PathBuf>), String> {
+    let args: Vec<String> = raw.iter().map(|a| a.as_ref().to_string_lossy().into_owned()).collect();
+    let cmd = args.first().map(String::as_str).unwrap_or("");
+    let file_at = match OPENS_FILE.iter().find(|(c, _)| *c == cmd) {
+        Some((_, n)) => args.iter().enumerate().skip(1).filter(|(_, a)| !a.starts_with("--")).nth(*n).map(|(i, _)| i),
+        None if cmd == "run" => args.iter().position(|a| a == "--file").map(|i| i + 1),
+        None => None,
+    };
+    let mut file = None;
+    for (i, a) in raw.iter().map(AsRef::as_ref).enumerate() {
+        if a.to_str().is_none() {
+            if Some(i) != file_at {
+                return Err(format!("argument {} is not valid Unicode: {}", i + 1, a.to_string_lossy()));
+            }
+            file = Some(PathBuf::from(a));
+        }
+    }
+    Ok((args, file))
+}
+
+/// The password for a protected Word file: `--password`, `--password-file`, or
+/// `WORDCRAFT_PASSWORD`, in that order. The file form exists because a password on a command line
+/// is readable by every other process on the machine; a trailing newline is dropped so a file
+/// written by `echo` works. Never logged, and never named in an error.
+fn password_from(args: &[String]) -> Result<Option<String>, String> {
+    if let Some(password) = arg_value(args, "--password") {
+        return Ok(Some(password));
+    }
+    if let Some(path) = arg_value(args, "--password-file") {
+        let raw = std::fs::read_to_string(&path).map_err(|e| format!("--password-file {path}: {e}"))?;
+        return Ok(Some(raw.trim_end_matches(['\r', '\n']).to_string()));
+    }
+    Ok(std::env::var("WORDCRAFT_PASSWORD").ok().filter(|p| !p.is_empty()))
+}
+
+/// The positional arguments, skipping every option's value so an option value is never read as a
+/// path. Mirrors [`validate_options`], which has already checked the options are known.
+fn positionals<'a>(args: &'a [String], specs: &[OptionSpec]) -> Vec<&'a String> {
+    let mut out = Vec::new();
+    let mut i = 0;
+    while let Some(arg) = args.get(i) {
+        let takes_value =
+            arg.starts_with("--") && specs.iter().any(|s| s.name == arg && s.takes_value) && args.get(i + 1).is_some_and(|v| !v.starts_with("--"));
+        if takes_value {
+            i += 2;
+        } else {
+            if !arg.starts_with("--") {
+                out.push(arg);
+            }
+            i += 1;
+        }
+    }
+    out
+}
+
+/// A headless session in the system region: every way the CLI starts one gives `file.new` the
+/// same paper (#1381).
+fn session(doc: wordcraft_doc::Document) -> Session {
+    let mut s = Session::new(doc);
+    s.system_region = system_region();
+    s
+}
+
+/// The system region, read as the app reads it (locale variables, else the platform's locale).
+fn system_region() -> wordcraft_engine::Region {
+    wordcraft_engine::Region::from_locale_vars(|name| std::env::var(name).ok(), sys_locale::get_locale)
 }
 
 /// The body text for `text`: the plain-text export, so list items keep their bullet or number label.
@@ -65,6 +175,58 @@ fn set_author(s: &mut Session, name: &str) -> Result<(), String> {
 
 fn arg_value(args: &[String], name: &str) -> Option<String> {
     args.iter().position(|a| a == name).and_then(|i| args.get(i + 1)).cloned()
+}
+
+enum OptionArg<'a> {
+    Absent,
+    Duplicate,
+    MissingValue,
+    Value(&'a str),
+}
+
+fn find_option_arg<'a>(args: &'a [String], name: &str) -> OptionArg<'a> {
+    let mut matches = args.iter().enumerate().filter(|(_, a)| *a == name);
+    let Some((i, _)) = matches.next() else {
+        return OptionArg::Absent;
+    };
+    if matches.next().is_some() {
+        return OptionArg::Duplicate;
+    }
+    match args.get(i + 1) {
+        None => OptionArg::MissingValue,
+        Some(val) if val.starts_with("--") => OptionArg::MissingValue,
+        Some(val) => OptionArg::Value(val.as_str()),
+    }
+}
+
+fn parse_page_arg(command: &str, args: &[String]) -> Result<Option<u64>, String> {
+    match find_option_arg(args, "--page") {
+        OptionArg::Absent => Ok(None),
+        OptionArg::Duplicate => Err(format!("{command}: duplicate --page option")),
+        OptionArg::MissingValue => Err(format!("{command}: --page requires a value")),
+        OptionArg::Value(val) => {
+            let n = val.parse::<u64>().map_err(|_| format!("{command}: invalid --page `{val}`: not a valid integer"))?;
+            if n == 0 {
+                return Err(format!("{command}: invalid --page `0`: page numbers start at 1"));
+            }
+            Ok(Some(n))
+        }
+    }
+}
+
+fn parse_scale_arg(command: &str, args: &[String]) -> Result<Option<f64>, String> {
+    match find_option_arg(args, "--scale") {
+        OptionArg::Absent => Ok(None),
+        OptionArg::Duplicate => Err(format!("{command}: duplicate --scale option")),
+        OptionArg::MissingValue => Err(format!("{command}: --scale requires a value")),
+        OptionArg::Value(val) => {
+            let scale = val.parse::<f64>().map_err(|_| format!("{command}: invalid --scale `{val}`: not a number"))?;
+            if !scale.is_finite() || scale <= 0.0 {
+                return Err(format!("{command}: invalid --scale `{val}`: scale must be a positive number"));
+            }
+            Ok(Some(scale))
+        }
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -112,11 +274,27 @@ fn automation_roots(
     Ok((roots, left))
 }
 
-const NO_OPTIONS: &[OptionSpec] = &[];
-const CONVERT_OPTIONS: &[OptionSpec] = &[OptionSpec { name: "--markup", takes_value: false }, OptionSpec { name: "--format", takes_value: true }];
-const RENDER_OPTIONS: &[OptionSpec] = &[OptionSpec { name: "--page", takes_value: true }, OptionSpec { name: "--scale", takes_value: true }];
+/// The password a protected Word file is opened with: `--password` (which any other process on
+/// the machine can read from the command line), `--password-file`, or `WORDCRAFT_PASSWORD`.
+const PASSWORD_OPTIONS: &[OptionSpec] =
+    &[OptionSpec { name: "--password", takes_value: true }, OptionSpec { name: "--password-file", takes_value: true }];
+const CONVERT_OPTIONS: &[OptionSpec] = &[
+    OptionSpec { name: "--markup", takes_value: false },
+    OptionSpec { name: "--format", takes_value: true },
+    OptionSpec { name: "--update-fields", takes_value: false },
+    OptionSpec { name: "--password", takes_value: true },
+    OptionSpec { name: "--password-file", takes_value: true },
+];
+const RENDER_OPTIONS: &[OptionSpec] = &[
+    OptionSpec { name: "--page", takes_value: true },
+    OptionSpec { name: "--scale", takes_value: true },
+    OptionSpec { name: "--password", takes_value: true },
+    OptionSpec { name: "--password-file", takes_value: true },
+];
 const RUN_OPTIONS: &[OptionSpec] = &[
     OptionSpec { name: "--file", takes_value: true },
+    OptionSpec { name: "--password", takes_value: true },
+    OptionSpec { name: "--password-file", takes_value: true },
     OptionSpec { name: "--template", takes_value: true },
     OptionSpec { name: "--cmd", takes_value: true },
     OptionSpec { name: "--save", takes_value: true },
@@ -181,25 +359,30 @@ fn write_stdout(write: impl FnOnce(&mut std::io::StdoutLock<'static>) -> std::io
     Ok(())
 }
 
-fn run(args: &[String]) -> Result<(), Failure> {
+fn run<S: AsRef<OsStr>>(args: &[S]) -> Result<(), Failure> {
+    let (args, file) = text_args(args)?;
+    // Opens the file by its real name, which its text in `args` may have lost, and with the
+    // password of a protected document (`password_from`).
+    let open = |text: &str, password: Option<&str>| open(file.as_deref().unwrap_or(Path::new(text)), password);
     let cmd = args.first().map(String::as_str).unwrap_or("");
     let rest: Vec<String> = args.iter().skip(1).cloned().collect();
-    let pos = |i: usize| rest.iter().filter(|a| !a.starts_with("--")).nth(i).cloned().ok_or_else(|| format!("missing argument\n\n{USAGE}"));
+    // Before options are checked or files and folders opened.
+    if wants_help(cmd, &rest) {
+        return write_stdout(|o| write!(o, "{USAGE}"));
+    }
     match cmd {
         "convert" => {
             validate_options("convert", &rest, CONVERT_OPTIONS)?;
             // `--format wordml2003` (or `flatopc`) picks the kind of `.xml` file; its value isn't a path.
             let format = arg_value(&rest, "--format");
-            let paths: Vec<&String> = rest
-                .iter()
-                .enumerate()
-                .filter(|(n, a)| !a.starts_with("--") && !(*n > 0 && rest.get(n - 1).is_some_and(|p| p == "--format")))
-                .map(|(_, a)| a)
-                .collect();
-            let missing = || format!("missing argument\n\n{USAGE}");
-            let (i, o) = (paths.first().ok_or_else(missing)?.to_string(), paths.get(1).ok_or_else(missing)?.to_string());
+            let paths = positionals(&rest, CONVERT_OPTIONS);
+            let (i, o) = (paths.first().ok_or_else(missing_argument)?.to_string(), paths.get(1).ok_or_else(missing_argument)?.to_string());
             let markup = rest.iter().any(|a| a == "--markup");
-            let mut s = open(&i)?;
+            let password = password_from(&rest)?;
+            let mut s = open(&i, password.as_deref())?;
+            if rest.iter().any(|a| a == "--update-fields") {
+                s.run("references.updateFields", &json!({})).map_err(|e| e.to_string())?;
+            }
             let r = if o.to_ascii_lowercase().ends_with(".png") {
                 s.run("file.exportPng", &json!({"path": o, "page": 1, "markup": markup}))
             } else {
@@ -214,42 +397,56 @@ fn run(args: &[String]) -> Result<(), Failure> {
             Ok(())
         }
         "info" => {
-            validate_options("info", &rest, NO_OPTIONS)?;
-            let mut s = open(&pos(0)?)?;
+            validate_options("info", &rest, PASSWORD_OPTIONS)?;
+            let paths = positionals(&rest, PASSWORD_OPTIONS);
+            let password = password_from(&rest)?;
+            let mut s = open(paths.first().ok_or_else(missing_argument)?, password.as_deref())?;
             let info = serde_json::to_string_pretty(&s.run("file.info", &json!({})).map_err(|e| e.to_string())?).unwrap_or_default();
             write_stdout(|o| writeln!(o, "{info}"))
         }
         "text" => {
-            validate_options("text", &rest, NO_OPTIONS)?;
-            let s = open(&pos(0)?)?;
+            validate_options("text", &rest, PASSWORD_OPTIONS)?;
+            let paths = positionals(&rest, PASSWORD_OPTIONS);
+            let password = password_from(&rest)?;
+            let s = open(paths.first().ok_or_else(missing_argument)?, password.as_deref())?;
             let text = listed_text(&s.doc)?;
             write_stdout(|o| writeln!(o, "{text}"))
         }
         "inspect" => {
-            validate_options("inspect", &rest, NO_OPTIONS)?;
-            let mut s = open(&pos(0)?)?;
+            validate_options("inspect", &rest, PASSWORD_OPTIONS)?;
+            let paths = positionals(&rest, PASSWORD_OPTIONS);
+            let password = password_from(&rest)?;
+            let mut s = open(paths.first().ok_or_else(missing_argument)?, password.as_deref())?;
             let tree = serde_json::to_string_pretty(&s.run("document.inspect", &json!({})).map_err(|e| e.to_string())?).unwrap_or_default();
             write_stdout(|o| writeln!(o, "{tree}"))
         }
         "render" => {
             validate_options("render", &rest, RENDER_OPTIONS)?;
-            let (i, o) = (pos(0)?, pos(1)?);
-            let mut s = open(&i)?;
-            let page = arg_value(&rest, "--page").and_then(|p| p.parse::<u64>().ok()).unwrap_or(1);
-            let scale = arg_value(&rest, "--scale").and_then(|p| p.parse::<f64>().ok()).unwrap_or(2.0);
+            let paths = positionals(&rest, RENDER_OPTIONS);
+            let password = password_from(&rest)?;
+            let (Some(i), Some(o)) = (paths.first(), paths.get(1)) else {
+                return Err(missing_argument());
+            };
+            let (i, o) = (i.to_string(), o.to_string());
+            let page = parse_page_arg("render", &rest)?.unwrap_or(1);
+            let scale = parse_scale_arg("render", &rest)?.unwrap_or(2.0);
+            let mut s = open(&i, password.as_deref())?;
             let r = s.run("file.exportPng", &json!({"path": o, "page": page, "scale": scale})).map_err(|e| e.to_string())?;
             write_stdout(|o| writeln!(o, "{r}"))
         }
         "run" => {
             validate_options("run", &rest, RUN_OPTIONS)?;
+            let page = parse_page_arg("run", &rest)?;
+            let scale = parse_scale_arg("run", &rest)?;
+            let password = password_from(&rest)?;
             let mut s = match (arg_value(&rest, "--file"), arg_value(&rest, "--template")) {
-                (Some(f), _) => open(&f)?,
+                (Some(f), _) => open(&f, password.as_deref())?,
                 (None, Some(t)) => {
-                    let mut s = Session::new(wordcraft_doc::Document::new());
+                    let mut s = session(wordcraft_doc::Document::new());
                     s.run("file.new", &json!({"template": t})).map_err(|e| e.to_string())?;
                     s
                 }
-                _ => Session::new(wordcraft_doc::Document::new()),
+                _ => session(wordcraft_doc::Document::new()),
             };
             if let Some(name) = arg_value(&rest, "--author") {
                 set_author(&mut s, &name)?;
@@ -274,10 +471,10 @@ fn run(args: &[String]) -> Result<(), Failure> {
             if let Some(out) = arg_value(&rest, "--save") {
                 let r = if out.to_ascii_lowercase().ends_with(".png") {
                     let mut v = json!({"path": out});
-                    if let Some(n) = arg_value(&rest, "--page").and_then(|p| p.parse::<u64>().ok()) {
+                    if let Some(n) = page {
                         v["page"] = json!(n);
                     }
-                    if let Some(k) = arg_value(&rest, "--scale").and_then(|p| p.parse::<f64>().ok()) {
+                    if let Some(k) = scale {
                         v["scale"] = json!(k);
                     }
                     s.run("file.exportPng", &v)
@@ -291,7 +488,7 @@ fn run(args: &[String]) -> Result<(), Failure> {
         }
         "commands" => {
             validate_options("commands", &rest, COMMANDS_OPTIONS)?;
-            let s = Session::new(wordcraft_doc::Document::new());
+            let s = session(wordcraft_doc::Document::new());
             if rest.iter().any(|a| a == "--json") {
                 let list = serde_json::to_string_pretty(&s.registry.describe()).unwrap_or_default();
                 write_stdout(|o| writeln!(o, "{list}"))
@@ -306,7 +503,7 @@ fn run(args: &[String]) -> Result<(), Failure> {
         }
         "parity" => {
             validate_options("parity", &rest, PARITY_OPTIONS)?;
-            let s = Session::new(wordcraft_doc::Document::new());
+            let s = session(wordcraft_doc::Document::new());
             let p = wordcraft_engine::catalog::parity(&s.registry);
             if rest.iter().any(|a| a == "--markdown") {
                 write_stdout(|o| write!(o, "{}", parity_markdown(&p)))
@@ -359,10 +556,12 @@ fn run(args: &[String]) -> Result<(), Failure> {
         }
         "zotero" => {
             validate_options("zotero", &rest, ZOTERO_OPTIONS)?;
-            let name = pos(0)?;
-            let command = wordcraft_zotero::Command::from_name(&name).ok_or_else(|| format!("unknown Zotero command `{name}`\n\n{USAGE}"))?;
-            let file = pos(1)?;
-            let mut s = open(&file)?;
+            let paths = positionals(&rest, ZOTERO_OPTIONS);
+            let (Some(name), Some(file)) = (paths.first(), paths.get(1)) else {
+                return Err(missing_argument());
+            };
+            let command = wordcraft_zotero::Command::from_name(name).ok_or_else(|| format!("unknown Zotero command `{name}`\n\n{USAGE}"))?;
+            let mut s = open(file, None)?;
             for spec in rest.iter().zip(rest.iter().skip(1)).filter(|(a, _)| *a == "--cmd").map(|(_, v)| v) {
                 let (id, params) = match spec.split_once('=') {
                     Some((id, p)) => (id.to_string(), serde_json::from_str::<Value>(p).map_err(|e| format!("{id}: bad JSON params: {e}"))?),
@@ -437,7 +636,7 @@ fn parity_markdown(p: &Value) -> String {
 }
 
 fn main() -> ExitCode {
-    let args: Vec<String> = std::env::args().skip(1).collect();
+    let args: Vec<OsString> = std::env::args_os().skip(1).collect();
     match run(&args) {
         Ok(()) | Err(Failure::StdoutClosed) => ExitCode::SUCCESS,
         Err(Failure::Error(e)) => {
@@ -457,7 +656,7 @@ mod tests {
 
     #[test]
     fn validators_accept_only_the_documented_options() {
-        assert!(validate_options("info", &args(&["file.docx"]), NO_OPTIONS).is_ok());
+        assert!(validate_options("info", &args(&["file.docx"]), PASSWORD_OPTIONS).is_ok());
         assert!(validate_options("render", &args(&["in.docx", "out.png", "--page", "2", "--scale", "1.5"]), RENDER_OPTIONS).is_ok());
         assert!(validate_options("run", &args(&["--cmd", "text.insert={}", "--cmd", "edit.undo", "--print"]), RUN_OPTIONS).is_ok());
         assert!(validate_options("commands", &args(&["--json"]), COMMANDS_OPTIONS).is_ok());
@@ -475,10 +674,65 @@ mod tests {
     }
 
     #[test]
+    fn an_option_value_is_never_read_as_a_path() {
+        // `--password`'s value sits between the paths and would be taken for one without
+        // `positionals`, so `render` would write its picture over a file called after the password.
+        assert_eq!(positionals(&args(&["in.docx", "--password", "secret", "out.png"]), RENDER_OPTIONS), vec!["in.docx", "out.png"]);
+        assert_eq!(positionals(&args(&["in.docx", "out.png", "--page", "2"]), RENDER_OPTIONS), vec!["in.docx", "out.png"]);
+        // A bare flag takes no value, so the next argument stays a path.
+        assert_eq!(positionals(&args(&["--print", "in.docx"]), RUN_OPTIONS), vec!["in.docx"]);
+        // `convert` is the one with a value-taking flag between the two paths.
+        assert_eq!(positionals(&args(&["in.docx", "--format", "flatopc", "out.docx"]), CONVERT_OPTIONS), vec!["in.docx", "out.docx"]);
+    }
+
+    #[test]
+    fn the_password_comes_from_an_option_a_file_or_the_environment() {
+        assert_eq!(password_from(&args(&["f.docx"])), Ok(None));
+        assert_eq!(password_from(&args(&["f.docx", "--password", "s3cret"])), Ok(Some("s3cret".into())));
+        // `--password` wins over the other two sources.
+        assert_eq!(password_from(&args(&["--password", "a", "--password-file", "/nonexistent"])), Ok(Some("a".into())));
+    }
+
+    #[test]
+    fn a_password_file_loses_only_its_trailing_newline() {
+        let path = std::env::temp_dir().join("wordcraft-cli-password-test.txt");
+        std::fs::write(&path, "s3cret\r\n").unwrap();
+        let got = password_from(&args(&["f.docx", "--password-file", &path.to_string_lossy()]));
+        std::fs::remove_file(&path).ok();
+        assert_eq!(got, Ok(Some("s3cret".into())));
+    }
+
+    #[test]
+    fn a_missing_password_file_is_named_without_the_password() {
+        let err = password_from(&args(&["f.docx", "--password-file", "/nonexistent/secret.txt"])).unwrap_err();
+        assert!(err.contains("--password-file"), "{err}");
+    }
+
+    #[test]
     fn unknown_options_are_rejected_before_file_access() {
         assert_eq!(run(&args(&["info", "missing.docx", "--passwrod", "x"])), Err("info: unknown option --passwrod".into()));
         assert_eq!(run(&args(&["render", "missing.docx", "out.png", "--sclae", "2"])), Err("render: unknown option --sclae".into()));
         assert_eq!(run(&args(&["zotero", "refresh", "missing.docx", "--prot", "1"])), Err("zotero: unknown option --prot".into()));
+    }
+
+    #[test]
+    fn help_or_h_after_a_subcommand_asks_for_the_usage() {
+        for cmd in SUBCOMMANDS {
+            assert!(wants_help(cmd, &args(&["in.docx", "--help"])), "{cmd}");
+            assert!(wants_help(cmd, &args(&["-h"])), "{cmd}");
+            assert!(!wants_help(cmd, &args(&["in.docx", "--hepl"])), "{cmd}");
+        }
+        assert!(!wants_help("frobnicate", &args(&["--help"])));
+    }
+
+    #[test]
+    fn usage_lists_exactly_the_subcommands() {
+        let listed: Vec<&str> = USAGE
+            .lines()
+            .filter_map(|line| line.strip_prefix("  wordcraft-cli ")?.split_whitespace().next())
+            .filter(|word| !word.starts_with(['-', '[']))
+            .collect();
+        assert_eq!(listed, SUBCOMMANDS);
     }
 
     #[test]
@@ -547,10 +801,211 @@ mod tests {
         assert!(run(&args(&["mcp", "--automation-write-root", "/definitely/not/a/folder"])).is_err());
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn only_the_opened_file_may_be_other_than_unicode() {
+        use std::os::unix::ffi::OsStringExt;
+        let latin1 = || OsString::from_vec(b"caf\xe9.docx".to_vec());
+        let ok = |raw: Vec<OsString>| text_args(&raw).unwrap().1;
+        assert_eq!(ok(vec!["zotero".into(), "refresh".into(), latin1()]), Some(PathBuf::from(latin1())));
+        assert_eq!(ok(vec!["render".into(), latin1(), "out.png".into(), "--page".into(), "2".into()]), Some(PathBuf::from(latin1())));
+        assert_eq!(ok(vec!["run".into(), "--print".into(), "--file".into(), latin1()]), Some(PathBuf::from(latin1())));
+        assert_eq!(ok(vec!["info".into(), "in.docx".into()]), None);
+        // Every command that opens a file reaches the open with it (no such file here), so
+        // `OPENS_FILE` and the commands' own arguments agree.
+        let missing = || OsString::from_vec(b"/definitely/not/caf\xe9.docx".to_vec());
+        let mut opening: Vec<Vec<OsString>> = OPENS_FILE
+            .iter()
+            .map(|(cmd, n)| [vec![(*cmd).into()], vec![OsString::from("refresh"); *n], vec![missing(), "out.png".into()]].concat())
+            .collect();
+        opening.push(vec!["run".into(), "--file".into(), missing()]);
+        for raw in opening {
+            let e = run(&raw).unwrap_err().to_string();
+            assert!(e.contains("No such file"), "{raw:?}: {e}");
+        }
+        for (raw, n) in [
+            (vec!["zotero".into(), latin1(), "in.docx".into()], 2),
+            (vec!["render".into(), "in.docx".into(), latin1()], 3),
+            (vec!["run".into(), "--save".into(), latin1()], 3),
+            (vec!["commands".into(), latin1()], 2),
+        ] {
+            assert_eq!(text_args(&raw).unwrap_err(), format!("argument {n} is not valid Unicode: caf\u{FFFD}.docx"));
+        }
+    }
+
     #[test]
     fn automation_roots_are_an_error_with_connect() {
         let dir = std::env::temp_dir().to_string_lossy().into_owned();
         let e = run(&args(&["mcp", "--connect", "127.0.0.1:9", "--automation-read-root", &dir])).unwrap_err().to_string();
         assert!(e.contains("--automation-read-root") && e.contains("headless"), "{e}");
+    }
+
+    #[test]
+    fn render_rejects_missing_or_invalid_page_and_scale() {
+        // Missing operands
+        assert_eq!(run(&args(&["render", "missing.docx", "out.png", "--page"])), Err("render: --page requires a value".into()));
+        assert_eq!(run(&args(&["render", "missing.docx", "out.png", "--scale"])), Err("render: --scale requires a value".into()));
+        assert_eq!(run(&args(&["render", "missing.docx", "out.png", "--page", "--scale", "2"])), Err("render: --page requires a value".into()));
+        assert_eq!(run(&args(&["render", "missing.docx", "out.png", "--scale", "--page", "1"])), Err("render: --scale requires a value".into()));
+
+        // Non-numeric operands
+        assert_eq!(
+            run(&args(&["render", "missing.docx", "out.png", "--page", "banana"])),
+            Err("render: invalid --page `banana`: not a valid integer".into())
+        );
+        assert_eq!(
+            run(&args(&["render", "missing.docx", "out.png", "--scale", "banana"])),
+            Err("render: invalid --scale `banana`: not a number".into())
+        );
+
+        // Out-of-range values
+        assert_eq!(
+            run(&args(&["render", "missing.docx", "out.png", "--page", "0"])),
+            Err("render: invalid --page `0`: page numbers start at 1".into())
+        );
+        assert_eq!(
+            run(&args(&["render", "missing.docx", "out.png", "--page", "-1"])),
+            Err("render: invalid --page `-1`: not a valid integer".into())
+        );
+        assert_eq!(
+            run(&args(&["render", "missing.docx", "out.png", "--scale", "0"])),
+            Err("render: invalid --scale `0`: scale must be a positive number".into())
+        );
+        assert_eq!(
+            run(&args(&["render", "missing.docx", "out.png", "--scale", "-2"])),
+            Err("render: invalid --scale `-2`: scale must be a positive number".into())
+        );
+        assert_eq!(
+            run(&args(&["render", "missing.docx", "out.png", "--scale", "NaN"])),
+            Err("render: invalid --scale `NaN`: scale must be a positive number".into())
+        );
+        assert_eq!(
+            run(&args(&["render", "missing.docx", "out.png", "--scale", "inf"])),
+            Err("render: invalid --scale `inf`: scale must be a positive number".into())
+        );
+
+        // Duplicate options
+        assert_eq!(run(&args(&["render", "missing.docx", "out.png", "--page", "1", "--page", "2"])), Err("render: duplicate --page option".into()));
+        assert_eq!(
+            run(&args(&["render", "missing.docx", "out.png", "--scale", "1", "--scale", "2"])),
+            Err("render: duplicate --scale option".into())
+        );
+    }
+
+    #[test]
+    fn run_rejects_missing_or_invalid_page_and_scale() {
+        // Missing operands
+        assert_eq!(run(&args(&["run", "--template", "sample", "--save", "out.png", "--page"])), Err("run: --page requires a value".into()));
+        assert_eq!(run(&args(&["run", "--template", "sample", "--save", "out.png", "--scale"])), Err("run: --scale requires a value".into()));
+        assert_eq!(
+            run(&args(&["run", "--template", "sample", "--save", "out.png", "--page", "--scale", "2"])),
+            Err("run: --page requires a value".into())
+        );
+        assert_eq!(
+            run(&args(&["run", "--template", "sample", "--save", "out.png", "--scale", "--page", "1"])),
+            Err("run: --scale requires a value".into())
+        );
+
+        // Non-numeric operands
+        assert_eq!(
+            run(&args(&["run", "--template", "sample", "--save", "out.png", "--page", "banana"])),
+            Err("run: invalid --page `banana`: not a valid integer".into())
+        );
+        assert_eq!(
+            run(&args(&["run", "--template", "sample", "--save", "out.png", "--scale", "banana"])),
+            Err("run: invalid --scale `banana`: not a number".into())
+        );
+
+        // Out-of-range values
+        assert_eq!(
+            run(&args(&["run", "--template", "sample", "--save", "out.png", "--page", "0"])),
+            Err("run: invalid --page `0`: page numbers start at 1".into())
+        );
+        assert_eq!(
+            run(&args(&["run", "--template", "sample", "--save", "out.png", "--page", "-1"])),
+            Err("run: invalid --page `-1`: not a valid integer".into())
+        );
+        assert_eq!(
+            run(&args(&["run", "--template", "sample", "--save", "out.png", "--scale", "0"])),
+            Err("run: invalid --scale `0`: scale must be a positive number".into())
+        );
+        assert_eq!(
+            run(&args(&["run", "--template", "sample", "--save", "out.png", "--scale", "-1"])),
+            Err("run: invalid --scale `-1`: scale must be a positive number".into())
+        );
+        assert_eq!(
+            run(&args(&["run", "--template", "sample", "--save", "out.png", "--scale", "NaN"])),
+            Err("run: invalid --scale `NaN`: scale must be a positive number".into())
+        );
+        assert_eq!(
+            run(&args(&["run", "--template", "sample", "--save", "out.png", "--scale", "inf"])),
+            Err("run: invalid --scale `inf`: scale must be a positive number".into())
+        );
+
+        // Duplicate options
+        assert_eq!(
+            run(&args(&["run", "--template", "sample", "--save", "out.png", "--page", "1", "--page", "2"])),
+            Err("run: duplicate --page option".into())
+        );
+        assert_eq!(
+            run(&args(&["run", "--template", "sample", "--save", "out.png", "--scale", "1", "--scale", "2"])),
+            Err("run: duplicate --scale option".into())
+        );
+    }
+
+    #[test]
+    fn render_and_run_valid_options_and_defaults_produce_files() {
+        let dir = std::env::temp_dir().join(format!("wc-cli-render-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let docx_path = dir.join("sample.docx");
+        // Create sample docx via `run --save sample.docx`
+        assert!(run(&args(&["run", "--template", "sample", "--save", &docx_path.to_string_lossy()])).is_ok());
+        assert!(docx_path.exists());
+
+        let docx_str = docx_path.to_string_lossy().into_owned();
+
+        // 1. render with defaults
+        let out_default = dir.join("out_default.png");
+        assert!(run(&args(&["render", &docx_str, &out_default.to_string_lossy()])).is_ok());
+        assert!(out_default.exists());
+
+        // 2. render with valid --page and --scale
+        let out_valid = dir.join("out_valid.png");
+        assert!(run(&args(&["render", &docx_str, &out_valid.to_string_lossy(), "--page", "1", "--scale", "2"])).is_ok());
+        assert!(out_valid.exists());
+
+        // 3. render with different flag order
+        let out_reordered = dir.join("out_reordered.png");
+        assert!(run(&args(&["render", &docx_str, &out_reordered.to_string_lossy(), "--scale", "1", "--page", "1"])).is_ok());
+        assert!(out_reordered.exists());
+
+        // 4. render failure leaves no output file
+        let out_invalid = dir.join("out_invalid.png");
+        assert!(run(&args(&["render", &docx_str, &out_invalid.to_string_lossy(), "--page", "banana"])).is_err());
+        assert!(!out_invalid.exists());
+
+        // 5. run --save out.png with defaults
+        let run_default = dir.join("run_default.png");
+        assert!(run(&args(&["run", "--file", &docx_str, "--save", &run_default.to_string_lossy()])).is_ok());
+        assert!(run_default.exists());
+
+        // 6. run --save out.png with --page and --scale
+        let run_valid = dir.join("run_valid.png");
+        assert!(run(&args(&["run", "--file", &docx_str, "--save", &run_valid.to_string_lossy(), "--page", "1", "--scale", "1"])).is_ok());
+        assert!(run_valid.exists());
+
+        // 7. run --save out.png with different flag order
+        let run_reordered = dir.join("run_reordered.png");
+        assert!(run(&args(&["run", "--file", &docx_str, "--scale", "1", "--page", "1", "--save", &run_reordered.to_string_lossy()])).is_ok());
+        assert!(run_reordered.exists());
+
+        // 8. run --save out.png failure leaves no output file
+        let run_invalid = dir.join("run_invalid.png");
+        assert!(run(&args(&["run", "--file", &docx_str, "--save", &run_invalid.to_string_lossy(), "--scale", "banana"])).is_err());
+        assert!(!run_invalid.exists());
+
+        let _ = std::fs::remove_dir_all(dir);
     }
 }

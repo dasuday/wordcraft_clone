@@ -86,6 +86,11 @@ fn undo_list_row_id(i: usize) -> egui::Id {
     undo_list_button_id().with(("row", i))
 }
 
+/// The footer Cancel row's id (#1903).
+pub(crate) fn undo_list_cancel_id() -> egui::Id {
+    undo_list_button_id().with("cancel")
+}
+
 /// The Undo list's rows, newest first: each step named as the Undo button's tooltip names it.
 pub(crate) fn undo_list_rows(app: &WordApp) -> Vec<String> {
     app.session.undo_history().into_iter().map(|l| tl!(l).to_string()).collect()
@@ -147,8 +152,21 @@ fn undo_list(ui: &mut Ui, app: &mut WordApp) {
         }
     });
     ui.separator();
-    let footer = undo_list_footer(hovered.map_or(0, |h| h + 1));
-    ui.vertical_centered(|ui| ui.label(egui::RichText::new(footer).font(regular(12.0)).color(t.text)));
+    let n = hovered.map_or(0, |h| h + 1);
+    if n == 0 {
+        // Cancel is a real row: it closes the popup without undoing anything (#1903).
+        let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), ROW), Sense::hover());
+        let resp = ui.interact(r, undo_list_cancel_id(), Sense::click());
+        if resp.hovered() {
+            ui.painter().rect_filled(r, 0.0, t.selection);
+        }
+        ui.painter().text(pos2(r.min.x + 6.0, r.center().y), Align2::LEFT_CENTER, undo_list_footer(0), regular(12.0), t.text);
+        if resp.clicked() {
+            ui.close();
+        }
+    } else {
+        ui.vertical_centered(|ui| ui.label(egui::RichText::new(undo_list_footer(n)).font(regular(12.0)).color(t.text)));
+    }
     if let Some(i) = clicked {
         let _ = app.run("edit.undoTo", json!({"count": i + 1}));
         ui.close();
@@ -197,15 +215,42 @@ const MAC_LIGHTS_LEFT: f32 = 10.0;
 /// from the top of the window.
 pub const MAC_CONTENT_LEFT: f32 = MAC_LIGHTS_LEFT + 2.0 * MAC_LIGHT_PITCH + MAC_LIGHT + (MAC_TITLE_BAR - MAC_LIGHT) / 2.0;
 
+/// The macOS title bar as laid out around the traffic lights: its height and where content starts
+/// after the lights. The app measures the real buttons (they grew in macOS 26); until then, or if it
+/// can't, the standard layout above.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct MacTitleBar {
+    pub height: f32,
+    pub content_left: f32,
+}
+
+impl Default for MacTitleBar {
+    fn default() -> Self {
+        Self { height: MAC_TITLE_BAR, content_left: MAC_CONTENT_LEFT }
+    }
+}
+
+impl MacTitleBar {
+    /// The bar for traffic lights whose right edge is `lights_right` and whose centre is
+    /// `lights_centre_y` below the top of the window: the lights centred in it, and content the
+    /// same gap after them as they keep from the top. Never smaller than the standard layout.
+    pub fn around_lights(lights_right: f32, lights_centre_y: f32, light: f32) -> Self {
+        let height = (2.0 * lights_centre_y).max(MAC_TITLE_BAR);
+        let gap = (height - light) / 2.0;
+        Self { height, content_left: (lights_right + gap).clamp(MAC_CONTENT_LEFT, f32::from(i8::MAX)) }
+    }
+}
+
 pub fn title_bar(app: &mut WordApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
     // macOS: shorter, so the system's traffic lights are centred in it; the tallest controls
     // shrink to keep a margin above and below them.
     let mac = app.integrated_titlebar;
-    let left = if mac { MAC_CONTENT_LEFT as i8 } else { 8 };
+    let bar = app.mac_titlebar;
+    let left = if mac { bar.content_left as i8 } else { 8 };
     let control_h = if mac { 22.0 } else { 26.0 };
     egui::Panel::top("title_bar")
-        .exact_size(if mac { MAC_TITLE_BAR } else { 38.0 })
+        .exact_size(if mac { bar.height } else { 38.0 })
         .frame(egui::Frame::NONE.fill(t.title_bar).inner_margin(egui::Margin { left, right: 10, top: 0, bottom: 0 }))
         .show(ui, |ui| {
             let full = ui.max_rect();
@@ -259,9 +304,12 @@ pub fn title_bar(app: &mut WordApp, ui: &mut Ui) {
                     // Account / community.
                     let (r, resp) = ui.allocate_exact_size(vec2(control_h, control_h), Sense::click());
                     ui.painter().circle_filled(r.center(), control_h / 2.0 - 1.0, t.accent);
+                    resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, tl!("Account")));
                     let initials: String = app.session.user_initials().chars().take(2).collect();
                     ui.painter().text(r.center(), Align2::CENTER_CENTER, initials, semibold(10.5), t.on_accent);
-                    resp.on_hover_text(format!("{} — set your name in File › Options", app.session.author));
+                    if resp.on_hover_text(format!("{} — set your name in File › Options", app.session.author)).clicked() {
+                        let _ = app.run("ui.backstage", json!({"value": true, "page": "options", "pane": "general"}));
+                    }
                     ui.add_space(8.0);
                     if app.ui.show_discord {
                         let (r, resp) = ui.allocate_exact_size(vec2(84.0, 22.0), Sense::click());
@@ -333,14 +381,29 @@ pub fn title_bar(app: &mut WordApp, ui: &mut Ui) {
             };
             let font = TypeRung::Chrome.semibold();
             let track = TypeRung::Chrome.tracking();
-            let w = text_width(ui.painter(), &title, &font, track, t.text);
             let cx = full.center().x;
-            if cx - w / 2.0 > qat_end + 10.0 && cx + w / 2.0 < right_start - 10.0 {
+            let available = 2.0 * (cx - qat_end - 10.0).min(right_start - 10.0 - cx);
+            let mut shown: String = title.chars().take(240).collect();
+            if text_width(ui.painter(), &shown, &font, track, t.text) > available {
+                while !shown.is_empty() && text_width(ui.painter(), &format!("{shown}…"), &font, track, t.text) > available {
+                    shown.pop();
+                }
+                shown.push('…');
+            }
+            let w = text_width(ui.painter(), &shown, &font, track, t.text);
+            if available > 24.0 {
+                let rect = Rect::from_center_size(pos2(cx, full.center().y), vec2(w + 8.0, control_h));
+                let response = ui.interact(rect, ui.id().with("document_name"), Sense::click()).on_hover_text(tl!("Rename Document"));
+                response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, &title));
+                if response.clicked() {
+                    let _ = app.run("file.rename", json!({}));
+                }
+
                 paint_text(
                     ui.painter(),
                     pos2(cx - w / 2.0, full.center().y - TypeRung::Chrome.line_height() / 2.0),
                     Align2::LEFT_TOP,
-                    &title,
+                    &shown,
                     &font,
                     track,
                     t.text,
@@ -367,7 +430,11 @@ pub fn status_bar(app: &mut WordApp, ui: &mut Ui) {
             ui.horizontal_centered(|ui| {
                 ui.spacing_mut().item_spacing = vec2(14.0, 0.0);
                 let l = app.session.layout();
-                let page = l.caret_on(&app.session.sel.focus, app.session.page_hint).map(|c| c.page + 1).unwrap_or(1);
+                let page = if app.session.selects_whole_story() {
+                    app.session.page_hint.min(l.pages.len().saturating_sub(1)) + 1
+                } else {
+                    l.caret_on(&app.session.sel.focus, app.session.page_hint).map(|c| c.page + 1).unwrap_or(1)
+                };
                 let st = |ui: &mut Ui, s: &str| {
                     let font = TypeRung::Caption.regular();
                     let track = TypeRung::Caption.tracking();
@@ -399,7 +466,16 @@ pub fn status_bar(app: &mut WordApp, ui: &mut Ui) {
                 }
                 // The language at the caret; a click sets the proofing language (Review › Language).
                 let lang = crate::ribbon::caret_language(app);
-                let resp = st(ui, &lang).on_hover_text(tl!("Language"));
+                let missing = crate::ribbon::caret_missing_dictionary(app);
+                let shown = if missing.is_some() { crate::i18n::fmt(tl!("{language} (no dictionary)"), &[("language", &lang)]) } else { lang.clone() };
+                let tip = match missing {
+                    Some(name) => crate::i18n::fmt(
+                        tl!("No spelling dictionary for {language} is installed, so it isn't checked. WordCraft looks for the Hunspell dictionary {name} in the WORDCRAFT_DICTIONARIES folder and in the usual system locations."),
+                        &[("language", &lang), ("name", name)],
+                    ),
+                    None => tl!("Language").to_string(),
+                };
+                let resp = st(ui, &shown).on_hover_text(tip);
                 egui::Popup::menu(&resp).show(|ui| {
                     ui.set_min_width(200.0);
                     crate::ribbon::language_menu(ui, app);
@@ -426,8 +502,11 @@ pub fn status_bar(app: &mut WordApp, ui: &mut Ui) {
                     let zfont = TypeRung::Caption.regular();
                     let ztrack = TypeRung::Caption.tracking();
                     let zw = text_width(ui.painter(), &ztxt, &zfont, ztrack, t.text_dim);
-                    let (zr, zresp) = ui.allocate_exact_size(vec2(zw + 1.0, TypeRung::Caption.line_height()), Sense::click());
-                    paint_text(ui.painter(), pos2(zr.min.x, zr.min.y), Align2::LEFT_TOP, &ztxt, &zfont, ztrack, t.text_dim);
+                    // A fixed width for three digits plus a small reserve, so the controls to the
+                    // left don't shift as the percentage gains or loses digits (#1975).
+                    let zslot = text_width(ui.painter(), "000%", &zfont, ztrack, t.text_dim) + 4.0;
+                    let (zr, zresp) = ui.allocate_exact_size(vec2(zw.max(zslot) + 1.0, TypeRung::Caption.line_height()), Sense::click());
+                    paint_text(ui.painter(), pos2(zr.max.x - 1.0, zr.min.y), Align2::RIGHT_TOP, &ztxt, &zfont, ztrack, t.text_dim);
                     if zresp.clicked() && !reading {
                         let _ = app.run("ui.dialog", json!({ "name": "zoom" }));
                     }
@@ -492,6 +571,7 @@ pub fn status_bar(app: &mut WordApp, ui: &mut Ui) {
                         ftrack,
                         t.text_dim,
                     );
+                    resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, focus));
                     if resp.clicked() {
                         let _ = app.run("view.focus", json!({}));
                     }
@@ -583,6 +663,64 @@ mod tests {
         assert!(!egui::Popup::is_id_open(&ctx, popup), "the list closes");
     }
 
+    /// #1975: the zoom percentage gains and loses digits (9% → 100% → 500%); the controls to its
+    /// left must not shift with it.
+    #[test]
+    fn status_bar_controls_hold_still_across_zoom_levels() {
+        let mut a = WordApp::new(wordcraft_engine::Session::new(wordcraft_doc::Document::new()), crate::Services::default());
+        let ctx = ctx();
+        ctx.enable_accesskit();
+        let names = ["Focus", "Print Layout", "Web Layout"];
+        let mut seen: Vec<(f32, Vec<f64>)> = Vec::new();
+        for (n, zoom) in [10.0_f32, 9.0, 100.0, 500.0].into_iter().enumerate() {
+            a.canvas.scale = zoom / 100.0 * crate::canvas::PX_PER_PT;
+            let input = egui::RawInput {
+                time: Some(n as f64 / 60.0),
+                screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, vec2(1200.0, 800.0))),
+                ..Default::default()
+            };
+            let mut out = ctx.run_ui(input, |ui| status_bar(&mut a, ui));
+            out.textures_delta.clear();
+            let update = out.platform_output.accesskit_update.take().unwrap();
+            let xs: Vec<f64> = names
+                .iter()
+                .map(|name| {
+                    let node =
+                        update.nodes.iter().find(|(_, node)| node.label() == Some(*name)).unwrap_or_else(|| panic!("{name} is drawn")).1.clone();
+                    node.bounds().unwrap().x0
+                })
+                .collect();
+            seen.push((zoom, xs));
+        }
+        let first = &seen[0].1;
+        for (zoom, xs) in &seen {
+            assert_eq!(xs, first, "status bar controls moved at {zoom}% zoom");
+        }
+    }
+
+    /// #1903: the footer's Cancel row closes the Undo list without undoing anything.
+    #[test]
+    fn undo_list_cancel_closes_without_undoing() {
+        let mut a = WordApp::new(wordcraft_engine::Session::new(wordcraft_doc::Document::new()), crate::Services::default());
+        a.run("text.insert", json!({"text": "Hello"})).unwrap();
+        let before: Vec<String> = a.session.undo_history().into_iter().map(str::to_string).collect();
+        assert!(!before.is_empty());
+
+        let (ctx, mut n) = (ctx(), 0);
+        frame(&ctx, &mut n, vec![], &mut a);
+        let arrow = ctx.read_response(undo_list_button_id()).unwrap();
+        let popup = egui::Popup::default_response_id(&arrow);
+        click(&ctx, &mut n, arrow.rect.center(), &mut a);
+        assert!(egui::Popup::is_id_open(&ctx, popup), "the arrow opens the Undo list");
+        frame(&ctx, &mut n, vec![], &mut a);
+        let cancel = ctx.read_response(undo_list_cancel_id()).expect("Cancel is drawn");
+        click(&ctx, &mut n, cancel.rect.center(), &mut a);
+        let after: Vec<String> = a.session.undo_history().into_iter().map(str::to_string).collect();
+        assert_eq!(after, before, "nothing undone");
+        frame(&ctx, &mut n, vec![], &mut a);
+        assert!(!egui::Popup::is_id_open(&ctx, popup), "Cancel closes the list");
+    }
+
     #[test]
     fn mac_title_bar_centres_and_clears_the_traffic_lights() {
         // The lights are centred in the bar, and content keeps the same gap after them.
@@ -591,5 +729,18 @@ mod tests {
         assert_eq!(MAC_CONTENT_LEFT - lights_end, margin);
         // `egui::Margin` is in `i8`.
         assert!(MAC_CONTENT_LEFT <= f32::from(i8::MAX));
+    }
+
+    #[test]
+    fn mac_title_bar_follows_the_measured_lights() {
+        // The standard lights give the standard bar.
+        let lights_end = MAC_LIGHTS_LEFT + 2.0 * MAC_LIGHT_PITCH + MAC_LIGHT;
+        assert_eq!(MacTitleBar::around_lights(lights_end, MAC_TITLE_BAR / 2.0, MAC_LIGHT), MacTitleBar::default());
+        // Larger, lower lights (macOS 26): a taller bar, and content clear of the green button.
+        let bar = MacTitleBar::around_lights(78.0, 18.0, 14.0);
+        assert_eq!(bar.height, 36.0);
+        assert_eq!(bar.content_left, 89.0);
+        // Never tighter than the standard layout.
+        assert_eq!(MacTitleBar::around_lights(40.0, 10.0, 12.0), MacTitleBar::default());
     }
 }
