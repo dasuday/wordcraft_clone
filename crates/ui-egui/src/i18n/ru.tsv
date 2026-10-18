@@ -2638,6 +2638,11 @@ preview	Title	Пример
 # Reading Mode column widths (#1040)
 	Narrow	Узкая
 	Medium	Средняя
+	Collapsed by default	Свернут по умолчанию
+	Expand Heading	Развернуть заголовок
+	Collapse Heading	Свернуть заголовок
+	Expand All Headings	Развернуть все заголовки
+	Collapse All Headings	Свернуть все заголовки
 # Split Cells and Convert Text to Table (#2592)
 	Merge cells before split	Объединить ячейки перед разбиением
 	Table size	Размер таблицы

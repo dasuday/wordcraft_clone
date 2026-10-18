@@ -2253,6 +2253,11 @@
 # Reading Mode column widths (#1040)
 	Narrow	Estreita
 	Medium	Média
+	Collapsed by default	Recolhido por padrão
+	Expand Heading	Expandir título
+	Collapse Heading	Recolher título
+	Expand All Headings	Expandir todos os títulos
+	Collapse All Headings	Recolher todos os títulos
 # Split Cells and Convert Text to Table (#2592)
 	Merge cells before split	Mesclar células antes de dividir
 	Table size	Tamanho da tabela

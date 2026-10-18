@@ -2607,6 +2607,11 @@ preview	Title	Título
 # Reading Mode column widths (#1040)
 	Narrow	Estrecha
 	Medium	Media
+	Collapsed by default	Contraído de forma predeterminada
+	Expand Heading	Expandir título
+	Collapse Heading	Contraer título
+	Expand All Headings	Expandir todos los títulos
+	Collapse All Headings	Contraer todos los títulos
 # Split Cells and Convert Text to Table (#2592)
 	Merge cells before split	Combinar celdas antes de dividir
 	Table size	Tamaño de la tabla

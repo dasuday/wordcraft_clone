@@ -2275,6 +2275,11 @@
 # Reading Mode column widths (#1040)
 	Narrow	Kitsas
 	Medium	Keskmine
+	Collapsed by default	Vaikimisi ahendatud
+	Expand Heading	Laienda pealkiri
+	Collapse Heading	Ahenda pealkiri
+	Expand All Headings	Laienda kõik pealkirjad
+	Collapse All Headings	Ahenda kõik pealkirjad
 # Split Cells and Convert Text to Table (#2592)
 	Merge cells before split	Ühenda lahtrid enne tükeldamist
 	Table size	Tabeli suurus

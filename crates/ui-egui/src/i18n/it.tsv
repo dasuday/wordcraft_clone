@@ -2649,6 +2649,11 @@ preview	Title	Esempio
 # Reading Mode column widths (#1040)
 	Narrow	Stretta
 	Medium	Media
+	Collapsed by default	Compresso per impostazione predefinita
+	Expand Heading	Espandi titolo
+	Collapse Heading	Comprimi titolo
+	Expand All Headings	Espandi tutti i titoli
+	Collapse All Headings	Comprimi tutti i titoli
 # Split Cells and Convert Text to Table (#2592)
 	Merge cells before split	Unisci le celle prima di dividere
 	Table size	Dimensioni tabella
