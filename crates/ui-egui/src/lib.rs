@@ -838,12 +838,12 @@ impl WordApp {
         }
         self.session.read_aloud.set_rate(self.ui.read_aloud_rate);
         self.session.read_aloud.skip_citations = self.ui.read_aloud_skip_citations;
-        self.session.view.dark_mode = self.ui.dark_page;
         // A `ui.json` from before #1722 had "Dark page": that page stays dark in every theme, so
         // it becomes Never change plus the explicit switch. An unticked one follows the theme.
         if self.ui.never_change_page.is_none() {
             self.ui.never_change_page = Some(self.ui.dark_page);
         }
+        self.session.view.dark_mode = self.ui.dark_page && self.ui.never_change_page.unwrap_or(false);
         self.session.view.nav_pane = self.ui.nav_pane;
         // Keys for commands this version doesn't have are dropped.
         self.session.keymap = std::mem::take(&mut self.ui.keyboard);
@@ -1519,6 +1519,16 @@ impl WordApp {
                     }
                 }
                 json!({"theme": self.ui.theme.code(), "dark": self.ui_is_dark()})
+            }
+            "ui.neverChangePage" => {
+                // File › Options › General › Never change the document page color; no value reads it.
+                if let Some(v) = p.get("value") {
+                    match v.as_bool() {
+                        Some(never) => self.set_never_change_page(never),
+                        None => return Some(Err("value must be true or false".into())),
+                    }
+                }
+                json!({"neverChangePage": self.ui.never_change_page.unwrap_or(false), "dark": self.page_is_dark()})
             }
             "ui.interfaceSize" => {
                 // `auto` (the display scale the system reports) or an absolute size in percent,
@@ -2536,6 +2546,7 @@ pub(crate) fn works_without_document(id: &str) -> bool {
             | "ui.keytips"
             | "ui.dark"
             | "ui.theme"
+            | "ui.neverChangePage"
             | "ui.interfaceSize"
             | "ui.animations"
             | "ui.language"
@@ -6251,6 +6262,32 @@ mod tests {
     }
 
     /// #1722: a theme change shows on the page on the next frame, and the view fingerprint moves.
+    #[test]
+    fn never_change_page_command_sets_and_reads_the_preference() {
+        let ctx = egui::Context::default();
+        let mut a = app();
+        let read = a.run("ui.neverChangePage", json!({})).unwrap();
+        assert_eq!(read["neverChangePage"], false);
+        a.run("ui.theme", json!({"value": "dark"})).unwrap();
+        theme_frame(&ctx, &mut a, Some(egui::Theme::Dark));
+        assert!(a.page_is_dark());
+        let set = a.run("ui.neverChangePage", json!({"value": true})).unwrap();
+        assert_eq!((set["neverChangePage"].as_bool(), set["dark"].as_bool()), (Some(true), Some(false)));
+        assert!(!a.page_is_dark());
+        assert!(a.run("ui.neverChangePage", json!({"value": "yes"})).is_err());
+        a.run("ui.neverChangePage", json!({"value": false})).unwrap();
+        assert!(a.page_is_dark());
+    }
+
+    #[test]
+    fn explicit_unticked_never_change_ignores_a_stray_dark_page() {
+        let ctx = egui::Context::default();
+        let mut a = app();
+        a.apply_prefs(serde_json::from_str(r#"{"darkPage": true, "neverChangePage": false, "theme": "light"}"#).unwrap());
+        theme_frame(&ctx, &mut a, Some(egui::Theme::Light));
+        assert!(!a.page_is_dark(), "the theme decides when Never change is explicitly off");
+    }
+
     #[test]
     fn theme_change_updates_the_page_on_the_next_frame() {
         let ctx = egui::Context::default();

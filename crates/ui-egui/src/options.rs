@@ -188,7 +188,7 @@ fn general(app: &mut WordApp, ui: &mut Ui) {
         .on_hover_text(tl!("Off, pages follow the theme: light in the light theme, dark in the dark theme. On, pages keep the document's own colour in every theme; only View › Switch Modes darkens them. Saving, printing and PDFs are unchanged."))
         .changed()
     {
-        app.set_never_change_page(never);
+        let _ = app.run("ui.neverChangePage", json!({"value": never}));
     }
     ui.checkbox(&mut app.ui.show_discord, tl!("Show the community button in the title bar"));
     default_app_button(app, ui);
