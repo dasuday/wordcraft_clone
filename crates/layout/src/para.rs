@@ -2924,7 +2924,9 @@ pub fn paragraph_issues(p: &Paragraph, runs: &[ProofRun], spelling: &wordcraft_p
         return found
             .into_iter()
             .filter(|i| !skip(i.start, i.end) && (grammar || i.kind != wordcraft_proof::IssueKind::Grammar))
-            .filter(|i| i.kind != wordcraft_proof::IssueKind::Spelling || !wordcraft_proof::spelling_ignored_by_options(&text, i.start, i.end, spelling))
+            .filter(|i| {
+                i.kind != wordcraft_proof::IssueKind::Spelling || !wordcraft_proof::spelling_ignored_by_options(&text, i.start, i.end, spelling)
+            })
             .map(|i| wordcraft_proof::Issue { lang: lang_at(i.start), ..i })
             .collect();
     }

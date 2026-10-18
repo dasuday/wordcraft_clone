@@ -186,7 +186,12 @@ fn credentials_go_in_the_body_only_when_both_are_set_and_never_in_debug() {
 
 #[test]
 fn credentials_never_go_over_plain_http_to_another_host() {
-    let acct = |server: &str, user: &str| Settings { server: server.into(), username: user.into(), api_key: if user.is_empty() { String::new() } else { "k".into() }, ..on() };
+    let acct = |server: &str, user: &str| Settings {
+        server: server.into(),
+        username: user.into(),
+        api_key: if user.is_empty() { String::new() } else { "k".into() },
+        ..on()
+    };
     assert!(matches!(acct("http://lt.example.org", "u").endpoint(), Err(LtError::BadServer(_))));
     assert!(matches!(acct("HTTP://lt.example.org:8081/v2", "u").endpoint(), Err(LtError::BadServer(_))));
     assert!(acct("https://lt.example.org", "u").endpoint().is_ok());
