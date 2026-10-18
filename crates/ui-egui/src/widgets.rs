@@ -415,6 +415,7 @@ fn collapsed_group(ui: &mut Ui, id_title: &str, title: &str, launcher: Option<&s
     );
     label_line(ui, r.center().x, r.min.y + BIG_LABEL_Y, title, regular(11.5), t.text, true);
     let resp = resp.on_hover_text(title);
+    resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, title));
     let mut open = was_open;
     if resp.clicked() {
         open = !open;
@@ -461,6 +462,8 @@ fn group_icon(title: &str) -> &'static str {
         "Styles" => "styles",
         "Editing" => "find",
         "Voice" => "dictate",
+        "Tables" => "table",
+        "Links" => "link",
         _ => "more",
     }
 }
