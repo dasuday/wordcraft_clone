@@ -15,6 +15,7 @@ use serde_json::{Value, json};
 
 use wordcraft_doc::section::LineNumberRestart;
 use wordcraft_engine::cmd::mailings::{ENVELOPE_SIZES, LABEL_PRODUCTS};
+use wordcraft_engine::cmd::objects::fit_size;
 
 use crate::WordApp;
 use crate::options::MeasureExt;
@@ -1108,6 +1109,8 @@ fn text_to_table_ui(app: &mut WordApp, ui: &mut Ui, f: &mut TextToTableForm) -> 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SizeForm {
+    /// Where the object sized is (the selected one when the dialog opened).
+    pub at: wordcraft_doc::Pos,
     pub width: f32,
     pub height: f32,
     /// Changing one side changes the other in proportion (on for pictures, as in Word).
@@ -1125,9 +1128,10 @@ pub struct SizeForm {
 }
 
 impl SizeForm {
+    /// The selected picture's or shape's size; None when nothing that has one is selected.
     pub fn read(app: &WordApp) -> Option<SizeForm> {
         use wordcraft_doc::para::InlineObject;
-        let (_, o) = wordcraft_engine::cmd::objects::selected(&app.session)?;
+        let (at, o) = wordcraft_engine::cmd::objects::selected(&app.session)?;
         let (w, h, _) = o.frame()?;
         let full = match &o {
             InlineObject::Image { media, .. } => wordcraft_engine::cmd::objects::original_size(&app.session, media),
@@ -1135,6 +1139,7 @@ impl SizeForm {
         };
         let original = wordcraft_engine::cmd::objects::cropped_original_size(&app.session, &o);
         Some(SizeForm {
+            at,
             width: w,
             height: h,
             lock: matches!(o, InlineObject::Image { .. }),
@@ -1144,6 +1149,17 @@ impl SizeForm {
             uncropped: full.map(|f| (f.w, f.h)),
             pixels: full.and_then(|f| f.pixels),
         })
+    }
+
+    /// Follow the selection: dialogs aren't modal, so a click on the page may pick another object,
+    /// which the form starts over on, or nothing to size (false: close the dialog). OK then never
+    /// sizes one object with the numbers read from another.
+    pub fn follow(&mut self, app: &WordApp) -> bool {
+        match wordcraft_engine::cmd::objects::selected(&app.session) {
+            Some((at, _)) if at == self.at => true,
+            Some(_) => SizeForm::read(app).map(|f| *self = f).is_some(),
+            None => false,
+        }
     }
 
     /// What the scale counts from.
@@ -1160,34 +1176,40 @@ impl SizeForm {
         (self.width / bw.max(0.01) * 100.0, self.height / bh.max(0.01) * 100.0)
     }
 
+    /// A new width; locked, the height follows in proportion, both kept within 1–4000 pt by one
+    /// factor (as `picture.size` does), so the limit never changes the shape.
     pub fn set_width(&mut self, w: f32) {
-        let w = w.clamp(1.0, 4000.0);
         if self.lock && self.width > 0.0 {
-            self.height = (self.height * w / self.width).clamp(1.0, 4000.0);
+            (self.width, self.height) = fit_size(w, self.height * w / self.width, true);
+        } else {
+            self.width = fit_size(w, self.height, false).0;
         }
-        self.width = w;
     }
 
+    /// A new height; locked, the width follows (see [`Self::set_width`]).
     pub fn set_height(&mut self, h: f32) {
-        let h = h.clamp(1.0, 4000.0);
         if self.lock && self.height > 0.0 {
-            self.width = (self.width * h / self.height).clamp(1.0, 4000.0);
+            (self.width, self.height) = fit_size(self.width * h / self.height, h, true);
+        } else {
+            self.height = fit_size(self.width, h, false).1;
         }
-        self.height = h;
     }
 
+    /// The width as a percentage of [`Self::base`].
     pub fn set_scale_width(&mut self, percent: f32) {
         self.set_width(self.base().0 * percent / 100.0);
     }
 
+    /// The height as a percentage of [`Self::base`].
     pub fn set_scale_height(&mut self, percent: f32) {
         self.set_height(self.base().1 * percent / 100.0);
     }
 
-    /// Reset: the picture's original size, less what is cropped.
+    /// Reset: the picture's original size, less what is cropped; one past 4000 pt (a large photo)
+    /// shrinks as a whole.
     pub fn reset(&mut self) {
         if let Some((w, h)) = self.original {
-            (self.width, self.height) = (w, h);
+            (self.width, self.height) = fit_size(w, h, true);
         }
     }
 
@@ -1197,7 +1219,11 @@ impl SizeForm {
     }
 }
 
+/// The Size dialog; returns true to close it.
 fn size_ui(app: &mut WordApp, ui: &mut Ui, f: &mut SizeForm) -> bool {
+    if !f.follow(app) {
+        return true;
+    }
     let unit = unit();
     let k = unit.pt_per_unit();
     // A length in the interface unit that takes any typed unit (`300 px` too), applied on Enter
@@ -1705,13 +1731,18 @@ mod tests {
         assert!(product_label(f.product).contains("63.5 × 33.9 mm (A4)"));
     }
 
-    /// An app with a `w`×`h` pixel picture, inserted and selected as by Insert › Pictures.
-    fn picture_app(w: u32, h: u32) -> WordApp {
+    /// A `w`×`h` pixel PNG, base64 for `insert.picture`.
+    fn png_data(w: u32, h: u32) -> String {
         let img = image::RgbaImage::from_pixel(w, h, image::Rgba([200, 30, 30, 255]));
         let mut png = Vec::new();
         img.write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png).unwrap();
+        wordcraft_engine::cmd::insert::base64_encode(&png)
+    }
+
+    /// An app with a `w`×`h` pixel picture, inserted and selected as by Insert › Pictures.
+    fn picture_app(w: u32, h: u32) -> WordApp {
         let mut a = WordApp::new(Session::new(wordcraft_doc::Document::new()), Services::default());
-        a.run("insert.picture", json!({"data": wordcraft_engine::cmd::insert::base64_encode(&png)})).unwrap();
+        a.run("insert.picture", json!({"data": png_data(w, h)})).unwrap();
         a
     }
 
@@ -1775,5 +1806,47 @@ mod tests {
         let LayoutDialog::Size(f) = form(&mut a) else { panic!("size") };
         assert!(!f.lock && !f.relative && f.original.is_none() && f.uncropped.is_none());
         assert_eq!(f.scale(), (100.0, 100.0));
+    }
+
+    /// #2573 review: locked, a side past 4000 pt shrinks the other with it instead of flattening
+    /// the picture, and so does Reset for a photo larger than 4000 pt; under 1 pt likewise.
+    #[test]
+    fn size_dialog_keeps_the_proportions_at_the_limits() {
+        let close = |(w, h): (f32, f32), (ew, eh): (f32, f32)| (w - ew).abs() < 0.01 && (h - eh).abs() < 0.01;
+        let mut a = picture_app(6000, 30);
+        a.run("picture.size", json!({})).unwrap();
+        let LayoutDialog::Size(mut f) = form(&mut a) else { panic!("size") };
+        assert_eq!(f.original, Some((4500.0, 22.5)), "6000×30 px at 96 ppi");
+        f.reset();
+        assert!(close((f.width, f.height), (4000.0, 20.0)), "Reset: {}×{}", f.width, f.height);
+        a.run("picture.size", f.params()).unwrap();
+        assert!(close(selected_size(&a), (4000.0, 20.0)), "applied: {:?}", selected_size(&a));
+        (f.width, f.height) = (15.0, 30.0);
+        f.set_width(4000.0);
+        assert_eq!((f.width, f.height), (2000.0, 4000.0));
+        f.set_height(0.5);
+        assert_eq!((f.width, f.height), (1.0, 2.0));
+        f.lock = false;
+        f.set_width(9000.0);
+        assert_eq!((f.width, f.height), (4000.0, 2.0), "unlocked, one side alone");
+    }
+
+    /// #2573 review: dialogs aren't modal. Picking another picture while the Size dialog is open
+    /// starts the form over on it, so OK never sizes one picture with another's numbers; with
+    /// nothing left to size the dialog closes.
+    #[test]
+    fn size_dialog_follows_the_selection() {
+        let mut a = picture_app(40, 20);
+        a.run("picture.size", json!({})).unwrap();
+        let LayoutDialog::Size(mut f) = form(&mut a) else { panic!("size") };
+        f.set_width(300.0);
+        assert!(f.follow(&a) && f.width == 300.0, "the same picture keeps the edits");
+        a.run("select.collapse", json!({"end": true})).unwrap();
+        a.run("insert.picture", json!({"data": png_data(20, 40)})).unwrap();
+        assert!(f.follow(&a), "another picture selected");
+        assert_eq!((f.width, f.height, f.original), (15.0, 30.0, Some((15.0, 30.0))));
+        a.run("select.collapse", json!({"end": true})).unwrap();
+        a.run("text.insert", json!({"text": " caption"})).unwrap();
+        assert!(!f.follow(&a), "nothing to size");
     }
 }

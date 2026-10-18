@@ -1076,10 +1076,24 @@ fn size(s: &mut Session, v: &Value) -> CmdResult {
     })
 }
 
-/// An object size within 1–4000 pt; with `keep`, a side past 4000 pt shrinks the other with it.
-fn fit_size(w: f32, h: f32, keep: bool) -> (f32, f32) {
-    let k = if keep && w.is_finite() && h.is_finite() && w > 0.0 && h > 0.0 { (4000.0 / w).min(4000.0 / h).min(1.0) } else { 1.0 };
-    let side = |x: f32| if x.is_nan() { 1.0 } else { (x * k).clamp(1.0, 4000.0) };
+/// An object size within 1–4000 pt. With `keep`, both sides scale by one factor, the one nearest
+/// 1 that brings them within the limits, so the proportions hold; a shape too long and thin for any
+/// such factor is clamped side by side.
+pub fn fit_size(w: f32, h: f32, keep: bool) -> (f32, f32) {
+    let side = |x: f32| if x.is_nan() { 1.0 } else { x.clamp(1.0, 4000.0) };
+    if keep && w.is_finite() && h.is_finite() && w > 0.0 && h > 0.0 {
+        let (lo, hi) = ((1.0 / w).max(1.0 / h), (4000.0 / w).min(4000.0 / h));
+        if lo <= hi {
+            let k = if lo > 1.0 {
+                lo
+            } else if hi < 1.0 {
+                hi
+            } else {
+                1.0
+            };
+            return (side(w * k), side(h * k));
+        }
+    }
     (side(w), side(h))
 }
 
@@ -2013,8 +2027,8 @@ mod tests {
         assert!(s.run("picture.size", &json!({"original": true})).is_err(), "a shape has no original size");
     }
 
-    /// #2573: a size past 4000 pt that keeps the proportions shrinks as a whole instead of
-    /// flattening against the limit; both sides given are clamped each on its own.
+    /// #2573: a size past 4000 pt (or under 1 pt) that keeps the proportions scales as a whole
+    /// instead of flattening against the limit; both sides given are clamped each on its own.
     #[test]
     fn picture_size_past_the_limit_keeps_the_proportions() {
         let mut s = Session::new(wordcraft_doc::Document::new());
@@ -2029,6 +2043,14 @@ mod tests {
         assert_eq!(size(&s), (4000.0, 10.0));
         s.run("picture.size", &json!({"height": 30.0, "lockAspect": false})).unwrap();
         assert_eq!(size(&s), (4000.0, 30.0));
+        // Below 1 pt as well: a 1% scale of 50×200 pt is 1×4 pt, not 1×2.
+        s.run("picture.size", &json!({"width": 50.0, "height": 200.0})).unwrap();
+        s.run("picture.size", &json!({"scale": 1})).unwrap();
+        assert_eq!(size(&s), (1.0, 4.0));
+        // Too long and thin for one factor: side by side. NaN and infinity stay in range.
+        assert_eq!(fit_size(0.5, 5000.0, true), (1.0, 4000.0));
+        assert_eq!(fit_size(f32::NAN, 10.0, true), (1.0, 10.0));
+        assert_eq!(fit_size(f32::INFINITY, 10.0, true), (4000.0, 10.0));
         // Hostile values never leave the 1–4000 pt range.
         for v in [json!({"scale": -50}), json!({"width": -1.0}), json!({"original": "yes", "scale": 1e30}), json!({"height": 1e30})] {
             s.run("picture.size", &v).unwrap();
