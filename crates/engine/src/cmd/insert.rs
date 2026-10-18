@@ -888,8 +888,10 @@ fn symbol(s: &mut Session, v: &Value) -> CmdResult {
     let base = s.typing_props();
     let mut props = base.clone();
     // A symbol font's character remembers it as its own font (`w:sym`), so changing the text's
-    // font later keeps the symbol; other fonts are ordinary run formatting.
-    if wordcraft_doc::symbol_fonts::is_symbol_font(font) || c.chars().all(|ch| ('\u{F020}'..='\u{F0FF}').contains(&ch)) {
+    // font later keeps the symbol; other fonts are ordinary run formatting. `w:sym` holds a 16-bit
+    // code, so a character beyond the Basic Multilingual Plane stays ordinary text in that font.
+    let bmp = c.chars().all(|ch| u32::from(ch) <= 0xFFFF);
+    if bmp && (wordcraft_doc::symbol_fonts::is_symbol_font(font) || c.chars().all(|ch| ('\u{F020}'..='\u{F0FF}').contains(&ch))) {
         props.sym_font = Some(font.to_string());
     } else {
         props.font = Some(font.to_string());
@@ -1162,6 +1164,16 @@ mod tests {
     }
 
     /// Insert › Symbol with a font: only the symbol takes it, the caret's font carries on after.
+    #[test]
+    fn an_astral_symbol_stays_text_in_its_font() {
+        let mut s = Session::new(wordcraft_doc::Document::from_text("a"));
+        s.run("caret.docEnd", &json!({})).unwrap();
+        s.run("insert.symbol", &json!({"char": "\u{1F600}", "font": "Wingdings"})).unwrap();
+        let p = s.doc.para(StoryRef::Body, &Path::top(0)).unwrap();
+        assert_eq!(p.props_of_char(1).sym_font, None, "w:sym can't hold it");
+        assert_eq!(p.props_of_char(1).font.as_deref(), Some("Wingdings"));
+    }
+
     #[test]
     fn symbol_takes_its_own_font() {
         let mut s = Session::new(wordcraft_doc::Document::from_text("ab"));

@@ -333,7 +333,7 @@ fn pcl6_symbol_roundtrip() {
     for doc in [&d, &again] {
         let p = paras(doc)[0];
         assert_eq!(p.text, "\u{F0B3}");
-        assert_eq!(p.props_of_char(0).font.as_deref(), Some("Symbol (PCL6)"));
+        assert_eq!(p.props_of_char(0).sym_font.as_deref(), Some("Symbol (PCL6)"));
         assert_eq!(p.shown_text(), "≥");
     }
 }
