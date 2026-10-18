@@ -1150,9 +1150,9 @@ fn a_hungarian_interface_writes_new_documents_in_hungarian() {
     let issues = app.session.run("review.issues", &serde_json::json!({})).unwrap();
     assert!(issues.as_array().unwrap().iter().all(|i| i["lang"] == "hu"), "{issues}");
     set_current(lang("hu"));
-    assert_eq!(crate::ribbon::caret_language(&app), "Magyar");
+    assert_eq!(crate::ribbon::caret_language(app), "Magyar");
     set_current(Lang::EN);
-    assert_eq!(crate::ribbon::caret_language(&app), "Hungarian");
+    assert_eq!(crate::ribbon::caret_language(app), "Hungarian");
 }
 
 #[test]
