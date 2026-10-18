@@ -3170,11 +3170,8 @@ mod tests {
         use model::{FmtChange, ListInfo};
         let mark = RevMark { author: "Alice".into(), date: "2024-03-15T10:30:00Z".into(), id: None };
         let old = Para { list: Some(ListInfo { ordered: true, level: 0 }), ..Default::default() };
-        let mut item = Para {
-            list: Some(ListInfo { ordered: false, level: 0 }),
-            fmt_change: Some(Box::new(FmtChange { mark, old })),
-            ..Default::default()
-        };
+        let mut item =
+            Para { list: Some(ListInfo { ordered: false, level: 0 }), fmt_change: Some(Box::new(FmtChange { mark, old })), ..Default::default() };
         item.push_text("Item", &Fmt::default());
         let flow = Flow { blocks: vec![FBlock::Para(item)], meta: Meta::default() };
         let doc = model::to_doc(&flow);
@@ -3339,7 +3336,14 @@ mod tests {
             "x",
             &Fmt { font: Some("Arial".into()), fmt_change: Some(Box::new(FmtChange { mark, old: Fmt::default() })), ..Default::default() },
         );
-        let mut w = Writer { t: Tables { fonts: vec!["Aptos".into()], colors: Vec::new() }, lists: Vec::new(), authors: None, base: Fmt::default() };
+        let mut w = Writer {
+            t: Tables { fonts: vec!["Aptos".into()], colors: Vec::new() },
+            lists: Vec::new(),
+            authors: None,
+            base: Fmt::default(),
+            sections: Vec::new(),
+            sect_i: 0,
+        };
         let mut out = String::new();
         w.para(&p, false, None, "\\par", &mut out);
         let mono = w.t.font(model::MONO_FONT);
