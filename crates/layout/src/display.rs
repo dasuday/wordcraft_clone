@@ -594,10 +594,8 @@ fn commented_ranges(doc: &Document, p: &Paragraph, carry: Option<&CommentCarry>)
                 }
                 open.insert(*id);
             }
-            Some(InlineObject::CommentEnd { id }) => {
-                if open.remove(id) && open.is_empty() {
-                    ranges.push((from, off));
-                }
+            Some(InlineObject::CommentEnd { id }) if open.remove(id) && open.is_empty() => {
+                ranges.push((from, off));
             }
             _ => {}
         }
