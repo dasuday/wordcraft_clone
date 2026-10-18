@@ -68,11 +68,7 @@ fn parse(bytes: &[u8]) -> Option<CoreProps> {
     let codepage = property(1)
         .and_then(|cp| {
             let vt = u32_at(cp, 0)?;
-            if vt == 2 || vt == 3 {
-                Some(u16::from_le_bytes(cp.get(4..6)?.try_into().ok()?))
-            } else {
-                None
-            }
+            if vt == 2 || vt == 3 { Some(u16::from_le_bytes(cp.get(4..6)?.try_into().ok()?)) } else { None }
         })
         .unwrap_or(1252);
     let get = |id| property(id).and_then(|value| text(value, codepage)).unwrap_or_default();

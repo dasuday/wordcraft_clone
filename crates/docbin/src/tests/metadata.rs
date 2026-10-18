@@ -148,16 +148,15 @@ fn summary_parses_filetime_created_and_modified_dates() {
     let ft_val: u64 = 133_549_794_450_000_000;
     let ft_low = (ft_val & 0xFFFFFFFF) as u32;
     let ft_high = (ft_val >> 32) as u32;
-    let filetime_bytes = [
-        64u32.to_le_bytes().as_slice(),
-        &ft_low.to_le_bytes(),
-        &ft_high.to_le_bytes(),
-    ].concat();
+    let filetime_bytes = [64u32.to_le_bytes().as_slice(), &ft_low.to_le_bytes(), &ft_high.to_le_bytes()].concat();
 
-    let stream = custom_summary(&[
-        (12, filetime_bytes.clone()), // PIDSI_CREATE_DTM
-        (13, filetime_bytes),         // PIDSI_LASTSAVE_DTM
-    ], 1);
+    let stream = custom_summary(
+        &[
+            (12, filetime_bytes.clone()), // PIDSI_CREATE_DTM
+            (13, filetime_bytes),         // PIDSI_LASTSAVE_DTM
+        ],
+        1,
+    );
 
     let core = open_with_metadata(&stream, false).core;
     assert_eq!(core.created, "2024-03-15T12:30:45Z");
