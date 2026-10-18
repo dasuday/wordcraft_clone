@@ -122,6 +122,7 @@ impl eframe::App for WebShell {
         if !dropped.is_empty() {
             let inbox = self.inbox.clone();
             let ctx = ctx.clone();
+            let messages = self.messages.clone();
             // One file is read at a time, and only after its size passed the budget (#1333).
             wasm_bindgen_futures::spawn_local(async move {
                 for f in dropped {
@@ -130,6 +131,8 @@ impl eframe::App for WebShell {
                         && let Err(e) = size_gate::check_size(&name, file.size(), size_gate::budget_for(&name, IMAGE_EXTS))
                     {
                         log::error!("{e}");
+                        messages.borrow_mut().push(e);
+                        ctx.request_repaint();
                         continue;
                     }
                     match f.bytes_async().await {
@@ -220,10 +223,12 @@ fn services(inbox: Inbox, ctx: egui::Context, dirty: Rc<Cell<bool>>, saves: Asyn
     let save_ctx = ctx.clone();
     let font_ctx = ctx.clone();
     let font_messages = messages.clone();
+    let picker_messages = messages.clone();
     Services {
         open_async: Some(Box::new(move |purpose: &str| {
             let inbox = open_inbox.clone();
             let ctx = ctx.clone();
+            let picker_messages = picker_messages.clone();
             let budget = match purpose {
                 "picture" => wordcraft_ui_egui::paste_picture::MAX_FILE_BYTES,
                 "font" => wordcraft_fonts::MAX_FONT_FILE_BYTES as u64,
@@ -246,6 +251,9 @@ fn services(inbox: Inbox, ctx: egui::Context, dirty: Rc<Cell<bool>>, saves: Asyn
                     // The size is checked before any of the file is read (#1333).
                     if let Err(e) = size_gate::check_size(&file.file_name(), file.inner().size(), budget) {
                         log::error!("{e}");
+                        // The status bar shows the rejection (WebShell::logic drains this queue).
+                        picker_messages.borrow_mut().push(e);
+                        ctx.request_repaint();
                         continue;
                     }
                     let mut bytes = file.read().await;
