@@ -424,7 +424,7 @@ fn structure(blocks: &Blocks, prefix: &mut Vec<u32>, protected: &HashSet<Vec<u32
     // `Document::para_paths` stops at the same depth; deeper nesting can't hold an editable
     // exception, so any change below it counts as a change to protected content.
     if depth > 16 {
-        if blocks.iter().any(|b| matches!(&**b, Block::Table(_))) {
+        if !blocks.is_empty() {
             out.push(Piece::Deep(format!("{blocks:?}")));
         }
         return;
