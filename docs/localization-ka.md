@@ -24,9 +24,9 @@ string against one terminology glossary shared by the Craft apps. Product, forma
 - **Count-neutral numbers.** A Georgian noun stays singular after a numeral, and the catalog format
   has no plural forms, so counts are written as `noun: n` (`სიტყვა: 21`, `მიმღები: {count}`), which
   reads right for every number.
-- **Fonts.** None of the bundled interface faces (Inter, JetBrains Mono) has Georgian, and
-  craft-fonts has no Georgian face yet, so the interface needs a Georgian-capable fallback face to
-  draw this catalog.
+- **Fonts.** None of the bundled interface faces (Inter, JetBrains Mono) has Georgian. The
+  interface draws it with craft-fonts' Noto Sans Georgian (`Geor`), which release builds embed
+  (the pinned `craft-fonts-ref` includes it) and the web build keeps.
 - **Numbers and dates.** The interface uses a decimal comma in its own labels (`სტრიქონთა დაშორება
   1,5`). Lengths, paper and document numbers follow the system region (File › Options › Advanced ›
   Region), not the interface language; there are no Georgian date formats of its own yet.
