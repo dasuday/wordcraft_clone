@@ -2494,6 +2494,7 @@ preview	Title	제목
 	Bottom Right Cell	오른쪽 아래 셀
 	Inside Horizontal Border	안쪽 가로 테두리
 	Inside Vertical Border	안쪽 세로 테두리
+	Define New Bullet…	새 글머리 기호 정의…
 # Split Cells and Convert Text to Table (#2592)
 	Merge cells before split	나누기 전에 셀 병합
 	Table size	표 크기

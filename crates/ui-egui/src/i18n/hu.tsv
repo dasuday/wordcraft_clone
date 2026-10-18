@@ -2636,6 +2636,7 @@
 # Reading Mode column widths (#1040)
 	Narrow	Keskeny
 	Medium	Közepes
+	Define New Bullet…	Új felsorolásjel megadása…
 # Split Cells and Convert Text to Table (#2592)
 	Merge cells before split	Cellák egyesítése felosztás előtt
 	Table size	Táblázat mérete

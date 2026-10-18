@@ -2241,6 +2241,7 @@
 # Reading Mode column widths (#1040)
 	Narrow	狭い
 	Medium	中
+	Define New Bullet…	新しい行頭文字の定義…
 # Split Cells and Convert Text to Table (#2592)
 	Merge cells before split	分割する前にセルを結合する
 	Table size	表のサイズ

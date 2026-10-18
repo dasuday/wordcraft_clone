@@ -2253,6 +2253,7 @@
 # Reading Mode column widths (#1040)
 	Narrow	Estreita
 	Medium	Média
+	Define New Bullet…	Definir novo marcador…
 # Split Cells and Convert Text to Table (#2592)
 	Merge cells before split	Mesclar células antes de dividir
 	Table size	Tamanho da tabela

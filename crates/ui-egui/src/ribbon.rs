@@ -639,6 +639,80 @@ fn mi_text(ui: &mut Ui, app: &mut WordApp, text: &str, id: &str, params: Value) 
     }
 }
 
+/// Change List Level ›: a tile per level of the caret's list, its bullet or number at its
+/// aligned-at position and a grey line from its text indent, each level further in; the
+/// caret's level is marked. A click runs `para.listLevel`.
+fn list_level_tiles(ui: &mut Ui, app: &mut WordApp) {
+    use wordcraft_doc::numbering::{Counters, LevelSuffix};
+    let t = Tokens::get(ui.ctx());
+    let doc = &app.session.doc;
+    // The paragraph's own list, the one `para.listLevel` changes.
+    let Some(n) = doc.para_at(&app.session.sel.focus).and_then(|p| p.props.numbering).filter(|n| n.num != 0) else { return };
+    // (label and its formatting, alignment, aligned-at and text positions in points) per level.
+    let levels: Vec<_> = (0..9u8)
+        .map(|k| {
+            let def = doc.numbering.level(n.num, k).cloned().unwrap_or_default();
+            // Every level above at its start value, as the Define dialogs' previews show it.
+            let label = Counters::default().next_label(&doc.numbering, n.num, k).map(|(s, _)| s).filter(|s| !s.trim().is_empty());
+            let at = (def.indent - def.hanging).max(0.0);
+            // The label fits its tile whatever size the level gives it.
+            let chr = wordcraft_doc::CharProps { size: None, ..def.chr.clone() };
+            (label, chr, def.align, at, def.indent.max(0.0), def.suffix)
+        })
+        .collect();
+    let enabled = crate::widgets::enabled(app, "para.listLevel");
+    let (w, h) = (200.0, 28.0);
+    // Scaled so the deepest level still has room for its line.
+    let deepest = levels.iter().map(|l| l.3).fold(0.0f32, f32::max);
+    let scale = if deepest > 0.0 { ((w - 64.0) / deepest).min(0.6) } else { 0.6 };
+    let page = crate::previews::preview_tint(&t, false);
+    let ink = |g: u8| egui::Color32::from_gray(((g as u16 * page.r() as u16) / 255) as u8);
+    ui.spacing_mut().item_spacing.y = 1.0;
+    for (k, (label, chr, align, at, text_at, suffix)) in levels.into_iter().enumerate() {
+        let name = format!("{} {}", tl!("Level"), k + 1);
+        let (outer, resp) = ui.allocate_exact_size(vec2(w, h), if enabled { Sense::click() } else { Sense::hover() });
+        let on = k == n.level as usize;
+        resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::SelectableLabel, enabled, on, &name));
+        if on {
+            ui.painter().rect(outer, 3.0, t.checked, Stroke::new(1.0, t.accent), egui::StrokeKind::Inside);
+        } else if resp.hovered() && enabled {
+            ui.painter().rect_filled(outer, 3.0, t.hover);
+        }
+        let tile = outer.shrink(3.0);
+        ui.painter().rect(tile, 1.0, page, Stroke::new(1.0, t.border_strong), egui::StrokeKind::Inside);
+        let left = tile.left() + 6.0;
+        let x_of = |v: f32| left + (v * scale).clamp(0.0, tile.width() - 40.0);
+        let y = tile.center().y;
+        let x = x_of(at);
+        let mut text_x = left;
+        if let Some(label) = label {
+            let glyph = 18.0;
+            // Bullets are one character; a number gets room for its digits and punctuation.
+            let gw = (label.chars().count() as f32 * 7.5).clamp(glyph, 48.0);
+            let gx = match align {
+                wordcraft_doc::Align::Center => x - gw / 2.0,
+                wordcraft_doc::Align::Right => x - gw,
+                _ => x,
+            };
+            let r = Rect::from_min_size(pos2(gx.max(tile.left() + 1.0), y - glyph / 2.0), vec2(gw, glyph));
+            crate::previews::glyph(app, ui, r, &label, &chr, page);
+            text_x = match suffix {
+                LevelSuffix::Tab => x_of(text_at).max(r.right() + 2.0),
+                LevelSuffix::Space => r.right() + 3.0,
+                LevelSuffix::Nothing => r.right(),
+            };
+        }
+        let bar = Rect::from_min_max(pos2(text_x, y - 2.0), pos2(tile.right() - 6.0, y + 2.0));
+        if bar.width() > 0.0 {
+            ui.painter().rect_filled(bar, 1.0, ink(if on { 150 } else { 205 }));
+        }
+        if resp.clicked() {
+            crate::widgets::run_from_ribbon(app, "para.listLevel", json!({"level": k}));
+            ui.close();
+        }
+    }
+}
+
 /// The proofing languages the Language menu offers: tag and English name (translated when drawn).
 pub(crate) const PROOFING_LANGUAGES: [(&str, &str); 10] = [
     ("en-US", "English (United States)"),
@@ -1061,6 +1135,15 @@ fn home(app: &mut WordApp, ui: &mut Ui) {
                         }
                     });
                     mi(ui, app, "None", "para.bullets", json!({"off": true}));
+                    ui.separator();
+                    // #2786: Change List Level › and Define New Bullet….
+                    // Change List Level is for a paragraph in a list of its own numbering, the one
+                    // `para.listLevel` changes (a style's numbering it leaves alone).
+                    let in_list = app.session.doc.para_at(&app.session.sel.focus).and_then(|p| p.props.numbering).is_some_and(|n| n.num != 0);
+                    ui.add_enabled_ui(in_list, |ui| {
+                        ui.menu_button(tl!("Change List Level"), |ui| list_level_tiles(ui, app));
+                    });
+                    mi(ui, app, "Define New Bullet…", "ui.dialog", json!({"name": "defineBullet"}));
                 });
                 split(ui, app, "numbering", "Numbering", "para.numbering", json!({}), lists.numbering, None, |ui, app| {
                     for (l, k) in [
@@ -2951,6 +3034,32 @@ mod tests {
             .collect();
         let first_words: Vec<&str> = checked.iter().filter_map(|l| l.trim_start_matches('✓').split_whitespace().next()).collect();
         assert_eq!(first_words, ["Narrow", "Landscape", "A4", "Right"], "{checked:?}");
+    }
+
+    /// Change List Level › draws a tile per level, named "Level 1" to "Level 9" with the caret's
+    /// level marked; a click moves the paragraph to that level.
+    #[test]
+    fn change_list_level_tiles_name_mark_and_set_the_level() {
+        use egui_kittest::kittest::{NodeT, Queryable};
+        let mut app = WordApp::new(Session::new(wordcraft_doc::Document::from_text("One\nTwo")), crate::Services::default());
+        app.run("para.bullets", json!({"kind": "▪"})).unwrap();
+        app.run("para.listLevel", json!({"level": 1})).unwrap();
+        let mut h =
+            egui_kittest::Harness::builder().with_size(vec2(260.0, 400.0)).build_ui_state(|ui, app: &mut WordApp| list_level_tiles(ui, app), app);
+        h.run_steps(2);
+        let toggled = |h: &egui_kittest::Harness<'_, WordApp>, n: usize| h.get_by_label(&format!("Level {n}")).accesskit_node().toggled();
+        for n in 1..=9 {
+            let want = if n == 2 { egui::accesskit::Toggled::True } else { egui::accesskit::Toggled::False };
+            assert_eq!(toggled(&h, n), Some(want), "Level {n}");
+        }
+        h.get_by_label("Level 4").click();
+        h.run_steps(2);
+        let level = |app: &WordApp| {
+            let doc = &app.session.doc;
+            doc.para_at(&app.session.sel.focus).and_then(|p| p.props.numbering).map(|n| n.level)
+        };
+        assert_eq!(level(h.state()), Some(3), "the paragraph moved to level 4");
+        assert_eq!(toggled(&h, 4), Some(egui::accesskit::Toggled::True), "the tile now marks level 4");
     }
 
     /// #860 review: a tag the language list doesn't have shows by language and region, not as

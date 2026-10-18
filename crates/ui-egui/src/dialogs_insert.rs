@@ -20,6 +20,7 @@ pub enum InsertDialog {
     SmartArt(crate::dialogs_smart_art::SmartArtForm),
     ChartType(crate::dialogs_chart::ChartTypeForm),
     ChartData(crate::dialogs_chart::ChartDataForm),
+    DefineBullet(crate::dialogs_bullet::DefineBulletForm),
 }
 
 impl InsertDialog {
@@ -32,6 +33,7 @@ impl InsertDialog {
             InsertDialog::ChartType(f) if f.change => "changeChartType",
             InsertDialog::ChartType(_) => "insertChart",
             InsertDialog::ChartData(_) => "chartData",
+            InsertDialog::DefineBullet(_) => "defineBullet",
         }
     }
 
@@ -45,13 +47,14 @@ impl InsertDialog {
             InsertDialog::ChartType(f) if f.change => "Change Chart Type",
             InsertDialog::ChartType(_) => "Insert Chart",
             InsertDialog::ChartData(_) => "Edit Data",
+            InsertDialog::DefineBullet(_) => "Define New Bullet",
         }
     }
 }
 
 /// The dialog `ui.dialog` opens by `name`: `columns`, `symbol`, `specialCharacters`, `field`,
-/// `insertChart`, `changeChartType` or `chartData` (the last two for the selected chart), or
-/// `insertSmartArt`.
+/// `insertChart`, `changeChartType` or `chartData` (the last two for the selected chart),
+/// `insertSmartArt`, or `defineBullet` (Home › Bullets › Define New Bullet…).
 pub fn open(name: &str, app: &WordApp) -> Option<InsertDialog> {
     Some(match name {
         "columns" => InsertDialog::Columns(ColumnsForm::read(app)),
@@ -62,6 +65,7 @@ pub fn open(name: &str, app: &WordApp) -> Option<InsertDialog> {
         "insertChart" => InsertDialog::ChartType(crate::dialogs_chart::ChartTypeForm::new(app, false)?),
         "changeChartType" => InsertDialog::ChartType(crate::dialogs_chart::ChartTypeForm::new(app, true)?),
         "chartData" => InsertDialog::ChartData(crate::dialogs_chart::ChartDataForm::new(app)?),
+        "defineBullet" => InsertDialog::DefineBullet(crate::dialogs_bullet::DefineBulletForm::new(app)),
         _ => return None,
     })
 }
@@ -75,6 +79,7 @@ pub fn body(app: &mut WordApp, ui: &mut Ui, d: &mut InsertDialog) -> bool {
         InsertDialog::SmartArt(f) => crate::dialogs_smart_art::picker_ui(app, ui, f),
         InsertDialog::ChartType(f) => crate::dialogs_chart::type_ui(app, ui, f),
         InsertDialog::ChartData(f) => crate::dialogs_chart::data_ui(app, ui, f),
+        InsertDialog::DefineBullet(f) => crate::dialogs_bullet::body(app, ui, f),
     }
 }
 
@@ -596,6 +601,10 @@ pub struct SymbolForm {
     /// Scroll the grid to this row on the next frame.
     #[serde(skip)]
     scroll_to: Option<usize>,
+    /// Picking a bullet for Define New Bullet (#2786): OK hands the character and its font back
+    /// to that dialog instead of inserting it, and Cancel goes back to it unchanged.
+    #[serde(skip)]
+    pub bullet: Option<Box<crate::dialogs_bullet::DefineBulletForm>>,
 }
 
 /// Grid geometry.
@@ -614,10 +623,43 @@ impl SymbolForm {
         let recent = app.ui.recent_symbols.first().cloned();
         let font = recent.as_ref().map(|r| r.font.clone()).unwrap_or_default();
         let selected = recent.and_then(|r| r.ch.chars().next());
-        let mut f =
-            SymbolForm { tab, font, selected, code: String::new(), special: 0, text_font, chars: Vec::new(), chars_of: None, scroll_to: None };
+        let mut f = SymbolForm {
+            tab,
+            font,
+            selected,
+            code: String::new(),
+            special: 0,
+            text_font,
+            chars: Vec::new(),
+            chars_of: None,
+            scroll_to: None,
+            bullet: None,
+        };
         f.sync_code();
         f
+    }
+
+    /// The Symbol dialog picking `form`'s bullet: it opens on the bullet's font and character.
+    pub fn for_bullet(app: &WordApp, form: crate::dialogs_bullet::DefineBulletForm) -> SymbolForm {
+        let mut f = SymbolForm::new(app, 0);
+        f.font = form.font.clone();
+        f.selected = form.ch.chars().next();
+        f.load();
+        f.sync_code();
+        f.scroll_to = f.selected.and_then(|c| f.row_of(c));
+        f.bullet = Some(Box::new(form));
+        f
+    }
+
+    /// Back to Define New Bullet, with `picked` (a character and its font) when one was chosen.
+    fn back_to_bullet(&mut self, app: &mut WordApp, picked: Option<(String, String)>) -> bool {
+        let Some(mut form) = self.bullet.take() else { return false };
+        if let Some((ch, font)) = picked {
+            form.ch = ch;
+            form.font = font;
+        }
+        app.dialog = Some(crate::dialogs::Dialog::Insert(Box::new(InsertDialog::DefineBullet(*form))));
+        true
     }
 
     /// The font the grid shows: the chosen one, or the text's.
@@ -732,14 +774,19 @@ fn symbol_cell(app: &mut WordApp, ui: &mut Ui, font: &str, c: char, selected: bo
 fn symbol_ui(app: &mut WordApp, ui: &mut Ui, f: &mut SymbolForm) -> bool {
     let t = Tokens::get(ui.ctx());
     ui.set_width(GRID_COLS as f32 * CELL + 24.0);
-    ui.horizontal(|ui| {
-        for (i, l) in ["Symbols", "Special Characters"].into_iter().enumerate() {
-            if ui.selectable_label(f.tab == i as u8, tl!(l)).clicked() {
-                f.tab = i as u8;
+    if f.bullet.is_some() {
+        // A bullet is one character in a font: the Special Characters tab has nothing for it.
+        f.tab = 0;
+    } else {
+        ui.horizontal(|ui| {
+            for (i, l) in ["Symbols", "Special Characters"].into_iter().enumerate() {
+                if ui.selectable_label(f.tab == i as u8, tl!(l)).clicked() {
+                    f.tab = i as u8;
+                }
             }
-        }
-    });
-    ui.separator();
+        });
+        ui.separator();
+    }
     let mut insert: Option<(Value, String, String)> = None;
     if f.tab == 1 {
         if special_ui(app, ui, f, &mut insert, &t) {
@@ -792,8 +839,10 @@ fn symbol_ui(app: &mut WordApp, ui: &mut Ui, f: &mut SymbolForm) -> bool {
         let rows = f.chars.len().div_ceil(GRID_COLS);
         let mut area = egui::ScrollArea::vertical().id_salt("symbol_grid").max_height(CELL * GRID_ROWS as f32).auto_shrink([false, false]);
         if let Some(row) = f.scroll_to.take() {
-            // Keep the row in view: it lands on the grid's second row when there is room.
-            area = area.vertical_scroll_offset(row.saturating_sub(1) as f32 * CELL);
+            // Keep the row in view: it lands on the grid's second row when there is room. Rows
+            // are `CELL` plus the item spacing apart (`show_rows` adds it between rows).
+            let pitch = CELL + ui.spacing().item_spacing.y;
+            area = area.vertical_scroll_offset(row.saturating_sub(1) as f32 * pitch);
         }
         let font = f.shown_font().to_string();
         let chars = f.chars.clone();
@@ -864,14 +913,22 @@ fn symbol_ui(app: &mut WordApp, ui: &mut Ui, f: &mut SymbolForm) -> bool {
         if double && let Some(p) = f.params() {
             insert = Some((p, f.selected.map(String::from).unwrap_or_default(), f.font.clone()));
         }
-        // The Insert button.
-        let (ok, close) = buttons(ui, "Insert", "Close", f.selected.is_some());
+        // The Insert button (OK while picking a bullet).
+        let (ok_label, close_label) = if f.bullet.is_some() { ("OK", "Cancel") } else { ("Insert", "Close") };
+        let (ok, close) = buttons(ui, ok_label, close_label, f.selected.is_some());
         if ok && let Some(p) = f.params() {
             insert = Some((p, f.selected.map(String::from).unwrap_or_default(), f.font.clone()));
         }
         if close {
+            f.back_to_bullet(app, None);
             return true;
         }
+    }
+    if f.bullet.is_some()
+        && let Some((_, ch, font)) = insert
+    {
+        remember_symbol(app, &ch, &font);
+        return f.back_to_bullet(app, Some((ch, font)));
     }
     if let Some((params, ch, font)) = insert {
         // Special characters with their own command insert through it (non-breaking hyphen…).
