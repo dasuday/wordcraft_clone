@@ -2480,7 +2480,8 @@ mod tests {
         assert!(tb.rows[0].cells[0].props.borders.is_none());
 
         // Cell borders round-trip through export and import.
-        let d = import(br"{\rtf1\ansi{\colortbl;\red174\green174\blue174;}\trowd\clbrdrb\brdrdb\brdrw15\brdrcf1\cellx2000\pard\intbl a\cell\row}").unwrap();
+        let d = import(br"{\rtf1\ansi{\colortbl;\red174\green174\blue174;}\trowd\clbrdrb\brdrdb\brdrw15\brdrcf1\cellx2000\pard\intbl a\cell\row}")
+            .unwrap();
         let exported = export(&d);
         assert!(exported.contains("\\clbrdrb\\brdrdb\\brdrw15\\brdrcf1"), "{exported}");
         let back = import(exported.as_bytes()).unwrap();
