@@ -2373,6 +2373,14 @@ fn layout_pass(
                 }
             }
         }
+        // Header and footer paragraphs are cut at the limit too; they aren't in the body index.
+        for it in p.header.iter().chain(p.footer.iter()) {
+            if let Placed::Lines { story, path, para, .. } = it
+                && para.truncated
+            {
+                truncated.insert((*story, path.clone()));
+            }
+        }
     }
     let warned = truncated.iter().fold(truncated.len() as u64, |acc, (story, path)| {
         use std::hash::{Hash, Hasher};

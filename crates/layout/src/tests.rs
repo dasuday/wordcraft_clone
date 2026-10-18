@@ -7764,6 +7764,12 @@ fn paragraphs_past_the_line_limit_are_counted() {
     assert!(shown_to(&l) <= tail, "shown to {} of {}", shown_to(&l), text.len());
     // The production limit leaves ordinary paragraphs alone.
     assert_eq!(lay(&d).truncated_paragraphs, 0);
+    // A header paragraph cut at the limit is counted too (#1341 review).
+    let mut d = Document::from_text("Body");
+    let hp = wordcraft_doc::Paragraph::with_text("L1\nL2\nL3\nTailEnd", Default::default());
+    let id = d.add_part(wordcraft_doc::PartKind::Header, vec![wordcraft_doc::para_block(hp)]);
+    d.last_section.headers.default = Some(id);
+    assert_eq!(para::with_line_limit(3, || lay(&d)).truncated_paragraphs, 1);
 }
 
 /// #1341: the cut-paragraph warning is logged once per revision of the cut paragraphs, not on
