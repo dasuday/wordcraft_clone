@@ -964,9 +964,13 @@ fn finish_within(s: &mut Session, v: &Value, max_blocks: usize) -> CmdResult {
             skipped += 1;
             continue;
         }
-        if count > 0 && out.body.len().saturating_add(body.len()) > max_blocks {
-            // This record's copy would pass the limit: it and every record after it are left
-            // out, and the result says so.
+        // A letter after the first needs a paragraph to carry the previous letter's section break,
+        // unless the output already ends in one.
+        let needs_separator = per_record && prev_section.is_some() && !matches!(out.body.last().map(|b| &**b), Some(Block::Para(_)));
+        // The first record is always kept, so a template over the limit still merges one copy.
+        if count > 0 && out.body.len().saturating_add(body.len()).saturating_add(usize::from(needs_separator)) > max_blocks {
+            // This record's copy (and its separator) would pass the limit: it and every record
+            // after it are left out, and the result says so.
             omitted = to.saturating_sub(record);
             break;
         }
@@ -998,7 +1002,7 @@ fn finish_within(s: &mut Session, v: &Value, max_blocks: usize) -> CmdResult {
             let mut last = s.doc.last_section.clone();
             remap_headers(&mut last, &map, first);
             if let Some(prev) = prev_section.replace(last) {
-                if !matches!(out.body.last().map(|b| &**b), Some(Block::Para(_))) {
+                if needs_separator {
                     out.body.push(para_block(Paragraph::new()));
                 }
                 if let Some(Block::Para(p)) = out.body.last_mut().map(std::sync::Arc::make_mut) {
@@ -1608,6 +1612,27 @@ mod tests {
         let (r, text, _) = run(&["Alpha", "SkipMe", "Beta"], Some(skip));
         assert_eq!(r, json!({"records": 2, "requested": 3, "skipped": 1, "omitted": 0}));
         assert_eq!(text, "Alpha\nBeta");
+    }
+
+    /// #1341 review: in per-letter mode the paragraph that carries a section break counts toward the
+    /// block limit, so the merged body never passes it without saying records were left out.
+    #[test]
+    fn finish_counts_the_section_separator_toward_the_block_limit() {
+        let mut s = Session::new(Document::new());
+        s.run("mailings.recipients", &json!({"rows": [{"Name": "Alpha"}, {"Name": "Beta"}]})).unwrap();
+        s.run("insert.header", &json!({"text": "To: "})).unwrap();
+        s.run("caret.docEnd", &json!({})).unwrap();
+        s.run("mailings.insertField", &json!({"field": "Name"})).unwrap();
+        s.run("insert.closeHeader", &json!({})).unwrap();
+        s.run("text.insert", &json!({"text": "Body"})).unwrap();
+        s.run("insert.table", &json!({"rows": 1, "cols": 1})).unwrap();
+        s.doc.body.pop();
+        // The letter ends in a table, so the next letter needs a paragraph to carry the section.
+        assert!(!matches!(s.doc.body.last().map(|b| &**b), Some(Block::Para(_))));
+        let one = s.doc.body.len();
+        let r = finish_within(&mut s, &json!({}), one * 2).unwrap();
+        assert_eq!((r["records"].clone(), r["omitted"].clone()), (json!(1), json!(1)), "{r}");
+        assert!(s.doc.body.len() <= one * 2, "{}", s.doc.body.len());
     }
 
     /// #1341: a recipient list longer than the record limit is refused with the limit named,
