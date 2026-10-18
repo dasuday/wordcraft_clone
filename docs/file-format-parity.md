@@ -223,12 +223,8 @@ Imported text fields use the first nonempty cached result run's formatting on th
 
 | Date | Change | Summary |
 |---|---|---|
-| 2026-10-15 | trivial | DOCX: a field nested in another field's code is kept with its nesting on save instead of being replaced by its cached result, with its formatting and tracked changes; not evaluated; fallback cases listed (#1671) |
-<<<<<<< HEAD
 | 2026-10-14 | trivial | ODT export writes sections: each new-page section gets its own page layout and master page (the first stays "Standard"), named by its first paragraph or table with the page-numbering restart; a continuous section with columns is a columned `text:section` (gap 19) |
-=======
 | 2026-10-15 | trivial | DOCX: a field nested in another field's code is kept with its nesting on save instead of being replaced by its cached result, with its formatting and tracked changes; not updated by Update Field (SEQ/STYLEREF still are); fallback cases listed (#1671) |
->>>>>>> 426b051 (DOCX: nested field codes checked on save; revisions on any code text fall back (#1671))
 | 2026-10-17 | trivial | Paste: an HTML `<blockquote>` (LibreOffice's both-sides indent) pastes as a Normal paragraph with its margins as indents, not the centred italic Quote style; opening .html unchanged (#1270) |
 | 2026-10-15 | trivial | `wordcraft-cli convert --update-fields` explicitly refreshes unlocked fields before conversion; ordinary conversion keeps cached results. Field refresh can change pagination |
 | 2026-10-16 | trivial | Cached textual `REF` results with `\h` export links to their bookmarks. Code view and existing enclosing hyperlinks remain unchanged; unresolved bookmarks emit no PDF link. |
