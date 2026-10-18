@@ -2842,7 +2842,7 @@ fn body(app: &mut WordApp, ui: &mut Ui, d: &mut Dialog) -> bool {
 }
 
 /// The Recipient List dialog's body: a file button, the editable table, OK/Cancel. True to close.
-fn recipient_list(
+pub(crate) fn recipient_list(
     app: &mut WordApp,
     ui: &mut Ui,
     fields: &mut Vec<String>,

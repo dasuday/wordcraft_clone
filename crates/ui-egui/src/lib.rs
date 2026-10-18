@@ -6962,6 +6962,76 @@ mod tests {
         assert!(filter.find.is_empty() && !filter.only_merged && filter.held.is_none());
     }
 
+    /// #1576: the real Edit Recipient List grid in a harness (the dialog body, without the app
+    /// around it): Find, merged-only, an edit while the search hides rows, remove, New Entry.
+    #[test]
+    fn recipient_grid_edits_the_right_record_through_the_ui() {
+        use egui_kittest::kittest::Queryable;
+        type State = (WordApp, Vec<String>, Vec<Vec<String>>, String, dialogs::RecipientFilter);
+        let rows = [["Ada", "London"], ["Alan", "Wilmslow"], ["Grace", "London"], ["Émile", "Paris"]];
+        let mut filter = dialogs::RecipientFilter::default();
+        let rule =
+            dialogs::FilterRow { field: "City".into(), op: wordcraft_engine::cmd::mailings::FilterOp::Equal, value: "London".into(), or: false };
+        filter.rules.push(rule);
+        let state: State = (
+            app(),
+            vec!["Name".into(), "City".into()],
+            rows.iter().map(|r| r.iter().map(|c| c.to_string()).collect()).collect(),
+            String::new(),
+            filter,
+        );
+        let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(900.0, 600.0)).build_ui_state(
+            |ui, s: &mut State| {
+                let (app, fields, rows, message, filter) = s;
+                dialogs::recipient_list(app, ui, fields, rows, message, filter);
+            },
+            state,
+        );
+        h.run_steps(4);
+        // Text boxes in order: Find, two field names, then the visible records' cells.
+        let cells = |h: &egui_kittest::Harness<'_, State>| h.query_all_by_role(egui::accesskit::Role::TextInput).count().saturating_sub(3) / 2;
+        let names = |h: &egui_kittest::Harness<'_, State>| h.state().2.iter().map(|r| r[0].clone()).collect::<Vec<_>>();
+        // Find in list: the first text box. Grace is the only match.
+        let find = h.query_all_by_role(egui::accesskit::Role::TextInput).next().unwrap();
+        find.click();
+        h.run_steps(2);
+        h.query_all_by_role(egui::accesskit::Role::TextInput).next().unwrap().type_text("grace");
+        h.run_steps(3);
+        assert_eq!(h.state().4.find, "grace");
+        assert!(cells(&h) == 1, "search hides the other rows");
+        // Merged-only on top of it: still Grace (London is kept).
+        h.get_by_label("Show only records that will be merged").click();
+        h.run_steps(3);
+        assert!(h.state().4.only_merged && cells(&h) == 1);
+        // Edit Grace's cell to something the search no longer matches: the row stays, and the
+        // edit lands on record 2, not on the first visible row's index.
+        h.query_all_by_role(egui::accesskit::Role::TextInput).nth(3).unwrap().click();
+        h.run_steps(2);
+        h.event(egui::Event::Key {
+            key: egui::Key::A,
+            physical_key: None,
+            pressed: true,
+            repeat: false,
+            modifiers: egui::Modifiers { command: true, ..Default::default() },
+        });
+        h.query_all_by_role(egui::accesskit::Role::TextInput).nth(3).unwrap().type_text("Zed");
+        h.run_steps(3);
+        assert_eq!(names(&h), ["Ada", "Alan", "Zed", "Émile"]);
+        assert_eq!(h.state().4.held, Some(vec![2]), "rows are held while the cell has the keyboard");
+        assert_eq!(cells(&h), 1);
+        // Remove the one shown record: the third "×" (two are field headers).
+        let xs: Vec<_> = h.get_all_by_label("×").collect();
+        xs[2].click();
+        h.run_steps(3);
+        assert_eq!(names(&h), ["Ada", "Alan", "Émile"]);
+        assert!(h.state().4.held.is_none());
+        // New Entry clears the view and appends an empty record.
+        h.get_by_label("New Entry").click();
+        h.run_steps(3);
+        assert_eq!(h.state().2, vec![vec!["Ada", "London"], vec!["Alan", "Wilmslow"], vec!["Émile", "Paris"], vec!["", ""]]);
+        assert!(h.state().4.find.is_empty() && !h.state().4.only_merged);
+    }
+
     /// #240: Select Recipients needs data, so clicking it opens the recipient list instead of
     /// reporting missing parameters; scripts and agents still get the error.
     #[test]
