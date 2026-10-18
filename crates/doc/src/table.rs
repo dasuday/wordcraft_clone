@@ -438,6 +438,8 @@ impl Table {
             let Some(src) = self.rows.get_mut(top) else { return false };
             let mut like = Row { props: src.props.clone(), cells: Vec::with_capacity(src.cells.len()), controls: ControlWrap::default() };
             like.props.header = false;
+            like.props.ins = None;
+            like.props.del = None;
             for (i, cell) in src.cells.iter_mut().enumerate() {
                 let mut nc = Cell::empty();
                 nc.props = cell.props.clone();

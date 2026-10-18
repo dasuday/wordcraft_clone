@@ -391,6 +391,8 @@ fn remap_table_changes(b: &mut Block, depth: usize, rev: &dyn Fn(&mut Option<u32
         remap_change(&mut t.props.fmt_change, rev);
         for row in &mut t.rows {
             remap_change(&mut row.props.fmt_change, rev);
+            rev(&mut row.props.ins);
+            rev(&mut row.props.del);
             for cell in &mut row.cells {
                 remap_change(&mut cell.props.fmt_change, rev);
                 for cb in &mut cell.blocks {
