@@ -1601,7 +1601,7 @@ fn apply_font(app: &mut WordApp, d: &Dialog) {
     }
 }
 
-/// Returns true to close.
+/// Draws the selected dialog body and returns true when the dialog should close.
 fn body(app: &mut WordApp, ui: &mut Ui, d: &mut Dialog) -> bool {
     match d {
         Dialog::RenameDocument { name, message, focus } => {
@@ -1658,7 +1658,7 @@ fn body(app: &mut WordApp, ui: &mut Ui, d: &mut Dialog) -> bool {
                 if *asian {
                     ui.label(tl!("Asian text font:"));
                     let fams = app.previews.east_asian_families();
-                    if let Some(f) = crate::widgets::font_combo(ui, "fontdlg_asian", 220.0, font_ea, &fams, Some(&*prev)) {
+                    if let Some(f) = crate::widgets::font_combo(ui, "fontdlg_asian", tl!("Asian text font:"), 220.0, font_ea, &fams, Some(&*prev)) {
                         if f == crate::widgets::ADD_FONT {
                             let _ = app.run("font.add", json!({}));
                         } else if f == crate::widgets::LOAD_SYSTEM_FONTS {
@@ -1671,7 +1671,15 @@ fn body(app: &mut WordApp, ui: &mut Ui, d: &mut Dialog) -> bool {
                 }
                 ui.label(if *asian { tl!("Latin text font:") } else { tl!("Font:") });
                 let fams = app.previews.families();
-                if let Some(f) = crate::widgets::font_combo(ui, "fontdlg_font", 220.0, font, &fams, Some(&*prev)) {
+                if let Some(f) = crate::widgets::font_combo(
+                    ui,
+                    "fontdlg_font",
+                    if *asian { tl!("Latin text font:") } else { tl!("Font:") },
+                    220.0,
+                    font,
+                    &fams,
+                    Some(&*prev),
+                ) {
                     if f == crate::widgets::ADD_FONT {
                         let _ = app.run("font.add", json!({}));
                     } else if f == crate::widgets::LOAD_SYSTEM_FONTS {
@@ -2347,7 +2355,7 @@ fn body(app: &mut WordApp, ui: &mut Ui, d: &mut Dialog) -> bool {
                 let shown = app.previews.font_shown(font);
                 let fams = app.previews.families();
                 let prev = app.previews.font_preview_fn();
-                if let Some(f) = crate::widgets::font_combo(ui, "ms_font", 220.0, &shown, &fams, Some(&*prev)) {
+                if let Some(f) = crate::widgets::font_combo(ui, "ms_font", tl!("Font:"), 220.0, &shown, &fams, Some(&*prev)) {
                     if f == crate::widgets::ADD_FONT {
                         let _ = app.run("font.add", json!({}));
                     } else {

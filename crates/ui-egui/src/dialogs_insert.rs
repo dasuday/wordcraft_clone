@@ -729,6 +729,7 @@ fn symbol_cell(app: &mut WordApp, ui: &mut Ui, font: &str, c: char, selected: bo
     resp
 }
 
+/// Draws the Symbols dialog body and handles font selection or special-character insertion.
 fn symbol_ui(app: &mut WordApp, ui: &mut Ui, f: &mut SymbolForm) -> bool {
     let t = Tokens::get(ui.ctx());
     ui.set_width(GRID_COLS as f32 * CELL + 24.0);
@@ -768,7 +769,7 @@ fn symbol_ui(app: &mut WordApp, ui: &mut Ui, f: &mut SymbolForm) -> bool {
                     pf(ui, name)
                 }
             };
-            if let Some(v) = crate::widgets::combo(ui, "symbol_font", 190.0, &shown, &items, Some(&preview)) {
+            if let Some(v) = crate::widgets::combo(ui, "symbol_font", tl!("Font:"), 190.0, &shown, &items, Some(&preview)) {
                 f.font = if v == normal || v.trim().is_empty() { String::new() } else { v.trim().to_string() };
                 f.load();
             }

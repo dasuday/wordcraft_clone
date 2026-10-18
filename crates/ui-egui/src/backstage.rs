@@ -20,11 +20,21 @@ const PAGES: [(&str, &str); 11] = [
     ("options", "Options"),
 ];
 
-/// The Backstage back chevron's centre on macOS (#1873): beside the traffic lights in a
-/// window (the title bar's content edge), at the plain control inset in full screen, where the
-/// lights aren't docked top-left and the reserved offset would leave dead space.
-fn back_chevron_c(band_min_x: f32, center_y: f32, fullscreen: bool, content_left: f32) -> egui::Pos2 {
-    let x = if fullscreen { 26.0 } else { content_left + 3.0 };
+#[cfg(test)]
+thread_local! {
+    /// The real rectangles the macOS Backstage band laid out: the band, the drag region and the back
+    /// button's hitbox. Tests check these rather than the painted chevron's position.
+    pub(crate) static BACKSTAGE_RECTS: std::cell::RefCell<Vec<(&'static str, Rect)>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// The navigation column's width in egui points: Word's 200, widened on macOS when the native strip
+/// needs more room than that (see `show`).
+const BACKSTAGE_NAV_W: f32 = 200.0;
+
+/// The chevron centre from the normalized native reservation. In full screen the traffic lights
+/// aren't docked at the top-left, so use the plain 26-point control inset instead.
+fn back_chevron_c(band_min_x: f32, center_y: f32, fullscreen: bool, reservation: f32) -> egui::Pos2 {
+    let x = if fullscreen { 26.0 } else { reservation + 11.0 };
     pos2(band_min_x + x, center_y)
 }
 
@@ -37,8 +47,14 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
         app.ui.backstage_page = "home".into();
     }
     let mac = app.integrated_titlebar;
+    let fullscreen = mac && app.session.view.full_screen;
+    // Only windowed macOS reserves room for the traffic lights. native_reservation is normalized to
+    // the actual interface zoom; full screen uses Word's plain 200-point navigation column.
+    let reserve = if mac && !fullscreen { crate::chrome::native_reservation(app, ui.ctx()) } else { 0.0 };
+    // The windowed column is wide enough for the native strip, the 22-point back hitbox and room to drag.
+    let nav_w = if mac { BACKSTAGE_NAV_W.max(reserve + 44.0) } else { BACKSTAGE_NAV_W };
     egui::Panel::left("backstage_nav")
-        .exact_size(200.0)
+        .exact_size(nav_w)
         // Fixed width, as in Word: without this egui shows a resize handle that does nothing (#502).
         .resizable(false)
         .frame(egui::Frame::NONE.fill(if recovery { egui::Color32::BLACK } else { APP_COLOR }).inner_margin(egui::Margin {
@@ -52,17 +68,39 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
                 // macOS (#222): the Backstage covers the title bar, so its top band is the title
                 // bar: the back button sits beside the traffic lights, centred with them and as far
                 // from them as the title bar's own controls, and the rest of the band drags the window.
-                let (band, drag) = ui.allocate_exact_size(vec2(200.0, app.mac_titlebar.height), Sense::click_and_drag());
-                if drag.drag_started() {
+                // The band itself takes no input: the native traffic lights sit in its left part, so a
+                // click or drag there must reach AppKit rather than us.
+                let (band, _) = ui.allocate_exact_size(vec2(nav_w, crate::chrome::mac_band_height(app, ui.ctx())), Sense::hover());
+                // The helper returns the centre used by both the full 22-point hitbox and the chevron
+                // art, so windowed native clearance and the full-screen inset cannot drift apart.
+                let center = back_chevron_c(band.min.x, band.center().y, fullscreen, reserve);
+                let hit = Rect::from_center_size(center, vec2(22.0, band.height()));
+                let resp = ui.interact(hit, ui.id().with("backstage_back"), Sense::click());
+                // Windowed dragging is restricted to the safe part right of the back hitbox; in full
+                // screen the same rule leaves the 15..37-point button area non-draggable.
+                let drag = Rect::from_min_max(pos2(hit.max.x, band.min.y), band.max);
+                let drag = if drag.width() > 1.0 { Some(drag) } else { None };
+                if drag.map(|r| ui.interact(r, ui.id().with("backstage_drag"), Sense::click_and_drag())).is_some_and(|d| d.drag_started()) {
                     ui.ctx().send_viewport_cmd(egui::ViewportCommand::StartDrag);
                 }
-                // The chevron's stroke starts at the content edge.
-                let c = back_chevron_c(band.min.x, band.center().y, app.session.view.full_screen, app.mac_titlebar.content_left);
-                let resp = ui.interact(Rect::from_center_size(c, vec2(22.0, band.height())), ui.id().with("backstage_back"), Sense::click());
-                icons::paint(ui.painter(), Rect::from_center_size(c, vec2(18.0, 18.0)), "chevronLeft", egui::Color32::WHITE, egui::Color32::WHITE);
+                #[cfg(test)]
+                BACKSTAGE_RECTS.with(|b| {
+                    b.borrow_mut().push(("band", band));
+                    if let Some(r) = drag {
+                        b.borrow_mut().push(("drag", r));
+                    }
+                    b.borrow_mut().push(("back", resp.rect));
+                });
+                icons::paint(
+                    ui.painter(),
+                    Rect::from_center_size(center, vec2(18.0, 18.0)),
+                    "chevronLeft",
+                    egui::Color32::WHITE,
+                    egui::Color32::WHITE,
+                );
                 resp
             } else {
-                let (r, resp) = ui.allocate_exact_size(vec2(200.0, 40.0), Sense::click());
+                let (r, resp) = ui.allocate_exact_size(vec2(nav_w, 40.0), Sense::click());
                 icons::paint(
                     ui.painter(),
                     Rect::from_center_size(pos2(r.min.x + 26.0, r.center().y), vec2(18.0, 18.0)),
@@ -81,7 +119,7 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
             for (id, label) in PAGES {
                 // No document open (#1129): Info, Save, Save As, Print and Export are greyed out.
                 let on = has_document || works_without_document(id);
-                let (r, resp) = ui.add_enabled_ui(on, |ui| ui.allocate_exact_size(vec2(200.0, 38.0), Sense::click())).inner;
+                let (r, resp) = ui.add_enabled_ui(on, |ui| ui.allocate_exact_size(vec2(nav_w, 38.0), Sense::click())).inner;
                 resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, on, tl!(label)));
                 let active = app.ui.backstage_page == id;
                 if active {
@@ -127,7 +165,7 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
             }
             ui.with_layout(egui::Layout::bottom_up(egui::Align::Min), |ui| {
                 for (label, id) in [("About", "about"), ("Discord community", "discord")] {
-                    let (r, resp) = ui.allocate_exact_size(vec2(200.0, 32.0), Sense::click());
+                    let (r, resp) = ui.allocate_exact_size(vec2(nav_w, 32.0), Sense::click());
                     resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), tl!(label)));
                     if resp.hovered() {
                         ui.painter().rect_filled(r, 0.0, egui::Color32::from_white_alpha(26));
@@ -496,16 +534,15 @@ mod tests {
     use egui_kittest::kittest::Queryable;
     use serde_json::json;
 
-    use super::matching_templates;
+    use super::{BACKSTAGE_RECTS, matching_templates};
     use crate::{Services, WordApp};
 
-    /// #1873: the macOS back chevron sits beside the traffic lights windowed, at the plain
-    /// control inset in full screen.
+    /// #1873: windowed placement uses the normalized native reservation; full screen ignores it.
     #[test]
-    fn back_chevron_keeps_clear_of_traffic_lights_only_windowed() {
-        let windowed = super::back_chevron_c(0.0, 14.0, false, 70.0);
+    fn back_chevron_uses_native_reservation_only_windowed() {
+        let windowed = super::back_chevron_c(0.0, 14.0, false, 62.0);
         assert_eq!((windowed.x, windowed.y), (73.0, 14.0));
-        let full = super::back_chevron_c(0.0, 14.0, true, 70.0);
+        let full = super::back_chevron_c(0.0, 14.0, true, 62.0);
         assert_eq!((full.x, full.y), (26.0, 14.0));
         assert!(full.x < windowed.x);
     }
@@ -629,6 +666,169 @@ mod tests {
         assert_eq!(ids("re"), ["resume", "report"]);
         assert_eq!(ids("résumé"), ["resume"]);
         assert!(ids("no such template").is_empty());
+    }
+
+    /// Runs the macOS Backstage (integrated title bar) at the given interface size and returns the
+    /// zoom the app actually used plus the band rectangles it laid out. The interface size goes
+    /// through the app's own command, because the app sets the zoom itself every frame.
+    fn backstage_rects_at(percent: u32, fullscreen: bool) -> (f32, Vec<(&'static str, egui::Rect)>) {
+        let mut a = WordApp::new(wordcraft_engine::Session::new(wordcraft_doc::Document::new()), Services::default());
+        a.integrated_titlebar = true;
+        a.native_lights = Some(egui::vec2(crate::chrome::NATIVE_LIGHTS_W, 28.0));
+        a.session.view.full_screen = fullscreen;
+        a.run("ui.backstage", json!({"value": true, "page": "home"})).unwrap();
+        a.run("ui.interfaceSize", json!({"percent": percent})).unwrap();
+        let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(1440.0, 900.0)).build_ui_state(
+            |ui, app: &mut WordApp| {
+                let ctx = ui.ctx().clone();
+                app.logic(&ctx);
+                app.ui(ui);
+            },
+            a,
+        );
+        BACKSTAGE_RECTS.with(|b| b.borrow_mut().clear());
+        h.run_steps(4);
+        (h.ctx.zoom_factor(), BACKSTAGE_RECTS.with(|b| b.borrow().clone()))
+    }
+
+    /// The whole back button — its 22-point hitbox, not just the chevron's ink — and the window-drag
+    /// region start to the right of the native traffic lights plus the gap, at every supported
+    /// interface size. The comparison is in physical points, so the native reservation stays the same
+    /// 88 at 80 % and at 200 %.
+    #[test]
+    fn mac_backstage_back_button_clears_the_native_traffic_lights() {
+        for percent in [80u32, 90, 100, 110, 125, 150, 175, 200] {
+            let (zoom, rects) = backstage_rects_at(percent, false);
+            assert!((zoom - percent as f32 / 100.0).abs() < 0.01, "the {percent}% interface size did not apply: zoom {zoom:.2}");
+            assert!(!rects.is_empty(), "the macOS Backstage band recorded no rectangles");
+            assert!(rects.iter().any(|(n, _)| *n == "back"), "the back hitbox was recorded");
+            // The band itself is only an allocation (it must take no input); the interactive parts —
+            // the back hitbox and the window-drag region — must clear the native strip entirely.
+            for (name, r) in rects.iter().filter(|(n, _)| *n != "band") {
+                assert!(
+                    r.min.x * zoom >= crate::chrome::NATIVE_LIGHTS_W + crate::chrome::NATIVE_GAP - 0.5,
+                    "at {percent}% the Backstage {name} region starts at {:.1} egui points = {:.1} physical points, inside the 88-point reservation",
+                    r.min.x,
+                    r.min.x * zoom
+                );
+            }
+            // The drag region never overlaps the back button.
+            if let Some((_, drag)) = rects.iter().find(|(n, _)| *n == "drag")
+                && let Some((_, back)) = rects.iter().find(|(n, _)| *n == "back")
+            {
+                assert!(drag.min.x >= back.max.x - 0.01, "at {percent}% the drag region {drag:?} overlaps the back hitbox {back:?}");
+            }
+        }
+    }
+
+    /// Full screen drops the windowed native reservation but keeps the whole 22-point hitbox and
+    /// starts the drag region immediately to its right.
+    #[test]
+    fn mac_backstage_fullscreen_uses_plain_control_inset() {
+        let (zoom, rects) = backstage_rects_at(100, true);
+        assert!((zoom - 1.0).abs() < 0.01, "the 100% interface size did not apply: zoom {zoom:.2}");
+        let band = rects.iter().find(|(name, _)| *name == "band").expect("the Backstage band").1;
+        let back = rects.iter().find(|(name, _)| *name == "back").expect("the full back hitbox").1;
+        let drag = rects.iter().find(|(name, _)| *name == "drag").expect("the drag region").1;
+        assert!((band.width() - 200.0).abs() < 0.01, "full-screen navigation width is not 200 points: {band:?}");
+        assert!((back.min.x - band.min.x - 15.0).abs() < 0.01, "the hitbox does not start at 15 points: {back:?} vs {band:?}");
+        assert!((back.max.x - band.min.x - 37.0).abs() < 0.01, "the hitbox does not end at 37 points: {back:?} vs {band:?}");
+        assert!((back.width() - 22.0).abs() < 0.01, "the hitbox is not 22 points wide: {back:?}");
+        assert!((drag.min.x - back.max.x).abs() < 0.01, "the drag region does not start after the hitbox: {drag:?} vs {back:?}");
+    }
+
+    /// The macOS band's native strip takes no input of ours: a click and a drag started inside the
+    /// traffic lights' area reach neither the back button nor a window drag, while the same gestures
+    /// in the safe band do. This is the "no custom clickable or drag region over the native controls"
+    /// contract, measured on the real rectangles.
+    #[test]
+    fn mac_backstage_native_strip_takes_no_input() {
+        let mut a = WordApp::new(wordcraft_engine::Session::new(wordcraft_doc::Document::new()), Services::default());
+        a.integrated_titlebar = true;
+        a.native_lights = Some(egui::vec2(crate::chrome::NATIVE_LIGHTS_W, 28.0));
+        a.run("ui.backstage", json!({"value": true, "page": "home"})).unwrap();
+        let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(1440.0, 900.0)).build_ui_state(
+            |ui, app: &mut WordApp| {
+                let ctx = ui.ctx().clone();
+                app.logic(&ctx);
+                app.ui(ui);
+            },
+            a,
+        );
+        h.run_steps(3);
+        let rects = BACKSTAGE_RECTS.with(|b| b.borrow().clone());
+        let band = rects.iter().find(|(n, _)| *n == "band").expect("the band").1;
+        let back = rects.iter().find(|(n, _)| *n == "back").expect("the back hitbox").1;
+        let started_drag = |h: &egui_kittest::Harness<'_, WordApp>| {
+            h.output().viewport_output.values().any(|v| v.commands.iter().any(|c| matches!(c, egui::ViewportCommand::StartDrag)))
+        };
+        // A press inside the native strip: no back click, no window drag.
+        let strip = egui::pos2(band.min.x + 4.0, band.center().y);
+        assert!(strip.x < back.min.x, "the probe is inside the back button: {strip:?} vs {back:?}");
+        let button =
+            |pressed| egui::Event::PointerButton { pos: strip, button: egui::PointerButton::Primary, pressed, modifiers: Default::default() };
+        h.input_mut().events.push(egui::Event::PointerMoved(strip));
+        h.input_mut().events.push(button(true));
+        h.run_steps(1);
+        h.input_mut().events.push(button(false));
+        h.run_steps(1);
+        assert!(!started_drag(&h), "a drag started inside the native strip");
+        assert!(h.state().ui.backstage, "a click in the native strip closed the Backstage");
+        // The back button still works through a real click.
+        let centre = back.center();
+        h.input_mut().events.push(egui::Event::PointerMoved(centre));
+        h.input_mut().events.push(egui::Event::PointerButton {
+            pos: centre,
+            button: egui::PointerButton::Primary,
+            pressed: true,
+            modifiers: Default::default(),
+        });
+        h.run_steps(1);
+        h.input_mut().events.push(egui::Event::PointerButton {
+            pos: centre,
+            button: egui::PointerButton::Primary,
+            pressed: false,
+            modifiers: Default::default(),
+        });
+        h.run_steps(2);
+        assert!(!h.state().ui.backstage, "clicking the back button left the Backstage open");
+    }
+
+    /// A drag that starts in the safe part of the band (right of the back button) asks the window
+    /// manager to move the window; a drag in the native strip does not.
+    #[test]
+    fn mac_backstage_drag_only_from_the_safe_band() {
+        let mut a = WordApp::new(wordcraft_engine::Session::new(wordcraft_doc::Document::new()), Services::default());
+        a.integrated_titlebar = true;
+        a.native_lights = Some(egui::vec2(crate::chrome::NATIVE_LIGHTS_W, 28.0));
+        a.run("ui.backstage", json!({"value": true, "page": "home"})).unwrap();
+        let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(1440.0, 900.0)).build_ui_state(
+            |ui, app: &mut WordApp| {
+                let ctx = ui.ctx().clone();
+                app.logic(&ctx);
+                app.ui(ui);
+            },
+            a,
+        );
+        h.run_steps(3);
+        let rects = BACKSTAGE_RECTS.with(|b| b.borrow().clone());
+        let drag = rects.iter().find(|(n, _)| *n == "drag").expect("the drag region").1;
+        let started_drag = |h: &egui_kittest::Harness<'_, WordApp>| {
+            h.output().viewport_output.values().any(|v| v.commands.iter().any(|c| matches!(c, egui::ViewportCommand::StartDrag)))
+        };
+        assert!(drag.width() > 10.0, "the safe drag region is too small: {drag:?}");
+        let start = drag.center();
+        h.input_mut().events.push(egui::Event::PointerMoved(start));
+        h.input_mut().events.push(egui::Event::PointerButton {
+            pos: start,
+            button: egui::PointerButton::Primary,
+            pressed: true,
+            modifiers: Default::default(),
+        });
+        h.run_steps(1);
+        h.input_mut().events.push(egui::Event::PointerMoved(start + egui::vec2(12.0, 4.0)));
+        h.run_steps(1);
+        assert!(started_drag(&h), "dragging the safe band did not ask the window to move");
     }
 
     /// Home and New are different pages (#141): Home has the short template row, the link to New

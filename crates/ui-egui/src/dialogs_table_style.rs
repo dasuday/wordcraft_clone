@@ -507,7 +507,7 @@ pub fn body(app: &mut WordApp, ui: &mut Ui, f: Form) -> bool {
         ui.label(egui::RichText::new(tl!("Formatting")).font(crate::theme::semibold(12.5)));
         // Font, size, bold, italic, underline and text colour.
         ui.horizontal(|ui| {
-            if let Some(f) = crate::widgets::font_combo(ui, "tstyle_font", 170.0, &r.font, &fams, Some(&*preview_fn))
+            if let Some(f) = crate::widgets::font_combo(ui, "tstyle_font", tl!("Font"), 170.0, &r.font, &fams, Some(&*preview_fn))
                 && f != crate::widgets::ADD_FONT
             {
                 r.font = f;
