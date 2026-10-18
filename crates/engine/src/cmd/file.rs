@@ -42,11 +42,17 @@ fn rename(s: &mut Session, v: &Value) -> CmdResult {
     {
         return Err(CmdError::Params("Enter a valid document name (up to 200 characters, without path separators).".into()));
     }
+    let mut name = name;
     if let Some(path) = &s.path {
         let mut destination = path.with_file_name(name);
         // The field edits the stem; retain the original format, including macro/template files.
         if let Some(ext) = path.extension() {
-            destination.set_file_name(format!("{name}.{}", ext.to_string_lossy()));
+            let ext = ext.to_string_lossy();
+            // #2983: a full file name ("Notes.docx", any case) keeps one extension, not two.
+            if let Some(stem) = strip_extension(name, &ext) {
+                name = stem;
+            }
+            destination.set_file_name(format!("{name}.{ext}"));
         }
         if destination != *path {
             #[cfg(not(target_arch = "wasm32"))]
@@ -61,9 +67,17 @@ fn rename(s: &mut Session, v: &Value) -> CmdResult {
     Ok(json!({"name": name, "path": s.path}))
 }
 
+/// `name` without a trailing `.ext` (compared case-insensitively), when a non-empty stem is left.
+fn strip_extension<'a>(name: &'a str, ext: &str) -> Option<&'a str> {
+    let split = name.len().checked_sub(ext.len())?.checked_sub(1)?;
+    let (stem, tail) = (name.get(..split)?, name.get(split..)?);
+    let suffix = tail.strip_prefix('.')?;
+    (!stem.trim_end().is_empty() && suffix.to_lowercase() == ext.to_lowercase()).then_some(stem)
+}
+
 pub fn specs() -> Vec<CommandSpec> {
     vec![
-        CommandSpec::new("file.rename", "Rename Document", "File › Info", rename).params(r#"{"name": string (document name without its extension)}"#).pure(),
+        CommandSpec::new("file.rename", "Rename Document", "File › Info", rename).params(r#"{"name": string (document name; the file keeps its extension, which may also be typed)}"#).pure(),
         CommandSpec::new("file.new", "New", "File", new).key("Mod+N").params(r#"{"template"?: "blank|sample|letter|resume|report"}"#).pure(),
         CommandSpec::new("file.open", "Open", "File", open)
             .key("Mod+O / Mod+F12 / Mod+Alt+F2")
