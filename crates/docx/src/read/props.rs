@@ -14,7 +14,7 @@ use wordcraft_doc::section::{
 };
 
 use super::drawing_color::adjust_lum;
-use crate::units::{int, measure, on_off, tw, u32_of};
+use crate::units::{int, line_multiple, measure, on_off, tw, u32_of};
 
 /// A text frame (`w:framePr` without a drop cap, ECMA-376 §17.3.1.11), sizes and offsets in
 /// points (clamped), names kept as OOXML writes them.
@@ -315,7 +315,8 @@ impl PropCtx {
                         p.line_spacing = match rule.as_str() {
                             "exact" => measure(line, 20.0).map(|v| LineSpacing::Exactly(v.abs())),
                             "atleast" => measure(line, 20.0).map(|v| LineSpacing::AtLeast(v.abs())),
-                            _ => measure(line, 240.0).map(|v| LineSpacing::Multiple(v.abs().clamp(0.06, 132.0))),
+                            // Strict OOXML writes the height with a unit (`13.90pt`, #2329).
+                            _ => line_multiple(line).map(|v| LineSpacing::Multiple(v.abs().clamp(0.06, 132.0))),
                         };
                     }
                 }
@@ -429,7 +430,11 @@ pub fn borders(e: &El) -> Borders {
 
 /// Margins element (`w:tblCellMar`, `w:tcMar`) → [top, left, bottom, right].
 pub fn margins(e: &El) -> [f32; 4] {
-    let get = |names: &[&str]| names.iter().find_map(|n| e.child(n)).and_then(|c| tw(c, "w:w")).unwrap_or(0.0).clamp(0.0, 1584.0);
+    margin_sides(e).map(|side| side.unwrap_or(0.0))
+}
+
+fn margin_sides(e: &El) -> [Option<f32>; 4] {
+    let get = |names: &[&str]| names.iter().find_map(|n| e.child(n)).and_then(|c| tw(c, "w:w")).map(|v| v.clamp(0.0, 1584.0));
     [get(&["w:top"]), get(&["w:left", "w:start"]), get(&["w:bottom"]), get(&["w:right", "w:end"])]
 }
 
@@ -564,7 +569,14 @@ pub fn tcpr(pc: &PropCtx, e: &El) -> (CellProps, bool) {
             "w:shd" => c.shading = pc.shd_fill(k),
             "w:noWrap" => c.no_wrap = on_off(k),
             "w:hideMark" => c.hide_mark = on_off(k),
-            "w:tcMar" => c.margins = Some(margins(k)),
+            "w:tcMar" => {
+                let sides = margin_sides(k);
+                if sides.iter().all(Option::is_some) {
+                    c.margins = Some(sides.map(|side| side.unwrap_or(0.0)));
+                } else {
+                    c.partial_margins = Some(sides);
+                }
+            }
             "w:textDirection" => {
                 c.text_direction = TextDirection::from_ooxml(k.attr("w:val").unwrap_or(""));
                 c.text_direction_set = k.attr("w:val") == Some("lrTb");
