@@ -2494,6 +2494,9 @@ preview	Title	제목
 	Bottom Right Cell	오른쪽 아래 셀
 	Inside Horizontal Border	안쪽 가로 테두리
 	Inside Vertical Border	안쪽 세로 테두리
+	Dot-dot-dash	이점쇄선
+	More Underlines…	밑줄 더 보기…
+	Underline Color	밑줄 색
 # Split Cells and Convert Text to Table (#2592)
 	Merge cells before split	나누기 전에 셀 병합
 	Table size	표 크기
