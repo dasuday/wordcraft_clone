@@ -143,6 +143,9 @@ pub struct ViewState {
     pub single_column: bool,
     /// Zoom to fit: "pageWidth", "onePage", "multiplePages", or empty.
     pub fit: String,
+    /// Web Layout's text width, which the UI keeps at the window's width (#1876); never saved.
+    /// Draft and Outline don't use it: they keep a fixed 800 pt column.
+    #[serde(skip, default = "default_web_width")]
     pub web_width: f32,
     /// Transient viewport metrics for reading pagination; never saved in a document or preferences.
     #[serde(skip, default = "default_read_width")]
@@ -195,6 +198,13 @@ fn on() -> bool {
     true
 }
 
+/// The text column of Draft and Outline, and of Web Layout in a headless session.
+const DRAFT_WIDTH: f32 = 800.0;
+
+fn default_web_width() -> f32 {
+    DRAFT_WIDTH
+}
+
 fn default_read_width() -> f32 {
     300.0
 }
@@ -229,7 +239,7 @@ impl Default for ViewState {
             multi_page: false,
             single_column: false,
             fit: String::new(),
-            web_width: 800.0,
+            web_width: default_web_width(),
             read_width: default_read_width(),
             read_height: default_read_height(),
             read_column_width: None,
@@ -384,6 +394,8 @@ pub struct Session {
     typing_open: bool,
     /// The next mutating command joins the previous undo step (later frames of a drag).
     join_next: bool,
+    /// The newest automatic capitalisation, for Word's "Automatically add words to list" (#1857).
+    pub(crate) autocap: Option<crate::cmd::tools::AutoCap>,
     rev: u64,
     /// Which document this is: changes when [`Session::set_document`] replaces it (open, new,
     /// mail merge, recover), never on an edit.
@@ -618,6 +630,7 @@ impl Session {
             redo: Vec::new(),
             typing_open: false,
             join_next: false,
+            autocap: None,
             rev: 1,
             document_id: 1,
             cache: LayoutCache::new(),
@@ -765,7 +778,11 @@ impl Session {
     /// The current layout (recomputed when the document or view changed).
     pub fn layout(&mut self) -> Arc<DocLayout> {
         let mode = if self.view.read_mode { ViewMode::Read } else { self.view.mode };
-        let width = if self.view.read_mode { self.view.read_width } else { self.view.web_width };
+        let width = match mode {
+            ViewMode::Read => self.view.read_width,
+            ViewMode::Web => self.view.web_width,
+            _ => DRAFT_WIDTH,
+        };
         let height = if self.view.read_mode { self.view.read_height } else { 0.0 };
         let spacing = if self.view.read_mode { self.view.read_line_spacing.map(f32::to_bits) } else { None };
         // Deletions in balloons depend on the view (the Comments pane, Read Mode, side by side), so
@@ -906,6 +923,10 @@ impl Session {
     pub fn redo_label(&self) -> Option<&str> {
         self.redo.last().map(|u| u.label.as_str())
     }
+    /// Undo steps pushed so far, evicted ones included: only grows while steps are added.
+    pub(crate) fn undo_steps_so_far(&self) -> u64 {
+        self.history.len() as u64 + self.undo_evicted
+    }
     /// The number of undo steps.
     pub fn undo_depth(&self) -> usize {
         self.history.len()
@@ -930,6 +951,12 @@ impl Session {
     }
     pub fn undo(&mut self) -> bool {
         self.typing_open = false;
+        // Undoing the automatic capitalisation's own step makes its word an exception; any
+        // other Undo forgets the capital.
+        let steps = self.history.len() as u64 + self.undo_evicted;
+        if let Some(c) = self.autocap.take().filter(|c| c.depth == steps) {
+            c.add_exceptions(&mut self.prefs.autocorrect);
+        }
         let Some(u) = self.history.pop().map(Arc::unwrap_or_clone) else { return false };
         let cur = Undo {
             label: u.label.clone(),
@@ -963,6 +990,7 @@ impl Session {
     }
     /// Drop history (after open / new).
     pub fn reset_history(&mut self) {
+        self.autocap = None;
         self.history.clear();
         self.redo.clear();
         self.typing_open = false;
@@ -995,6 +1023,7 @@ impl Session {
 
     /// Replace the document (open/new).
     pub fn set_document(&mut self, doc: Document) {
+        self.autocap = None;
         self.document_id = self.document_id.wrapping_add(1);
         self.bib_style = doc_bib_style(&doc);
         self.doc = doc;
@@ -1065,6 +1094,7 @@ impl Session {
             redo,
             typing_open,
             join_next,
+            autocap: _,
             rev: _,
             cache: _,
             layout: _,
@@ -1129,6 +1159,7 @@ impl Session {
             self.history.splice(0..0, head.into_iter().take(back));
         }
         self.undo_evicted = evicted;
+        self.autocap = None;
         self.doc = doc;
         self.sel = sel;
         self.also_selected.clear();
@@ -1286,6 +1317,7 @@ impl Session {
                 }
             }
             Err(e) => {
+                self.autocap = None;
                 if let Some((d, s, h, r, t, ev, c)) = before_doc {
                     self.doc = d;
                     self.sel = s;
