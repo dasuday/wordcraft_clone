@@ -1075,6 +1075,91 @@ fn copying_symbol_font_text_puts_the_unicode_symbols_on_the_clipboard() {
     assert_eq!(text(&s), "ok J\u{F0FC}ok J\u{F0FC}");
 }
 
+/// The text drawn on the first page.
+fn drawn_text(s: &mut Session) -> String {
+    let layout = s.layout();
+    let draws = wordcraft_layout::display::page_display(&s.doc, &layout.pages[0], &Default::default());
+    draws.iter().filter_map(|d| if let wordcraft_layout::display::Draw::Glyphs { text, .. } = d { Some(text.as_str()) } else { None }).collect()
+}
+
+#[test]
+fn an_inserted_symbol_keeps_its_font_when_the_text_font_changes() {
+    // #2036: Insert › Symbol in Wingdings, then the whole document set in Times New Roman: the
+    // symbol stays a check mark (as Word keeps a `w:sym` character's font).
+    let mut s = s();
+    run(&mut s, "document.setText", json!({"text": "ab"}));
+    run(&mut s, "caret.docEnd", json!({}));
+    run(&mut s, "insert.symbol", json!({"char": "\u{F0FC}", "font": "Wingdings"}));
+    run(&mut s, "text.insert", json!({"text": "c"}));
+    run(&mut s, "select.all", json!({}));
+    run(&mut s, "format.font", json!({"name": "Times New Roman"}));
+    assert_eq!(text(&s), "ab\u{F0FC}c", "the stored character is unchanged");
+    assert_eq!(drawn_text(&mut s), "ab\u{2713}c");
+    run(&mut s, "edit.copy", json!({}));
+    assert_eq!(s.clipboard_text, "ab\u{2713}c");
+    // Text typed after the symbol is in the text's font, not the symbol's.
+    run(&mut s, "caret.docEnd", json!({}));
+    run(&mut s, "text.insert", json!({"text": "J"}));
+    assert_eq!(drawn_text(&mut s), "ab\u{2713}cJ");
+    // Clear Formatting keeps the symbol too.
+    run(&mut s, "select.all", json!({}));
+    run(&mut s, "format.clear", json!({}));
+    assert_eq!(drawn_text(&mut s), "ab\u{2713}cJ");
+}
+
+#[test]
+fn format_painter_does_not_carry_a_symbol_font_to_text() {
+    let mut s = s();
+    run(&mut s, "document.setText", json!({"text": "ok "}));
+    run(&mut s, "caret.docEnd", json!({}));
+    run(&mut s, "insert.symbol", json!({"char": "\u{F0FC}", "font": "Wingdings"}));
+    run(&mut s, "text.insert", json!({"text": " J"}));
+    // Pick up the symbol's formatting and paint it on "J".
+    run(&mut s, "select.text", json!({"text": "\u{F0FC}"}));
+    run(&mut s, "edit.formatPainter", json!({}));
+    run(&mut s, "select.text", json!({"text": "J"}));
+    run(&mut s, "edit.pasteFormat", json!({}));
+    let shown = drawn_text(&mut s);
+    assert!(shown.ends_with('J'), "{shown}");
+}
+
+/// "ab" then a Wingdings check mark, with the caret after it.
+fn text_then_symbol() -> Session {
+    let mut s = s();
+    run(&mut s, "document.setText", json!({"text": "ab"}));
+    run(&mut s, "caret.docEnd", json!({}));
+    run(&mut s, "insert.symbol", json!({"char": "\u{F0FC}", "font": "Wingdings"}));
+    s
+}
+
+#[test]
+fn a_style_created_next_to_a_symbol_does_not_take_its_font() {
+    let mut s = text_then_symbol();
+    let r = run(&mut s, "styles.create", json!({"name": "Mine"}));
+    let id = r["id"].as_str().unwrap().to_string();
+    assert_eq!(s.doc.styles.get(&id).unwrap().chr.sym_font, None);
+    assert_eq!(drawn_text(&mut s), "ab\u{2713}");
+}
+
+#[test]
+fn updating_a_style_to_match_a_symbol_does_not_take_its_font() {
+    let mut s = text_then_symbol();
+    run(&mut s, "select.text", json!({"text": "\u{F0FC}"}));
+    run(&mut s, "styles.updateToMatch", json!({}));
+    assert_eq!(s.doc.styles.get("Normal").unwrap().chr.sym_font, None);
+    assert_eq!(drawn_text(&mut s), "ab\u{2713}");
+}
+
+#[test]
+fn replacing_a_symbol_with_text_gives_the_text_no_symbol_font() {
+    let mut s = text_then_symbol();
+    run(&mut s, "edit.replaceAll", json!({"text": "\u{F0FC}", "with": "OK"}));
+    assert_eq!(text(&s), "abOK");
+    let p = s.doc.para_at(&Pos::body(0, 0)).unwrap();
+    assert_eq!(p.props_of_char(2).sym_font, None);
+    assert_eq!(drawn_text(&mut s), "abOK");
+}
+
 fn bold_at(s: &Session, block: usize, off: usize) -> bool {
     let pos = Pos { story: StoryRef::Body, path: wordcraft_doc::Path::top(block), off };
     s.doc.para_at(&pos).and_then(|p| p.props_of_char(off).bold).unwrap_or(false)
@@ -2684,6 +2769,85 @@ fn imported_range_toc_is_refreshed_in_place() {
         assert_eq!(text(&s), before);
         assert_eq!(s.doc.field_ranges(StoryRef::Body).len(), 1, "undo brings the imported range back");
     }
+}
+
+/// #2182 (the save and reopen gap, not the flow in the report, which #1197 fixed): after a save
+/// and reopen a TOC is a range field opening in its first entry. The context menu offers Update
+/// Field wherever the caret is in it, including the field's own marker (offset 0 of the first
+/// entry) and the end of the last entry; and repeated update, save and reopen adds no blank line.
+#[test]
+fn toc_menu_offers_update_field_after_save_and_reopen() {
+    use wordcraft_doc::para::InlineObject;
+    use wordcraft_doc::props::CharProps;
+    // What the canvas context menu checks before offering Update Field.
+    let offered = |s: &Session| !crate::cmd::fields::selected(s).is_empty() || crate::cmd::references::caret_in_toc(s);
+    let mut d = wordcraft_doc::Document::from_text("Before.\nOld entry\t9\nAlpha\nBeta");
+    {
+        let p = d.para_mut(StoryRef::Body, &wordcraft_doc::Path::top(1)).unwrap();
+        let n = p.len();
+        p.insert_object(n, InlineObject::FieldEnd, &CharProps::default()).unwrap();
+        p.insert_object(0, InlineObject::FieldStart { instr: r#"TOC \o "1-2" \h"#.into(), locked: false, dirty: false }, &CharProps::default())
+            .unwrap();
+    }
+    let mut s = Session::new(d);
+    for (i, style) in [(2, "Heading 1"), (3, "Heading 2")] {
+        run(&mut s, "caret.set", json!({"pos": Pos::body(i, 0)}));
+        run(&mut s, "styles.apply", json!({"style": style}));
+    }
+    let check = |s: &mut Session, what: &str| {
+        let entries: Vec<usize> = (0..s.doc.body.len())
+            .filter(|i| {
+                s.doc.body.get(*i).and_then(|b| b.as_para()).is_some_and(|p| p.props.style.as_deref().is_some_and(|st| st.starts_with("TOC")))
+            })
+            .collect();
+        assert!(!entries.is_empty(), "{what}: no TOC paragraphs: {}", text(s));
+        for (k, i) in entries.iter().enumerate() {
+            let len = s.doc.body.get(*i).and_then(|b| b.as_para()).map_or(0, |p| p.len());
+            // The leftover empty field paragraph before the range (first block) has no menu (minor).
+            if k == 0 && len == 0 {
+                continue;
+            }
+            for off in 0..=len {
+                s.sel = crate::Selection::caret(Pos::body(*i, off));
+                assert!(offered(s), "{what}: no Update Field at block {i} offset {off}: {}", text(s));
+            }
+        }
+    };
+    let bytes = wordcraft_docx::write(&s.doc).unwrap();
+    s = Session::new(wordcraft_docx::read(&bytes).unwrap());
+    let mut blocks = None;
+    for round in 0..3 {
+        run(&mut s, "references.updateToc", json!({}));
+        check(&mut s, &format!("after update {round}"));
+        // No extra blank line per cycle.
+        assert!(blocks.is_none_or(|n| n == s.doc.body.len()), "after update {round}: the document grew: {}", text(&s));
+        blocks = Some(s.doc.body.len());
+        let bytes = wordcraft_docx::write(&s.doc).unwrap();
+        s = Session::new(wordcraft_docx::read(&bytes).unwrap());
+        check(&mut s, &format!("after reopen {round}"));
+    }
+}
+
+/// #2182: with two TOCs only the one Update Table would refresh is offered Update Field; the other
+/// range TOC doesn't claim the menu, so it never refreshes a different table.
+#[test]
+fn toc_menu_targets_the_toc_update_table_refreshes() {
+    use wordcraft_doc::para::InlineObject;
+    use wordcraft_doc::props::CharProps;
+    let mut d = wordcraft_doc::Document::from_text("One\nTwo\nHead\nFirst\nSecond\nTail");
+    for (para, instr) in [(0, r#"TOC \o "1-2""#), (3, r#"TOC \o "1-3""#)] {
+        let p = d.para_mut(StoryRef::Body, &wordcraft_doc::Path::top(para)).unwrap();
+        let n = p.len();
+        p.insert_object(n, InlineObject::FieldEnd, &CharProps::default()).unwrap();
+        p.insert_object(0, InlineObject::FieldStart { instr: instr.into(), locked: false, dirty: false }, &CharProps::default()).unwrap();
+    }
+    let mut s = Session::new(d);
+    let at = |s: &mut Session, block: usize| {
+        s.sel = crate::Selection::caret(Pos::body(block, 1));
+        crate::cmd::references::caret_in_toc(s)
+    };
+    assert!(at(&mut s, 0), "the first TOC is the one Update Table converts");
+    assert!(!at(&mut s, 3), "the second range TOC is not offered the menu item");
 }
 
 /// Updating a TOC field that had a non-empty result (placeholder from an external generator, #878)
@@ -8081,5 +8245,66 @@ fn toc_collects_cell_headings() {
         let targets = s.run("link.targets", &json!({})).unwrap();
         assert_eq!(targets["headings"].as_array().unwrap().len(), 0);
         assert!(s.doc.para(StoryRef::Body, &Path::top(1)).is_some());
+    }
+}
+
+#[test]
+fn toc_keeps_direct_number_tabs() {
+    use wordcraft_doc::props::{CharProps, NumRef, TabAlign, TabLeader, TabStop};
+    let left = TabStop { pos: 24.0, align: TabAlign::Left, leader: TabLeader::None };
+    let right = TabStop { pos: 179.5, align: TabAlign::Right, leader: TabLeader::Dot };
+    let mut d = wordcraft_doc::Document::from_text("Contents\n\n1.\tAlpha\t9\nAlpha\nBeta");
+    d.last_section.page_w = 220.0;
+    d.last_section.margin_left = 20.0;
+    d.last_section.margin_right = 20.0;
+    d.styles.get_mut("TOC2").unwrap().para.tabs = Some(vec![right]);
+    let num = d.numbering.add_list(wordcraft_doc::ListKind::Numbered);
+    {
+        let p = d.para_mut(StoryRef::Body, &wordcraft_doc::Path::top(0)).unwrap();
+        p.props.style = Some("TOCHeading".into());
+        p.insert_object(
+            p.len(),
+            wordcraft_doc::InlineObject::Field {
+                instr: r#"TOC \o "1-2""#.into(),
+                result: String::new(),
+                locked: false,
+                dirty: true,
+                code: false,
+                form: String::new(),
+            },
+            &CharProps::default(),
+        )
+        .unwrap();
+        let p = d.para_mut(StoryRef::Body, &wordcraft_doc::Path::top(1)).unwrap();
+        p.props.style = Some("TOC2".into());
+        p.props.tabs = Some(vec![right]);
+        let p = d.para_mut(StoryRef::Body, &wordcraft_doc::Path::top(2)).unwrap();
+        p.props.style = Some("TOC2".into());
+        p.props.tabs = Some(vec![left, right]);
+    }
+    for i in [3, 4] {
+        let p = d.para_mut(StoryRef::Body, &wordcraft_doc::Path::top(i)).unwrap();
+        p.props.style = Some("Heading2".into());
+        p.props.numbering = Some(NumRef { num, level: 0 });
+    }
+    let bytes = wordcraft_docx::write(&d).unwrap();
+    let mut s = Session::new(wordcraft_docx::read(&bytes).unwrap());
+    for command in ["references.updateFields", "references.updateToc", "references.toc"] {
+        run(&mut s, command, json!({}));
+        let layout = s.layout();
+        let mut entries = 0;
+        for (i, b) in s.doc.body.iter().enumerate() {
+            let Some(p) = b.as_para().filter(|p| p.props.style.as_deref() == Some("TOC2")) else { continue };
+            entries += 1;
+            assert!(p.props.tabs.as_ref().is_some_and(|tabs| tabs.contains(&left)), "{command}: {:?}", p.props.tabs);
+            let title = p.text.find('\t').unwrap() + 1;
+            let page = p.text.rfind('\t').unwrap() + 1;
+            let start = layout.caret(&Pos::body(i, title)).unwrap();
+            let end = layout.caret(&Pos::body(i, page)).unwrap();
+            assert_eq!((start.page, start.top), (end.page, end.top), "{command}: {:?}", p.plain_text());
+            assert!((start.x - 44.0).abs() < 1.0, "{command}: {}", start.x);
+            assert!(end.x > 180.0, "{command}: {}", end.x);
+        }
+        assert_eq!(entries, 2);
     }
 }

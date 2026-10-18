@@ -3,7 +3,7 @@
 use std::io::Write;
 
 use wordcraft_doc::para::{Anchor, FloatAlign, NoteKind, ShapeKind, Wrap};
-use wordcraft_doc::props::{Align, Border, BorderStyle, Rgb, TextColor, VMerge};
+use wordcraft_doc::props::{Align, Border, BorderStyle, Rgb, TextColor, Underline, VMerge};
 use wordcraft_doc::{Block, Document, InlineObject, Paragraph, RevisionKind};
 
 const W_NS: &str = r#"xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape" xmlns:wpg="http://schemas.microsoft.com/office/word/2010/wordprocessingGroup" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office""#;
@@ -227,7 +227,7 @@ fn hyperlink_runs_and_wrappers() {
     assert_eq!(p[0].props_of_char(0).style.as_deref(), Some("Hyperlink"));
     assert_eq!(p[0].props_of_char(4).link.as_deref(), Some("https://example.org/#frag"));
     let sym_off = p[0].text.find('\u{F04A}').unwrap();
-    assert_eq!(p[0].props_of_char(sym_off).font.as_deref(), Some("Wingdings"));
+    assert_eq!(p[0].props_of_char(sym_off).sym_font.as_deref(), Some("Wingdings"), "the symbol keeps its own font");
     let t = p[0].props_of_char(p[0].text.len() - 1);
     assert_eq!((t.bold, t.italic, t.caps, t.strike, t.color), (Some(false), Some(false), Some(false), Some(true), Some(TextColor::Auto)));
     assert_eq!(p[1].plain_text(), "in block sdt");
@@ -258,6 +258,73 @@ fn symbol_font_text_reads_as_unicode_and_round_trips_unchanged() {
     assert_eq!(q[0].shown_text(), p[0].shown_text());
 }
 
+/// The `w:sym` elements of a document's main part, as written.
+fn sym_elements(bytes: &[u8]) -> Vec<String> {
+    let parts = unzip(bytes);
+    let xml = String::from_utf8_lossy(parts.get("word/document.xml").unwrap()).to_string();
+    xml.match_indices("<w:sym ").map(|(i, _)| xml[i..].split("/>").next().unwrap().to_string() + "/>").collect()
+}
+
+#[test]
+fn a_sym_character_keeps_its_symbol_font_when_the_text_font_changes() {
+    // #2036: ECMA-376 §17.3.3.30 — a `w:sym` character's font is its own `w:font`, whatever the
+    // run's font. Setting the whole paragraph in Times New Roman keeps the check mark.
+    let body = r#"<w:p><w:r><w:t>a</w:t></w:r><w:r><w:sym w:font="Wingdings" w:char="F0FC"/></w:r><w:r><w:t>b</w:t></w:r></w:p>"#;
+    let mut d = wordcraft_docx::read(&docx(body, &[], &[])).unwrap();
+    let len = paras(&d)[0].text.len();
+    d.format_range(&wordcraft_doc::Pos::body(0, 0), &wordcraft_doc::Pos::body(0, len), &|c| c.font = Some("Times New Roman".into())).unwrap();
+    let p = paras(&d)[0];
+    assert_eq!(p.plain_text(), "a\u{F0FC}b", "the stored character is unchanged");
+    assert_eq!(p.props_of_char(1).font.as_deref(), Some("Times New Roman"), "the run font did change");
+    assert_eq!(p.shown_text(), "a\u{2713}b");
+    assert_eq!(d.shown_text(wordcraft_doc::StoryRef::Body), "a\u{2713}b");
+    // Written back as a `w:sym` in its symbol font, so Word shows the symbol too.
+    let bytes = wordcraft_docx::write(&d).unwrap();
+    assert_eq!(sym_elements(&bytes), vec![r#"<w:sym w:font="Wingdings" w:char="F0FC"/>"#.to_string()]);
+    let again = wordcraft_docx::read(&bytes).unwrap();
+    let q = paras(&again)[0];
+    assert_eq!(q.plain_text(), "a\u{F0FC}b");
+    assert_eq!(q.shown_text(), "a\u{2713}b");
+    assert_eq!(q.props_of_char(1).font.as_deref(), Some("Times New Roman"));
+}
+
+#[test]
+fn a_sym_character_round_trips_as_w_sym() {
+    let body = r#"<w:p><w:r><w:t xml:space="preserve">Done </w:t></w:r><w:r><w:sym w:font="Wingdings" w:char="F0FC"/><w:sym w:font="Symbol" w:char="F061"/></w:r></w:p>"#;
+    let d = wordcraft_docx::read(&docx(body, &[], &[])).unwrap();
+    let bytes = wordcraft_docx::write(&d).unwrap();
+    assert_eq!(
+        sym_elements(&bytes),
+        vec![r#"<w:sym w:font="Wingdings" w:char="F0FC"/>"#.to_string(), r#"<w:sym w:font="Symbol" w:char="F061"/>"#.to_string()]
+    );
+    let again = wordcraft_docx::read(&bytes).unwrap();
+    assert_eq!(paras(&again)[0].shown_text(), "Done \u{2713}\u{3B1}");
+    assert_eq!(sym_elements(&wordcraft_docx::write(&again).unwrap()), sym_elements(&bytes));
+}
+
+#[test]
+fn hostile_sym_fonts_never_panic() {
+    // Built in the model (an XML file couldn't even hold some of these names).
+    let huge = "W".repeat(100_000);
+    for font in ["", " ", "\u{1}", huge.as_str(), "Wingdings\u{FFFF}", "<&\"'>"] {
+        let mut d = Document::from_text("a\u{F0FC}\u{1}\u{1F600}b");
+        let len = paras(&d)[0].text.len();
+        let f = font.to_string();
+        d.format_range(&wordcraft_doc::Pos::body(0, 0), &wordcraft_doc::Pos::body(0, len), &|c| c.sym_font = Some(f.clone())).unwrap();
+        let _ = d.shown_text(wordcraft_doc::StoryRef::Body);
+        let bytes = wordcraft_docx::write(&d).unwrap();
+        let _ = wordcraft_docx::read(&bytes).unwrap();
+    }
+}
+
+#[test]
+fn only_printable_characters_are_written_as_w_sym() {
+    // `w:sym` holds a character code from U+0020 (the reader drops lower ones), like `w:t`.
+    let mut d = Document::from_text("a\u{7}");
+    d.format_range(&wordcraft_doc::Pos::body(0, 0), &wordcraft_doc::Pos::body(0, 2), &|c| c.sym_font = Some("Wingdings".into())).unwrap();
+    assert_eq!(sym_elements(&wordcraft_docx::write(&d).unwrap()), vec![r#"<w:sym w:font="Wingdings" w:char="0061"/>"#.to_string()]);
+}
+
 #[test]
 fn pcl6_symbol_roundtrip() {
     let body = r#"<w:p><w:r><w:sym w:font="Symbol (PCL6)" w:char="F0B3"/></w:r></w:p>"#;
@@ -266,7 +333,7 @@ fn pcl6_symbol_roundtrip() {
     for doc in [&d, &again] {
         let p = paras(doc)[0];
         assert_eq!(p.text, "\u{F0B3}");
-        assert_eq!(p.props_of_char(0).font.as_deref(), Some("Symbol (PCL6)"));
+        assert_eq!(p.props_of_char(0).sym_font.as_deref(), Some("Symbol (PCL6)"));
         assert_eq!(p.shown_text(), "≥");
     }
 }
@@ -880,6 +947,28 @@ fn line_rule_is_read_case_insensitively() {
     let p = paras(&d);
     assert_eq!(p[0].props.line_spacing, Some(wordcraft_doc::props::LineSpacing::AtLeast(14.0)));
     assert_eq!(p[1].props.line_spacing, Some(wordcraft_doc::props::LineSpacing::Exactly(15.0)));
+}
+
+/// #2329: Word 2024 saves strict OOXML with the line height written out with a unit
+/// (`w:line="13.90pt"`). Under `auto` it reads through twips, as Word renders it (13.90 × 20 =
+/// 278; the 1.1583 multiple), not as 240ths of a line like the bare number — a Word file with
+/// a `line="13.90pt"` default came in at 13.9 lines per line of text.
+#[test]
+fn strict_line_heights_with_a_unit_are_read_as_point_multiples() {
+    let d = read_body(
+        r#"<w:p><w:pPr><w:spacing w:after="8pt" w:line="13.90pt" w:lineRule="auto"/></w:pPr><w:r><w:t>x</w:t></w:r></w:p><w:p><w:pPr><w:spacing w:line="13.90pt" w:lineRule="exact"/></w:pPr></w:p>"#,
+    );
+    let p = paras(&d);
+    let Some(wordcraft_doc::props::LineSpacing::Multiple(m)) = p[0].props.line_spacing else {
+        panic!("auto line spacing: {:?}", p[0].props.line_spacing)
+    };
+    assert!((m - 278.0 / 240.0).abs() < 1e-5, "{m}");
+    assert_eq!(p[0].props.space_after, Some(8.0), "the unit form of w:after too");
+    assert_eq!(p[1].props.line_spacing, Some(wordcraft_doc::props::LineSpacing::Exactly(13.9)), "exact keeps reading it as points");
+    // Saves as the transitional 240ths form and reads back the same multiple.
+    let again = wordcraft_docx::read(&wordcraft_docx::write(&d).unwrap()).unwrap();
+    let Some(wordcraft_doc::props::LineSpacing::Multiple(m2)) = paras(&again)[0].props.line_spacing else { panic!("multiple after a save") };
+    assert!((m2 - m).abs() < 1e-5, "{m2} vs {m}");
 }
 
 #[test]
@@ -1664,6 +1753,23 @@ fn theme_colours_follow_the_colour_scheme_mapping() {
 fn theme_colour_without_a_theme_keeps_the_fixed_colour() {
     let d = read_body(r#"<w:p><w:r><w:rPr><w:color w:val="00FF00" w:themeColor="accent1" w:themeShade="BF"/></w:rPr><w:t>a</w:t></w:r></w:p>"#);
     assert_eq!(paras(&d)[0].props_of_char(0).color, Some(TextColor::Rgb(Rgb(0, 0xFF, 0))));
+}
+
+#[test]
+fn underline_without_a_val_draws_no_underline() {
+    // w:val has no schema default (ECMA-376 CT_Underline); Word leaves a bare w:u with a colour plain.
+    let d = read_body(
+        r#"<w:p><w:r><w:rPr><w:u w:val="single"/></w:rPr><w:t>a</w:t></w:r><w:r><w:rPr><w:u w:color="FF0000"/></w:rPr><w:t>b</w:t></w:r><w:r><w:t>c</w:t></w:r></w:p>"#,
+    );
+    let p = paras(&d);
+    assert_eq!(p[0].props_of_char(0).underline, Some(Underline::Single));
+    let b = p[0].props_of_char(1);
+    assert_eq!(b.underline, None);
+    assert_eq!(b.underline_color, Some(Rgb(0xFF, 0, 0)), "the colour is still read");
+    assert_eq!(p[0].props_of_char(2).underline, None);
+    let back = wordcraft_docx::read(&wordcraft_docx::write(&d).unwrap()).unwrap();
+    let b = paras(&back)[0].props_of_char(1);
+    assert_eq!((b.underline, b.underline_color), (None, Some(Rgb(0xFF, 0, 0))), "saving keeps the colour, not an underline");
 }
 
 #[test]
@@ -3088,4 +3194,27 @@ fn bookmark_end_name_and_id_trim() {
         })
         .collect();
     assert_eq!(names, vec![("start", "section_intro".into()), ("end", "section_intro".into()), ("end", "standalone_target".into())]);
+}
+
+#[test]
+fn zero_effects_stay_zero_rotated() {
+    const ANGLE_UNITS_PER_DEGREE: i32 = 60_000;
+
+    // ECMA-376 §20.4.2.6: zero effect extents add no space around a rotated picture.
+    for degrees in [0, 90, 180, 270] {
+        for effects in ["", r#"<wp:effectExtent l="0" t="0" r="0" b="0"/>"#] {
+            let body = format!(
+                r#"<w:p><w:r><w:drawing><wp:inline><wp:extent cx="914400" cy="457200"/>{effects}<wp:docPr id="1" name="Synthetic picture"/><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic><pic:blipFill><a:blip r:embed="rId1"/></pic:blipFill><pic:spPr><a:xfrm rot="{}"><a:off x="0" y="0"/><a:ext cx="914400" cy="457200"/></a:xfrm></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>"#,
+                degrees * ANGLE_UNITS_PER_DEGREE
+            );
+            let d = wordcraft_docx::read(&docx(&body, &[("rId1", "image", "media/marker.png")], &[("word/media/marker.png", "synthetic")])).unwrap();
+            let (w, h, float) = paras(&d)[0].objects[0].frame().unwrap();
+            assert_eq!(float.rot, degrees as f32);
+            assert_eq!(float.effect, [0.0; 4], "rotation {degrees} must not invent effects");
+            let (px, py) = float.spin_pad(w, h);
+            let expected = if degrees % 180 == 0 { (w, h) } else { (h, w) };
+            assert!((w + 2.0 * px - expected.0).abs() < 0.001);
+            assert!((h + 2.0 * py - expected.1).abs() < 0.001);
+        }
+    }
 }

@@ -660,8 +660,9 @@ impl Reader<'_> {
                 let ch = k.attr("w:char").and_then(|h| u32::from_str_radix(h.trim(), 16).ok()).and_then(char::from_u32).filter(|c| *c as u32 >= 0x20);
                 if let Some(ch) = ch {
                     let mut p = props.clone();
-                    if let Some(f) = k.attr("w:font").filter(|f| !f.is_empty()) {
-                        p.font = Some(f.to_string());
+                    // The symbol's own font, kept apart from the run's (ECMA-376 §17.3.3.30).
+                    if let Some(f) = k.attr("w:font").filter(|f| !f.trim().is_empty()) {
+                        p.sym_font = Some(f.to_string());
                     }
                     self.emit_text(sc, pb, &ch.to_string(), &p);
                 }
@@ -998,7 +999,9 @@ impl Reader<'_> {
             float.set_spin(xfrm_spin(content.child("w14:xfrm")));
             let (px, py) = float.spin_pad(w, h);
             for (e, p) in float.effect.iter_mut().zip([px, py, px, py]) {
-                *e = (*e - p).clamp(0.0, 1584.0);
+                if *e != 0.0 {
+                    *e = (*e - p).clamp(0.0, 1584.0);
+                }
             }
             // The renderer's existing missing-picture box marks ink without a usable preview.
             // InkML stays opaque: no approximation of its strokes or conversion to freeforms.
@@ -1054,7 +1057,10 @@ impl Reader<'_> {
         if let Some(f) = obj.float_mut() {
             let (px, py) = f.spin_pad(w, h);
             for (e, p) in f.effect.iter_mut().zip([px, py, px, py]) {
-                *e = (*e - p).clamp(0.0, 1584.0);
+                // Zero adds no effects room when rotation contracts this axis.
+                if *e != 0.0 {
+                    *e = (*e - p).clamp(0.0, 1584.0);
+                }
             }
         }
         Some(obj)
