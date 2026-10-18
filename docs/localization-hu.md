@@ -1,6 +1,6 @@
-# Hungarian interface
+# Hungarian interface and proofing
 
-> **Last reviewed:** 2026-10-11 · **Last updated:** 2026-10-11 · **Change:** minor (Hungarian interface catalog and regression checks) · **Target:** WordCraft 0.5.0
+> **Last reviewed:** 2026-10-11 · **Last updated:** 2026-10-18 · **Change:** minor (Hungarian offline proofing, attribution and pinned dictionary updates); previously minor (Hungarian interface catalog and regression checks) · **Target:** WordCraft 0.5.0
 
 Choose **File › Options › Interface language › Magyar**, or follow a Hungarian system display
 language (`hu-HU`, `hu_HU.UTF-8`). The catalog code is `hu`; `ui.language` with `{"value":"hu"}`
@@ -65,11 +65,27 @@ and the glyphs `ÁáÉéÍíÓóÖöŐőÚúÜüŰű` in the bundled Inter (Regu
 (validation, every tab and command translated) include Hungarian automatically, and the on-demand
 interface audit (`untranslated_interface_text`) checks Hungarian alongside Russian.
 
-Spelling, grammar and hyphenation stay English-only: this is an interface translation, not
-Hungarian proofing. A native-speaker review of the catalog is welcome.
+Hungarian spelling now works offline from the bundled Magyar Ispell 1.9 dictionary.
+A Hungarian interface uses `hu-HU` for new documents; existing document languages are preserved.
+For existing text choose Review › Language › Hungarian (or Set Proofing Language).
+Spelling suggestions handle accents, inflections and compounds. Grammar checks are limited to
+possible repeated words and spacing around punctuation; they are not a full Hungarian grammar
+or style checker. Hungarian automatic hyphenation is disabled until suitable patterns are added,
+so English patterns cannot introduce incorrect Hungarian breaks.
+
+The original dictionary files are from LibreOffice/dictionaries, by László Németh and Ferenc Godó.
+They are used under MPL-2.0, with the original notices, license text and pinned provenance in
+`assets/spelling/hu/`. Spellbook 0.4.2 is used under MPL-2.0; the two local safety fixes and upstream
+source are documented in `vendor/spellbook/WORDCRAFT-NOTICE.txt`. About › Third-party licenses
+shows the notices and MPL text. See [dictionary updates](spelling-dictionaries.md#updating-the-bundled-hungarian-dictionary).
+
+Tests use the real bundled dictionary, including `árvíztűrő`, `tükörfúrógép`, `házainkban`,
+`muszály` → `muszáj`, `hejesírás` → `helyesírás`, mixed-language byte ranges and arbitrary Unicode.
+A native-speaker review of the catalog and proofing behavior is welcome.
 
 ## Revision history
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-18 | minor | Hungarian offline spelling, basic grammar, source/license notices and a pinned LibreOffice updater |
 | 2026-10-11 | minor | Hungarian catalog (2,419 entries: built-in style names, equation gallery, citation styles), conventions, terminology, scope and regression checks |

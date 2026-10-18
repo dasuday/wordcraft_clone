@@ -2693,6 +2693,23 @@ fn body(app: &mut WordApp, ui: &mut Ui, d: &mut Dialog) -> bool {
                     ui.hyperlink_to(tl!("getartcraft.com/apps/wordcraft"), "https://getartcraft.com/apps/wordcraft");
                     ui.hyperlink_to(tl!("Join us on Discord: discord.gg/artcraft"), "https://discord.gg/artcraft");
                     ui.hyperlink_to(tl!("Source code: github.com/storytold/wordcraft"), "https://github.com/storytold/wordcraft");
+                    ui.collapsing(tl!("Third-party licenses"), |ui| {
+                        // Legal notices are reproduced verbatim, not translated.
+                        let mut notices: &str = concat!(
+                            include_str!("../../../NOTICE"),
+                            "\n\n",
+                            include_str!("../../../assets/spelling/hu/COPYING.MPL"),
+                            "\n\n",
+                            include_str!("../../../assets/spelling/hu/README_hu_HU.txt"),
+                            "\n\n",
+                            include_str!("../../../assets/spelling/hu/SOURCE.json"),
+                            "\n\n",
+                            include_str!("../../../vendor/spellbook/WORDCRAFT-NOTICE.txt")
+                        );
+                        egui::ScrollArea::vertical().max_height(180.0).show(ui, |ui| {
+                            ui.add(egui::TextEdit::multiline(&mut notices).desired_width(f32::INFINITY));
+                        });
+                    });
                     ui.add_space(6.0);
                     ui.label(
                         egui::RichText::new(tl!("MIT OR Apache-2.0. Copyright (c) 2026 ArtCraft Team and the WordCraft contributors."))

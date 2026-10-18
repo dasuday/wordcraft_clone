@@ -39,6 +39,8 @@ pub enum ProofLang {
     /// `id_ID` dictionary, dictionary-driven suggestions and generic checks with Indonesian
     /// messages. Hyphenation keeps the fallback English patterns.
     Id,
+    /// Hungarian (`hu`, `hu-HU`, `hun`): bundled Magyar Ispell dictionary.
+    Hu,
     /// A language without proofing tools here (`fr-FR`, `ja-JP`, `x-none`…). Like Word without
     /// the language's proofing tools: no spelling or grammar marks, so its words are never
     /// flagged as English misspellings. Hyphenation keeps using the English patterns, as before
@@ -48,8 +50,18 @@ pub enum ProofLang {
 
 impl ProofLang {
     /// Every language with a spelling dictionary, in display order.
-    pub const PROOFED: [ProofLang; 9] =
-        [ProofLang::En, ProofLang::Pl, ProofLang::Pt, ProofLang::It, ProofLang::Hr, ProofLang::Tr, ProofLang::Ru, ProofLang::Cs, ProofLang::Id];
+    pub const PROOFED: [ProofLang; 10] = [
+        ProofLang::En,
+        ProofLang::Pl,
+        ProofLang::Pt,
+        ProofLang::It,
+        ProofLang::Hr,
+        ProofLang::Tr,
+        ProofLang::Ru,
+        ProofLang::Cs,
+        ProofLang::Id,
+        ProofLang::Hu,
+    ];
 
     /// The proofing language of a BCP 47 tag (`pl-PL`, `en_GB`, `PL`…). Only the primary subtag
     /// counts. No tag (or an empty one) is English, WordCraft's default editing language.
@@ -76,6 +88,8 @@ impl ProofLang {
             ProofLang::Cs
         } else if primary.eq_ignore_ascii_case("id") || primary.eq_ignore_ascii_case("ind") || primary.eq_ignore_ascii_case("in") {
             ProofLang::Id
+        } else if primary.eq_ignore_ascii_case("hu") || primary.eq_ignore_ascii_case("hun") {
+            ProofLang::Hu
         } else {
             ProofLang::Other
         }
@@ -94,6 +108,7 @@ impl ProofLang {
             ProofLang::Ru => "ru",
             ProofLang::Cs => "cs",
             ProofLang::Id => "id",
+            ProofLang::Hu => "hu",
             ProofLang::Other => "",
         }
     }
@@ -181,6 +196,11 @@ mod tests {
         for t in ["id", "id-ID", "ID-id", "id_ID", "id_ID.UTF-8", " id-ID ", "ind", "in", "in_ID"] {
             assert_eq!(ProofLang::from_tag(Some(t)), ProofLang::Id, "{t}");
         }
+        for tag in ["hu", "hu-HU", "hu_HU", "HU", "hun"] {
+            assert_eq!(ProofLang::from_tag(Some(tag)), ProofLang::Hu);
+        }
+        assert_eq!(ProofLang::Hu.code(), "hu");
+        assert!(ProofLang::Hu.is_proofed());
         assert_eq!(ProofLang::Id.code(), "id");
         assert!(ProofLang::Id.is_proofed() && ProofLang::PROOFED.contains(&ProofLang::Id));
         for t in ["en", "en-US", "en-GB", "EN_au", "en-Latn-US"] {

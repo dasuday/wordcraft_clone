@@ -1121,9 +1121,29 @@ fn an_italian_interface_writes_new_documents_in_italian() {
 }
 
 #[test]
+fn a_hungarian_interface_writes_new_documents_in_hungarian() {
+    let mut app = crate::WordApp::new(wordcraft_engine::Session::new(wordcraft_doc::Document::new()), Default::default());
+    let ctx = egui::Context::default();
+    let frame = |app: &mut crate::WordApp| ctx.run_ui(egui::RawInput::default(), |ui| app.logic(ui.ctx())).drop_without_applying_deltas();
+    frame(&mut app);
+    app.run("ui.language", serde_json::json!({"value": "hu"})).unwrap();
+    frame(&mut app);
+    assert_eq!(app.session.editing_lang.as_deref(), Some("hu-HU"));
+    assert_eq!(app.session.doc.styles.default_chr.lang.as_deref(), Some("hu-HU"), "the untouched first document follows");
+    // Typing Hungarian then shows no English misspellings; the status bar names the language.
+    app.session.run("text.insert", &serde_json::json!({"text": "Árvíztűrő tükörfúrógép"})).unwrap();
+    let issues = app.session.run("review.issues", &serde_json::json!({})).unwrap();
+    assert!(issues.as_array().unwrap().iter().all(|i| i["lang"] == "hu"), "{issues}");
+    set_current(lang("hu"));
+    assert_eq!(crate::ribbon::caret_language(&app), "Magyar");
+    set_current(Lang::EN);
+    assert_eq!(crate::ribbon::caret_language(&app), "Hungarian");
+}
+
+#[test]
 fn the_editing_languages_are_the_ones_wordcraft_can_proof() {
     let with: Vec<(&str, &str)> = Lang::all().filter_map(|l| l.editing_lang().map(|e| (l.code(), e))).collect();
-    assert_eq!(with, [("pt-br", "pt-BR"), ("pl", "pl-PL"), ("cs", "cs-CZ"), ("tr", "tr-TR"), ("it", "it-IT")]);
+    assert_eq!(with, [("pt-br", "pt-BR"), ("pl", "pl-PL"), ("cs", "cs-CZ"), ("tr", "tr-TR"), ("it", "it-IT"), ("hu", "hu-HU")]);
 }
 
 #[test]

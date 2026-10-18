@@ -8446,3 +8446,24 @@ fn rtf_list_round_trip_keeps_text() {
         assert_eq!(d.plain_text(StoryRef::Body), "first\nsecond", "{cmd}");
     }
 }
+
+/// The real bundled Hungarian dictionary works through F7, corrections and document language selection.
+#[test]
+fn hungarian_proofing_through_the_review_commands() {
+    let mut s = s();
+    run(&mut s, "document.setText", json!({"text": "Ez hejesírás és árvíztűrő tükörfúrógép."}));
+    run(&mut s, "select.all", json!({}));
+    run(&mut s, "review.language", json!({"lang": "hu_HU", "default": true}));
+    assert_eq!(s.doc.styles.default_chr.lang.as_deref(), Some("hu-HU"));
+    let issues = run(&mut s, "review.issues", json!({}));
+    let arr = issues.as_array().unwrap();
+    assert_eq!(arr.len(), 1, "{issues}");
+    assert_eq!(arr[0]["text"], "hejesírás");
+    assert_eq!(arr[0]["lang"], "hu");
+    assert!(arr[0]["suggestions"].as_array().unwrap().iter().any(|s| s == "helyesírás"));
+    run(&mut s, "caret.docStart", json!({}));
+    assert_eq!(run(&mut s, "review.spelling", json!({}))["text"], "hejesírás");
+    run(&mut s, "review.applySuggestion", json!({"text": "helyesírás"}));
+    assert!(run(&mut s, "review.issues", json!({})).as_array().unwrap().is_empty());
+    assert!(text(&s).contains("helyesírás"));
+}

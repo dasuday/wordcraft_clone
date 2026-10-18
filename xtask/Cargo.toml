@@ -7,3 +7,5 @@ publish = false
 
 [dependencies]
 serde_json = { workspace = true }
+wordcraft-proof = { workspace = true }
+sha2 = "0.11"

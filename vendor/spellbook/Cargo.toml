@@ -1,0 +1,13 @@
+[package]
+name = "spellbook"
+version = "0.4.2"
+edition = "2021"
+license = "MPL-2.0"
+repository = "https://github.com/helix-editor/spellbook"
+description = "Hunspell-compatible spelling (local Hungarian arithmetic fix)"
+[dependencies]
+hashbrown = { version = "0.16", default-features = false }
+foldhash = { version = "0.2", default-features = false, optional = true }
+[features]
+default = ["default-hasher"]
+default-hasher = ["dep:foldhash"]
