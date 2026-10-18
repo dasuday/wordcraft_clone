@@ -1701,7 +1701,10 @@ impl Page {
     pub fn content_bottom(&self) -> f32 {
         fn bottom(it: &Placed) -> f32 {
             let b = match it {
-                Placed::Lines { para, l0, l1, y, .. } => item_bottom(*y, para, *l0, *l1).unwrap_or(0.0),
+                // Turned lines (a cell's text direction) take their own page area.
+                Placed::Lines { para, l0, l1, y, .. } => {
+                    it.turned_bounds().map(|r| r.bottom()).or_else(|| item_bottom(*y, para, *l0, *l1)).unwrap_or(0.0)
+                }
                 Placed::Fill { rect, .. }
                 | Placed::Image { rect, .. }
                 | Placed::Shape { rect, .. }

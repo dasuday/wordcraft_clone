@@ -389,6 +389,10 @@ fn fragment_picture(s: &Session, frag: &Fragment) -> Result<(Vec<u8>, f32), CmdE
     sect.footers = Default::default();
     let layout = wordcraft_layout::layout(&d, &mut wordcraft_layout::LayoutCache::new(), &Default::default());
     let page = layout.pages.first().ok_or_else(|| CmdError::Failed("nothing to turn into a picture".into()))?;
+    // More than one page of it can't be drawn whole: refuse rather than leave the rest out.
+    if layout.pages.len() > 1 {
+        return Err(CmdError::Failed("the pasted content is too long to turn into a picture".into()));
+    }
     // Draw only as much page as the content takes, not the whole tall one it was laid out on.
     let used = page.content_bottom();
     let layout = if used > 0.0 && used + 8.0 < PICTURE_MAX_H {
@@ -397,6 +401,9 @@ fn fragment_picture(s: &Session, frag: &Fragment) -> Result<(Vec<u8>, f32), CmdE
     } else {
         layout
     };
+    if layout.pages.len() > 1 {
+        return Err(CmdError::Failed("the pasted content is too long to turn into a picture".into()));
+    }
     let page = layout.pages.first().ok_or_else(|| CmdError::Failed("nothing to turn into a picture".into()))?;
     let img = wordcraft_render::render_page(&d, page, PICTURE_SCALE, &Default::default());
     // Crop to the ink: everything that isn't paper, with a small margin.
@@ -499,7 +506,15 @@ pub fn change_paste(s: &mut Session, v: &Value) -> CmdResult {
         let (png, width) = fragment_picture(s, &lp.source)?;
         super::controls::prepare_edit(s)?;
         s.sel = Selection { anchor: lp.start.clone(), focus: lp.end.clone() };
-        delete_selection(s)?;
+        let at = delete_selection(s)?;
+        // A paste at a paragraph's start restyled that paragraph: it goes back to the destination's.
+        if at.off == 0
+            && let Ok(para) = s.doc.para_mut(at.story, &at.path)
+        {
+            para.props = lp.dest.1.clone();
+            para.touch();
+        }
+        s.sel = Selection::caret(at);
         let r = super::insert::place_picture(s, png, Some(width), "Pasted content")?;
         // The picture is still a paste: the options stay, so it can be turned back.
         s.last_paste = Some(LastPaste { start: lp.start, end: s.sel.focus.clone(), source: lp.source, dest: lp.dest, mode: "picture", rev: None });
@@ -807,5 +822,28 @@ mod tests {
         let (w, h) = wordcraft_render::image_size(&png).unwrap();
         assert!(h < 400, "{w}×{h}px: cropped to the table, not the page");
         assert!(width_pt > 20.0 && width_pt < 500.0, "{width_pt}pt");
+    }
+
+    /// More than a page of content isn't drawn with the rest left out: it is refused.
+    #[test]
+    fn content_taller_than_the_picture_page_is_refused() {
+        let mut s = Session::new(wordcraft_doc::Document::new());
+        let html: String = (0..900).map(|i| format!("<p><b>line {i}</b></p>")).collect();
+        let text: String = (0..900).map(|i| format!("line {i}\n")).collect();
+        s.run("edit.paste", &json!({"text": text, "html": html})).unwrap();
+        let source = s.last_paste.as_ref().map(|lp| lp.source.clone()).unwrap();
+        let err = fragment_picture(&s, &source).unwrap_err();
+        assert!(err.to_string().contains("too long"), "{err}");
+    }
+
+    /// Picture at the start of a document puts the paragraph the paste restyled back.
+    #[test]
+    fn a_picture_restores_the_destination_paragraph() {
+        let mut s = Session::new(wordcraft_doc::Document::new());
+        let html = "<h2 style=\"font-weight:bold\">Heading</h2><p>Body</p>";
+        s.run("edit.paste", &json!({"text": "Heading\nBody", "html": html})).unwrap();
+        s.run("edit.pasteChange", &json!({"mode": "picture"})).unwrap();
+        let first = s.doc.para_at(&s.doc.start_of(wordcraft_doc::StoryRef::Body)).unwrap();
+        assert!(first.props.style.is_none(), "{:?}", first.props.style);
     }
 }
