@@ -1116,20 +1116,14 @@ impl WordApp {
         if !go {
             return Ok(json!({"done": false}));
         }
-        // An open that waited on this prompt and then failed: name the file, as other opens do.
-        let opening = (then == "file.open").then(|| params.get("path").and_then(Value::as_str).map(str::to_owned)).flatten();
-        let result = self.execute_user(&then, params);
-        if let (Err(e), Some(path)) = (&result, opening) {
-            self.report_open_failure(&path, e);
-            self.ui.backstage = false;
-        }
-        result.map(|r| json!({"done": true, "result": r}))
+        self.execute_user(&then, params).map(|r| json!({"done": true, "result": r}))
     }
 
     /// [`WordApp::execute`] for something the user did: a document that turns out to be
     /// password-protected asks for the password (and opens with it) instead of failing (#55).
     pub(crate) fn execute_user(&mut self, id: &str, params: Value) -> Result<Value, String> {
         let retry = (id == "file.open").then(|| params.clone());
+        let retry_path = retry.clone();
         let r = self.execute(id, params);
         if let (Err(e), Some(params)) = (&r, retry)
             && wordcraft_engine::io::needs_password(e)
@@ -1138,6 +1132,13 @@ impl WordApp {
             let name = std::path::Path::new(path).file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| path.to_string());
             self.dialog = Some(dialogs::Dialog::Password { name, params, password: Default::default(), message: String::new() });
             return Ok(json!({"pending": "password"}));
+        }
+        // Whoever asked (a prompt that held the open back, a finished save), a failed open names
+        // the file and the cause, and Backstage gives way to the status bar that shows it (#1103).
+        if let (Err(e), Some(params)) = (&r, retry_path) {
+            let path = params.get("path").and_then(Value::as_str).unwrap_or("");
+            self.report_open_failure(path, e);
+            self.ui.backstage = false;
         }
         r
     }
