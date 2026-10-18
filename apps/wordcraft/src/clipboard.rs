@@ -228,10 +228,10 @@ mod platform {
         out.filter(|o| o.len() as u64 <= cap)
     }
 
-    /// The first command whose output looks like a PNG (the type asked for; a program that
-    /// prints text or an error instead is ignored).
+    /// The first command whose output decodes as a PNG (the type asked for; a program that prints
+    /// text or an error instead, or a file cut short, is ignored and the next command is tried).
     pub fn picture_via(commands: &[ExternalCommand], run: &mut dyn FnMut(ExternalCommand) -> Option<Vec<u8>>) -> Option<Vec<u8>> {
-        commands.iter().find_map(|&c| run(c).filter(|b| b.starts_with(b"\x89PNG")))
+        commands.iter().find_map(|&c| run(c).filter(|b| b.starts_with(b"\x89PNG") && wordcraft_render::decode_pixmap(b).is_some()))
     }
 
     /// A picture read by `wl-paste` / `xclip`, for sessions where arboard can't open the clipboard.
@@ -417,7 +417,8 @@ mod tests {
         use super::super::platform::{ExternalCommand, picture_via};
 
         fn png() -> Vec<u8> {
-            b"\x89PNG\r\n\x1a\nrest".to_vec()
+            // A real 1x1 PNG: the output must decode, not just start with the signature.
+            b"\x89\x50\x4e\x47\x0d\x0a\x1a\x0a\x00\x00\x00\x0d\x49\x48\x44\x52\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\x0d\x49\x44\x41\x54\x78\xda\x63\x64\x60\xf8\x5f\x0f\x00\x02\x87\x01\x80\xeb\x47\xba\x92\x00\x00\x00\x00\x49\x45\x4e\x44\xae\x42\x60\x82".to_vec()
         }
 
         #[test]
@@ -436,6 +437,17 @@ mod tests {
             assert_eq!(picture_via(&[ExternalCommand::WlPaste], &mut |_| Some(Vec::new())), None);
             assert_eq!(picture_via(&[ExternalCommand::WlPaste, ExternalCommand::Xclip], &mut |_| None), None);
             assert_eq!(picture_via(&[], &mut |_| Some(png())), None);
+        }
+
+        #[test]
+        fn truncated_png_is_rejected_and_the_next_command_is_tried() {
+            let mut cut = png();
+            cut.truncate(30);
+            let got = picture_via(&[ExternalCommand::WlPaste, ExternalCommand::Xclip], &mut |c| {
+                Some(if c == ExternalCommand::WlPaste { cut.clone() } else { png() })
+            });
+            assert_eq!(got, Some(png()));
+            assert_eq!(picture_via(&[ExternalCommand::WlPaste], &mut |_| Some(b"\x89PNG\r\n\x1a\nrest".to_vec())), None);
         }
 
         #[test]
