@@ -2606,3 +2606,59 @@ fn page_background_picture_round_trips() {
     // Saved again, it is still there.
     assert!(rt(&r).settings.page_picture.is_some());
 }
+
+/// #1836: Page Setup's Multiple pages — 2 pages per sheet, book fold with its sheet count and
+/// direction — round-trip through `word/settings.xml` in CT_Settings' order, and hostile values
+/// clamp.
+#[test]
+fn multiple_pages_settings_round_trip() {
+    use wordcraft_doc::section::MultiplePages;
+    for mode in [MultiplePages::Normal, MultiplePages::Mirror, MultiplePages::TwoPerSheet, MultiplePages::BookFold] {
+        let mut d = Document::new();
+        d.settings.set_multiple_pages(mode);
+        d.settings.book_fold_sheets = if mode == MultiplePages::BookFold { 8 } else { 0 };
+        d.settings.book_fold_reverse = mode == MultiplePages::BookFold;
+        d.settings.even_odd_headers = true;
+        let back = rt(&d);
+        assert_eq!(back.settings.multiple_pages(), mode, "{mode:?}");
+        assert_eq!(back.settings.book_fold_sheets, d.settings.book_fold_sheets);
+        assert_eq!(back.settings.book_fold_reverse, d.settings.book_fold_reverse);
+    }
+    let mut d = Document::new();
+    d.settings.set_multiple_pages(MultiplePages::BookFold);
+    d.settings.book_fold_sheets = 4;
+    d.settings.book_fold_reverse = true;
+    d.settings.even_odd_headers = true;
+    let bytes = wordcraft_docx::write(&d).expect("write");
+    let mut zip = zip::ZipArchive::new(std::io::Cursor::new(&bytes)).unwrap();
+    let mut xml = String::new();
+    std::io::Read::read_to_string(&mut zip.by_name("word/settings.xml").unwrap(), &mut xml).unwrap();
+    let at = |tag: &str| xml.find(tag).unwrap_or_else(|| panic!("{tag} missing: {xml}"));
+    assert!(at("<w:evenAndOddHeaders") < at("<w:bookFoldRevPrinting"));
+    assert!(at("<w:bookFoldRevPrinting") < at("<w:bookFoldPrinting"));
+    assert!(at("<w:bookFoldPrinting") < at("<w:bookFoldPrintingSheets w:val=\"4\""));
+    assert!(!xml.contains("printTwoOnOne"), "{xml}");
+    let mut d = Document::new();
+    d.settings.set_multiple_pages(MultiplePages::TwoPerSheet);
+    let bytes = wordcraft_docx::write(&d).expect("write");
+    let mut zip = zip::ZipArchive::new(std::io::Cursor::new(&bytes)).unwrap();
+    let mut xml = String::new();
+    std::io::Read::read_to_string(&mut zip.by_name("word/settings.xml").unwrap(), &mut xml).unwrap();
+    assert!(xml.find("<w:characterSpacingControl").unwrap() < xml.find("<w:printTwoOnOne").unwrap(), "{xml}");
+    assert!(!xml.contains("bookFoldPrinting"), "{xml}");
+    // Hostile sheet counts clamp (Word offers 1-40, or all) instead of overflowing; other
+    // settings the model doesn't own survive an edit-and-save of the merged part.
+    let plain = wordcraft_docx::write(&Document::new()).expect("write");
+    let file = replace_part(
+        &plain,
+        "word/settings.xml",
+        br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:settings xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:zoom w:percent="100"/><w:bookFoldPrinting/><w:bookFoldPrintingSheets w:val="99999999999"/><w:defaultTabStop w:val="720"/><w:characterSpacingControl w:val="doNotCompress"/><w:printTwoOnOne w:val="0"/><w:compat><w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="15"/></w:compat></w:settings>"#,
+    );
+    let mut back = wordcraft_docx::read(&file).expect("read");
+    assert_eq!(back.settings.multiple_pages(), MultiplePages::BookFold);
+    assert_eq!(back.settings.book_fold_sheets, 40);
+    back.settings.set_multiple_pages(MultiplePages::TwoPerSheet);
+    let again = wordcraft_docx::read(&wordcraft_docx::write(&back).expect("write")).expect("read");
+    assert_eq!(again.settings.multiple_pages(), MultiplePages::TwoPerSheet);
+    assert!(!again.settings.book_fold);
+}

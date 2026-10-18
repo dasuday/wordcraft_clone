@@ -696,6 +696,57 @@ impl DocGrid {
     }
 }
 
+/// Page Setup's "Multiple pages" choices.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum MultiplePages {
+    #[default]
+    Normal,
+    Mirror,
+    TwoPerSheet,
+    BookFold,
+}
+
+impl MultiplePages {
+    pub fn id(self) -> &'static str {
+        match self {
+            MultiplePages::Normal => "normal",
+            MultiplePages::Mirror => "mirror",
+            MultiplePages::TwoPerSheet => "twoPerSheet",
+            MultiplePages::BookFold => "bookFold",
+        }
+    }
+
+    pub fn from_id(id: &str) -> Option<Self> {
+        Some(match id {
+            "normal" => MultiplePages::Normal,
+            "mirror" | "mirrored" => MultiplePages::Mirror,
+            "twoPerSheet" => MultiplePages::TwoPerSheet,
+            "bookFold" => MultiplePages::BookFold,
+            _ => return None,
+        })
+    }
+
+    /// Two pages share a sheet, so a page is half of it.
+    pub fn halves_page(self) -> bool {
+        matches!(self, MultiplePages::TwoPerSheet | MultiplePages::BookFold)
+    }
+
+    /// The size of one laid-out page on a sheet of `w` x `h` points. With two pages per sheet the
+    /// height is halved (a portrait sheet is cut across its long side); on a landscape sheet that
+    /// still halves the height, giving wide, short strips. Whether Word instead halves the width
+    /// of a landscape sheet is unconfirmed (a Mac check is pending). In a booklet the width is
+    /// halved (folded across its width). Never smaller than 1 pt.
+    pub fn page_size(self, w: f32, h: f32) -> (f32, f32) {
+        let (w, h) = (if w.is_finite() { w } else { 612.0 }, if h.is_finite() { h } else { 792.0 });
+        match self {
+            MultiplePages::TwoPerSheet => (w, (h / 2.0).max(1.0)),
+            MultiplePages::BookFold => ((w / 2.0).max(1.0), h),
+            _ => (w, h),
+        }
+    }
+}
+
 /// Page setup and section-level settings.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
@@ -795,6 +846,14 @@ fn is_horizontal(d: &crate::props::TextDirection) -> bool {
 }
 
 impl SectionProps {
+    /// This section's page as laid out under `mode`: the sheet's paper size becomes the size of one
+    /// page (see [`MultiplePages::page_size`]). The one place that turns paper into page size.
+    pub fn for_multiple_pages(&self, mode: MultiplePages) -> SectionProps {
+        let mut s = self.clone();
+        (s.page_w, s.page_h) = mode.page_size(self.page_w, self.page_h);
+        s
+    }
+
     /// Width of the text area, points.
     pub fn text_width(&self) -> f32 {
         (self.page_w - self.margin_left - self.margin_right - self.gutter).max(18.0)

@@ -1031,12 +1031,25 @@ fn settings_xml(doc: &Document, footnotes: bool, endnotes: bool, template_rel: O
     if s.even_odd_headers {
         w.empty("w:evenAndOddHeaders", &[]);
     }
+    // §17.15.1.9, .8, .10: a booklet, its direction (right to left) and its sheets.
+    if s.book_fold_reverse {
+        w.empty("w:bookFoldRevPrinting", &[]);
+    }
+    if s.book_fold {
+        w.empty("w:bookFoldPrinting", &[]);
+    }
+    if s.book_fold && s.book_fold_sheets > 0 {
+        w.val("w:bookFoldPrintingSheets", &s.book_fold_sheets.min(wordcraft_doc::MAX_BOOKLET_SHEETS).to_string());
+    }
     for (tag, v) in [("w:drawingGridHorizontalSpacing", s.grid_h), ("w:drawingGridVerticalSpacing", s.grid_v)] {
         if v.is_finite() && (v - wordcraft_doc::DEFAULT_GRID).abs() > 0.01 {
             w.val(tag, &crate::units::twips(v.clamp(0.5, 1584.0)));
         }
     }
     w.val("w:characterSpacingControl", "doNotCompress");
+    if s.two_per_sheet {
+        w.empty("w:printTwoOnOne", &[]);
+    }
     for (tag, fmt, pr, used, el) in [
         ("w:footnotePr", s.footnote_format, &s.footnote_pr, footnotes, "w:footnote"),
         ("w:endnotePr", s.endnote_format, &s.endnote_pr, endnotes, "w:endnote"),
