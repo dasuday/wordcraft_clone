@@ -991,6 +991,8 @@ fn flow_paras_in(doc: &Document, p: &Paragraph, tracked: bool) -> Vec<Para> {
             Box::new(FmtChange { mark: rev_mark(doc, c.rev), old })
         });
     }
+    // The paragraph that ends a section carries its properties (the last piece of it does).
+    out.section.clone_from(&p.section);
     done.push(out);
     done
 }
