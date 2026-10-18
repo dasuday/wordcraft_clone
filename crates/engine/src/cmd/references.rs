@@ -867,10 +867,14 @@ pub fn update_fields(s: &mut Session) -> Result<(), CmdError> {
     let marks = s.doc.bookmarks();
     for (name, pos) in marks {
         let l = s.layout();
-        let page_info = l.caret(&pos).and_then(|c| l.pages.get(c.page)).map(|p| {
-            let format = formats.get(p.section).copied().unwrap_or_default();
-            (p.number, format)
-        }).unwrap_or((1, NumFormat::Decimal));
+        let page_info = l
+            .caret(&pos)
+            .and_then(|c| l.pages.get(c.page))
+            .map(|p| {
+                let format = formats.get(p.section).copied().unwrap_or_default();
+                (p.number, format)
+            })
+            .unwrap_or((1, NumFormat::Decimal));
         pages.entry(name).or_insert(page_info);
     }
     for path in s.doc.para_paths(StoryRef::Body) {
@@ -905,11 +909,7 @@ pub fn update_fields(s: &mut Session) -> Result<(), CmdError> {
                     let f = FieldCode::parse(instr);
                     let target = f.args.first().map(|s| s.split('\\').next().unwrap_or("").trim_matches('"')).unwrap_or("");
                     let r = if name == "REF" {
-                        if !has_switch(instr, 'p') {
-                            bookmark_text(&s.doc, target)
-                        } else {
-                            None
-                        }
+                        if !has_switch(instr, 'p') { bookmark_text(&s.doc, target) } else { None }
                     } else if !has_switch(instr, 'p') {
                         pages.get(target).map(|(num, page_fmt)| {
                             let fmt = wordcraft_layout::fields::format_switch(instr).unwrap_or(*page_fmt);
@@ -1197,4 +1197,3 @@ mod tests {
         assert_eq!(res[4], ("REF TargetMark \\p".into(), "above".into()));
     }
 }
-
