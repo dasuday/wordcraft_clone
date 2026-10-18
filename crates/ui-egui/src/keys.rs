@@ -28,6 +28,7 @@ pub fn key_name(k: Key) -> Option<&'static str> {
         Key::Minus => "-",
         Key::Period => ".",
         Key::Comma => ",",
+        Key::Semicolon => ";",
         Key::OpenBracket => "[",
         Key::CloseBracket => "]",
         Key::Num0 => "0",
@@ -669,6 +670,16 @@ mod tests {
         assert_eq!(shift_variant_params("text.backspace"), Some(json!({})));
         assert_eq!(shift_variant_params("caret.left"), Some(json!({"extend": true})));
         assert_eq!(shift_variant_params("text.delete"), None);
+    }
+
+    #[test]
+    fn named_keys_and_semicolon_reach_the_registry() {
+        // ⌥; (Ellipsis) and the named table-selection keys need registry spellings too.
+        assert_eq!(key_name(Key::Semicolon), Some(";"));
+        assert_eq!(key_name(Key::Home), Some("Home"));
+        assert_eq!(key_name(Key::End), Some("End"));
+        assert_eq!(key_name(Key::PageUp), Some("PageUp"));
+        assert_eq!(key_name(Key::PageDown), Some("PageDown"));
     }
 
     #[test]
