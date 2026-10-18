@@ -723,7 +723,9 @@ fn draw(ctx: &mut RenderContext, doc: &Document, it: &Draw, view: Affine, visibl
             ctx.set_transform(view);
             ctx.set_paint(color(opts.ink_text(*c, *text_bg), *alpha));
             let w = *width as f64;
-            let mut st = kurbo::Stroke::new(w);
+            // Flat ends, as the PDF export draws rules: kurbo's default round caps extend each
+            // rule half its width past its end point, a rounded blob where thick borders meet.
+            let mut st = kurbo::Stroke::new(w).with_caps(kurbo::Cap::Butt);
             match stroke {
                 Stroke::Dotted => st = st.with_dashes(0.0, [w, w * 2.0]),
                 Stroke::Dashed => st = st.with_dashes(0.0, [w * 4.0, w * 2.0]),
@@ -744,7 +746,7 @@ fn draw(ctx: &mut RenderContext, doc: &Document, it: &Draw, view: Affine, visibl
                 return;
             }
             if *stroke == Stroke::Double {
-                ctx.set_stroke(kurbo::Stroke::new(w * 0.6));
+                ctx.set_stroke(kurbo::Stroke::new(w * 0.6).with_caps(kurbo::Cap::Butt));
                 line(ctx, -w * 0.9);
                 line(ctx, w * 0.9);
                 return;
@@ -1978,6 +1980,20 @@ mod tests {
     fn a_line_runs_from_top_left_to_bottom_right() {
         let p = shape_path(ShapeKind::Line, kurbo::Rect::new(10.0, 20.0, 30.0, 60.0), None);
         assert_eq!(p.elements(), &[kurbo::PathEl::MoveTo((10.0, 20.0).into()), kurbo::PathEl::LineTo((30.0, 60.0).into())]);
+    }
+
+    /// Rules stop at their end points on screen, as in the PDF export: no round cap past the end.
+    #[test]
+    fn rules_have_flat_ends_on_screen() {
+        let d = Document::new();
+        for stroke in [Stroke::Solid, Stroke::Double] {
+            let line = Draw::Line { x0: 20.0, y0: 50.0, x1: 80.0, y1: 50.0, width: 6.0, color: Rgb(0, 0, 0), stroke, alpha: 1.0, text_bg: None };
+            let r = render_items(&d, &[line], 0.0, 0.0, 100.0, 100.0, 4.0, &RenderOptions::default());
+            let ink = |x: f32, y: f32| r.pixel((x * 4.0) as u32, (y * 4.0) as u32)[3] > 0;
+            let y = if stroke == Stroke::Double { 50.0 - 6.0 * 0.9 } else { 50.0 };
+            assert!(ink(79.0, y), "{stroke:?}: the rule is drawn up to its end");
+            assert!(!ink(81.5, y) && !ink(18.5, y), "{stroke:?}: nothing is drawn past the ends");
+        }
     }
 }
 
