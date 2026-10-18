@@ -259,6 +259,8 @@ fn check_formatting(s: &Session, id: &str, params: &Value) -> Result<(), CmdErro
                 | "table.cellAlign"
                 | "table.cellMargins"
                 | "table.textDirection"
+                | "table.properties"
+                | "table.rowHeight"
                 | "table.newStyle"
                 | "table.modifyStyle"
                 | "table.deleteStyle"
@@ -615,6 +617,8 @@ mod tests {
             ("table.shading", json!({"color": "FF0000"})),
             ("table.borders", json!({"kind": "none"})),
             ("table.cellAlign", json!({"value": "bottomRight"})),
+            ("table.properties", json!({"align": "center"})),
+            ("table.rowHeight", json!({"height": 40})),
             ("table.style", json!({"style": "TableGrid"})),
         ] {
             let e = s.run(id, &v).unwrap_err().to_string();
