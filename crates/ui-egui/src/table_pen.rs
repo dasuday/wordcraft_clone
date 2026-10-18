@@ -188,10 +188,13 @@ pub fn cursor(app: &WordApp, ui: &Ui, resp: &egui::Response) {
     }
 }
 
+/// The side of the eraser's pink end, darker than its top.
+const ERASER_PINK_SIDE: egui::Color32 = egui::Color32::from_rgb(0xC2, 0x45, 0x7A);
+
 /// The eraser's pointer, our own drawing (egui has no cursor images; the system pointer is
-/// hidden): a white eraser with a grey sleeve, seen a little from the side, tilted up and to the
-/// right from the point it works at (the middle of its lower end); outlined in black with a
-/// white edge, so it shows on dark paper too.
+/// hidden): an eraser with a pink end and a white sleeve, as on its button, seen a little from
+/// the side, tilted up and to the right from the point it works at (the middle of its lower
+/// end); outlined in black with a white edge, so it shows on dark paper too.
 fn eraser_pointer(painter: &egui::Painter, at: Pos2) {
     let (sin, cos) = 40f32.to_radians().sin_cos();
     let (along, across) = (vec2(cos, -sin), vec2(sin, cos));
@@ -203,8 +206,9 @@ fn eraser_pointer(painter: &egui::Painter, at: Pos2) {
     // The top face is 9.6 points wide; its side shows 2.4 points below it; the sleeve starts 9 points up.
     let (top, whole) = (part(0.0, 21.0, -4.8, 4.8), part(0.0, 21.0, -4.8, 7.2));
     painter.add(egui::Shape::convex_polygon(whole.clone(), white, Stroke::new(2.6, white)));
-    painter.add(egui::Shape::convex_polygon(part(0.0, 21.0, 4.8, 7.2), egui::Color32::from_gray(0x78), Stroke::NONE));
-    painter.add(egui::Shape::convex_polygon(part(9.0, 21.0, -4.8, 4.8), egui::Color32::from_gray(0xCD), Stroke::NONE));
+    painter.add(egui::Shape::convex_polygon(part(0.0, 9.0, -4.8, 4.8), crate::icons::ERASER_PINK, Stroke::NONE));
+    painter.add(egui::Shape::convex_polygon(part(0.0, 9.0, 4.8, 7.2), ERASER_PINK_SIDE, Stroke::NONE));
+    painter.add(egui::Shape::convex_polygon(part(9.0, 21.0, 4.8, 7.2), egui::Color32::from_gray(0xB4), Stroke::NONE));
     painter.line_segment([at + along * 9.0 - across * 4.8, at + along * 9.0 + across * 7.2], ink);
     painter.add(egui::Shape::closed_line(top, ink));
     painter.add(egui::Shape::closed_line(whole, ink));
@@ -337,6 +341,9 @@ mod tests {
         h.event(egui::Event::PointerMoved(from));
         steps(&mut h, 2);
         assert_eq!(h.output().platform_output.cursor_icon, egui::CursorIcon::None, "the drawn eraser");
+        // Pink at the pointer (the ribbon's pink icons are far from it).
+        let pink = |s: &egui::epaint::ClippedShape| matches!(&s.shape, egui::Shape::Path(p) if p.fill == crate::icons::ERASER_PINK && p.points.iter().all(|q| q.distance(from) < 30.0));
+        assert!(h.output().shapes.iter().any(pink), "the eraser's end is pink, as on its button");
         let depth = h.state().session.undo_depth();
         button(&h, from, true);
         h.step();
