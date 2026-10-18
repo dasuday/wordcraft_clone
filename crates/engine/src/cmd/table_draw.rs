@@ -248,12 +248,15 @@ fn float_table(s: &mut Session, v: &Value, l: &DocLayout, page: usize, start: (f
     let body_x = l.pages.get(page).map_or(0.0, |pg| pg.body.x);
     // The table stands this far below where its paragraph starts (not above it, as in Word); in
     // an older document's layout (Word 2010) its first cell's text margin hangs left of `x`.
-    let top = l.caret(&pos).filter(|c| c.page == page).map_or(r.y, |c| c.top);
+    let caret = l.caret(&pos).filter(|c| c.page == page);
+    let top = caret.map_or(r.y, |c| c.top);
     let legacy = if s.doc.settings.compat_mode < 15 { wordcraft_layout::cell_margins(&s.doc, &t, 0, 0)[1] } else { 0.0 };
+    // From the left of the paragraph's column; from the margin when that isn't known.
+    let (h_rel, origin) = caret.and_then(|c| column_x(s, l, page, pos.story, c.x)).map_or((Anchor::Margin, body_x), |x| (Anchor::Column, x));
     t.props.float = Some(TableFloat {
-        h_rel: Anchor::Column,
+        h_rel,
         v_rel: Anchor::Paragraph,
-        x: r.x - body_x + legacy,
+        x: r.x - origin + legacy,
         y: (r.y - top).max(0.0),
         dist: [FLOAT_GAP, 0.0, FLOAT_GAP, 0.0],
         overlap: true,
@@ -264,6 +267,18 @@ fn float_table(s: &mut Session, v: &Value, l: &DocLayout, page: usize, start: (f
     first.extend([0, 0, 0]);
     s.sel = Selection::caret(Pos { story: pos.story, path: Path(first), off: 0 });
     sel_result(s)
+}
+
+/// The left of the text column at `x` on page `page` (page points), as the layout places a
+/// table from it: the rightmost of the section's columns starting at or left of `x`. Headers
+/// and footers span the text area. `None` left of every column.
+fn column_x(s: &Session, l: &DocLayout, page: usize, story: StoryRef, x: f32) -> Option<f32> {
+    let pg = l.pages.get(page)?;
+    if story != StoryRef::Body {
+        return Some(pg.body.x);
+    }
+    let boxes = s.doc.sections().get(pg.section).map(|(_, sp)| sp.column_boxes())?;
+    boxes.iter().map(|(cx, _)| pg.body.x + cx).filter(|c| c.is_finite() && *c <= x + 0.5).reduce(f32::max)
 }
 
 /// A one-cell table the size of `r` nested in `cell`, at the paragraph under the stroke's start:
@@ -1041,6 +1056,34 @@ mod tests {
         assert!(s.run("table.draw", &json!({"page": 0, "x0": x0, "y0": y0, "x1": x0 + 5.0, "y1": y0 + 5.0})).is_err());
         assert!(s.run("table.draw", &json!({"page": 9, "x0": 1, "y0": 1, "x1": 100, "y1": 100})).is_err());
         assert!(s.run("table.draw", &json!({})).is_err());
+    }
+
+    /// In a section of two columns a rectangle drawn in either column floats where it was
+    /// drawn, placed from that column's left (#2555 review: the second column's offset was
+    /// counted twice, so it landed a column's width too far right).
+    #[test]
+    fn a_rectangle_drawn_in_a_column_floats_where_it_was_drawn() {
+        for col in 0..2 {
+            let mut s = Session::new(wordcraft_doc::Document::new());
+            s.run("layout.columns", &json!({"count": 2})).unwrap();
+            // One-line paragraphs: a new one starts at the top of the second column.
+            for i in 0..120 {
+                if i > 0 {
+                    s.run("text.newParagraph", &json!({})).unwrap();
+                }
+                s.run("text.insert", &json!({"text": format!("Line {i}")})).unwrap();
+            }
+            assert_eq!(s.doc.sections().len(), 1);
+            let body = s.layout().pages[0].body;
+            let left = body.x + s.doc.sections()[0].1.column_boxes()[col].0;
+            let (x0, y0) = (left + 20.0, body.y + 2.0);
+            s.run("table.draw", &json!({"page": 0, "x0": x0, "y0": y0, "x1": x0 + 100.0, "y1": y0 + 40.0})).unwrap();
+            let f = first_table(&s).props.float.unwrap();
+            assert_eq!(f.h_rel, Anchor::Column, "column {col}");
+            assert!((f.x - 20.0).abs() < 0.5, "column {col}: from the column's left: {f:?}");
+            let r = cell_rect(&mut s, 0, 0);
+            assert!((r.x - x0).abs() < 1.0 && (r.y - y0).abs() < 1.0, "column {col}: where it was drawn: {r:?}");
+        }
     }
 
     /// A line drawn through an exact-height row splits it into two exact rows that draw where
