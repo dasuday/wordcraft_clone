@@ -241,6 +241,152 @@ pub fn plan_strip(tabs: &[TabSpec], buttons: [f32; 3], avail: f32, more: f32) ->
     StripPlan { pad, buttons: level, fits, widths }
 }
 
+/// Smooth wheel input (a touchpad, a free-spinning wheel) forgets part of a notch after this many
+/// seconds without more.
+const WHEEL_IDLE: f64 = 0.75;
+/// Smooth input that began somewhere else (a page scroll still coasting), or that already switched
+/// a tab, is ignored until it rests this many seconds.
+const WHEEL_QUIET: f64 = 0.2;
+/// Most notches taken from one frame's input.
+const MAX_WHEEL_NOTCHES: i32 = 64;
+
+/// Mouse-wheel notches turned over the ribbon or one of its galleries (#2948), kept between frames
+/// so that the small deltas of a touchpad add up to a notch.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct WheelNotches {
+    /// Part of a notch turned so far by smooth input.
+    partial: f32,
+    /// When smooth input last counted.
+    last: f64,
+    /// Smooth input is ignored until then.
+    quiet_until: f64,
+}
+
+/// A wheel event's turn in notches (positive down, toward the end) and whether it is whole
+/// notches; `None` for input left alone: Ctrl/⌘ (zoom), Shift and sideways (horizontal scrolling).
+fn wheel_turn(event: &egui::Event, opts: &egui::InputOptions) -> Option<(f32, bool)> {
+    let egui::Event::MouseWheel { unit, delta, modifiers, .. } = event else { return None };
+    if !delta.is_finite()
+        || modifiers.matches_any(opts.zoom_modifier)
+        || modifiers.matches_any(opts.horizontal_scroll_modifier)
+        || delta.x.abs() > delta.y.abs()
+        || delta.y == 0.0
+    {
+        return None;
+    }
+    // egui's delta moves the content, so a turn down is negative.
+    let down = -delta.y;
+    Some(match unit {
+        // Browsers report three lines per notch.
+        egui::MouseWheelUnit::Line if cfg!(target_arch = "wasm32") => (down / 3.0, (down / 3.0).fract() == 0.0),
+        egui::MouseWheelUnit::Line => (down, down.fract() == 0.0),
+        egui::MouseWheelUnit::Page => (down.signum(), true),
+        egui::MouseWheelUnit::Point => (down / crate::scroll::NOTCH_PX, false),
+    })
+}
+
+impl WheelNotches {
+    /// Whole notches turned by the wheel events in `events` at `time`, positive for down. Whole
+    /// line steps are mouse-wheel notches and count at once; finer input adds up to a notch first.
+    /// With `per_gesture`, smooth input turns one notch and then waits until it rests, so a
+    /// touchpad flick moves one step (pure, tested).
+    pub fn read(&mut self, events: &[egui::Event], opts: &egui::InputOptions, time: f64, per_gesture: bool) -> i32 {
+        let mut notches = 0i32;
+        for (turned, whole) in events.iter().filter_map(|e| wheel_turn(e, opts)) {
+            if whole {
+                notches = notches.saturating_add(turned.clamp(-MAX_WHEEL_NOTCHES as f32, MAX_WHEEL_NOTCHES as f32) as i32);
+                self.partial = 0.0;
+                continue;
+            }
+            if time < self.quiet_until {
+                self.quiet_until = time + WHEEL_QUIET;
+                continue;
+            }
+            if time - self.last > WHEEL_IDLE || self.partial * turned < 0.0 {
+                self.partial = 0.0;
+            }
+            self.last = time;
+            self.partial += turned;
+            if self.partial.abs() >= 1.0 {
+                notches = notches.saturating_add(if self.partial > 0.0 { 1 } else { -1 });
+                self.partial = 0.0;
+                if per_gesture {
+                    self.quiet_until = time + WHEEL_QUIET;
+                }
+            }
+        }
+        notches.clamp(-MAX_WHEEL_NOTCHES, MAX_WHEEL_NOTCHES)
+    }
+
+    /// `events` went somewhere else (the pointer was elsewhere, or a menu or gallery had them):
+    /// smooth input among them is ignored here until it rests, so a page scroll still coasting
+    /// when the pointer reaches the ribbon turns nothing (pure, tested).
+    pub fn hold(&mut self, events: &[egui::Event], opts: &egui::InputOptions, time: f64) {
+        if events.iter().filter_map(|e| wheel_turn(e, opts)).any(|(_, whole)| !whole) {
+            self.partial = 0.0;
+            self.quiet_until = time + WHEEL_QUIET;
+        }
+    }
+}
+
+/// Notches the wheel turned this frame with the pointer over `rect` in `ui`'s layer (not under a
+/// menu or window), positive for down, counted in the state kept as `key`. The first part of the
+/// ribbon asked with the pointer over it takes the frame's wheel, so a gallery drawn inside the
+/// ribbon keeps it from switching tabs. Wheel input that goes anywhere else is held off.
+fn take_wheel(ui: &Ui, rect: Rect, key: &str, allowed: bool, per_gesture: bool) -> i32 {
+    let ctx = ui.ctx();
+    let wheel = |e: &&egui::Event| matches!(e, egui::Event::MouseWheel { .. });
+    let (events, time) = ctx.input(|i| (i.events.iter().filter(wheel).cloned().collect::<Vec<_>>(), i.time));
+    if events.is_empty() {
+        return 0;
+    }
+    let id = egui::Id::new("wc_ribbon_wheel").with(key);
+    let taken_id = egui::Id::new("wc_ribbon_wheel_taken");
+    let pass = ctx.cumulative_pass_nr();
+    let opts = ctx.options(|o| o.input_options);
+    let mut state: WheelNotches = ctx.data(|d| d.get_temp(id)).unwrap_or_default();
+    let free = ctx.data(|d| d.get_temp::<u64>(taken_id)) != Some(pass);
+    let turned = if allowed && free && ctx.dragged_id().is_none() && ui.rect_contains_pointer(rect) {
+        ctx.data_mut(|d| d.insert_temp(taken_id, pass));
+        state.read(&events, &opts, time, per_gesture)
+    } else {
+        state.hold(&events, &opts, time);
+        0
+    };
+    ctx.data_mut(|d| d.insert_temp(id, state));
+    turned
+}
+
+/// Notches turned over a gallery inside the ribbon (`key` names it), which scrolls with the wheel
+/// instead of switching tabs.
+pub(crate) fn gallery_wheel(ui: &Ui, rect: Rect, key: &str) -> i32 {
+    take_wheel(ui, rect, key, true, false)
+}
+
+/// The tab `notches` away from `current` among `tabs`, File left out, stopping at the first and
+/// the last (pure, tested).
+pub fn wheel_tab<'a>(tabs: &[&'a str], current: &str, notches: i32) -> Option<&'a str> {
+    let order: Vec<&str> = tabs.iter().copied().filter(|t| *t != "File").collect();
+    let at = order.iter().position(|t| *t == current)?;
+    let steps = notches.unsigned_abs() as usize;
+    let to = if notches > 0 { at.saturating_add(steps).min(order.len().saturating_sub(1)) } else { at.saturating_sub(steps) };
+    if to == at { None } else { order.get(to).copied() }
+}
+
+/// The wheel over the tab strip or the ribbon switches tabs, one per notch, as in Word for
+/// Windows (#2948). Not while a menu, a list or a text box has it.
+fn wheel_switches_tab(app: &mut WordApp, ui: &Ui, rect: Rect, tabs: &[&str]) {
+    let ctx = ui.ctx();
+    // A text box on the ribbon (the font box) keeps its tab; one elsewhere doesn't matter.
+    let typing_here =
+        ctx.text_edit_focused() && ctx.memory(|m| m.focused()).and_then(|id| ctx.read_response(id)).is_some_and(|r| rect.intersects(r.rect));
+    let allowed = app.ui.wheel_tabs && !egui::Popup::is_any_open(ctx) && !ctx.any_popup_open() && !typing_here;
+    let turned = take_wheel(ui, rect, "tabs", allowed, true);
+    if let Some(tab) = wheel_tab(tabs, &app.ui.tab, turned) {
+        let _ = app.run("ui.tab", json!({"tab": tab}));
+    }
+}
+
 /// Whether the caret is inside a table (so the contextual tabs and their badges are shown).
 pub fn in_table_public(app: &WordApp) -> bool {
     app.session.sel.focus.path.cell().is_some()
@@ -296,7 +442,7 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
         }
     }
     // Tab strip.
-    egui::Panel::top("tabs")
+    let strip = egui::Panel::top("tabs")
         .exact_size(30.0)
         .frame(egui::Frame::NONE.fill(t.tab_strip).inner_margin(egui::Margin { left: 8, right: 10, top: 0, bottom: 0 }))
         .show(ui, |ui| {
@@ -468,11 +614,17 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
                     });
                 });
             });
-        });
+        })
+        .response
+        .rect;
+    let names: Vec<&str> = tabs.iter().map(|(n, _)| n.as_str()).collect();
+    // A collapsed ribbon has only its tab names: the wheel over them switches tabs and leaves it
+    // collapsed.
     if app.ui.ribbon_collapsed {
+        wheel_switches_tab(app, ui, strip, &names);
         return;
     }
-    egui::Panel::top("ribbon")
+    let body = egui::Panel::top("ribbon")
         .exact_size(CONTENT_H + LABEL_H + 10.0)
         .frame(
             egui::Frame::NONE.fill(t.ribbon).inner_margin(egui::Margin { left: 8, right: 8, top: 4, bottom: 4 }).stroke(Stroke::new(1.0, t.border)),
@@ -550,7 +702,10 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
                 state.offset.x = x.clamp(0.0, overflow.max(0.0));
                 state.store(ui.ctx(), scroll.id);
             }
-        });
+        })
+        .response
+        .rect;
+    wheel_switches_tab(app, ui, strip.union(body), &names);
 }
 
 /// Custom groups (Customize Ribbon, #379): up to three commands as large buttons, more as small
@@ -2717,15 +2872,25 @@ fn table_design(app: &mut WordApp, ui: &mut Ui) {
             .map(|s| (s.builtin, s.id.clone(), crate::i18n::style_name(s)))
             .collect();
         styles.sort_by_key(|(builtin, _, _)| *builtin);
-        egui::ScrollArea::horizontal().max_width(420.0).show(ui, |ui| {
-            ui.horizontal(|ui| {
-                for (_, id, name) in styles {
-                    if crate::previews::table_style_tile(ui, app, &id).on_hover_text(name).clicked() {
-                        let _ = app.run("table.style", json!({"style": id}));
-                    }
-                }
-            });
-        });
+        // The wheel scrolls the gallery sideways rather than switching tabs (#2948).
+        let gallery = ui
+            .scope(|ui| {
+                ui.style_mut().always_scroll_the_only_direction = true;
+                egui::ScrollArea::horizontal()
+                    .max_width(420.0)
+                    .show(ui, |ui| {
+                        ui.horizontal(|ui| {
+                            for (_, id, name) in styles {
+                                if crate::previews::table_style_tile(ui, app, &id).on_hover_text(name).clicked() {
+                                    let _ = app.run("table.style", json!({"style": id}));
+                                }
+                            }
+                        });
+                    })
+                    .inner_rect
+            })
+            .inner;
+        gallery_wheel(ui, gallery, "tableStyles");
         stack(ui, |ui| {
             let current = look.and_then(|_| {
                 let (tp, _, _) = app.session.sel.focus.path.cell()?;
@@ -3430,5 +3595,324 @@ mod tests {
         let before = (size(&a), a.session.undo_depth());
         assert_eq!(before.0, Some((20.0, 2500.0)));
         assert_eq!(shown(a), before, "Chart Design shown, the chart untouched");
+    }
+
+    fn wheel(unit: egui::MouseWheelUnit, dx: f32, dy: f32, modifiers: egui::Modifiers) -> egui::Event {
+        egui::Event::MouseWheel { unit, delta: vec2(dx, dy), phase: egui::TouchPhase::Move, modifiers }
+    }
+
+    /// `n` mouse-wheel notches, positive turned down.
+    fn notches(n: f32) -> egui::Event {
+        wheel(egui::MouseWheelUnit::Line, 0.0, -n, egui::Modifiers::NONE)
+    }
+
+    fn wheel_harness(a: WordApp) -> egui_kittest::Harness<'static, WordApp> {
+        let mut h = egui_kittest::Harness::builder().with_size(vec2(1440.0, 900.0)).build_ui_state(
+            |ui, app: &mut WordApp| {
+                let ctx = ui.ctx().clone();
+                app.logic(&ctx);
+                app.ui(ui);
+            },
+            a,
+        );
+        h.run_steps(3);
+        h
+    }
+
+    /// The pointer goes to `at`, then `events` arrive together in one frame.
+    fn wheel_at(h: &mut egui_kittest::Harness<'static, WordApp>, at: egui::Pos2, events: Vec<egui::Event>) {
+        h.hover_at(at);
+        h.step();
+        h.input_mut().events.extend(events);
+        h.step();
+        h.run_steps(2);
+    }
+
+    /// The tab's name on the strip.
+    fn tab_rect(h: &egui_kittest::Harness<'static, WordApp>, tab: &str) -> Rect {
+        use egui_kittest::kittest::Queryable;
+        h.query_all_by_label(tl!(tab)).map(|n| n.rect()).min_by(|a, b| a.top().total_cmp(&b.top())).unwrap()
+    }
+
+    /// #2948: the wheel moves one tab per notch, File left out, and stops at the ends.
+    #[test]
+    fn wheel_tab_skips_file_and_stops_at_the_ends() {
+        let tabs = ["File", "Home", "Insert", "Draw", "Table Design"];
+        assert_eq!(wheel_tab(&tabs, "Home", 1), Some("Insert"));
+        assert_eq!(wheel_tab(&tabs, "Insert", -1), Some("Home"));
+        assert_eq!(wheel_tab(&tabs, "Home", -1), None, "no File, no wrap");
+        assert_eq!(wheel_tab(&tabs, "Table Design", 1), None, "no wrap at the end");
+        assert_eq!(wheel_tab(&tabs, "Home", 2), Some("Draw"));
+        assert_eq!(wheel_tab(&tabs, "Home", 64), Some("Table Design"), "a fast spin stops at the last tab");
+        assert_eq!(wheel_tab(&tabs, "Draw", i32::MIN), Some("Home"));
+        assert_eq!(wheel_tab(&tabs, "Home", 0), None);
+        assert_eq!(wheel_tab(&tabs, "Gone", 1), None);
+        assert_eq!(wheel_tab(&[], "Home", 1), None);
+    }
+
+    /// #2948: mouse-wheel notches count at once; touchpad deltas add up to a notch, one notch per
+    /// gesture for the tabs and every notch for a gallery; smooth input that began elsewhere waits
+    /// until it rests; zoom, Shift and sideways scrolling are left alone.
+    #[test]
+    fn wheel_notches_count_notches_and_add_up_touchpad_deltas() {
+        use egui::{Modifiers, MouseWheelUnit::*};
+        let opts = egui::InputOptions::default();
+        let mut w = WheelNotches::default();
+        assert_eq!(w.read(&[notches(1.0)], &opts, 0.0, true), 1);
+        assert_eq!(w.read(&[notches(-1.0)], &opts, 0.1, true), -1);
+        assert_eq!(w.read(&[notches(3.0)], &opts, 0.2, true), 3);
+        assert_eq!(w.read(&[wheel(Page, 0.0, -1.0, Modifiers::NONE)], &opts, 0.3, true), 1);
+        for left_alone in [
+            wheel(Line, 0.0, -1.0, Modifiers::SHIFT),
+            wheel(Line, 0.0, -1.0, Modifiers::COMMAND),
+            wheel(Point, -80.0, -10.0, Modifiers::NONE),
+            wheel(Point, 0.0, f32::NAN, Modifiers::NONE),
+            wheel(Point, 0.0, 0.0, Modifiers::NONE),
+            egui::Event::PointerMoved(pos2(1.0, 1.0)),
+        ] {
+            assert_eq!(w.read(std::slice::from_ref(&left_alone), &opts, 0.4, true), 0, "{left_alone:?}");
+        }
+        // A touchpad: small deltas add up to a notch.
+        let pad = |dy: f32| wheel(Point, 0.0, -dy, Modifiers::NONE);
+        assert_eq!(w.read(&[pad(20.0)], &opts, 1.0, true), 0);
+        assert_eq!(w.read(&[pad(20.0)], &opts, 1.1, true), 0);
+        assert_eq!(w.read(&[pad(20.0)], &opts, 1.2, true), 1);
+        // The rest of that gesture is ignored until it rests.
+        assert_eq!(w.read(&[pad(60.0)], &opts, 1.3, true), 0);
+        assert_eq!(w.read(&[pad(60.0)], &opts, 1.45, true), 0);
+        assert_eq!(w.read(&[pad(60.0)], &opts, 1.7, true), 1, "a new gesture");
+        // A flick of many large deltas is one notch.
+        assert_eq!(w.read(&vec![pad(80.0); 40], &opts, 3.0, true), 1);
+        // Turning back, or resting, starts over.
+        assert_eq!(w.read(&[pad(40.0)], &opts, 5.0, true), 0);
+        assert_eq!(w.read(&[pad(-40.0)], &opts, 5.1, true), 0);
+        assert_eq!(w.read(&[pad(-40.0)], &opts, 7.0, true), 0, "the earlier part was forgotten");
+        assert_eq!(w.read(&[pad(-40.0)], &opts, 7.1, true), -1);
+        // A huge or endless delta stays bounded.
+        assert_eq!(w.read(&[notches(1e9)], &opts, 9.0, true), MAX_WHEEL_NOTCHES);
+        assert_eq!(w.read(&[notches(f32::INFINITY)], &opts, 9.1, true), 0);
+        // A gallery counts every notch's worth of a gesture.
+        let mut g = WheelNotches::default();
+        assert_eq!((0..4).map(|k| g.read(&[pad(60.0)], &opts, 20.0 + f64::from(k) * 0.02, false)).sum::<i32>(), 4);
+        // Smooth input that went elsewhere first (a page scroll still coasting) turns nothing
+        // until it rests; mouse-wheel notches still count, and holding them changes nothing.
+        let mut w = WheelNotches::default();
+        w.hold(&[pad(40.0)], &opts, 30.0);
+        assert_eq!(w.read(&[pad(40.0), pad(40.0)], &opts, 30.1, true), 0);
+        assert_eq!(w.read(&[pad(40.0), pad(40.0)], &opts, 30.25, true), 0);
+        assert_eq!(w.read(&[notches(1.0)], &opts, 30.3, true), 1);
+        assert_eq!(w.read(&[pad(40.0), pad(40.0)], &opts, 30.6, true), 1, "a new gesture");
+        let mut w = WheelNotches::default();
+        w.hold(&[notches(1.0), wheel(Line, 0.0, -1.0, Modifiers::SHIFT)], &opts, 40.0);
+        assert_eq!(w.read(&[pad(40.0), pad(40.0)], &opts, 40.05, true), 1);
+    }
+
+    /// #2948: whoever asks for the wheel first in a frame takes it, so a gallery keeps the ribbon
+    /// from switching tabs under it; the pointer must be over the rectangle asked about.
+    #[test]
+    fn the_first_to_ask_takes_the_wheel() {
+        let gallery = Rect::from_min_size(pos2(10.0, 10.0), vec2(100.0, 40.0));
+        let ribbon = Rect::from_min_size(pos2(0.0, 0.0), vec2(400.0, 100.0));
+        let seen = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let log = seen.clone();
+        let mut h = egui_kittest::Harness::builder().with_size(vec2(400.0, 200.0)).build_ui(move |ui| {
+            let first = gallery_wheel(ui, gallery, "gallery");
+            let second = gallery_wheel(ui, ribbon, "ribbon");
+            if first != 0 || second != 0 {
+                log.lock().unwrap().push((first, second));
+            }
+        });
+        for (at, expected) in [(pos2(50.0, 30.0), (1, 0)), (pos2(300.0, 30.0), (0, 1)), (pos2(300.0, 150.0), (0, 0))] {
+            seen.lock().unwrap().clear();
+            h.hover_at(at);
+            h.step();
+            h.input_mut().events.push(notches(1.0));
+            h.step();
+            let got = seen.lock().unwrap().first().copied().unwrap_or((0, 0));
+            assert_eq!(got, expected, "pointer at {at:?}");
+        }
+    }
+
+    /// #2948: as in Word for Windows, a wheel notch over the ribbon or its tab names shows the
+    /// next tab (down) or the one before (up), File left out, stopping at the first and last;
+    /// contextual tabs are in the round.
+    #[test]
+    fn wheel_over_the_ribbon_switches_tabs() {
+        let mut h = wheel_harness(WordApp::new(Session::new(wordcraft_doc::Document::from_text("Text")), crate::Services::default()));
+        let home = tab_rect(&h, "Home");
+        let body = pos2(home.center().x, home.bottom() + 40.0);
+        assert_eq!(h.state().ui.tab, "Home");
+        wheel_at(&mut h, body, vec![notches(1.0)]);
+        assert_eq!(h.state().ui.tab, "Insert", "down over the ribbon: the next tab");
+        wheel_at(&mut h, home.center(), vec![notches(-1.0)]);
+        assert_eq!(h.state().ui.tab, "Home", "up over the tab names: the one before");
+        wheel_at(&mut h, body, vec![notches(-1.0)]);
+        assert_eq!(h.state().ui.tab, "Home", "nothing before Home: File isn't opened");
+        assert!(!h.state().ui.backstage);
+        let last = h.state().session.ribbon.tabs().iter().filter(|e| !e.hidden).map(|e| e.name.clone()).next_back().unwrap();
+        wheel_at(&mut h, body, vec![notches(30.0)]);
+        assert_eq!(h.state().ui.tab, last, "a fast spin stops at the last tab");
+        wheel_at(&mut h, home.center(), vec![notches(1.0)]);
+        assert_eq!(h.state().ui.tab, last, "no wrap");
+        // In a table the contextual tabs come after the others.
+        h.state_mut().run("insert.table", json!({"rows": 2, "cols": 2})).unwrap();
+        h.run_steps(2);
+        wheel_at(&mut h, home.center(), vec![notches(1.0)]);
+        assert_eq!(h.state().ui.tab, "Table Design");
+        wheel_at(&mut h, home.center(), vec![notches(1.0)]);
+        assert_eq!(h.state().ui.tab, "Table Layout");
+        // The Table Styles gallery scrolls with the wheel rather than switching tabs.
+        h.state_mut().run("ui.tab", json!({"tab": "Table Design"})).unwrap();
+        h.run_steps(2);
+        let options = {
+            use egui_kittest::kittest::Queryable;
+            ["First Column", "Last Column", "Banded Columns"].map(|l| h.get_by_label(tl!(l)).rect())
+        };
+        let right = options.iter().map(|r| r.right()).fold(0.0, f32::max);
+        wheel_at(&mut h, pos2(right + 120.0, options[0].center().y), vec![notches(1.0)]);
+        assert_eq!(h.state().ui.tab, "Table Design", "over the Table Styles gallery");
+    }
+
+    /// #2948: the wheel over the Styles gallery scrolls its tiles, over an open menu or with Shift
+    /// (sideways) it doesn't switch tabs, and a touchpad switches once a notch's worth adds up.
+    #[test]
+    fn wheel_leaves_galleries_menus_and_sideways_scrolling_alone() {
+        use egui::{Modifiers, MouseWheelUnit::Point};
+        use egui_kittest::kittest::Queryable;
+        let mut h = wheel_harness(WordApp::new(Session::new(wordcraft_doc::Document::from_text("Text")), crate::Services::default()));
+        let home = tab_rect(&h, "Home");
+        let body = pos2(home.center().x, home.bottom() + 40.0);
+        let start = |h: &egui_kittest::Harness<'static, WordApp>| h.ctx.data(|d| d.get_temp::<usize>(egui::Id::new("gallery_start"))).unwrap_or(0);
+        let tile = h.query_all_by_label("Normal").map(|n| n.rect()).find(|r| r.top() > home.bottom()).unwrap();
+        wheel_at(&mut h, tile.center(), vec![notches(1.0)]);
+        assert_eq!(h.state().ui.tab, "Home", "the gallery keeps the wheel");
+        assert!(start(&h) > 0, "and shows its next tiles");
+        wheel_at(&mut h, tile.center(), vec![notches(-1.0)]);
+        assert_eq!(start(&h), 0, "and back");
+        // Shift+wheel and sideways scrolling keep their meaning.
+        wheel_at(&mut h, body, vec![wheel(egui::MouseWheelUnit::Line, 0.0, -1.0, Modifiers::SHIFT)]);
+        wheel_at(&mut h, body, vec![wheel(Point, -120.0, 0.0, Modifiers::NONE)]);
+        assert_eq!(h.state().ui.tab, "Home");
+        // An open menu has the wheel.
+        h.get_by_label(tl!("Editing")).click();
+        h.run_steps(2);
+        assert!(egui::Popup::is_any_open(&h.ctx), "the editing mode menu is open");
+        wheel_at(&mut h, body, vec![notches(1.0)]);
+        assert_eq!(h.state().ui.tab, "Home", "not under an open menu");
+        h.key_press(egui::Key::Escape);
+        h.run_steps(2);
+        assert!(!egui::Popup::is_any_open(&h.ctx));
+        // A touchpad: small deltas in a row of frames add up to a notch, and a flick is one tab.
+        let pad = |dy: f32| wheel(Point, 0.0, -dy, Modifiers::NONE);
+        h.hover_at(body);
+        h.step();
+        for _ in 0..2 {
+            h.input_mut().events.push(pad(20.0));
+            h.step();
+        }
+        assert_eq!(h.state().ui.tab, "Home", "not yet a notch");
+        h.input_mut().events.push(pad(20.0));
+        h.step();
+        h.run_steps(2);
+        assert_eq!(h.state().ui.tab, "Insert");
+        wheel_at(&mut h, body, vec![pad(90.0); 30]);
+        assert_eq!(h.state().ui.tab, "Draw", "a flick moves one tab");
+        // The Equation tab's symbols scroll a row per notch.
+        h.state_mut().run("insert.equation", json!({})).unwrap();
+        h.run_steps(3);
+        assert_eq!(h.state().ui.tab, "Equation");
+        let sets = h.query_all_by_label("…").map(|n| n.rect()).find(|r| r.top() > home.bottom()).unwrap();
+        wheel_at(&mut h, pos2(sets.left() - 60.0, sets.center().y), vec![notches(1.0)]);
+        assert_eq!(h.state().ui.tab, "Equation");
+        assert_eq!(h.ctx.data(|d| d.get_temp::<usize>(egui::Id::new("eq_symbol_start"))), Some(10));
+    }
+
+    /// #2948: File › Options › Advanced turns it off; a collapsed ribbon switches tabs from its
+    /// names and stays collapsed.
+    #[test]
+    fn wheel_tabs_can_be_turned_off_and_keep_a_collapsed_ribbon_collapsed() {
+        let mut h = wheel_harness(WordApp::new(Session::new(wordcraft_doc::Document::from_text("Text")), crate::Services::default()));
+        let home = tab_rect(&h, "Home");
+        let body = pos2(home.center().x, home.bottom() + 40.0);
+        h.state_mut().run("ui.wheelTabs", json!({"value": false})).unwrap();
+        wheel_at(&mut h, body, vec![notches(1.0)]);
+        wheel_at(&mut h, home.center(), vec![notches(1.0)]);
+        assert_eq!(h.state().ui.tab, "Home", "off: the wheel leaves the tabs alone");
+        h.state_mut().run("ui.wheelTabs", json!({"value": true})).unwrap();
+        h.state_mut().run("ui.collapseRibbon", json!({})).unwrap();
+        h.run_steps(2);
+        wheel_at(&mut h, home.center(), vec![notches(1.0)]);
+        assert_eq!(h.state().ui.tab, "Insert");
+        assert!(h.state().ui.ribbon_collapsed, "the ribbon stays collapsed");
+    }
+
+    /// #2948: a page scroll still coasting when the pointer reaches the ribbon neither switches
+    /// the tab nor scrolls the Styles gallery; a touchpad gesture that begins over the ribbon does.
+    #[test]
+    fn a_page_scroll_coasting_onto_the_ribbon_switches_nothing() {
+        use egui::{Modifiers, MouseWheelUnit::Point};
+        use egui_kittest::kittest::Queryable;
+        let a = WordApp::new(Session::new(wordcraft_doc::Document::from_text("Text")), crate::Services::default());
+        let mut h = egui_kittest::Harness::builder().with_size(vec2(1440.0, 900.0)).with_step_dt(1.0 / 60.0).build_ui_state(
+            |ui, app: &mut WordApp| {
+                let ctx = ui.ctx().clone();
+                app.logic(&ctx);
+                app.ui(ui);
+            },
+            a,
+        );
+        h.run_steps(3);
+        let home = tab_rect(&h, "Home");
+        let body = pos2(home.center().x, home.bottom() + 40.0);
+        let tile = h.query_all_by_label("Normal").map(|n| n.rect()).find(|r| r.top() > home.bottom()).unwrap();
+        let page = h.state().canvas.canvas_rect.unwrap().center();
+        let start = |h: &egui_kittest::Harness<'static, WordApp>| h.ctx.data(|d| d.get_temp::<usize>(egui::Id::new("gallery_start"))).unwrap_or(0);
+        let pad = |dy: f32| wheel(Point, 0.0, -dy, Modifiers::NONE);
+        // Fingers flick the page; the scroll coasts on as the pointer moves up to the ribbon and
+        // over the gallery, 1/60 s a frame.
+        for at in [page, body, tile.center()] {
+            h.hover_at(at);
+            for _ in 0..4 {
+                h.input_mut().events.push(pad(40.0));
+                h.step();
+            }
+        }
+        h.run_steps(2);
+        assert_eq!(h.state().ui.tab, "Home", "the page's scroll doesn't switch the tab");
+        assert_eq!(start(&h), 0, "nor scroll the gallery");
+        // Once it rests, a gesture that begins over the ribbon switches the tab.
+        h.run_steps(15);
+        h.hover_at(body);
+        for _ in 0..2 {
+            h.input_mut().events.push(pad(40.0));
+            h.step();
+        }
+        h.run_steps(2);
+        assert_eq!(h.state().ui.tab, "Insert");
+    }
+
+    /// #2948: a text box on the ribbon (the font box) keeps the wheel from switching its tab away;
+    /// one elsewhere (the Navigation pane's search) doesn't.
+    #[test]
+    fn only_a_text_box_on_the_ribbon_keeps_the_tab() {
+        use egui::accesskit::Role;
+        use egui_kittest::kittest::{By, Queryable};
+        let mut h = wheel_harness(WordApp::new(Session::new(wordcraft_doc::Document::from_text("Text")), crate::Services::default()));
+        let home = tab_rect(&h, "Home");
+        let body = pos2(home.center().x, home.bottom() + 40.0);
+        h.query_all(By::new().role(Role::TextInput))
+            .find(|n| n.rect().top() > home.bottom() && n.rect().bottom() < home.bottom() + 100.0)
+            .unwrap()
+            .focus();
+        h.run_steps(2);
+        assert!(h.ctx.text_edit_focused(), "the font box has the keyboard");
+        wheel_at(&mut h, body, vec![notches(1.0)]);
+        assert_eq!(h.state().ui.tab, "Home", "the font box keeps its tab");
+        h.state_mut().run("view.navigationPane", json!({"value": true})).unwrap();
+        h.state_mut().nav_search_focus = true;
+        h.run_steps(3);
+        assert!(h.ctx.text_edit_focused(), "the Navigation pane's search has the keyboard");
+        wheel_at(&mut h, body, vec![notches(1.0)]);
+        assert_eq!(h.state().ui.tab, "Insert", "a text box elsewhere leaves the wheel to the ribbon");
     }
 }

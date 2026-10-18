@@ -517,6 +517,10 @@ fn advanced(app: &mut WordApp, ui: &mut Ui) {
     if ui.checkbox(&mut keytips, tl!("Show KeyTips (Alt or F10)")).changed() {
         let _ = app.run("ui.keytips", json!({"value": keytips}));
     }
+    let mut wheel = app.ui.wheel_tabs;
+    if ui.checkbox(&mut wheel, tl!("Switch ribbon tabs with the mouse wheel")).changed() {
+        let _ = app.run("ui.wheelTabs", json!({"value": wheel}));
+    }
     ui.add_space(8.0);
     section(ui, "Animation");
     let mut caret = app.ui.caret_animation;
@@ -1061,6 +1065,33 @@ mod tests {
         h.get_by_label(label).click();
         h.run_steps(4);
         assert!(h.state().ui.alignment_guides, "and on again");
+    }
+
+    /// File › Options › Advanced › Display (#2948): the checkbox is the `ui.wheelTabs` setting,
+    /// and it is translated.
+    #[test]
+    fn advanced_wheel_tabs_checkbox_turns_it_off_and_on() {
+        let mut a = app();
+        a.run("file.options", json!({"pane": "advanced"})).unwrap();
+        let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(1440.0, 900.0)).build_ui_state(
+            |ui, app: &mut WordApp| {
+                let ctx = ui.ctx().clone();
+                app.logic(&ctx);
+                app.ui(ui);
+            },
+            a,
+        );
+        h.run_steps(4);
+        let label = "Switch ribbon tabs with the mouse wheel";
+        h.get_by_label(label).click();
+        h.run_steps(4);
+        assert!(!h.state().ui.wheel_tabs, "the checkbox turns it off");
+        h.get_by_label(label).click();
+        h.run_steps(4);
+        assert!(h.state().ui.wheel_tabs, "and on again");
+        h.state_mut().run("ui.language", json!({"value": "fr"})).unwrap();
+        h.run_steps(4);
+        assert!(h.query_by_label("Changer d'onglet du ruban avec la molette de la souris").is_some());
     }
 
     /// File › Options › Advanced › Animation: the checkbox is the `ui.caretAnimation` setting,

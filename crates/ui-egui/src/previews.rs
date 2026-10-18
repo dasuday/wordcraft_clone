@@ -575,6 +575,16 @@ pub fn style_gallery(app: &mut WordApp, ui: &mut Ui, state: &Value) {
             let _ = app.run("para.style", json!({"style": id}));
         }
     }
+    // The wheel scrolls a row of tiles per notch, as the arrows do, rather than switching tabs (#2948).
+    let turned = crate::ribbon::gallery_wheel(ui, area, "styles");
+    if turned != 0 {
+        let last = styles.len().saturating_sub(1);
+        let mut n = start;
+        for _ in 0..turned.unsigned_abs() {
+            n = if turned < 0 { n.saturating_sub(visible) } else { n.saturating_add(visible).min(last) };
+        }
+        ui.data_mut(|d| d.insert_temp(egui::Id::new("gallery_start"), n));
+    }
     // Scroll arrows and "more".
     let ar = Rect::from_min_max(pos2(area.max.x - 16.0, area.min.y + 2.0), pos2(area.max.x - 2.0, area.max.y - 2.0));
     let thirds = ar.height() / 3.0;

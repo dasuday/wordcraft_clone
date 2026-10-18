@@ -187,7 +187,8 @@ fn symbols(ui: &mut Ui, app: &mut WordApp) {
     let all: Vec<char> = chars.chars().collect();
     let start = ui.data(|d| d.get_temp::<usize>(start_id)).unwrap_or(0).min(all.len().saturating_sub(1));
     let t = Tokens::get(ui.ctx());
-    ui.vertical(|ui| {
+    let page = per_row * rows;
+    let grid = ui.vertical(|ui| {
         ui.spacing_mut().item_spacing = vec2(1.0, 1.0);
         for row in 0..rows {
             ui.horizontal(|ui| {
@@ -206,9 +207,8 @@ fn symbols(ui: &mut Ui, app: &mut WordApp) {
             });
         }
     });
-    ui.vertical(|ui| {
+    let arrows = ui.vertical(|ui| {
         ui.spacing_mut().item_spacing = vec2(0.0, 1.0);
-        let page = per_row * rows;
         if ui.add_enabled(start > 0, egui::Button::new("▲").min_size(vec2(16.0, 22.0))).clicked() {
             ui.data_mut(|d| d.insert_temp(start_id, start.saturating_sub(per_row)));
         }
@@ -245,6 +245,19 @@ fn symbols(ui: &mut Ui, app: &mut WordApp) {
             }
         });
     });
+    // The wheel scrolls a row per notch, as the arrows do, rather than switching tabs (#2948).
+    let turned = crate::ribbon::gallery_wheel(ui, grid.response.rect.union(arrows.response.rect), "equationSymbols");
+    if turned != 0 {
+        let mut n = start;
+        for _ in 0..turned.unsigned_abs() {
+            if turned < 0 {
+                n = n.saturating_sub(per_row);
+            } else if n.saturating_add(page) < all.len() {
+                n = n.saturating_add(per_row);
+            }
+        }
+        ui.data_mut(|d| d.insert_temp(start_id, n));
+    }
 }
 
 fn symbol_button(ui: &mut Ui, app: &mut WordApp, c: char, t: &Tokens) -> bool {

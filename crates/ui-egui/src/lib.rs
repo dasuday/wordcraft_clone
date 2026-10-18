@@ -285,6 +285,9 @@ pub struct UiState {
     pub read_aloud_skip_citations: bool,
     /// Show ribbon and Quick Access Toolbar KeyTips on Alt/F10 (#620).
     pub keytips_enabled: bool,
+    /// File › Options › Advanced › Display: the mouse wheel over the ribbon switches tabs, as in
+    /// Word for Windows (#2948). On by default.
+    pub wheel_tabs: bool,
     /// Digits entered for a multi-key Quick Access Toolbar badge; never persisted.
     #[serde(skip)]
     pub keytip_prefix: String,
@@ -381,6 +384,7 @@ impl Default for UiState {
             read_aloud_rate: 1.0,
             read_aloud_skip_citations: true,
             keytips_enabled: true,
+            wheel_tabs: true,
             keytip_prefix: String::new(),
             keytips: crate::keytips::Phase::Off,
             alt_pressed: false,
@@ -1704,6 +1708,16 @@ impl WordApp {
                 }
                 json!({"alignmentGuides": self.ui.alignment_guides})
             }
+            "ui.wheelTabs" => {
+                // File › Options › Advanced › Display (#2948): `value` true or false turns switching
+                // ribbon tabs with the mouse wheel on or off; no value reads it.
+                match p.get("value") {
+                    None => {}
+                    Some(Value::Bool(on)) => self.ui.wheel_tabs = *on,
+                    Some(_) => return Some(Err("`value` must be true or false".into())),
+                }
+                json!({"wheelTabs": self.ui.wheel_tabs})
+            }
             "ui.startScreen" => {
                 // File › Options › General › Start-up (#766): `value` true or false turns showing
                 // File › Home at start-up on or off; no value reads it.
@@ -2614,6 +2628,7 @@ pub(crate) fn works_without_document(id: &str) -> bool {
             | "ui.discord"
             | "ui.caretAnimation"
             | "ui.startScreen"
+            | "ui.wheelTabs"
     ) || id.starts_with("help.")
 }
 
@@ -2901,6 +2916,27 @@ mod tests {
         let old: UiState = serde_json::from_str(r#"{"tab":"Insert"}"#).unwrap();
         assert!(old.caret_animation && old.tab == "Insert");
         assert_eq!(a.run("ui.caretAnimation", json!({"value": true})).unwrap()["caretAnimation"], true);
+    }
+
+    /// #2948: switching ribbon tabs with the mouse wheel is a UI command, on by default, kept
+    /// between runs, and it works with no document open like the other interface settings.
+    #[test]
+    fn wheel_tabs_is_a_ui_command_and_survives_a_restart() {
+        let mut a = app();
+        assert_eq!(a.run("ui.wheelTabs", json!({})).unwrap(), json!({"wheelTabs": true}), "on by default; no value reads it");
+        assert_eq!(a.run("ui.wheelTabs", json!({"value": false})).unwrap(), json!({"wheelTabs": false}));
+        for junk in [json!({"value": "off"}), json!({"value": 0}), json!({"value": null}), json!({"value": [false]})] {
+            assert!(a.run("ui.wheelTabs", junk).is_err());
+        }
+        assert!(!a.ui.wheel_tabs, "a rejected value keeps the setting");
+        let saved = serde_json::to_string(&a.prefs()).unwrap();
+        assert!(saved.contains(r#""wheelTabs":false"#), "{saved}");
+        let mut b = app();
+        b.apply_prefs(serde_json::from_str(&saved).unwrap());
+        assert!(!b.ui.wheel_tabs);
+        let old: UiState = serde_json::from_str(r#"{"tab":"Insert"}"#).unwrap();
+        assert!(old.wheel_tabs, "older settings leave it on");
+        assert!(works_without_document("ui.wheelTabs"));
     }
 
     /// #1945: showing or hiding the Quick Access Toolbar is a UI command (no value toggles it),
