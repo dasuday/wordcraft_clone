@@ -58,6 +58,8 @@ Document renaming: desktop renaming requires a filesystem that supports hard lin
 blocking gaps, and closing them lifts file formats, layout, stability and UI enough to take the
 full number from ~60% to ~75%. Everything else is depth on the way to full parity.
 
+> **Three-column preset update:** 2026-10-15 · the header/footer preset uses editable table cells and screen-only editing guides (#2197). Synthetic command, undo/redo and repeated DOCX save/reopen checks cover this preset; broader template/layout gaps and readiness estimates remain unchanged.
+
 ## By kind
 
 Sample-text formulas on Enter (#1067) are implemented: `=rand()` and `=lorem()`,
@@ -106,6 +108,7 @@ The Language dialog reads effective character formatting, including document def
 | 2026-10-16 | trivial | #17: automatic space between Asian text and Latin text or digits laid out (#2358) |
 | 2026-10-14 | trivial | Row table border exceptions fixed; other row table exceptions remain unsupported |
 | 2026-10-12 | minor | Czech proofing review: short-word splits rank after deletion, NOSUGGEST excludes suggestions while accepting typed forms, affix comments apply only to headers, ratios keep spaces and repeated-word messages use Czech quotes; synthetic engine end-to-end and latency checks |
+| 2026-10-15 | trivial | Three-column header/footer preset uses a borderless table with editing guides (#2197); broader gaps and estimates unchanged |
 | 2026-10-12 | minor | Czech spelling from the installed Hunspell dictionary, runtime-table suggestions and generic checks; Czech interface writes cs-CZ documents; no Czech hyphenation patterns bundled; estimates unchanged |
 | 2026-10-12 | minor | Gap #24 default shortcuts expanded (140 commands on macOS / 158 on Linux/Windows); stale gaps #9 (DOCX agile encryption already works, only encrypted .doc missing) and #15 (DOCX bibliography sources already saved, only desktop integrations missing) updated |
 | 2026-10-13 | trivial | Previously untracked long Web/Draft page blur resolved with visible high-resolution raster tiling; no gap remains for this issue |
