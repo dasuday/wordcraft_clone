@@ -5407,7 +5407,7 @@ dependencies = [
 
 [[package]]
 name = "wordcraft-languagetool"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "form_urlencoded",
  "log",
