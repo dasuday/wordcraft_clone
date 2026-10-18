@@ -208,11 +208,8 @@ impl PropCtx {
                 "w:szCs" => c.size_cs = k.attr("w:val").and_then(|v| measure(v, 2.0)).filter(|v| *v > 0.0).map(|v| v.clamp(1.0, 1638.0)),
                 "w:highlight" => c.highlight = k.attr("w:val").map(Highlight::from_ooxml),
                 "w:u" => {
-                    if let Some(v) = k.attr("w:val") {
-                        c.underline = Some(Underline::from_ooxml(v));
-                    } else {
-                        c.underline = Some(Underline::Single);
-                    }
+                    // w:val has no default in the schema: without it Word draws no underline
+                    c.underline = k.attr("w:val").map(Underline::from_ooxml);
                     c.underline_color =
                         self.theme_color(k, "w:themeColor", "w:themeTint", "w:themeShade").or_else(|| k.attr("w:color").and_then(Rgb::parse));
                 }
@@ -233,6 +230,7 @@ impl PropCtx {
                     c.lang = k.attr("w:val").filter(|v| !v.is_empty() && v.len() < 64).map(str::to_string);
                     c.lang_bidi = k.attr("w:bidi").filter(|v| !v.is_empty() && v.len() < 64).map(str::to_string);
                 }
+                "w14:ligatures" => c.ligatures = k.attr("w14:val").and_then(wordcraft_doc::props::Ligatures::from_ooxml),
                 n if n.starts_with("w14:") => {
                     let fx = c.text_effects.get_or_insert_with(Default::default);
                     super::wordart::read(k, &self.theme, fx);

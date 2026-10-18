@@ -616,6 +616,13 @@ pub(crate) fn push_caps(rc: &ResolvedChar, c: char, out: &mut String) {
     if rc.caps || (rc.small_caps && c.is_lowercase()) { out.extend(c.to_uppercase()) } else { out.push(c) }
 }
 
+/// The OpenType ligature features a `w14:ligatures` value sets, each on or off. Required
+/// ligatures (`rlig`, Arabic lam-alef) are never turned off.
+pub(crate) fn ligature_features(l: wordcraft_doc::props::Ligatures) -> [wordcraft_fonts::Feature; 4] {
+    let f = |tag: &[u8; 4], on: bool| wordcraft_fonts::feature_value(tag, on as u32);
+    [f(b"liga", l.standard), f(b"clig", l.contextual), f(b"hlig", l.historical), f(b"dlig", l.discretional)]
+}
+
 /// Whether `c`'s capital is more than one character (ß → SS), so All Caps draws more
 /// characters than the document holds.
 fn caps_expands(c: char) -> bool {
@@ -1020,7 +1027,18 @@ impl<'a> Builder<'a> {
                 }
             };
             // The shaper kerns by default; Word kerns only when Kerning for fonts covers the size.
-            let features: &[wordcraft_fonts::Feature] = if rc.kerned() { &[] } else { &no_kern };
+            // Without `w14:ligatures` the shaper's default (standard and contextual) stays.
+            let [kern_off] = no_kern;
+            let all = match rc.ligatures {
+                Some(l) => {
+                    let [a, b, c, d] = ligature_features(l);
+                    [kern_off, a, b, c, d]
+                }
+                None => [kern_off; 5],
+            };
+            let from = usize::from(rc.kerned());
+            let to = if rc.ligatures.is_some() { all.len() } else { 1 };
+            let features: &[wordcraft_fonts::Feature] = all.get(from..to).unwrap_or_default();
             let shaped = if use_levels {
                 wordcraft_fonts::shape_run(&st.face, shape_text, features, map, key.rtl)
             } else {
@@ -1741,7 +1759,7 @@ pub fn layout_para(p: &Paragraph, env: &ParaEnv) -> ParaLayout {
         text_len: p.text.len(),
         has_page_fields,
         notes,
-        issues: env.proofing.map(|o| proof_issues(p, &runs, &o)).unwrap_or_default(),
+        issues: env.proofing.map(|o| proof_issues(p, &runs, &o, is_list_item(doc, p))).unwrap_or_default(),
         drop_cap,
         hyph_after: Vec::new(),
         bidi_levels: b.levels,
@@ -2910,19 +2928,32 @@ fn lang_at(runs: &[ProofRun], off: usize) -> wordcraft_proof::ProofLang {
 /// Spelling and grammar issues in a paragraph, in order: each word in its run's language
 /// ([`wordcraft_proof::check_text_with`]: what spelling skips, and grammar only with `grammar`),
 /// and none touching a run left unchecked.
-pub fn paragraph_issues(p: &Paragraph, runs: &[ProofRun], spelling: &wordcraft_proof::Options, grammar: bool) -> Vec<wordcraft_proof::Issue> {
+///
+/// `list_item` (see [`is_list_item`]) turns off the capital-first-word grammar rule.
+pub fn paragraph_issues(
+    p: &Paragraph,
+    runs: &[ProofRun],
+    spelling: &wordcraft_proof::Options,
+    grammar: bool,
+    list_item: bool,
+) -> Vec<wordcraft_proof::Issue> {
     if p.text.trim().is_empty() || p.text.len() > 100_000 {
         return Vec::new();
     }
     let text = proof_text(p);
     let spans: Vec<(std::ops::Range<usize>, wordcraft_proof::ProofLang)> = runs.iter().map(|r| (r.range.clone(), r.lang)).collect();
     let skip = |a: usize, b: usize| runs.iter().any(|r| r.skip && r.range.start < b && a < r.range.end);
-    wordcraft_proof::check_text_with(&text, &spans, spelling, grammar).into_iter().filter(|i| !skip(i.start, i.end)).collect()
+    wordcraft_proof::check_text_with(&text, &spans, spelling, grammar, list_item).into_iter().filter(|i| !skip(i.start, i.end)).collect()
+}
+
+/// Whether the paragraph is a list item: its own numbering, or its style's, names a list (not 0).
+pub fn is_list_item(doc: &Document, p: &Paragraph) -> bool {
+    p.props.numbering.or_else(|| doc.styles.resolve_para(&p.props).numbering).is_some_and(|n| n.num != 0)
 }
 
 /// Spelling and grammar issues in a paragraph as squiggles: (start, end, is grammar).
-fn proof_issues(p: &Paragraph, runs: &[ProofRun], opts: &crate::ProofOptions) -> Vec<(usize, usize, bool)> {
-    paragraph_issues(p, runs, &opts.spelling, opts.grammar)
+fn proof_issues(p: &Paragraph, runs: &[ProofRun], opts: &crate::ProofOptions, list_item: bool) -> Vec<(usize, usize, bool)> {
+    paragraph_issues(p, runs, &opts.spelling, opts.grammar, list_item)
         .into_iter()
         .map(|i| (i.start, i.end, i.kind == wordcraft_proof::IssueKind::Grammar))
         .collect()
