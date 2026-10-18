@@ -370,3 +370,15 @@ fn oversized_theme_data_is_refused_before_decoding() {
     let err = t.run("design.openTheme", &json!({"path": "x.thmx", "data": big})).unwrap_err();
     assert!(err.to_string().contains("too large"), "{err}");
 }
+
+#[test]
+fn saving_to_a_built_in_name_by_path_in_the_themes_folder_is_refused() {
+    let dir = temp_dir("builtin-path");
+    let mut t = s();
+    t.load_custom_themes(&dir);
+    let file = dir.join("Craft.thmx");
+    let err = t.run("design.saveTheme", &json!({"path": file.to_string_lossy()})).unwrap_err();
+    assert!(err.to_string().contains("built-in"), "{err}");
+    assert!(!file.exists(), "nothing was written");
+    let _ = std::fs::remove_dir_all(&dir);
+}

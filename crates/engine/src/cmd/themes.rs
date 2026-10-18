@@ -390,14 +390,16 @@ fn save_theme(s: &mut Session, v: &Value) -> CmdResult {
             theme_file(&dir, n)
         }
     };
+    let in_folder = s.themes_dir.as_deref().is_some_and(|d| path.parent() == Some(d));
+    let stem = path.file_stem().map(|x| x.to_string_lossy().to_string());
+    // The gallery and startup skip built-in names in the themes folder, so don't write one there.
+    if in_folder && let Some(stem) = stem.as_deref().filter(|n| is_builtin(n)) {
+        return Err(CmdError::Params(format!("`{stem}` is a built-in theme")));
+    }
     let bytes = wordcraft_docx::write_thmx(&theme).map_err(|e| CmdError::Failed(e.to_string()))?;
     crate::io::write_file(&path.to_string_lossy(), &bytes).map_err(CmdError::Failed)?;
     // Saved to the themes folder: it shows in the Themes gallery.
-    let in_folder = s.themes_dir.as_deref().is_some_and(|d| path.parent() == Some(d));
-    if in_folder
-        && let Some(stem) = path.file_stem().map(|x| x.to_string_lossy().to_string())
-        && !is_builtin(&stem)
-    {
+    if in_folder && let Some(stem) = stem {
         let mut t = theme.clone();
         t.name = stem.clone();
         let list = &mut s.custom_themes.themes;
