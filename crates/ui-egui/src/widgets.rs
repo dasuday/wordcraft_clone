@@ -406,7 +406,15 @@ fn collapsed_open_id(ui: &Ui, id_title: &str, position: usize) -> egui::Id {
 /// designed with its title and launcher. The drop-down stays open while it is used (#1285): only a
 /// click outside it, or on the button, closes it; clicks in the menus and lists its controls open
 /// (font and size lists, Change Case, colours) count as inside.
-fn collapsed_group(ui: &mut Ui, id_title: &str, position: usize, title: &str, launcher: Option<&str>, app: &mut WordApp, add: impl FnOnce(&mut Ui, &mut WordApp)) {
+fn collapsed_group(
+    ui: &mut Ui,
+    id_title: &str,
+    position: usize,
+    title: &str,
+    launcher: Option<&str>,
+    app: &mut WordApp,
+    add: impl FnOnce(&mut Ui, &mut WordApp),
+) {
     let t = Tokens::get(ui.ctx());
     let text_w = ui.ctx().fonts_mut(|f| f.layout_no_wrap(title.to_string(), regular(11.5), t.text).size().x);
     let (r, resp) = ui.allocate_exact_size(vec2((text_w + DROPDOWN + 14.0).max(48.0), CONTENT_H + LABEL_H), Sense::click());
