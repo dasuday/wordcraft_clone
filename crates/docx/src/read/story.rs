@@ -62,6 +62,8 @@ struct FieldState {
     instr: String,
     phase: Phase,
     spilled: bool,
+    /// The emitted field's position in this story, while its code is still incomplete.
+    spill_ordinal: Option<usize>,
     buf: Vec<(Item, CharProps)>,
     props: CharProps,
     locked: bool,
@@ -125,6 +127,8 @@ fn sink(sc: &mut StoryCtx) -> Option<&mut FieldState> {
 #[derive(Default)]
 pub struct StoryCtx {
     fields: Vec<FieldState>,
+    emitted_fields: usize,
+    spilled_instructions: Vec<(usize, String)>,
     ignored_begins: usize,
     pending: Vec<InlineObject>,
     /// Text-box nesting depth.
@@ -315,6 +319,48 @@ impl Reader<'_> {
         sc.pending.clear();
     }
 
+    /// Complete a whole story, after all its paragraphs and cells have been read. An open
+    /// field is anchored in its first paragraph, but its instruction may continue later.
+    /// Cell-local marker flushes must not finalize these story-relative positions.
+    pub fn finish_story(&mut self, sc: &mut StoryCtx, out: &mut Blocks) {
+        self.flush_pending(sc, out);
+        for f in &mut sc.fields {
+            if let Some(at) = f.spill_ordinal.take() {
+                sc.spilled_instructions.push((at, std::mem::take(&mut f.instr)));
+            }
+        }
+        if sc.spilled_instructions.is_empty() {
+            return;
+        }
+        let mut codes: std::collections::BTreeMap<_, _> = sc.spilled_instructions.drain(..).collect();
+        fn complete(out: &mut Blocks, codes: &mut std::collections::BTreeMap<usize, String>, ordinal: &mut usize, depth: usize) {
+            for block in out {
+                match Arc::make_mut(block) {
+                    Block::Para(p) => {
+                        for obj in &mut p.objects {
+                            if let InlineObject::Field { instr, .. } = obj {
+                                if let Some(code) = codes.remove(ordinal) {
+                                    *instr = code.trim().to_string();
+                                }
+                                *ordinal += 1;
+                            }
+                        }
+                    }
+                    Block::Table(t) if depth < MAX_TABLE_DEPTH => {
+                        for row in &mut t.rows {
+                            for cell in &mut row.cells {
+                                complete(&mut cell.blocks, codes, ordinal, depth + 1);
+                            }
+                        }
+                    }
+                    Block::Table(_) => {}
+                }
+            }
+        }
+        let mut ordinal = 0;
+        complete(out, &mut codes, &mut ordinal, 0);
+    }
+
     fn marker(&mut self, e: &El) -> Option<InlineObject> {
         let id = e.attr("w:id").map(str::trim).unwrap_or("").to_string();
         match e.name.as_str() {
@@ -419,6 +465,7 @@ impl Reader<'_> {
         let ctx = RunCtx::default();
         self.read_inline_children(sc, &mut pb, e, rels, &ctx, depth + 1);
         self.spill_fields(sc, &mut pb);
+        sc.emitted_fields += pb.objects.iter().filter(|o| matches!(o, InlineObject::Field { .. })).count();
         if let Some(k) = mark_moves[0] {
             para.mark.del = Some(self.move_revision(false, k, true));
         }
@@ -638,7 +685,6 @@ impl Reader<'_> {
             "w:instrText" | "w:delInstrText" => {
                 if let Some(f) = sc.fields.last_mut()
                     && f.phase == Phase::Instr
-                    && !f.spilled
                     && f.instr.len() < MAX_INSTR
                 {
                     if f.sizes.len() < 64 {
@@ -832,6 +878,7 @@ impl Reader<'_> {
             instr,
             phase: Phase::Instr,
             spilled: false,
+            spill_ordinal: None,
             buf: Vec::new(),
             props,
             locked,
@@ -846,7 +893,7 @@ impl Reader<'_> {
     /// in another's code contributes text to that code, never content).
     fn parent_in_instr(sc: &StoryCtx) -> bool {
         let n = sc.fields.len();
-        n >= 2 && sc.fields.get(n - 2).is_some_and(|p| !p.spilled && !p.range && p.phase == Phase::Instr)
+        n >= 2 && sc.fields.get(n - 2).is_some_and(|p| !p.range && p.phase == Phase::Instr)
     }
 
     /// `separate`: the code is complete; a range field starts its result here.
@@ -879,6 +926,9 @@ impl Reader<'_> {
             return;
         }
         if f.spilled {
+            if let Some(at) = f.spill_ordinal {
+                sc.spilled_instructions.push((at, f.instr));
+            }
             return;
         }
         if f.phase == Phase::Instr && !nested_in_instr && is_range_instr(&f.instr) {
@@ -930,7 +980,6 @@ impl Reader<'_> {
             .clone();
         let obj = InlineObject::Field { instr, result, locked: f.locked, dirty: f.dirty, code: false, form: f.form };
         if let Some(parent) = sc.fields.last_mut()
-            && !parent.spilled
             && parent.phase == Phase::Instr
         {
             parent.instr.push_str(obj.plain_text());
@@ -947,6 +996,9 @@ impl Reader<'_> {
                 continue;
             }
             f.spilled = true;
+            if f.phase == Phase::Instr {
+                f.spill_ordinal = Some(sc.emitted_fields + pb.objects.iter().filter(|o| matches!(o, InlineObject::Field { .. })).count());
+            }
             let form = std::mem::take(&mut f.form);
             pb.push_obj(
                 InlineObject::Field { instr: f.instr.trim().to_string(), result: String::new(), locked: f.locked, dirty: f.dirty, code: false, form },
@@ -1488,7 +1540,7 @@ impl Reader<'_> {
         let mut inner = StoryCtx { story_depth: sc.story_depth + 1, ..Default::default() };
         let mut blocks = Blocks::new();
         self.read_blocks(&mut inner, content, rels, &mut blocks, 0);
-        self.flush_pending(&mut inner, &mut blocks);
+        self.finish_story(&mut inner, &mut blocks);
         self.doc.add_part(PartKind::TextBox, blocks)
     }
 
@@ -2338,3 +2390,4 @@ fn group_xfrm(sppr: Option<&El>) -> Xfrm {
         ch_ext: pos(pair("a:chExt", "cx", "cy", max)),
     }
 }
+

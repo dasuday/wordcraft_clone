@@ -8,6 +8,29 @@ fn lay(doc: &Document) -> DocLayout {
     layout(doc, &mut c, &LayoutOptions::default())
 }
 
+#[test]
+fn automatic_line_spacing_does_not_multiply_tall_math_growth() {
+    use wordcraft_doc::props::{CharProps, LineSpacing};
+    let height = |math: bool, multiple: f32| {
+        let cp = CharProps { font: Some("Times New Roman".into()), size: Some(14.0), ..Default::default() };
+        let mut p = Paragraph::with_text("Probe ", cp.clone());
+        p.props = ParaProps { space_before: Some(0.0), space_after: Some(0.0), line_spacing: Some(LineSpacing::Multiple(multiple)), ..Default::default() };
+        if math {
+            let linear = "(a/b)/(c/d)";
+            p.insert_object(p.len(), InlineObject::Equation { linear: linear.into(), display: false,
+                math: wordcraft_doc::math::Math { nodes: wordcraft_doc::math::parse_linear(linear), ..Default::default() } }, &cp).unwrap();
+        }
+        let mut d = Document::new(); d.body = vec![wordcraft_doc::para_block(p)];
+        let l = lay(&d);
+        l.pages[0].items.iter().find_map(|it| match it { Placed::Lines { para, .. } => Some(para.height), _ => None }).unwrap()
+    };
+    let ordinary_leading = height(false, 1.5) - height(false, 1.0);
+    let equation_leading = height(true, 1.5) - height(true, 1.0);
+    assert!((equation_leading - ordinary_leading).abs() < 0.05,
+        "automatic leading belongs to the text font, not to the extra fraction height: {equation_leading} vs {ordinary_leading}");
+    assert!(height(true, 1.0) > height(false, 1.0) + 5.0);
+}
+
 #[derive(Clone, Copy)]
 enum SpacingLocation {
     Cell,
@@ -927,6 +950,32 @@ fn tabs_left_of_the_margin_stay_on_a_default_stop() {
     assert!((x_of("\tX", -60.0, 1) - -36.0).abs() < 0.5, "leading tab between stops: {}", x_of("\tX", -60.0, 1));
     assert!((x_of("\t \tX", -60.0, 3) - 0.0).abs() < 0.5, "a space between the tabs: {}", x_of("\t \tX", -60.0, 3));
     assert!((x_of("a\t\tX", 0.0, 3) - 72.0).abs() < 0.5, "right of the margin: {}", x_of("a\t\tX", 0.0, 3));
+}
+
+#[test]
+fn right_tab_keeps_a_trailing_field_with_the_last_heading_word() {
+    use wordcraft_doc::props::{TabStop, TabAlign};
+    let title = "A heading endingword";
+    let measure = Document::from_text(title);
+    let width = lay(&measure).caret(&Pos::body(0, title.len())).unwrap().x - 72.0;
+    for extra in [3.0, -3.0] {
+        let edge = width + extra;
+        let mut d = Document::from_text(&format!("{title}\t"));
+        d.last_section.page_w = edge + 144.0;
+        d.format_paragraphs(&Pos::body(0, 0), &Pos::body(0, 0), &|p| {
+            p.tabs = Some(vec![TabStop { pos: edge, align: TabAlign::Right, leader: Default::default() }]);
+        }).unwrap();
+        d.insert_object(&Pos::body(0, title.len() + 1), InlineObject::Field {
+            instr: "PAGEREF target".into(), result: "70".into(), locked: true,
+            dirty: false, code: false, form: String::new(),
+        }, &Default::default()).unwrap();
+        let l = lay(&d);
+        let word = l.caret(&Pos::body(0, title.rfind(' ').unwrap() + 1)).unwrap();
+        let number = l.caret(&Pos::body(0, title.len() + 1)).unwrap();
+        let end = l.caret(&Pos::body(0, title.len() + 1 + "\u{fffc}".len())).unwrap();
+        assert!((word.top - number.top).abs() < 0.1, "number must share the last word's line: {word:?} {number:?}");
+        assert!((end.x - (72.0 + edge)).abs() < 0.5, "number remains right aligned: {end:?}");
+    }
 }
 
 #[test]
@@ -3849,6 +3898,76 @@ fn space_shrinking_is_only_for_justified_text() {
     for align in [Align::Left, Align::Center, Align::Right] {
         assert_eq!(justified_lines(&text, 15, align).0, justified_lines(&text, 14, align).0, "{align:?}");
     }
+}
+
+#[test]
+fn modern_justification_can_fit_a_word_with_quarter_space_compression() {
+    // The saved Word 365 oracle fits a line requiring about 24% compression of
+    // its inner spaces. Use an original short probe and widths derived from its
+    // uncompressed layout so the regression is independent of installed fonts.
+    let text = "Alpha beta gamma delta";
+    let mut d = Document::from_text(text);
+    d.settings.compat_mode = 15;
+    let natural = lay(&d);
+    let para = natural.pages[0].items.iter().find_map(|it| match it {
+        Placed::Lines { para, .. } => Some(para),
+        _ => None,
+    }).unwrap();
+    let advance: f32 = para.clusters.iter().map(|c| c.adv).sum();
+    let spaces: f32 = para.clusters.iter().filter(|c| c.kind == para::ClKind::Space).map(|c| c.adv).sum();
+    d.format_paragraphs(&Pos::body(0, 0), &Pos::body(0, 0), &|p| {
+        p.align = Some(Align::Justify);
+        p.indent_right = Some(468.0 - (advance - spaces * 0.24));
+    }).unwrap();
+    assert_eq!(lines_of(&lay(&d)), 1, "a modern justified line may compress its spaces by 24%");
+    d.settings.compat_mode = 14;
+    assert_eq!(lines_of(&lay(&d)), 2, "legacy layout keeps the word on the next line");
+}
+
+#[test]
+fn math_table_keeps_the_preferred_label_column() {
+    let mut d = Document::new();
+    let mut table = Table::new(1, 2, 468.0);
+    table.grid = vec![120.0, 348.0];
+    table.props.width = Some(468.0);
+    table.props.fixed = false;
+    table.rows[0].cells[0].props.width = Some(120.0);
+    table.rows[0].cells[1].props.width = Some(348.0);
+    table.rows[0].cells[0].blocks = vec![wordcraft_doc::para_block(wordcraft_doc::Paragraph::with_text("System formula", Default::default()))];
+    let linear = "y=".to_owned() + &"a+b+c+d+e+f+g+h+i+j+".repeat(8) + "z";
+    let mut p = wordcraft_doc::Paragraph::new();
+    p.insert_object(0, InlineObject::Equation { linear: linear.clone(), display: false,
+        math: wordcraft_doc::math::Math { nodes: wordcraft_doc::math::parse_linear(&linear), ..Default::default() } }, &Default::default()).unwrap();
+    table.rows[0].cells[1].blocks = vec![wordcraft_doc::para_block(p)];
+    let sizes = crate::table::measure_table_columns(&d, &table);
+    assert!(sizes[1].0 < 348.0, "breakable equation must not act as one enormous word: {sizes:?}");
+    d.body = vec![std::sync::Arc::new(wordcraft_doc::Block::Table(table))];
+    let l = lay(&d);
+    let cells: Vec<_> = l.pages[0].items.iter().filter_map(|it| match it {
+        Placed::Cell { rect, .. } => Some(rect.w), _ => None,
+    }).collect();
+    assert_eq!(cells.len(), 2);
+    assert!((cells[0] - 120.0).abs() < 0.05, "label column collapsed: {cells:?}");
+}
+
+#[test]
+fn math_table_inline_flow_keeps_one_native_object_and_the_trailing_number() {
+    let mut d = Document::new();
+    let linear = "y=".to_owned() + &"a+b+c+d+e+f+g+h+i+j+".repeat(3) + "z";
+    let p = d.para_mut(StoryRef::Body, &Path::top(0)).unwrap();
+    p.props.indent_right = Some(220.0);
+    p.insert_object(0, InlineObject::Equation { linear: linear.clone(), display: false,
+        math: wordcraft_doc::math::Math { nodes: wordcraft_doc::math::parse_linear(&linear), ..Default::default() } }, &Default::default()).unwrap();
+    p.insert_text(p.len(), " (1)", &Default::default()).unwrap();
+    let original = p.clone();
+    let l = lay(&d);
+    let layout = l.pages[0].items.iter().find_map(|it| match it { Placed::Lines { para, .. } => Some(para), _ => None }).unwrap();
+    assert!(layout.maths.len() > 1, "paragraph flow must see legal equation chunks");
+    let last = layout.lines.last().unwrap();
+    assert!(layout.clusters[last.c0..last.c1].iter().any(|c| matches!(c.kind, para::ClKind::Object(0))), "the number shares the last equation line");
+    assert_eq!(d.para(StoryRef::Body, &Path::top(0)).unwrap(), &original, "layout must preserve the one native equation");
+    let geom = l.equation_geom(&Pos::body(0, 0), 0).unwrap();
+    assert!(geom.3.slots.iter().any(|s| s.y < -1.0), "equation caret geometry covers continuation lines");
 }
 
 #[test]
@@ -9213,3 +9332,4 @@ fn shared_band_grid_spans() {
         .unwrap();
     assert_eq!(height, 27.0);
 }
+

@@ -853,6 +853,78 @@ fn field_code_spans_paragraphs() {
     assert_eq!(p[2].mark.hidden, None);
     assert_eq!(p[3].plain_text(), "Visible");
     assert_eq!(p[3].mark.hidden, None);
+    assert_field_instruction_cycles(doc, &["IF MERGEFIELD x = \"y\""], "Visible");
+}
+
+/// Check the actual reader/writer twice, including fields inside cells. SDK validity alone
+/// does not detect a truncated instruction, so compare the model after each save as well.
+fn assert_field_instruction_cycles(mut doc: Document, expected: &[&str], visible: &str) {
+    fn collect(blocks: &wordcraft_doc::Blocks, codes: &mut Vec<String>, text: &mut String) {
+        for block in blocks {
+            match block.as_ref() {
+                wordcraft_doc::Block::Para(p) => {
+                    text.push_str(&p.plain_text());
+                    for obj in &p.objects {
+                        if let InlineObject::Field { instr, .. } = obj {
+                            codes.push(instr.clone());
+                        }
+                    }
+                }
+                wordcraft_doc::Block::Table(t) => {
+                    for row in &t.rows {
+                        for cell in &row.cells {
+                            collect(&cell.blocks, codes, text);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    for cycle in 0..=2 {
+        let (mut codes, mut text) = (Vec::new(), String::new());
+        collect(&doc.body, &mut codes, &mut text);
+        assert_eq!(codes, expected, "instructions after {cycle} saves");
+        assert_eq!(text, visible, "visible text after {cycle} saves");
+        if cycle < 2 {
+            doc = wordcraft_docx::read(&wordcraft_docx::write(&doc).unwrap()).unwrap();
+        }
+    }
+}
+
+#[test]
+fn field_instruction_continues_after_unclosed_field_spill() {
+    let doc = read_body(r#"<w:p><w:r><w:fldChar w:fldCharType="begin"/><w:instrText>IF</w:instrText></w:r></w:p>
+<w:p><w:r><w:instrText> x = y</w:instrText></w:r></w:p>
+<w:p><w:r><w:t>after</w:t></w:r></w:p>"#);
+    assert_eq!(paras(&doc)[0].objects.len(), 1);
+    assert!(paras(&doc)[1].objects.is_empty());
+    assert_field_instruction_cycles(doc, &["IF x = y"], "after");
+}
+
+#[test]
+fn field_instruction_nested_after_parent_spill() {
+    let doc = read_body(r#"<w:p><w:r><w:fldChar w:fldCharType="begin"/><w:instrText>IF </w:instrText></w:r></w:p>
+<w:p><w:r><w:fldChar w:fldCharType="begin"/><w:instrText>MERGEFIELD x</w:instrText><w:fldChar w:fldCharType="separate"/><w:t>X</w:t><w:fldChar w:fldCharType="end"/><w:instrText> = "y"</w:instrText><w:fldChar w:fldCharType="separate"/><w:t>Result</w:t><w:fldChar w:fldCharType="end"/></w:r></w:p>"#);
+    assert_field_instruction_cycles(doc, &["IF X = \"y\""], "Result");
+}
+
+#[test]
+fn field_instruction_anchor_is_distinct_in_cells_and_controls() {
+    let doc = read_body(r#"<w:p><w:fldSimple w:instr="IF"><w:r><w:t>First</w:t></w:r></w:fldSimple></w:p>
+<w:sdt><w:sdtPr><w:tag w:val="code"/></w:sdtPr><w:sdtContent><w:p><w:r><w:fldChar w:fldCharType="begin"/><w:instrText>IF</w:instrText></w:r></w:p>
+<w:tbl><w:tblGrid><w:gridCol w:w="1440"/></w:tblGrid><w:tr><w:tc><w:p><w:r><w:instrText> x = y</w:instrText><w:fldChar w:fldCharType="separate"/><w:t>Cell</w:t><w:fldChar w:fldCharType="end"/></w:r></w:p></w:tc></w:tr></w:tbl></w:sdtContent></w:sdt>
+<w:p><w:r><w:fldChar w:fldCharType="begin"/><w:instrText>IF</w:instrText></w:r></w:p>
+<w:p><w:r><w:instrText> z = q</w:instrText><w:fldChar w:fldCharType="separate"/><w:t>Last</w:t><w:fldChar w:fldCharType="end"/></w:r></w:p>"#);
+    assert_field_instruction_cycles(doc, &["IF", "IF x = y", "IF z = q"], "FirstCellLast");
+}
+
+#[test]
+fn field_instruction_result_still_flows_across_paragraphs() {
+    let doc = read_body(r#"<w:p><w:r><w:fldChar w:fldCharType="begin" w:fldLock="1" w:dirty="1"/><w:instrText>IF</w:instrText></w:r></w:p>
+<w:p><w:r><w:instrText> x = y</w:instrText><w:fldChar w:fldCharType="separate"/><w:t>One</w:t></w:r></w:p>
+<w:p><w:r><w:t>Two</w:t><w:fldChar w:fldCharType="end"/></w:r></w:p>"#);
+    assert!(matches!(&paras(&doc)[0].objects[0], InlineObject::Field { locked: true, dirty: true, .. }));
+    assert_field_instruction_cycles(doc, &["IF x = y"], "OneTwo");
 }
 
 #[test]
@@ -3079,9 +3151,14 @@ fn hostile_native_ink_in_a_group_never_panics() {
 /// outside a hyperlink, and a hyperlink in another field, keep it.
 #[test]
 fn toc_entry_links_lose_the_hyperlink_style() {
+    toc_entry_links_with_id("Hyperlink");
+    toc_entry_links_with_id("af");
+}
+
+fn toc_entry_links_with_id(id: &str) {
     let styles = format!(
         r#"<w:styles {W_NS}><w:style w:type="paragraph" w:styleId="Normal" w:default="1"><w:name w:val="Normal"/></w:style>
-        <w:style w:type="character" w:styleId="Hyperlink"><w:name w:val="Hyperlink"/><w:rPr><w:color w:val="0066FF"/><w:u w:val="single"/></w:rPr></w:style></w:styles>"#
+        <w:style w:type="character" w:styleId="{id}"><w:name w:val="Hyperlink"/><w:rPr><w:color w:val="0066FF"/><w:u w:val="single"/></w:rPr></w:style></w:styles>"#
     );
     let field = |instr: &str, inner: &str| {
         format!(
@@ -3089,10 +3166,10 @@ fn toc_entry_links_lose_the_hyperlink_style() {
         )
     };
     let link =
-        |t: &str| format!(r#"<w:hyperlink w:anchor="_Toc1"><w:r><w:rPr><w:rStyle w:val="Hyperlink"/></w:rPr><w:t>{t}</w:t></w:r></w:hyperlink>"#);
+        |t: &str| format!(r#"<w:hyperlink w:anchor="_Toc1"><w:r><w:rPr><w:rStyle w:val="{id}"/></w:rPr><w:t>{t}</w:t></w:r></w:hyperlink>"#);
     let body = [
         field(r#" TOC \o "1-3" \h \z \u "#, &link("entry")),
-        field(" TOC ", r#"<w:r><w:rPr><w:rStyle w:val="Hyperlink"/></w:rPr><w:t>styled</w:t></w:r>"#),
+        field(" TOC ", &format!(r#"<w:r><w:rPr><w:rStyle w:val="{id}"/></w:rPr><w:t>styled</w:t></w:r>"#)),
         field(" QUOTE x ", &link("quoted")),
         format!("<w:p>{}</w:p>", link("plain")),
         r#"<w:p><w:bookmarkStart w:id="1" w:name="_Toc1"/><w:r><w:t>Target</w:t></w:r><w:bookmarkEnd w:id="1"/></w:p>"#.to_string(),
@@ -3104,9 +3181,9 @@ fn toc_entry_links_lose_the_hyperlink_style() {
     };
     let entry = run("entry");
     assert_eq!((entry.style.as_deref(), entry.link.as_deref()), (None, Some("#_Toc1")), "a TOC entry: plain, still a link");
-    assert_eq!(run("styled").style.as_deref(), Some("Hyperlink"), "not in a hyperlink: kept");
-    assert_eq!(run("quoted").style.as_deref(), Some("Hyperlink"), "another field: kept");
-    assert_eq!(run("plain").style.as_deref(), Some("Hyperlink"), "outside fields: kept");
+    assert_eq!(run("styled").style.as_deref(), Some(id), "not in a hyperlink: kept");
+    assert_eq!(run("quoted").style.as_deref(), Some(id), "another field: kept");
+    assert_eq!(run("plain").style.as_deref(), Some(id), "outside fields: kept");
 }
 
 /// A style or paragraph whose `w:numPr` gives only a level (`w:ilvl`) takes the list from its
@@ -3540,3 +3617,4 @@ fn equation_in_alternate_content_is_read() {
     assert_eq!(equations(p), vec![("x+1".to_string(), false)]);
     assert!(!p.plain_text().contains("[picture]"));
 }
+

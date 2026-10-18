@@ -75,11 +75,14 @@ pub fn specs() -> Vec<CommandSpec> {
             .params(r#"{"label"?: "Figure|Table|Equation|any label", "text"?: string, "position"?: "below|above", "excludeLabel"?: bool, "format"?: "ARABIC|alphabetic|ALPHABETIC|roman|ROMAN", "chapter"?: heading level 1-9, "separator"?: "-|.|:|—|–"}"#),
         // F9: update fields; the selected ones that showed their code show their result again.
         CommandSpec::new("references.updateFields", "Update Field", "References", |s, v| {
+            if p::bool(v, "pageReferencesOnly").unwrap_or(false) {
+                return update_page_references(s);
+            }
             update_fields_in(s, v.get("all").and_then(Value::as_bool).unwrap_or(false))?;
             super::fields::show_results(s)?;
             sel_result(s)
         })
-        .params(r#"{"all"?: bool (the body and every header, footer, note and text box, wherever the caret is; default: the story the caret is in)}"#)
+        .params(r#"{"all"?: bool (all stories instead of the caret story), "pageReferencesOnly"?: bool (only unlocked numeric body PAGEREF caches; preserves imported TOC and other fields; missing/ambiguous targets or unstable layout refuse)}"#)
         .key("F9"),
     ]
 }
@@ -924,6 +927,80 @@ pub fn update_seq(s: &mut Session) -> Result<(), CmdError> {
     Ok(())
 }
 
+/// Refresh numeric page-reference caches without regenerating an imported TOC.
+/// The public command transaction restores the document on refusal or failure.
+fn update_page_references(s: &mut Session) -> CmdResult {
+    use std::collections::HashMap;
+    use std::sync::Arc;
+    use wordcraft_layout::fields::{BookmarkPages, FieldCtx, field_text};
+    let ranges = s.doc.field_ranges(StoryRef::Body);
+    let mut targets: HashMap<String, (Vec<Pos>, Vec<Pos>)> = HashMap::new();
+    let mut selected = Vec::new();
+    let mut considered = 0usize;
+    for path in s.doc.para_paths(StoryRef::Body) {
+        let Some(para) = s.doc.para(StoryRef::Body, &path) else { continue };
+        for (k, (off, object)) in para.object_offsets().into_iter().zip(&para.objects).enumerate() {
+            considered = considered.saturating_add(1);
+            if considered > 200_000 { return Err(CmdError::Failed("page reference object limit exceeded".into())); }
+            let pos = Pos { story: StoryRef::Body, path: path.clone(), off };
+            match object {
+                InlineObject::BookmarkStart { name } => targets.entry(name.clone()).or_default().0.push(pos),
+                InlineObject::BookmarkEnd { name } => targets.entry(name.clone()).or_default().1.push(pos),
+                InlineObject::Field { instr, locked: false, .. } if wordcraft_layout::fields::field_name(instr) == "PAGEREF" => {
+                    if ranges.iter().any(|r| r.locked && r.start < pos && pos < r.end) { continue; }
+                    let field = FieldCode::parse(instr);
+                    if field.has('p') { return Err(CmdError::Failed("pageReferencesOnly requires numeric PAGEREF, without \\p".into())); }
+                    let target = field.args.first().and_then(|n| n.split('\\').next()).filter(|n| !n.is_empty())
+                        .ok_or_else(|| CmdError::Failed("PAGEREF target is missing".into()))?.to_string();
+                    selected.push((path.clone(), k, target));
+                }
+                _ => {}
+            }
+        }
+    }
+    for (_, _, name) in &selected {
+        if !targets.get(name).is_some_and(|(a, b)| a.len() == 1 && b.len() == 1 && a.first() < b.first()) {
+            return Err(CmdError::Failed(format!("PAGEREF target {name:?} is missing, unpaired or ambiguous")));
+        }
+    }
+    let mut changed = 0usize;
+    // A changed digit width can move a heading. Re-measure print layout until
+    // all selected caches agree with the same resulting pagination.
+    for pass in 1..=4 {
+        let layout = s.export_layout_with(false);
+        let sections = s.doc.sections();
+        let mut pages = BookmarkPages::new();
+        for (_, _, name) in &selected {
+            if pages.contains_key(name) { continue; }
+            let start = targets.get(name).and_then(|t| t.0.first()).ok_or_else(|| CmdError::Failed("PAGEREF target vanished".into()))?;
+            let page = layout.caret(start).and_then(|c| layout.pages.get(c.page))
+                .ok_or_else(|| CmdError::Failed(format!("PAGEREF target {name:?} has no printed page")))?;
+            let format = sections.get(page.section).map(|(_, s)| s.page_num_format).unwrap_or_default();
+            pages.insert(name.clone(), (page.number, format));
+        }
+        let fields = FieldCtx { bookmark_pages: Arc::new(pages), ..Default::default() };
+        let mut updates = Vec::new();
+        for (path, k, _) in &selected {
+            let object = s.doc.para(StoryRef::Body, path).and_then(|p| p.objects.get(*k));
+            let Some(InlineObject::Field { instr, result, dirty, .. }) = object else { return Err(CmdError::Failed("PAGEREF identity changed".into())); };
+            let (value, resolved) = field_text(instr, result, &fields);
+            if !resolved { return Err(CmdError::Failed("PAGEREF numeric format could not be resolved".into())); }
+            if &value != result || *dirty { updates.push((path.clone(), *k, value)); }
+        }
+        if updates.is_empty() {
+            return Ok(json!({"pageReferences":selected.len(),"changed":changed,"passes":pass,"pages":layout.pages.len(),"stable":true}));
+        }
+        changed = changed.saturating_add(updates.len());
+        for (path, k, value) in updates {
+            let para = s.doc.para_mut(StoryRef::Body, &path)?;
+            if let Some(InlineObject::Field { result, dirty, .. }) = para.objects.get_mut(k) { *result = value; *dirty = false; }
+            para.touch();
+        }
+        s.relayout();
+    }
+    Err(CmdError::Failed("PAGEREF pagination did not stabilize within four passes".into()))
+}
+
 /// Whether `instr` has the one-letter switch `\sw`, also run together with another (`\p\h`).
 fn has_switch(instr: &str, sw: char) -> bool {
     instr.split('\\').skip(1).any(|s| {
@@ -1421,3 +1498,4 @@ mod tests {
         assert_eq!(texts.get(1).map(String::as_str), Some("Figure 1"), "{texts:?}");
     }
 }
+

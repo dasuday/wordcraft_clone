@@ -93,15 +93,29 @@ pub struct Slot {
 #[derive(Clone, Debug, Default)]
 pub struct MathLayout {
     pub width: f32,
+    /// Width of the widest term between legal top-level equation breaks. AutoFit
+    /// must not treat an entire breakable equation as a single unbreakable word.
+    pub min_width: f32,
     /// Extent above and below the baseline, points.
     pub ascent: f32,
     pub descent: f32,
     pub items: Vec<MItem>,
     /// Every caret position, for drawing the caret and hit testing.
     pub slots: Vec<Slot>,
+    /// Legal inline chunks, with original equation caret paths. These are layout
+    /// fragments only; the document retains its single native OMML object.
+    pub parts: Vec<MathLayout>,
 }
 
 impl MathLayout {
+    pub(crate) fn append_shifted(&mut self, other: &MathLayout, dx: f32, dy: f32) {
+        self.width = self.width.max(dx + other.width);
+        self.min_width = self.min_width.max(other.min_width);
+        self.ascent = self.ascent.max(other.ascent + dy);
+        self.descent = self.descent.max(other.descent - dy);
+        for mut item in other.items.clone() { item.shift(dx, dy); self.items.push(item); }
+        for mut slot in other.slots.clone() { slot.x += dx; slot.y += dy; self.slots.push(slot); }
+    }
     /// Where the caret at (`path`, `off`) is drawn.
     pub fn slot(&self, path: &[(usize, usize)], off: usize) -> Option<&Slot> {
         self.slots
@@ -213,11 +227,12 @@ pub fn layout_equation(
     };
     let st = St { level: 0, display, cramped: false, upright: false };
     let avail = if avail.is_finite() { avail.clamp(0.0, 1e5) } else { 0.0 };
-    let b = match nodes.as_slice() {
-        [] => cx.hint(st),
-        [MNode::EqArr { rows }] if display && rows.iter().any(|r| split_number(r).is_some()) => cx.numbered(rows, st, avail, counter),
-        _ if display => cx.wrapped(nodes, st, avail, props),
-        _ => cx.arg(nodes, st, 0),
+    let (b, min_width, parts) = match nodes.as_slice() {
+        [] => { let b = cx.hint(st); let w = b.w; (b, w, Vec::new()) },
+        [MNode::EqArr { rows }] if display && rows.iter().any(|r| split_number(r).is_some()) => {
+            let b = cx.numbered(rows, st, avail, counter); let w = b.w; (b, w, Vec::new())
+        },
+        _ => cx.wrapped(nodes, st, avail, props),
     };
     let mut slots = b.slots;
     let em = base;
@@ -227,7 +242,7 @@ pub fn layout_equation(
             s.d = em * 0.25;
         }
     }
-    MathLayout { width: b.w.max(0.0), ascent: b.a.max(0.0), descent: b.d.max(0.0), items: b.items, slots }
+    MathLayout { width: b.w.max(0.0), min_width: min_width.max(0.0), ascent: b.a.max(0.0), descent: b.d.max(0.0), items: b.items, slots, parts }
 }
 
 /// Layout style: script level (0 = text size, 1 = script, 2 = script-script), display or inline,
@@ -363,6 +378,14 @@ struct Ctx {
 }
 
 const MAX_NODES: usize = 200_000;
+
+fn inline_linear(nodes: &[MNode], depth: usize) -> bool {
+    depth <= MAX_DEPTH && nodes.iter().all(|n| match n {
+        MNode::Run(r) => r.brk.is_none() && !r.text.contains('&'),
+        MNode::Delim { elems, .. } => elems.len() == 1 && inline_linear(&elems[0], depth + 1),
+        _ => false,
+    })
+}
 
 /// Constants as fractions of the em when there's no `MATH` table.
 fn fallback(c: C) -> f32 {
@@ -539,6 +562,10 @@ impl Ctx {
     /// The atoms of a row with their alignment segment (`&` starts a new segment). `u0`: the
     /// unit offset of the row's first node (for caret slots).
     fn row(&mut self, a: &[MNode], st: St, depth: usize, u0: usize) -> Vec<(Bx, usize)> {
+        self.row_atoms(a, st, depth, u0, false)
+    }
+
+    fn row_atoms(&mut self, a: &[MNode], st: St, depth: usize, u0: usize, inline_delimiters: bool) -> Vec<(Bx, usize)> {
         let mut out = Vec::new();
         if depth > MAX_DEPTH {
             return out;
@@ -567,6 +594,29 @@ impl Ctx {
                         b.brk = r.brk;
                     }
                     u += r.text.chars().count();
+                }
+                MNode::Delim { beg, end, grow, shp_match, elems, .. }
+                    if inline_delimiters && st.level == 0 && elems.len() == 1
+                        && elems.first().is_some_and(|e| inline_linear(e, 0)) =>
+                {
+                    // Native inline flow can wrap a linear expression inside
+                    // ordinary brackets. Retain the tree and its child caret
+                    // paths; fractions, scripts, radicals and matrices stay boxed.
+                    let first = out.len();
+                    self.path.push((i, 0));
+                    let inner = self.row_atoms(&elems[0], st, depth + 1, 0, true);
+                    self.path.pop();
+                    let measured = compose(inner.iter().map(|(b, _)| b.clone()).collect(), st, self.em(st));
+                    if let Some(c) = beg {
+                        out.push((self.delimiter(*c, measured.a, measured.d, st, *grow, *shp_match).cls(Cls::Open), seg));
+                    }
+                    for (b, _) in inner { out.push((b, seg)); }
+                    if let Some(c) = end {
+                        out.push((self.delimiter(*c, measured.a, measured.d, st, *grow, *shp_match).cls(Cls::Close), seg));
+                    }
+                    if let Some((b, _)) = out.get_mut(first) { b.slot(&path, u, 0.0); }
+                    if let Some((b, _)) = out.last_mut() { b.slot(&path, u + 1, b.w); }
+                    u += 1;
                 }
                 MNode::Nary { .. } | MNode::Func { .. } => {
                     self.node_stack.push(i);
@@ -716,6 +766,11 @@ impl Ctx {
             out.push(RunPart::Atom(b.cls(Cls::Ord)));
             return out;
         }
+        // A typed math space uses the selected math face's ordinary advance.
+        // Native Word's 90/66-space equation-array rows measure about 0.22 em
+        // with Cambria Math; a hard-coded 0.4 em makes those rows overflow.
+        let space_em = self.face.advance(self.face.glyph_for(' ')) as f32 / self.upem;
+        let space_width = size * if space_em.is_finite() && space_em > 0.0 { space_em } else { 0.22 };
         // Map characters (math alphabets, operators) and split into atoms by class.
         let mut cur = String::new();
         let mut cur_k0 = 0usize;
@@ -772,8 +827,7 @@ impl Ctx {
             let cls = if r.lit { Cls::Ord } else { class_of(ch) };
             if ch == ' ' || ch == '\u{2061}' || ch == '\u{2062}' || ch == '\u{2063}' || ch == '\u{200B}' {
                 flush(&mut cur, cur_k0, cur_face, synth_italic, &mut out);
-                // Word sets a typed space in an equation about 0.4 em wide.
-                out.push(RunPart::Atom(blank(if ch == ' ' { size * 0.4 } else { 0.0 }, k)));
+                out.push(RunPart::Atom(blank(if ch == ' ' { space_width } else { 0.0 }, k)));
                 continue;
             }
             let same_face = cur_face.map(|f| f.id()) == face.map(|f| f.id());
@@ -1614,23 +1668,18 @@ impl Ctx {
         out
     }
 
-    /// A display equation, broken into lines where it is wider than `avail` or a run asks for a
+    /// An equation, broken into lines where it is wider than `avail` or a run asks for a
     /// manual break (`m:brk`). Breaks fall only at top-level binary operators and relations (never
     /// inside a fraction, radical, script or matrix), before or after the operator as `m:brkBin`
     /// says; lines are filled greedily and a term wider than the line overflows it. The first line
     /// starts at the left; the rest are indented by `m:wrapIndent`, set flush right with
     /// `m:wrapRight`, or aligned at an operator of the first line (`m:alnAt`).
-    fn wrapped(&mut self, a: &[MNode], st: St, avail: f32, mp: &MathProps) -> Bx {
+    fn wrapped(&mut self, a: &[MNode], st: St, avail: f32, mp: &MathProps) -> (Bx, f32, Vec<MathLayout>) {
         let em = self.em(st);
-        let atoms: Vec<Bx> = self.row(a, st, 0, 0).into_iter().map(|(b, _)| b).collect();
+        let atoms: Vec<Bx> = self.row_atoms(a, st, 0, 0, !st.display).into_iter().map(|(b, _)| b).collect();
         let gaps = gaps_between(&atoms, st, em);
         let total: f32 = atoms.iter().map(|b| b.w).sum::<f32>() + gaps.iter().sum::<f32>();
         let manual = atoms.iter().skip(1).any(|b| b.brk.is_some());
-        if atoms.len() < 2 || (!manual && total <= avail + 0.01) {
-            let mut b = compose(atoms, st, em);
-            finalize(&mut b, &self.path, em);
-            return b;
-        }
         let cls = classes(&atoms);
         let n = atoms.len();
         let is_op = |i: usize| -> bool {
@@ -1642,11 +1691,14 @@ impl Ctx {
         let mut starts: std::collections::BTreeMap<usize, (Option<u8>, Option<usize>)> = std::collections::BTreeMap::new();
         for i in 1..n {
             let op = is_op(i);
-            let at = if op && mp.brk_bin != BrkBin::Before { i + 1 } else { i };
+            // Inline OMML participates in ordinary paragraph flow: native Word
+            // leaves the operator at the preceding text line. brkBin controls
+            // display-equation wrapping, rather than these inline text breaks.
+            let at = if op && (!st.display || mp.brk_bin != BrkBin::Before) { i + 1 } else { i };
             if at == 0 || at >= n {
                 continue;
             }
-            let repeat = (op && mp.brk_bin == BrkBin::Repeat).then_some(i);
+            let repeat = (st.display && op && mp.brk_bin == BrkBin::Repeat).then_some(i);
             let forced = atoms.get(i).and_then(|b| b.brk);
             if op || forced.is_some() {
                 let e = starts.entry(at).or_insert((None, None));
@@ -1665,6 +1717,31 @@ impl Ctx {
         let width_of = |s: usize, e: usize| -> f32 {
             (s..e).map(|i| atoms.get(i).map_or(0.0, |b| b.w) + if i > s { gaps.get(i).copied().unwrap_or(0.0) } else { 0.0 }).sum()
         };
+        let min_width = bounds.windows(2).filter_map(|r| Some(width_of(*r.first()?, *r.get(1)?))).fold(0.0f32, f32::max);
+        let mut parts = Vec::new();
+        // Inline automatic text breaks keep each trailing operator in its
+        // preceding chunk. Manual/aligned breaks retain their complete box.
+        if !st.display && !manual && bounds.len() > 2 {
+            for window in bounds.windows(2) {
+                let (Some(&s), Some(&e)) = (window.first(), window.get(1)) else { continue };
+                let mut part = Bx::default();
+                let mut x = 0.0;
+                for i in s..e {
+                    if i > 0 { x += gaps.get(i).copied().unwrap_or(0.0); }
+                    let Some(atom) = atoms.get(i) else { continue };
+                    let w = atom.w;
+                    part.put(atom.clone(), x, 0.0);
+                    x += w;
+                }
+                parts.push(MathLayout { width: x, min_width: x, ascent: part.a, descent: part.d,
+                    items: part.items, slots: part.slots, parts: Vec::new() });
+            }
+        }
+        if atoms.len() < 2 || (!manual && total <= avail + 0.01) {
+            let mut b = compose(atoms, st, em);
+            finalize(&mut b, &self.path, em);
+            return (b, min_width, parts);
+        }
         // The operator glyphs a repeated operator shows at the end of one line and the start of
         // the next.
         let repeats: std::collections::HashMap<usize, (Option<Bx>, Bx)> = starts
@@ -1791,7 +1868,7 @@ impl Ctx {
             out.put(b, x, y);
         }
         out.w = out.w.max(right);
-        out
+        (out, min_width, parts)
     }
 
     /// Operator `c` drawn like the operator atom `like` (its face, size and colour), without
@@ -2007,6 +2084,67 @@ mod tests {
     }
 
     #[test]
+    fn math_table_inline_equation_wraps_at_operators() {
+        let sum = "y=a+b+c+d+e+f+g+h+i+j+k+l+m+n+o+p+q+r+s+t+u+v+w";
+        let full = lay_in(&Math::default(), sum, false, 10000.0, &MathProps::default());
+        let wrapped = lay_in(&Math::default(), sum, false, 120.0, &MathProps::default());
+        assert!(lines(&wrapped).len() > 1, "an inline OMML equation in a narrow cell must wrap");
+        assert!(wrapped.width <= 120.01);
+        let glyphs = |m: &MathLayout| m.items.iter().filter_map(|i| match i {
+            MItem::Glyphs { text, .. } => Some(text.chars().count()), _ => None
+        }).sum::<usize>();
+        assert_eq!(glyphs(&wrapped), glyphs(&full), "wrapping must retain every glyph");
+    }
+
+    #[test]
+    fn inline_operator_chunks_follow_native_text_breaks() {
+        // The native Word probe uses brkBin=before but inline continuation
+        // lines follow an operator left on the previous text line. Display
+        // equation breaking remains governed by brkBin.
+        let m = lay_in(&Math::default(), "a+b+c+d+e+f+g+h+i+j+k+l", false, 60.0, &MathProps::default());
+        assert!(m.parts.len() > 2);
+        let text = |p: &MathLayout| p.items.iter().filter_map(|i| match i {
+            MItem::Glyphs { text, .. } => Some(text.as_str()), _ => None
+        }).collect::<String>();
+        assert!(text(&m.parts[0]).ends_with('+'), "inline chunks must include the trailing operator");
+        assert!(!text(&m.parts[1]).starts_with('+'));
+    }
+
+    #[test]
+    fn typed_math_spaces_use_the_math_fonts_advance() {
+        let (face, _) = wordcraft_fonts::math::resolve_math("Cambria Math");
+        let glyph = face.glyph_for(' ');
+        let advance = face.advance(glyph) as f32 / face.upem.max(1.0) as f32;
+        if glyph == 0 || advance <= 0.0 { return; }
+        let size = rc().draw_size();
+        let base_math = Math { nodes: vec![MNode::Run(MRun::new("a")), MNode::Run(MRun::new("b"))], ..Default::default() };
+        let baseline = lay_in(&base_math, "", false, 10000.0, &MathProps::default());
+        for count in [1usize, 20, 90] {
+            let text = format!("a{}b", " ".repeat(count));
+            let math = Math { nodes: vec![MNode::Run(MRun::new(text))], ..Default::default() };
+            let actual = lay_in(&math, "", false, 10000.0, &MathProps::default());
+            let expected = count as f32 * advance * size;
+            assert!((actual.width - baseline.width - expected).abs() < 0.02,
+                "typed math spaces must follow the selected font: count={count}, width={}, baseline={}, expected={expected}", actual.width, baseline.width);
+            assert!(actual.slots.iter().any(|s| s.off == count + 1));
+        }
+    }
+
+    #[test]
+    fn inline_delimiter_breaks_retain_child_caret_paths() {
+        let math = Math { nodes: vec![MNode::Delim {
+            beg: Some('('), end: Some(')'), sep: None, grow: true, shp_match: false,
+            elems: vec![vec![MNode::Run(MRun::new("a+b+c+d+e+f+g+h+i+j+k+l"))]],
+        }], ..Default::default() };
+        let m = lay_in(&math, "", false, 60.0, &MathProps::default());
+        assert!(m.parts.len() > 2, "ordinary inline brackets must not make a whole expression unbreakable");
+        assert!(m.parts.iter().all(|part| part.width < 60.0));
+        assert!(m.parts.iter().skip(1).any(|part| part.slots.iter().any(|s| s.path == [(0, 0)] && s.off > 2)));
+        let display = lay_in(&math, "", true, 60.0, &MathProps::default());
+        assert!(display.parts.is_empty(), "display delimiters stay an indivisible math box");
+    }
+
+    #[test]
     fn long_display_equations_wrap_before_operators_and_indent() {
         let sum = "y=a+b+c+d+e+f+g+h+i+j+k+l+m+n+o+p+q+r+s+t+u+v+w";
         let mp = MathProps::default();
@@ -2039,8 +2177,8 @@ mod tests {
         let m = lay_in(&Math::default(), sum, true, avail, &repeat);
         let ls = lines(&m);
         assert!(ls.len() >= 2 && ls[0].1.last().is_some_and(|g| g.1 == "+") && ls[1].1[0].1 == "+", "{ls:?}");
-        // Inline equations never wrap.
-        assert_eq!(lines(&lay_in(&Math::default(), sum, false, avail, &mp)).len(), 1);
+        // Inline OMML can also exceed a cell's width and must use legal equation breaks.
+        assert!(lines(&lay_in(&Math::default(), sum, false, avail, &mp)).len() >= 2);
         // A term wider than the line overflows it rather than breaking inside.
         let frac = lay_in(&Math::default(), "y=(a+b+c+d+e+f+g+h+i+j+k+l+m+n+o+p+q+r+s+t+u+v+w)/2", true, avail, &mp);
         assert!(frac.width > avail && frac.items.iter().any(|i| matches!(i, MItem::Rect { .. })), "{}", frac.width);
@@ -2280,3 +2418,4 @@ mod tests {
         }
     }
 }
+

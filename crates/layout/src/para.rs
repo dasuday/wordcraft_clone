@@ -357,7 +357,7 @@ pub struct ParaLayout {
     pub bidi_levels: Vec<u8>,
     /// Width of the drop cap letter itself (without the gap to the text).
     pub drop_cap_w: f32,
-    /// Laid-out equations by object index.
+    /// Laid-out equations (or inline equation fragments) by cluster index.
     pub maths: Vec<(usize, Arc<crate::math::MathLayout>)>,
     /// Ruby (Phonetic Guide) text over base-text clusters, in cluster order.
     pub rubies: Vec<RubyLayout>,
@@ -1625,27 +1625,32 @@ pub fn layout_para(p: &Paragraph, env: &ParaEnv) -> ParaLayout {
                         }
                         Some(InlineObject::Equation { linear, display, math }) => {
                             let avail = (env.width - rp.indent_left.max(0.0) - rp.indent_right.max(0.0)).max(12.0);
-                            let ml = crate::math::layout_equation(math, linear, &rc, *display, avail, &math_props, &mut eq_counter);
+                            let mut ml = crate::math::layout_equation(math, linear, &rc, *display, avail, &math_props, &mut eq_counter);
                             let st = b.styles.get(si as usize);
                             // The line is at least as tall as the text around it.
                             let (a, d) = st.map(|s| (s.ascent, s.descent)).unwrap_or((0.0, 0.0));
-                            b.clusters.push(Cluster {
-                                start,
-                                end,
-                                adv: ml.width,
-                                kind: ClKind::Object(k),
-                                style: si,
-                                g0: g,
-                                g1: g,
-                                break_after: false,
-                                obj_h: ml.ascent.max(a).max(0.01),
-                                obj_d: ml.descent.max(d),
-                                dot: false,
-                            });
-                            if *display {
-                                displays.push((b.clusters.len() - 1, math.jc));
+                            let parts = if !*display && !ml.parts.is_empty() { std::mem::take(&mut ml.parts) } else { vec![ml] };
+                            let count = parts.len();
+                            for (part, ml) in parts.into_iter().enumerate() {
+                                let cluster = b.clusters.len();
+                                b.clusters.push(Cluster {
+                                    start,
+                                    end,
+                                    adv: ml.width,
+                                    kind: ClKind::Object(k),
+                                    style: si,
+                                    g0: g,
+                                    g1: g,
+                                    break_after: part + 1 < count,
+                                    obj_h: ml.ascent.max(a).max(0.01),
+                                    obj_d: ml.descent.max(d),
+                                    dot: false,
+                                });
+                                if *display {
+                                    displays.push((b.clusters.len() - 1, math.jc));
+                                }
+                                maths.push((cluster, Arc::new(ml)));
                             }
-                            maths.push((k, Arc::new(ml)));
                         }
                         // A note separator's line: a short one, or one across the column.
                         Some(o) if o.as_note_separator().is_some() => {
@@ -2055,7 +2060,16 @@ fn break_lines(pl: &mut ParaLayout, env: &ParaEnv, mark_style: u32, level: Optio
                             c.adv = 0.0;
                         }
                         x = right_edge.max(x);
-                        last_break = Some(j);
+                        // A heading that reaches its explicit right tab must wrap its
+                        // last word with the trailing result, rather than orphaning the
+                        // page number at the left of the next line.
+                        let right_tab = rp.tabs.iter().any(|t| t.align == TabAlign::Right && (t.pos - right_edge).abs() < 1.0);
+                        last_break = if right_tab {
+                            (c0..j).rev()
+                                .skip_while(|k| pl.clusters.get(*k).is_some_and(|c| matches!(c.kind, ClKind::Space | ClKind::Marker)))
+                                .find(|k| pl.clusters.get(*k).is_some_and(|c| c.kind == ClKind::Space && c.break_after))
+                                .or(Some(j))
+                        } else { Some(j) };
                         j += 1;
                         continue;
                     }
@@ -2109,6 +2123,14 @@ fn break_lines(pl: &mut ParaLayout, env: &ParaEnv, mark_style: u32, level: Optio
             if !fits && (c0..j).any(|k| pl.clusters.get(k).is_some_and(takes_room)) {
                 // Wrap: back up to the last break opportunity on this line.
                 end = LineEnd::Wrap;
+                if let Some((tj, stop, _)) = pending_tab
+                    && stop.align == TabAlign::Right && last_break == Some(tj)
+                    && let Some(bk) = (c0..tj).rev()
+                        .skip_while(|k| pl.clusters.get(*k).is_some_and(|c| matches!(c.kind, ClKind::Space | ClKind::Marker)))
+                        .find(|k| pl.clusters.get(*k).is_some_and(|c| c.kind == ClKind::Space && c.break_after))
+                {
+                    last_break = Some(bk);
+                }
                 // Hyphenate only when the plain break leaves more than the hyphenation zone empty.
                 if let (Some(bk), Some((pj, px))) = (last_break, last_plain)
                     && pj >= c0
@@ -2255,6 +2277,7 @@ fn break_lines(pl: &mut ParaLayout, env: &ParaEnv, mark_style: u32, level: Optio
 
         // Vertical metrics.
         let (mut asc, mut desc) = (0.0f32, 0.0f32);
+        let (mut font_asc, mut font_desc) = (0.0f32, 0.0f32);
         // The tallest picture on the line (it sits on the baseline).
         let mut obj_asc = 0.0f32;
         let mut any = false;
@@ -2269,13 +2292,18 @@ fn break_lines(pl: &mut ParaLayout, env: &ParaEnv, mark_style: u32, level: Optio
                 continue;
             }
             if let Some(st) = pl.styles.get(c.style as usize) {
+                let math = pl.maths.iter().any(|(index, _)| *index == c0 + k);
                 // A picture sits on the baseline of its run: the line keeps that font's ascent
                 // and descent, and grows above the baseline to fit a taller picture.
                 let (a, d) = if matches!(c.kind, ClKind::Object(_)) && c.obj_h > 0.0 {
-                    if pl.maths.iter().any(|(k, _)| c.kind == ClKind::Object(*k)) {
-                        // Exact spacing keeps the run's baseline; tall math may overflow the
-                        // fixed line box without moving adjacent text up by its denominator.
-                        if matches!(rp.line_spacing, LineSpacing::Exactly(_)) { (st.ascent, st.descent) } else { (c.obj_h, c.obj_d) }
+                    if math {
+                        // Exact spacing retains its run baseline; automatic spacing also
+                        // retains the font floor when the equation itself is shorter.
+                        if matches!(rp.line_spacing, LineSpacing::Exactly(_)) {
+                            (st.ascent, st.descent)
+                        } else {
+                            (c.obj_h.max(st.ascent), c.obj_d.max(st.descent))
+                        }
                     } else {
                         obj_asc = obj_asc.max(c.obj_h);
                         (st.ascent, st.descent)
@@ -2286,6 +2314,8 @@ fn break_lines(pl: &mut ParaLayout, env: &ParaEnv, mark_style: u32, level: Optio
                 };
                 asc = asc.max(a);
                 desc = desc.max(d);
+                font_asc = font_asc.max(if math { st.ascent } else { a });
+                font_desc = font_desc.max(if math { st.descent } else { d });
                 any = true;
             }
         }
@@ -2294,8 +2324,12 @@ fn break_lines(pl: &mut ParaLayout, env: &ParaEnv, mark_style: u32, level: Optio
         {
             asc = st.ascent;
             desc = st.descent;
+            font_asc = asc;
+            font_desc = desc;
         }
         let text_natural = asc + desc;
+        let font_natural = font_asc + font_desc;
+        let math_growth = (text_natural - font_natural).max(0.0);
         let text_pictures = if obj_asc > asc { obj_asc + desc } else { 0.0 };
         let mut label_extra = 0.0;
         if first && let Some(lab) = &pl.label {
@@ -2321,7 +2355,9 @@ fn break_lines(pl: &mut ParaLayout, env: &ParaEnv, mark_style: u32, level: Optio
         let (height, centred) = match (rp.line_spacing, grid) {
             (LineSpacing::Multiple(m), Some(g)) => ((g.snap_height(natural) * m).max(g.snap_height(pictures)), true),
             (LineSpacing::AtLeast(v), Some(g)) => (g.snap_height(natural.max(pictures)).max(v), true),
-            (LineSpacing::Multiple(m), None) => ((text_natural * m + label_extra).max(text_pictures), false),
+            // Automatic leading scales the text font, not the extra height of a
+            // fraction or equation array. Keep compact (<single) spacing unchanged.
+            (LineSpacing::Multiple(m), None) => ((text_natural * m - math_growth * (m - 1.0).max(0.0) + label_extra).max(text_pictures), false),
             (LineSpacing::AtLeast(v), None) => (natural.max(text_pictures).max(v), false),
             (LineSpacing::Exactly(v), _) => (v, false),
         };
@@ -2660,8 +2696,9 @@ fn row_spans(exclusions: &[Exclusion], top: f32, h: f32, lo: f32, hi: f32) -> Re
 const HYPHENATION_ZONE: f32 = wordcraft_doc::DEFAULT_HYPHENATION_ZONE;
 
 /// How much of their width the spaces of a justified line may give up to fit more text (Word
-/// 2013+, compatibility mode 15).
-const MAX_SPACE_SHRINK: f32 = 0.2;
+/// 2013+, compatibility mode 15). The Word 365 reference includes lines requiring more than
+/// 20% compression (about 24%); the quarter-space floor keeps those words on their line.
+const MAX_SPACE_SHRINK: f32 = 0.25;
 
 /// Take `-slack` (an overflow) out of the line's inner spaces, in proportion to their widths and
 /// never more than [`MAX_SPACE_SHRINK`] of them. Trailing spaces hang and are left alone.
@@ -3158,3 +3195,4 @@ mod tests {
         assert_eq!(lookup_family(&d, "No Such Roman Font"), MISSING_ROMAN_FONT);
     }
 }
+

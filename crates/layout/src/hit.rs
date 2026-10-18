@@ -702,22 +702,26 @@ impl DocLayout {
         for (pi, it) in self.pieces(pos.story, &pos.path, page_hint) {
             // Equations in turned text aren't edited in place.
             let Placed::Lines { para, l0, l1, x, y, turn: TextDirection::Horizontal, .. } = it else { continue };
-            let li = para.line_of(pos.off);
-            if li < *l0 || li >= *l1 {
-                continue;
-            }
             let first = para.lines.get(*l0)?;
-            let l = para.lines.get(li)?;
-            for k in l.c0..l.c1 {
-                let Some(c) = para.clusters.get(k) else { continue };
-                let crate::para::ClKind::Object(oi) = c.kind else { continue };
-                if c.start != pos.off {
-                    continue;
+            let mut origin = None;
+            let mut joined = crate::math::MathLayout::default();
+            for li in *l0..*l1 {
+                let Some(l) = para.lines.get(li) else { continue };
+                for k in l.c0..l.c1 {
+                    let Some(c) = para.clusters.get(k) else { continue };
+                    let crate::para::ClKind::Object(_) = c.kind else { continue };
+                    if c.start != pos.off {
+                        continue;
+                    }
+                    let Some((_, ml)) = para.maths.iter().find(|(index, _)| *index == k) else { continue };
+                    let cx = l.cl_left(k)?;
+                    let base = y + (l.baseline - first.top);
+                    let (ox, ob) = *origin.get_or_insert((x + cx, base));
+                    joined.append_shifted(ml, x + cx - ox, ob - base);
                 }
-                let ml = para.maths.iter().find(|(o, _)| *o == oi)?.1.clone();
-                let cx = l.cl_left(k)?;
-                let base = y + (l.baseline - first.top);
-                return Some((pi, x + cx, base, ml));
+            }
+            if let Some((ox, ob)) = origin {
+                return Some((pi, ox, ob, std::sync::Arc::new(joined)));
             }
         }
         None
@@ -731,8 +735,8 @@ impl DocLayout {
             let base = l.top + (line.baseline - line.top);
             for k in line.c0..line.c1 {
                 let Some(c) = l.para.clusters.get(k) else { continue };
-                let crate::para::ClKind::Object(oi) = c.kind else { continue };
-                let Some((_, ml)) = l.para.maths.iter().find(|(o, _)| *o == oi) else { continue };
+                let crate::para::ClKind::Object(_) = c.kind else { continue };
+                let Some((_, ml)) = l.para.maths.iter().find(|(index, _)| *index == k) else { continue };
                 let x0 = l.x + line.cl_left(k).unwrap_or(0.0);
                 let pad = 2.0;
                 if x < x0 - pad || x > x0 + ml.width + pad || y < base - ml.ascent - pad || y > base + ml.descent + pad {
@@ -780,3 +784,4 @@ fn score(l: &LineHit, x: f32, y: f32) -> f32 {
     };
     dy * 4.0 + dx
 }
+
