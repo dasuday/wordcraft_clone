@@ -1789,7 +1789,8 @@ impl Body<'_> {
                 self.skip = 1;
             }
             "p" | "h" if !self.in_desc => {
-                let h = if local(q) == "h" { Some(get(a, "text:outline-level").and_then(|v| v.trim().parse::<u8>().ok()).unwrap_or(1)) } else { None };
+                let h =
+                    if local(q) == "h" { Some(get(a, "text:outline-level").and_then(|v| v.trim().parse::<u8>().ok()).unwrap_or(1)) } else { None };
                 self.start_para(get(a, "text:style-name"), h);
             }
             "span" => {
