@@ -706,20 +706,20 @@ fn elem(e: &El, depth: usize, budget: &mut usize) -> Arg {
                         .collect()
                 })
                 .unwrap_or_default();
-            if col_jc.is_empty() {
-                if let Some(first_row) = mtr_list.first() {
-                    let cell_aligns: Vec<ColJc> = first_row
-                        .els()
-                        .filter(|c| local(&c.name) == "mtd")
-                        .map(|c| match c.attr("columnalign") {
-                            Some("left") => ColJc::Left,
-                            Some("right") => ColJc::Right,
-                            _ => ColJc::Center,
-                        })
-                        .collect();
-                    if cell_aligns.iter().any(|a| *a != ColJc::Center) {
-                        col_jc = cell_aligns;
-                    }
+            if col_jc.is_empty()
+                && let Some(first_row) = mtr_list.first()
+            {
+                let cell_aligns: Vec<ColJc> = first_row
+                    .els()
+                    .filter(|c| local(&c.name) == "mtd")
+                    .map(|c| match c.attr("columnalign") {
+                        Some("left") => ColJc::Left,
+                        Some("right") => ColJc::Right,
+                        _ => ColJc::Center,
+                    })
+                    .collect();
+                if cell_aligns.iter().any(|a| *a != ColJc::Center) {
+                    col_jc = cell_aligns;
                 }
             }
             vec![MNode::Matrix { rows, col_jc }]
