@@ -84,6 +84,8 @@ The same gaps grouped the way the parity documents are, for agents working in on
 - **Localization gaps:** #8, #11, #16, #17; native-speaker review of every catalog (human).
 - **Stability and performance gaps:** #3, #20.
 
+> **Page-number update:** 2026-10-16 · top/bottom numbering preserves header/footer text, formatting, tables and existing PAGE fields, including fields in deeply nested tables and anchored text boxes (#2201). Detection follows nested boxes and group members, terminates on cyclic references and does not treat unrelated stories as duplicates. Section-slot behavior and readiness estimates are unchanged; this does not close the broader file-fidelity gaps.
+
 The Language dialog reads effective character formatting, including document defaults, paragraph styles and character styles. Accepting it unchanged keeps inherited language and no-proof choices (#2717); explicit direct formatting still takes precedence. Other proofing and Windows-specific reports remain separate.
 
 ## Revision history
@@ -105,6 +107,8 @@ The Language dialog reads effective character formatting, including document def
 | 2026-10-16 | trivial | Hint-reliant CJK fonts execute TrueType contour assembly; Windows DFKai-SB no longer loses strokes. Synthetic local-font regression; no font binaries bundled. |
 | 2026-10-16 | trivial | #17: automatic space between Asian text and Latin text or digits laid out (#2358) |
 | 2026-10-14 | trivial | Row table border exceptions fixed; other row table exceptions remain unsupported |
+| 2026-10-16 | trivial | Header/footer PAGE detection includes deep tables and anchored text boxes, with nested/grouped-box, unrelated-story and cyclic-reference regressions (#2201); readiness estimates unchanged |
+| 2026-10-15 | trivial | Page-number insertion preserves existing header/footer content and skips an existing PAGE field (#2201); synthetic undo/redo and repeated DOCX save/reopen checks; readiness estimates unchanged |
 | 2026-10-12 | minor | Czech proofing review: short-word splits rank after deletion, NOSUGGEST excludes suggestions while accepting typed forms, affix comments apply only to headers, ratios keep spaces and repeated-word messages use Czech quotes; synthetic engine end-to-end and latency checks |
 | 2026-10-12 | minor | Czech spelling from the installed Hunspell dictionary, runtime-table suggestions and generic checks; Czech interface writes cs-CZ documents; no Czech hyphenation patterns bundled; estimates unchanged |
 | 2026-10-12 | minor | Gap #24 default shortcuts expanded (140 commands on macOS / 158 on Linux/Windows); stale gaps #9 (DOCX agile encryption already works, only encrypted .doc missing) and #15 (DOCX bibliography sources already saved, only desktop integrations missing) updated |

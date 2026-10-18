@@ -67,6 +67,8 @@ the two partial ones (real-world .docx, printing) complete, roughly.
 | Ecosystem and plugins | 15% | 40–80 + owner decisions | [gaps.md](docs/gaps.md) (#22) |
 | AI features | 40% (beyond Word for external agents; no in-app assistant) | 15–30 | [gaps.md](docs/gaps.md) (#25) |
 
+> **Page-number update:** 2026-10-16 · header/footer content and existing PAGE fields in anchored text boxes are preserved on insertion (#2201); readiness estimates unchanged.
+
 ## Features
 
 | Area | Parity | Hours |
@@ -180,6 +182,8 @@ Ranked, to beta (detail and remaining milestones in [docs/roadmap.md](docs/roadm
 | 2026-10-17 | Language dialog keeps inherited proofing language and no-proof choices (#2717). Opening and accepting unchanged no longer replaces style-derived values with English US and proofing enabled. |
 | 2026-10-16 | Text with the legacy Outline, Shadow, Emboss or Engrave font effects (`w:outline`, `w:shadow`, `w:emboss`, `w:imprint`) is drawn with them on screen and in PDFs, no longer as plain text: hollow outlined letters, or a grey copy behind the letters; the PDF keeps the text (#2534) |
 | 2026-10-14 | Consistent preferred cell widths override a stale table grid when both totals agree, for fixed and AutoFit tables. Conflicting widths, spans and percentages remain unchanged. |
+| 2026-10-16 | Existing PAGE fields in deeply nested tables and anchored header/footer text boxes, including nested boxes and group members, prevent duplicate numbering (#2201). Detection follows only boxes anchored from that header/footer and terminates on cyclic references. |
+| 2026-10-15 | Inserting top/bottom page numbers appends a separate paragraph without replacing existing header/footer text, formatting or tables (#2201). An existing PAGE field, including one in a table, is preserved instead of duplicated. |
 | 2026-10-14 | Legacy VML freeforms (`v:shape` with its own `path`), such as the rule lines in many older headers, are read as freeform shapes: they show on screen and in PDFs and are saved back as DrawingML custom geometry instead of vanishing |
 | 2026-10-14 | Field instructions spanning paragraphs no longer add blank lines during pagination; empty result paragraphs still take a line. |
 | 2026-10-14 | Page-break-only list paragraphs no longer print stray bullets or numbers. The next item keeps its number, matching the reference export. |
@@ -482,6 +486,8 @@ Ranked, to beta (detail and remaining milestones in [docs/roadmap.md](docs/roadm
 | 2026-10-16 | trivial | Progress log: Ctrl+wheel zoom no longer scrolls the document (#1743) |
 | 2026-10-16 | trivial | Hint-reliant CJK fonts execute TrueType contour assembly; Windows DFKai-SB no longer loses strokes. Synthetic local-font regression; no font binaries bundled. |
 | 2026-10-14 | trivial | Progress log: row table border exceptions |
+| 2026-10-16 | trivial | Existing PAGE fields in anchored header/footer text boxes are preserved (#2201); readiness estimates unchanged |
+| 2026-10-15 | trivial | Page-number insertion preserves header/footer content (#2201); readiness estimates unchanged |
 | 2026-10-12 | minor | Czech proofing review: short-word splits rank after deletion, NOSUGGEST excludes suggestions while accepting typed forms, affix comments apply only to headers, ratios keep spaces and repeated-word messages use Czech quotes; synthetic engine end-to-end and latency checks |
 | 2026-10-12 | minor | Czech spelling from the installed Hunspell dictionary, runtime-table suggestions and generic checks; Czech interface writes cs-CZ documents; no Czech hyphenation patterns bundled; estimates unchanged |
 | 2026-10-12 | trivial | Progress log: one selected cell's border drags in its row only (#962) |

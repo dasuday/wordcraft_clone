@@ -215,6 +215,8 @@ attributes inside stories and style or list definitions; a regenerated theme. Te
 
 
 
+> **Page-number update:** 2026-10-16 · `insert.pageNumber` at the top/bottom preserves existing header/footer blocks and appends numbering on its own paragraph (#2201). An existing simple or range PAGE field, including one in a deeply nested table or an anchored text box, is kept without restyling or duplication. Nested and grouped text boxes are followed once each; unrelated stories do not suppress numbering. Synthetic tests cover text, table-cell bold formatting, paragraph alignment, undo/redo, table depths 1 and 17, cyclic box references and two DOCX save/reopen cycles, including nested/grouped text-box fields; native Word interoperability is not established by these tests. Section-slot selection is unchanged. Readiness estimates unchanged.
+
 ## Cached field result formatting
 
 Imported text fields use the first nonempty cached result run's formatting on their paragraph span, including character styles. Empty results retain begin-marker formatting. Synthetic fixtures cover simple and complex fields, default inheritance and repeated saves. Mixed-format results remain represented by one span; field refresh policy is unchanged.
@@ -235,6 +237,8 @@ Imported text fields use the first nonempty cached result run's formatting on th
 | 2026-10-16 | trivial | `w:eastAsianLayout` (two lines in one, horizontal in vertical) is read and written; not laid out yet |
 | 2026-10-13 | trivial | A cell's explicit top vertical alignment (`w:vAlign w:val="top"`) is kept on read and write and beats a table style that centres or bottom-aligns (#1288) |
 | 2026-10-14 | trivial | Row table border exceptions survive DOCX saves |
+| 2026-10-16 | trivial | Existing PAGE fields in deep tables and anchored header/footer text boxes prevent duplication (#2201); nested/grouped-box DOCX round trips and unrelated-story/cycle controls |
+| 2026-10-15 | trivial | Top/bottom page-number insertion preserves header/footer content (#2201); synthetic repeated DOCX save/reopen coverage |
 | 2026-10-12 | trivial | Fields keep `w:dirty` through DOCX round trips — on buffered fields and range-field begin markers alike — and computing a result (Update Field, Update Table) clears it like Word's F9, so a generator's placeholder TOC still refreshes when Word opens the file until WordCraft replaces the placeholder (#877) |
 | 2026-10-14 | trivial | VML freeforms (`v:shape` with a `path`, such as rule lines in headers) read as freeforms and kept on save instead of being dropped |
 | 2026-10-14 | trivial | DOCX paragraphs inside complex-field instructions carry a hidden paragraph mark; cached result paragraphs remain visible. |
