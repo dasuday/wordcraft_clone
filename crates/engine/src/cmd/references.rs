@@ -633,10 +633,10 @@ fn note_refs(s: &Session, kind: Option<NoteKind>) -> Vec<Pos> {
     for path in s.doc.para_paths(StoryRef::Body) {
         let Some(p) = s.doc.para(StoryRef::Body, &path) else { continue };
         for o in p.object_offsets() {
-            if let Some(InlineObject::NoteRef { kind: k, .. }) = p.object_at(o) {
-                if kind.is_none() || kind == Some(*k) {
-                    v.push(Pos { story: StoryRef::Body, path: path.clone(), off: o });
-                }
+            if let Some(InlineObject::NoteRef { kind: k, .. }) = p.object_at(o)
+                && (kind.is_none() || kind == Some(*k))
+            {
+                v.push(Pos { story: StoryRef::Body, path: path.clone(), off: o });
             }
         }
     }
