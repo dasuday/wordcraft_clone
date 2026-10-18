@@ -523,6 +523,8 @@ pub struct LayoutCache {
     outlines: HashMap<(String, usize, usize, [u32; 4]), Option<Arc<Vec<(f32, f32)>>>>,
     env: u64,
     used: HashSet<Key>,
+    /// How many layouts the last full pass used: the cache's live size.
+    live: usize,
     /// The STYLEREF style index of the last pass and what it was built from: the body blocks
     /// (shared, so an edited block is a different pointer) and `env` (styles and numbering). Kept
     /// while both are unchanged, so headers using STYLEREF don't rebuild it on every pass.
@@ -2253,6 +2255,8 @@ fn layout_pass(
         if let Some(st) = resume.take() {
             // The section was started before the checkpoint; carry on from there.
             st.restore(&mut pb, &mut ctx);
+            // The next section's start is stored after this section's end: it may have changed.
+            pb.next_starts_page = !web && sections.get(si + 1).is_some_and(|(_, s)| s.start != SectionStart::Continuous);
             ctx.grid = para::Grid::of(doc, sect);
             pb.foot_top = foot_top;
             let last = (*end).min(doc.body.len().saturating_sub(1));
@@ -2431,12 +2435,21 @@ fn layout_pass(
         }
     }
     // Evict paragraph layouts that weren't used this pass if the cache grew large.
-    // (Not after an incremental pass: it saw only the paragraphs it placed.)
-    if !incremental && ctx.cache.paras.len() + ctx.cache.measures.len() > 4 * ctx.cache.used.len().max(1024) {
-        let used = std::mem::take(&mut ctx.cache.used);
-        ctx.cache.paras.retain(|k, _| used.contains(k));
-        ctx.cache.measures.retain(|k, _| used.contains(k));
-        ctx.cache.used = used;
+    // (Not after an incremental pass: it saw only the paragraphs it placed. When those passes have
+    // left too many stale layouts, the next pass is a full one, which evicts them.)
+    let cached = ctx.cache.paras.len() + ctx.cache.measures.len();
+    if incremental {
+        if cached > 8 * ctx.cache.live.max(1024) {
+            ctx.cache.pass = None;
+        }
+    } else {
+        ctx.cache.live = ctx.cache.used.len();
+        if cached > 4 * ctx.cache.used.len().max(1024) {
+            let used = std::mem::take(&mut ctx.cache.used);
+            ctx.cache.paras.retain(|k, _| used.contains(k));
+            ctx.cache.measures.retain(|k, _| used.contains(k));
+            ctx.cache.used = used;
+        }
     }
     let mut index: HashMap<(StoryRef, Path), Vec<(usize, usize)>> = HashMap::new();
     for (pi, p) in pages.iter().enumerate() {

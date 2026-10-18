@@ -92,7 +92,7 @@ fn incremental_layout_matches_a_full_layout_after_any_edit() {
         caret_in(&mut s, at, 0);
         s.clamp_selection();
         for (id, p) in steps {
-            let _ = s.run(id, &p);
+            s.run(id, &p).unwrap_or_else(|e| panic!("{what}: {id} failed: {e}"));
         }
         assert_same_as_full(&mut s, what);
         // Undo comes back to the earlier pages too.
