@@ -66,6 +66,13 @@ pub fn reload_dictionary(lang: ProofLang) {
     *slot(lang).write().unwrap_or_else(|e| e.into_inner()) = None;
 }
 
+/// The `.dic` file of the installed dictionary for this region, searching the dictionaries folder
+/// and the system locations now (File › Options › Proofing shows it); `None` when there is none.
+/// A dictionary given with [`install_dictionary`] has no file and isn't reported.
+pub fn installed_path(lang: ProofLang) -> Option<std::path::PathBuf> {
+    crate::hunspell::find(names(lang)).map(|(_, dic)| dic)
+}
+
 /// Is spelling available for this German region?
 pub fn has_dictionary(lang: ProofLang) -> bool {
     !dictionary(lang).is_empty()

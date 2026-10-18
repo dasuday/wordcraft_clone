@@ -1,14 +1,25 @@
 //! Bounded German spelling candidates, with regional sharp-s and umlaut corrections first.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use crate::{
     ProofLang,
-    affix::{AffixDict, capitalize},
+    affix::{AffixDict, Casing, capitalize, casing},
 };
 
 const MAX_LETTERS: usize = 40;
 const MAX_CANDIDATES: usize = 8192;
+
+/// Whether `candidate` is accepted by the Swiss supplement or the user dictionary rather than the
+/// regional dictionary. Such words have no NOSUGGEST flag to honour; words the dictionary rejects
+/// for any other reason (single letters, digits) are not suggestions.
+fn accepted_outside_dictionary(d: &AffixDict, candidate: &str, lang: ProofLang) -> bool {
+    if d.check(candidate) {
+        return false;
+    }
+    let w = candidate.trim_matches(|c: char| !c.is_alphanumeric());
+    (lang == ProofLang::DeCh && matches!(w, "Rüebli" | "RÜEBLI")) || crate::in_user_dictionary(&w.to_lowercase())
+}
 
 /// Suggestions from the installed regional dictionary, best first.
 pub fn suggest(word: &str, max: usize, lang: ProofLang) -> Vec<String> {
@@ -22,14 +33,54 @@ pub fn suggest_with(d: &AffixDict, word: &str, max: usize, lang: ProofLang) -> V
         return Vec::new();
     }
     let limit = max.min(64);
+    // The edit generator works on the spelling, and validation is case-sensitive for mixed-case
+    // dictionary stems (`iPhone`, `mixCase`). Find those by their folded spelling under the word's
+    // first letters, then validate the stem and show it in the word's case.
+    let case = casing(word);
+    let folded = word.to_lowercase();
+    let prefix: String = folded.chars().take(3).collect();
+    let mut cased: HashMap<String, String> = HashMap::new();
+    if !prefix.is_empty() {
+        for prefix in [prefix.clone(), capitalize(&prefix), prefix.to_uppercase()] {
+            for stem in d.stems_with_prefix(&prefix).take(1024) {
+                if stem.chars().any(char::is_uppercase) {
+                    cased.entry(stem.to_lowercase()).or_insert_with(|| stem.to_string());
+                }
+            }
+        }
+    }
     let mut seen = HashSet::new();
     let mut out = Vec::new();
     let mut offer = |candidate: String| {
+        // A differently-cased dictionary spelling comes first: it is validated as written, then
+        // shown in the word's case (`MIXCASX` → `mixCase` → `MIXCASE`).
+        if let Some(stem) = cased.get(&candidate.to_lowercase()) {
+            let shown = match case {
+                Casing::Initial => capitalize(stem),
+                Casing::Upper if word.chars().count() > 1 => stem.to_uppercase(),
+                _ => stem.clone(),
+            };
+            if out.len() < limit
+                && seen.len() < MAX_CANDIDATES
+                && shown != word
+                && super::is_correct_with(d, stem, lang)
+                // The dictionary's NOSUGGEST forms are correct when typed but never offered.
+                && (d.can_suggest(stem) || accepted_outside_dictionary(d, stem, lang))
+                && seen.insert(shown.clone())
+            {
+                out.push(shown);
+            }
+        }
         for candidate in [candidate.clone(), capitalize(&candidate), candidate.to_lowercase()] {
             if out.len() >= limit || seen.len() >= MAX_CANDIDATES {
                 return;
             }
-            if candidate != word && seen.insert(candidate.clone()) && super::is_correct_with(d, &candidate, lang) {
+            if candidate != word
+                && seen.insert(candidate.clone())
+                && super::is_correct_with(d, &candidate, lang)
+                // The dictionary's NOSUGGEST forms are correct when typed but never offered.
+                && (d.can_suggest(&candidate) || accepted_outside_dictionary(d, &candidate, lang))
+            {
                 out.push(candidate);
             }
         }
@@ -107,5 +158,11 @@ mod tests {
         assert!(suggest_with(&ch, "Straße", 64, ProofLang::DeCh).iter().all(|s| !s.contains(['ß', 'ẞ'])));
         assert!(suggest_with(&ch, &"ß".repeat(100), usize::MAX, ProofLang::DeCh).is_empty());
         assert!(suggest_with(&ch, "groß", 0, ProofLang::DeCh).is_empty());
+    }
+
+    /// NOSUGGEST forms stay correct but are never offered, as in the other dictionary languages.
+    #[test]
+    fn nosuggest_is_honoured() {
+        crate::affix::tests::assert_nosuggest_is_honoured(|d, word, max| suggest_with(d, word, max, ProofLang::De));
     }
 }

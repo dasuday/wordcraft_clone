@@ -117,8 +117,7 @@ system-locale selection and a saved language choice (Italian also has 51 strings
 complete 2,419-entry catalog, also without proofing. Vietnamese (`vi`, #1434) has a complete
 2,448-entry catalog, also without proofing.
 German spelling (#2087) loads independent de-DE/de-AT/de-CH dictionaries, including compound nouns and Swiss ss suggestions. German grammar and dedicated hyphenation patterns remain open.
-Proofing: English, Polish, Portuguese and Russian (spelling, grammar, hyphenation), plus Czech (system Hunspell spelling, generic checks), chosen per run from its language. Word ships
-Proofing: English, Polish, Portuguese and Russian (spelling, grammar, hyphenation), plus Czech and Indonesian (system Hunspell spelling, generic checks), chosen per run from its language. Word ships
+Proofing: English, Polish, Portuguese, Italian, Croatian, Russian, Czech, Turkish, Indonesian and German (regional variants), chosen per run from its language. Word ships
 30 interface languages and proofing for ~50. Detail: [docs/localization-parity.md](docs/localization-parity.md).
 
 ## Upcoming

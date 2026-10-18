@@ -35,14 +35,19 @@ Wort
 iPhone/k
 ";
 
-pub fn dictionary(lang: ProofLang) -> AffixDict {
+/// The `.dic` text for one region, for tests that put a German dictionary in a folder.
+pub fn dic(lang: ProofLang) -> String {
     let local = match lang {
         ProofLang::DeCh => "Strasse\ngross\nFuss/x\n",
         ProofLang::DeAt => "Straße\ngroß\nFuß/x\nJänner\n",
         _ => "Straße\ngroß\nFuß/x\nJanuar\n",
     };
     let count = COMMON.lines().count() + local.lines().count();
-    AffixDict::from_hunspell(AFF, &format!("{count}\n{COMMON}{local}"), &[]).unwrap()
+    format!("{count}\n{COMMON}{local}")
+}
+
+pub fn dictionary(lang: ProofLang) -> AffixDict {
+    AffixDict::from_hunspell(AFF, &dic(lang), &[]).unwrap()
 }
 
 pub fn install() {

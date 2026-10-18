@@ -29,14 +29,7 @@ native-speaker review (human).
   Read Aloud, Backstage greetings) aren't wrapped in `tl!` yet, so they show in English in every
   language: the true share of visible strings is **~93–95%** (estimated).
 - Pending PRs: Norwegian Bokmål (#208) and Nynorsk (#210), Hebrew with RTL (#20).
-- **Proofing: English, Polish, Portuguese, Italian, Croatian, Russian, Czech, Turkish and German spelling**, chosen per run from its language (`w:lang`, resolved through
-  Language… for any of 31 languages and Set As Default for the document). Languages without proofing tools get
-- **Proofing: English, Polish, Portuguese, Italian, Russian, Czech and Indonesian**, chosen per run from its language (`w:lang`, resolved through
-  the styles; Review › Language and the status bar set it: a short list, plus Set Proofing
-  Language… for any of 30 languages and Set As Default for the document). Languages without proofing tools get
-  the styles; Review › Language and the status bar set it). Languages without proofing tools get
-  no spelling or grammar marks (as in Word without the language's tools) instead of being flagged
-  as English. Detail in [Proofing per language](#proofing-per-language).
+- **Proofing: English, Polish, Portuguese, Italian, Croatian, Russian, Czech, Turkish, Indonesian and German (Germany, Austria and Switzerland) spelling**, chosen per run from its language (`w:lang`, resolved through Review › Language and the status bar: a short list, plus Set Proofing Language… for any of 31 languages and Set As Default for the document). Languages without proofing tools get no spelling or grammar marks (as in Word without the language's tools) instead of being flagged as English. Detail in [Proofing per language](#proofing-per-language).
 - Document scripts: shaping via HarfRust (HarfBuzz port) for every script; bidi (UAX #9) and Arabic
   shaping tested (#207); IME on all desktop platforms (winit fixes pending, #155–#164).
 

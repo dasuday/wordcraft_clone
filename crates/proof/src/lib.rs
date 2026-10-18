@@ -156,6 +156,9 @@ pub fn set_dictionaries_folder(dir: Option<std::path::PathBuf>) {
     hr::reload_dictionary();
     tr::reload_dictionary();
     id::reload_dictionary();
+    for lang in [ProofLang::De, ProofLang::DeAt, ProofLang::DeCh] {
+        de::reload_dictionary(lang);
+    }
     DICTIONARY_GENERATION.fetch_add(1, Ordering::Relaxed);
 }
 
@@ -169,6 +172,9 @@ pub fn installed_dictionaries() -> Vec<(ProofLang, Option<std::path::PathBuf>)> 
         (ProofLang::Hr, hr::installed_path()),
         (ProofLang::Tr, tr::installed_path()),
         (ProofLang::Id, id::installed_path()),
+        (ProofLang::De, de::installed_path(ProofLang::De)),
+        (ProofLang::DeAt, de::installed_path(ProofLang::DeAt)),
+        (ProofLang::DeCh, de::installed_path(ProofLang::DeCh)),
     ]
 }
 
@@ -870,12 +876,19 @@ mod tests {
     fn dictionaries_folder_is_searched_first() {
         let dir = std::env::temp_dir().join(format!("wc-proof-dictionaries-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
+        // Each language's own test dictionary, so checks running meanwhile see the same words.
+        let de = de::test_dict::dic(ProofLang::De);
+        let de_at = de::test_dict::dic(ProofLang::DeAt);
+        let de_ch = de::test_dict::dic(ProofLang::DeCh);
         for (name, aff, dic) in [
             ("pl_PL", pl::test_dict::AFF, pl::test_dict::DIC),
             ("pt_BR", pt::test_dict::AFF, pt::test_dict::DIC),
             ("it_IT", it::test_dict::AFF, it::test_dict::DIC),
             ("hr_HR", hr::test_dict::AFF, hr::test_dict::DIC),
             ("id_ID", id::test_dict::AFF, id::test_dict::DIC),
+            ("de_DE", de::test_dict::AFF, de.as_str()),
+            ("de_AT", de::test_dict::AFF, de_at.as_str()),
+            ("de_CH", de::test_dict::AFF, de_ch.as_str()),
         ] {
             std::fs::write(dir.join(format!("{name}.aff")), aff).unwrap();
             std::fs::write(dir.join(format!("{name}.dic")), dic).unwrap();
@@ -883,20 +896,24 @@ mod tests {
         let before = dictionary_generation();
         set_dictionaries_folder(Some(dir.clone()));
         assert!(dictionary_generation() > before, "cached checks are dropped");
-        // Turkish has no test dictionary to put in the folder; Indonesian is listed after it.
+        // Turkish has no test dictionary to put in the folder.
         let found = installed_dictionaries();
-        assert_eq!(found.get(4).map(|(lang, _)| *lang), Some(ProofLang::Tr));
-        assert_eq!(found.last(), Some(&(ProofLang::Id, Some(dir.join("id_ID.dic")))));
-        assert_eq!(
-            found[..4],
-            [
-                (ProofLang::Pl, Some(dir.join("pl_PL.dic"))),
-                (ProofLang::Pt, Some(dir.join("pt_BR.dic"))),
-                (ProofLang::It, Some(dir.join("it_IT.dic"))),
-                (ProofLang::Hr, Some(dir.join("hr_HR.dic"))),
-            ]
-        );
+        let path = |lang| found.iter().find(|(l, _)| *l == lang).and_then(|(_, p)| p.clone());
+        assert_eq!(path(ProofLang::Pl), Some(dir.join("pl_PL.dic")));
+        assert_eq!(path(ProofLang::Pt), Some(dir.join("pt_BR.dic")));
+        assert_eq!(path(ProofLang::It), Some(dir.join("it_IT.dic")));
+        assert_eq!(path(ProofLang::Hr), Some(dir.join("hr_HR.dic")));
+        assert_eq!(path(ProofLang::Tr), None);
+        assert_eq!(path(ProofLang::Id), Some(dir.join("id_ID.dic")));
+        assert_eq!(path(ProofLang::De), Some(dir.join("de_DE.dic")));
+        assert_eq!(path(ProofLang::DeAt), Some(dir.join("de_AT.dic")));
+        assert_eq!(path(ProofLang::DeCh), Some(dir.join("de_CH.dic")));
         assert!(is_correct_in("chrząszcz", ProofLang::Pl) && !is_correct_in("chrzonszcz", ProofLang::Pl));
+        // The German regions reload from the new folder, each against its own file.
+        assert!(is_correct_in("Straße", ProofLang::De));
+        assert!(is_correct_in("Jänner", ProofLang::DeAt));
+        assert!(is_correct_in("Strasse", ProofLang::DeCh));
+        assert!(!is_correct_in("Straße", ProofLang::DeCh), "Swiss spelling still rejects ß");
     }
 
     #[test]

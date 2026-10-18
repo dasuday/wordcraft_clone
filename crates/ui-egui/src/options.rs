@@ -309,7 +309,7 @@ fn dictionaries(app: &mut WordApp, ui: &mut Ui) {
         }
     });
     ui.data_mut(|d| d.insert_temp(id, folder));
-    note(ui, "Hunspell .aff and .dic files here (pl_PL, pt_BR, it_IT, hr_HR, tr_TR) are used before the system's.");
+    note(ui, "Hunspell .aff and .dic files here (pl_PL, pt_BR, it_IT, hr_HR, tr_TR, de_DE) are used before the system's.");
     // The dictionary each language found, looked up again after the folder changes.
     let found_id = egui::Id::new("options_dictionaries_found");
     let generation = wordcraft_engine::proof::dictionary_generation();
