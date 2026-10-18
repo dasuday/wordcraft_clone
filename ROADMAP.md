@@ -145,6 +145,7 @@ Imported Word 97–2003 `.doc`/`.dot` files now ask for a supported DOCX target 
 | 2026-10-14 | `ASK` and `SET` fields no longer show their stored result on the page or in PDFs (#1765): like Word, they only assign text to a bookmark and draw nothing; the stored result is kept and saved |
 | 2026-10-15 | Table rows with an at-least height start the next page whole when less than their minimum is left on a page that already holds something, so one-row-per-page booklets keep their pages; rows taller than a page split from the top of the next page and repeated header rows go with the row (#1742) |
 | 2026-10-16 | Strict OOXML line heights render as Word renders them (#2329): `w:line="13.90pt"` under `lineRule="auto"` is a height read through twips (13.90 × 20 = 278; the 1.1583 multiple Word shows), not the 13.9 multiple the bare transitional number counts, so a Word 2024 file with 13.9 lines of line spacing opens at Word's 1 page with matching baselines instead of 10 |
+| 2026-10-15 | RTF keeps more tracked changes (gap 19): tracked paragraph marks (a `\par` inside a `\revised`/`\deleted` group) and character and paragraph formatting changes (`\crauth`/`\crdate` with `\oldcprops`, `\prauth`/`\prdate` with `\oldpprops`) are read and written, so their balloons and Accept/Reject survive an RTF round trip |
 | 2026-10-14 | ODT export writes sections (gap 19): every new-page section gets its own page layout and master page (the first stays "Standard"), named by its first paragraph or table with the page-numbering restart; a continuous section with columns is written as a columned `text:section`, so a landscape, two-column or restarted part survives a save as .odt |
 | 2026-10-14 | A bulleted or numbered list item that starts with a lower-case word no longer gets the grammar squiggle for a missing sentence capital (#1741): list items are often fragments, so the sentence-capital rule (every proofed language) skips the first word of a list paragraph (own or style numbering); later sentences in the item are still checked |
 | 2026-10-16 | The Spike, as in Word: Ctrl+F3 (⌘F3 on macOS) cuts the selection and adds it to the end of the Spike, each piece followed by a paragraph mark; Ctrl+Shift+F3 (⌘⇧F3) inserts everything collected, in order and with its formatting, and empties the Spike. The clipboard is left alone; each is one undo step. The Spike is the AutoText entry "Spike", so Insert › Quick Parts inserts it without emptying it. It lasts for the session (Word keeps it in Normal.dotm) |
@@ -170,6 +171,8 @@ Imported Word 97–2003 `.doc`/`.dot` files now ask for a supported DOCX target 
 | 2026-10-15 | Exact line spacing keeps the run font baseline around tall equations; automatic and minimum spacing still grow for math. |
 | 2026-10-16 | Zero-extent drawing anchors contribute no inline font height. |
 | 2026-10-16 | Control-channel keyboard and text input reaches the focused widget while the native window is inactive, without activating it; normal widget targets, dialogs and document protection remain in force (#2420) |
+| 2026-10-15 | Hide Quick Access Toolbar (#1945): the toolbar's menu ends with Hide Quick Access Toolbar, as Word's does; the ribbon's right-click menu and Customize Ribbon › Quick Access Toolbar offer Show Quick Access Toolbar; kept between runs; `ui.quickAccessToolbar {"value"?}` for scripts and MCP |
+| 2026-10-15 | Rulers: the numbers thin out as the page shrinks on screen (every 1, 2, 4… units, at least 30 px apart, the small ticks at least 4 px apart), give way to the indent, tab and column markers, and the margins get ticks only; both rulers span the caret's page at its own scale in One Page and Multiple Pages and follow the caret to another page (#1878) |
 |---|---|
 | 2026-10-16 | Save Changes gives assistive technology a named alert dialog with the loss warning and any save failure; visual layout and save policy unchanged (#1015). Native screen-reader verification remains pending. |
 | 2026-10-15 | The font family caches are bounded (4096 families for text, 1024 for math, names over 256 bytes aren't remembered), so a document naming thousands of missing fonts can't grow memory; equation fonts are looked up again after a font is added or removed instead of keeping the old choice (#1354) |
@@ -523,6 +526,7 @@ Imported Word 97–2003 `.doc`/`.dot` files now ask for a supported DOCX target 
 | 2026-10-15 | trivial | Exact line spacing keeps the run font baseline around tall equations; automatic and minimum spacing still grow for math. |
 | 2026-10-16 | trivial | Zero-extent drawing anchors contribute no inline font height. Synthetic regressions. |
 | 2026-10-16 | trivial | Control keyboard/text input works in the inactive native window (#2420) |
+| 2026-10-15 | trivial | Progress log: Hide Quick Access Toolbar (#1945) |
 | 2026-10-14 | trivial | Progress log: row table border exceptions |
 | 2026-10-12 | minor | Czech proofing review: short-word splits rank after deletion, NOSUGGEST excludes suggestions while accepting typed forms, affix comments apply only to headers, ratios keep spaces and repeated-word messages use Czech quotes; synthetic engine end-to-end and latency checks |
 | 2026-10-12 | minor | Czech spelling from the installed Hunspell dictionary, runtime-table suggestions and generic checks; Czech interface writes cs-CZ documents; no Czech hyphenation patterns bundled; estimates unchanged |
@@ -714,3 +718,4 @@ Imported Word 97–2003 `.doc`/`.dot` files now ask for a supported DOCX target 
 | 2026-10-12 | trivial | Progress log: recipient filter and sort, .xls and legacy-encoding recipient lists (#778) |
 | 2026-10-15 | trivial | Progress log: dialog close box (#1885) |
 | 2026-10-15 | trivial | Progress log: mixed Hebrew/Latin text keeps its order in Word (#1543) |
+| 2026-10-15 | trivial | Progress log: ruler numbers by zoom, rulers follow the caret's page (#1878) |
