@@ -126,7 +126,9 @@ impl Table {
         let mut props = self.props.clone();
         if !whole {
             // Part of the columns: as wide as they are, not the whole table's width.
-            props.width = props.width.map(|_| grid.iter().sum());
+            if props.width.is_some() || props.width_pct.is_some() {
+                props.width = Some(grid.iter().sum());
+            }
             props.width_pct = None;
         }
         Table { props, grid, rows: out_rows, controls: ControlWrap::default() }
@@ -620,6 +622,11 @@ mod tests {
         assert_eq!((whole.props.width, whole.props.width_pct), (Some(300.0), Some(50.0)), "all columns keep the table's width");
         let row = t.slice((1, 1), (0, 2));
         assert!(row.controls.is_empty() && row.rows[0].controls.is_empty());
+        // A table sized only by a percentage keeps a width for the part.
+        let mut pct = Table::new(3, 3, 300.0);
+        (pct.props.width, pct.props.width_pct) = (None, Some(50.0));
+        let part = pct.slice((0, 2), (2, 2));
+        assert_eq!((part.props.width, part.props.width_pct), (Some(100.0), None));
         // Nothing in range: no rows.
         assert!(t.slice((5, 6), (0, 2)).rows.is_empty());
         assert!(t.slice((0, 2), (9, 9)).rows.is_empty());
