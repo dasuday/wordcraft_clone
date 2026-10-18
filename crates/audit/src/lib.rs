@@ -264,6 +264,18 @@ fn for_each_element(xml: &[u8], part: &str, f: &mut impl FnMut(&Element) -> Resu
     let mut buf = Vec::new();
     let mut count: u64 = 0;
     let mut depth: u32 = 0;
+    // XML documents have exactly one root element: a second top-level
+    // element (or none at all) is malformed input, not a scannable part.
+    let mut root_seen = false;
+    let mut check_root = |depth: u32, part: &str| -> Result<(), AuditError> {
+        if depth == 0 {
+            if root_seen {
+                return Err(AuditError::Xml(part.to_string(), "multiple root elements".to_string()));
+            }
+            root_seen = true;
+        }
+        Ok(())
+    };
     loop {
         buf.clear();
         let (resolution, event) = reader.read_resolved_event_into(&mut buf).map_err(|e| AuditError::Xml(part.to_string(), e.to_string()))?;
@@ -275,6 +287,7 @@ fn for_each_element(xml: &[u8], part: &str, f: &mut impl FnMut(&Element) -> Resu
         };
         match event {
             Event::Start(ref e) => {
+                check_root(depth, part)?;
                 depth = depth.saturating_add(1);
                 count += 1;
                 if count > MAX_XML_ELEMENTS {
@@ -283,6 +296,7 @@ fn for_each_element(xml: &[u8], part: &str, f: &mut impl FnMut(&Element) -> Resu
                 f(&element_of(&mut reader, &ns, e, part)?)?;
             }
             Event::Empty(ref e) => {
+                check_root(depth, part)?;
                 count += 1;
                 if count > MAX_XML_ELEMENTS {
                     return Err(AuditError::Limit(format!("{part}: too many XML elements")));
@@ -295,6 +309,9 @@ fn for_each_element(xml: &[u8], part: &str, f: &mut impl FnMut(&Element) -> Resu
             Event::Eof => {
                 if depth != 0 {
                     return Err(AuditError::Xml(part.to_string(), "unclosed elements at end of part".to_string()));
+                }
+                if !root_seen {
+                    return Err(AuditError::Xml(part.to_string(), "no root element".to_string()));
                 }
                 break;
             }
@@ -631,7 +648,10 @@ fn scan_orphans(names: &[String], parts: &BTreeMap<String, Vec<u8>>, findings: &
             Ok(())
         })?;
         for target in targets {
-            if name_set.contains(target.as_str()) && reachable.insert(target.clone()) && let Some(rels) = rels_of_part(&target) {
+            if name_set.contains(target.as_str())
+                && reachable.insert(target.clone())
+                && let Some(rels) = rels_of_part(&target)
+            {
                 stack.push(rels);
             }
         }

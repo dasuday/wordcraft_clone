@@ -440,3 +440,30 @@ fn orphan_subtree_rels_do_not_rescue_parts() {
     assert!(orphans.contains(&"word/hidden.xml"));
     assert!(!orphans.contains(&"word/_rels/document.xml.rels"));
 }
+
+#[test]
+fn multiple_root_elements_is_an_error() {
+    // XML documents have exactly one root: a second top-level element is
+    // malformed input, never a scannable part.
+    let doc = format!(
+        r#"<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="{W}"><w:body/></w:document><w:document xmlns:w="{W}"><w:body/></w:document>"#
+    );
+    let bytes = package(&[
+        ("[Content_Types].xml", &content_types()),
+        ("_rels/.rels", &root_rels()),
+        ("word/document.xml", &doc.into_bytes()),
+        ("word/_rels/document.xml.rels", &doc_rels("")),
+    ]);
+    assert!(matches!(audit_bytes(&bytes), Err(AuditError::Xml(_, _))));
+}
+
+#[test]
+fn empty_part_is_an_error() {
+    let bytes = package(&[
+        ("[Content_Types].xml", &content_types()),
+        ("_rels/.rels", &root_rels()),
+        ("word/document.xml", b""),
+        ("word/_rels/document.xml.rels", &doc_rels("")),
+    ]);
+    assert!(matches!(audit_bytes(&bytes), Err(AuditError::Xml(_, _))));
+}
