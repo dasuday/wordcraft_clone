@@ -7954,6 +7954,8 @@ fn info_reports_paragraphs_cut_at_the_line_limit() {
     // Under the production limit nothing is cut.
     let mut b = Session::new(wordcraft_doc::Document::from_text("L1\nL2\nL3\nTailEnd"));
     assert_eq!(run(&mut b, "file.info", json!({}))["truncatedParagraphs"], 0);
+}
+
 /// #1876 review: only Web Layout wraps to the window's `web_width`. Draft and Outline keep a fixed
 /// 800 pt column, also after a visit to a wide Web Layout, and the window width is never serialized.
 #[test]

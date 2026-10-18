@@ -7504,6 +7504,8 @@ fn the_line_limit_warning_is_logged_once_per_revision() {
         layout(&d, &mut c, &opts);
         assert_eq!(c.line_limit_warnings, 2, "an edit to the cut paragraph warns again");
     });
+}
+
 /// Gap #5 review: a paragraph deleted whole (text and mark) takes no room in the final text, and
 /// neither does moved-away text marked Hidden; the paragraph after it sits where it would without
 /// it, and a deletion that isn't left out keeps its line.
