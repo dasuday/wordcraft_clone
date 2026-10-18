@@ -115,4 +115,8 @@ fn double_clicking_a_page_number_edits_the_footer_without_scrolling_away() {
         app.session.page_hint
     );
     assert_eq!(app.session.page_hint, page_before, "the view stays on the clicked page");
+    // editing_header_footer is true for a header story too: pin the Footer story itself, the
+    // one the double-clicked page number lives in (CodeRabbit review, PR #2871).
+    let footer = layout.pages[page_before].footer_story.expect("the page shows the page-number footer");
+    assert_eq!(app.session.sel.focus.story, wordcraft_doc::StoryRef::Part(footer), "the caret is in the footer story of the clicked page");
 }
