@@ -99,6 +99,8 @@ struct Writer {
     pending_start: Option<SecStart>,
     /// The next top-level list continues the one that ended the previous section.
     continue_list: bool,
+    /// `xml:id` of the last top-level list written, for `text:continue-list`.
+    last_list: Option<String>,
     /// The page the block being written starts.
     master: Option<SecStart>,
     /// Cell styles by shading.
@@ -523,13 +525,20 @@ impl Writer {
                                 *top = true;
                             }
                             if stack.is_empty() {
-                                // A list cut by a section boundary goes on numbering (ODF 1.3 §19.743).
-                                let cont = if depth == 0 && start == 0 && std::mem::take(&mut self.continue_list) {
-                                    " text:continue-numbering=\"true\""
-                                } else {
-                                    ""
+                                let id = format!("lst{}", self.list_styles.len());
+                                // A list cut by a section boundary goes on numbering: continue-list names the
+                                // preceding list by its xml:id, whatever its style name (ODF 1.3 §19.743).
+                                let prev = self.last_list.clone();
+                                let cont = match prev {
+                                    Some(prev) if depth == 0 && start == 0 && std::mem::take(&mut self.continue_list) => {
+                                        format!(" text:continue-list=\"{prev}\"")
+                                    }
+                                    _ => String::new(),
                                 };
-                                out.push_str(&format!("<text:list text:style-name=\"{lname}\"{cont}>"));
+                                if depth == 0 {
+                                    self.last_list = Some(id.clone());
+                                }
+                                out.push_str(&format!("<text:list xml:id=\"{id}\" text:style-name=\"{lname}\"{cont}>"));
                             } else {
                                 out.push_str("<text:list>");
                             }
@@ -2890,7 +2899,9 @@ mod tests {
         let doc = import(&package(&content, Some(&cols_styles()))).unwrap();
         let bytes = export(&doc).unwrap();
         let xml = String::from_utf8(read_entry(&mut archive(&bytes), "content.xml").unwrap()).unwrap();
-        assert_eq!(xml.matches("text:continue-numbering=\"true\"").count(), 1, "{xml}");
+        assert_eq!(xml.matches("text:continue-list=\"").count(), 1, "{xml}");
+        // The continuation points at the first list's xml:id.
+        assert!(xml.contains("xml:id=\"lst1\"") && xml.contains("text:continue-list=\"lst1\""), "{xml}");
         assert_eq!(section_summary(&import(&bytes).unwrap()), section_summary(&doc));
     }
 
