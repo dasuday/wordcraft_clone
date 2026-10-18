@@ -86,6 +86,8 @@ The same gaps grouped the way the parity documents are, for agents working in on
 
 The Language dialog reads effective character formatting, including document defaults, paragraph styles and character styles. Accepting it unchanged keeps inherited language and no-proof choices (#2717); explicit direct formatting still takes precedence. Other proofing and Windows-specific reports remain separate.
 
+Exact-height vertical merges no longer grow to fit overflowing text. Native synthetic controls cover exact, minimum and mixed heights; broader table pagination parity remains open.
+
 ## Revision history
 
 | Date | Change | Summary |
@@ -104,6 +106,7 @@ The Language dialog reads effective character formatting, including document def
 | 2026-10-15 | trivial | Numbered headings (#1793): heading-linked Multilevel List presets; numbering keeps heading styles. Not a ranked gap; style gallery previews without numbers remain |
 | 2026-10-16 | trivial | Hint-reliant CJK fonts execute TrueType contour assembly; Windows DFKai-SB no longer loses strokes. Synthetic local-font regression; no font binaries bundled. |
 | 2026-10-16 | trivial | #17: automatic space between Asian text and Latin text or digits laid out (#2358) |
+| 2026-10-17 | trivial | Exact-height merge overflow bounded |
 | 2026-10-14 | trivial | Row table border exceptions fixed; other row table exceptions remain unsupported |
 | 2026-10-12 | minor | Czech proofing review: short-word splits rank after deletion, NOSUGGEST excludes suggestions while accepting typed forms, affix comments apply only to headers, ratios keep spaces and repeated-word messages use Czech quotes; synthetic engine end-to-end and latency checks |
 | 2026-10-12 | minor | Czech spelling from the installed Hunspell dictionary, runtime-table suggestions and generic checks; Czech interface writes cs-CZ documents; no Czech hyphenation patterns bundled; estimates unchanged |
