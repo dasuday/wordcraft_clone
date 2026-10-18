@@ -2296,8 +2296,10 @@ fn chart_design(app: &mut WordApp, ui: &mut Ui) {
                 crate::widgets::row(ui, |ui| {
                     ui.label(egui::RichText::new(tl!(label)).small());
                     let mut v = v0;
-                    let r = ui.add(egui::DragValue::new(&mut v).speed(1.0).range(36.0..=2000.0).suffix(" pt"));
-                    if r.changed() {
+                    // The range bounds what is typed or dragged; a size outside it is shown as it
+                    // is (clamped, egui would report a change and resize the chart unasked).
+                    let r = ui.add(egui::DragValue::new(&mut v).speed(1.0).range(36.0..=2000.0).clamp_existing_to_range(false).suffix(" pt"));
+                    if r.changed() && v != v0 {
                         if r.dragged() && !r.drag_started() {
                             app.session.join_next_undo();
                         }
@@ -2384,8 +2386,10 @@ fn shape_format(app: &mut WordApp, ui: &mut Ui) {
                 for (label, key, v0) in [("W:", "width", w0), ("H:", "height", h0)] {
                     ui.label(egui::RichText::new(tl!(label)).small());
                     let mut v = v0;
-                    let r = ui.add(egui::DragValue::new(&mut v).speed(1.0).range(4.0..=2000.0).suffix(" pt"));
-                    if r.changed() {
+                    // `picture.size`'s own range; a size outside it (a thin line) is shown as it
+                    // is (clamped, egui would report a change and resize the shape unasked).
+                    let r = ui.add(egui::DragValue::new(&mut v).speed(1.0).range(1.0..=4000.0).clamp_existing_to_range(false).suffix(" pt"));
+                    if r.changed() && v != v0 {
                         if r.dragged() && !r.drag_started() {
                             app.session.join_next_undo();
                         }
@@ -3344,5 +3348,40 @@ mod tests {
         h.run_steps(6);
         assert_eq!(size(h.state()), Some((0.75, 0.75)), "shown, not resized");
         assert_eq!(h.state().session.undo_depth(), undo, "no undo step");
+    }
+
+    /// #2573 review: Shape Format and Chart Design leave sizes outside their fields' ranges alone
+    /// too (a 0.5 pt high line; a chart narrower than 36 pt), as Picture Format does.
+    #[test]
+    fn shape_and_chart_formats_leave_out_of_range_sizes_alone() {
+        let size = |a: &crate::WordApp| wordcraft_engine::cmd::objects::selected(&a.session).and_then(|(_, o)| o.frame().map(|(w, h, _)| (w, h)));
+        let shown = |a: crate::WordApp| {
+            let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(2560.0, 900.0)).build_ui_state(
+                |ui, app: &mut crate::WordApp| {
+                    let ctx = ui.ctx().clone();
+                    app.logic(&ctx);
+                    app.ui(ui);
+                },
+                a,
+            );
+            h.run_steps(6);
+            let a = h.state();
+            (size(a), a.session.undo_depth())
+        };
+        let mut a = crate::WordApp::new(Session::new(wordcraft_doc::Document::new()), crate::Services::default());
+        a.run("insert.shape", json!({"kind": "rectangle"})).unwrap();
+        a.run("picture.size", json!({"width": 3000.0, "height": 1.0, "lockAspect": false})).unwrap();
+        a.run("ui.tab", json!({"tab": "Shape Format"})).unwrap();
+        let before = (size(&a), a.session.undo_depth());
+        assert_eq!(before.0, Some((3000.0, 1.0)));
+        assert_eq!(shown(a), before, "Shape Format shown, the shape untouched");
+
+        let mut a = crate::WordApp::new(Session::new(wordcraft_doc::Document::new()), crate::Services::default());
+        a.run("insert.chart", json!({"type": "doughnut"})).unwrap();
+        a.run("picture.size", json!({"width": 20.0, "height": 2500.0, "lockAspect": false})).unwrap();
+        a.run("ui.tab", json!({"tab": "Chart Design"})).unwrap();
+        let before = (size(&a), a.session.undo_depth());
+        assert_eq!(before.0, Some((20.0, 2500.0)));
+        assert_eq!(shown(a), before, "Chart Design shown, the chart untouched");
     }
 }
