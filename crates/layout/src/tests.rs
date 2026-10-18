@@ -8329,3 +8329,91 @@ fn float_font_keeps_line_height() {
     }
     assert!(pitch(Wrap::Inline, 40.0) > pitch(Wrap::Inline, 9.0));
 }
+
+/// Native ink inside a group is drawn as drawing-level ink is: its fallback picture, in its place.
+#[test]
+fn ink_member_of_a_group_draws_its_fallback_picture() {
+    use crate::display::Draw;
+    use std::sync::Arc;
+    use wordcraft_doc::graphic::{Graphic, GraphicItem, GraphicKind};
+    use wordcraft_doc::para::{Float, GroupChild};
+    let items = vec![GraphicItem::Image { rect: [0.0, 0.0, 60.0, 30.0], media: "preview".into() }];
+    let ink = InlineObject::Graphic {
+        w: 60.0,
+        h: 30.0,
+        alt: String::new(),
+        float: Float::default(),
+        graphic: Arc::new(Graphic { kind: GraphicKind::Ink, items, w: 60.0, h: 30.0, ..Default::default() }),
+    };
+    let group = InlineObject::Group {
+        w: 200.0,
+        h: 100.0,
+        float: Float::default(),
+        ch_w: 200.0,
+        ch_h: 100.0,
+        children: vec![GroupChild { x: 20.0, y: 30.0, obj: ink }],
+        canvas: None,
+    };
+    let mut d = Document::from_text("Text by the group.");
+    d.insert_object(&Pos::body(0, 0), group, &Default::default()).unwrap();
+    let l = lay(&d);
+    let frame = l.object(&Pos::body(0, 0), 0).unwrap().rect;
+    fn images(draws: &[Draw], out: &mut Vec<Rect>) {
+        for d in draws {
+            match d {
+                Draw::Image { rect, media, .. } if media == "preview" => out.push(*rect),
+                Draw::Rotated { items, .. } | Draw::Clip { items, .. } => images(items, out),
+                Draw::Figure { draws, .. } => images(draws, out),
+                _ => {}
+            }
+        }
+    }
+    let mut found = Vec::new();
+    images(&crate::display::page_display(&d, &l.pages[0], &Default::default()), &mut found);
+    let [r] = found.as_slice() else { panic!("ink preview not drawn: {found:?}") };
+    assert!((r.x - (frame.x + 20.0)).abs() < 0.01 && (r.y - (frame.y + 30.0)).abs() < 0.01, "{r:?} in {frame:?}");
+    assert!((r.w - 60.0).abs() < 0.01 && (r.h - 30.0).abs() < 0.01, "{r:?}");
+}
+
+/// The word being typed gets no spelling squiggle until the caret leaves it (#1552): only in the
+/// paragraph with that revision, only spelling, and a change to it lays that one paragraph out
+/// again without clearing the cache.
+#[test]
+fn the_word_being_typed_has_no_spelling_squiggle() {
+    let d = Document::from_text("helo wrld\nfine text here");
+    let rev = d.para(StoryRef::Body, &Path::top(0)).unwrap().rev;
+    let marks = |l: &DocLayout, grammar: bool| -> Vec<String> {
+        l.pages[0]
+            .items
+            .iter()
+            .filter_map(|i| match i {
+                Placed::Lines { para, path, .. } if *path == Path::top(0) => {
+                    Some(para.issues.iter().filter(|i| i.2 == grammar).map(|i| "helo wrld"[i.0..i.1].to_string()).collect::<Vec<_>>())
+                }
+                _ => None,
+            })
+            .flatten()
+            .collect()
+    };
+    let mut c = LayoutCache::new();
+    let opts = LayoutOptions { proofing: true, ..LayoutOptions::default() };
+    let both = layout(&d, &mut c, &opts);
+    assert_eq!(marks(&both, false), ["helo", "wrld"]);
+    let misses = c.misses;
+    // "wrld" is being typed: only "helo" is marked; grammar is as before.
+    let typing = layout(&d, &mut c, &LayoutOptions { typing_word: Some(TypingWord { rev, start: 5, end: 9 }), ..opts.clone() });
+    assert_eq!(marks(&typing, false), ["helo"]);
+    assert_eq!(marks(&typing, true), marks(&both, true));
+    assert_eq!(c.misses, misses + 1, "only the paragraph with the word is laid out again");
+    // A range overlapping the word counts too (the checker's word may be longer than the caret's).
+    let typing = layout(&d, &mut c, &LayoutOptions { typing_word: Some(TypingWord { rev, start: 7, end: 9 }), ..opts.clone() });
+    assert_eq!(marks(&typing, false), ["helo"]);
+    // A different paragraph revision leaves everything marked.
+    let other = layout(&d, &mut c, &LayoutOptions { typing_word: Some(TypingWord { rev: rev.wrapping_add(1), start: 5, end: 9 }), ..opts.clone() });
+    assert_eq!(marks(&other, false), ["helo", "wrld"]);
+    // The caret left the word: the layout without the exemption comes back from the cache.
+    let misses = c.misses;
+    let left = layout(&d, &mut c, &opts);
+    assert_eq!(marks(&left, false), ["helo", "wrld"]);
+    assert_eq!(c.misses, misses);
+}
