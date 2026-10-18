@@ -1853,9 +1853,11 @@ fn ptab_stop(align: PTabAlign, base: PTabBase, leader: TabLeader, width: f32, in
 }
 
 fn break_lines(pl: &mut ParaLayout, env: &ParaEnv, mark_style: u32, level: Option<&Level>) {
+    // Narrow cells and float spans must retain their usable width.
+    const MIN_LINE_WIDTH: f32 = 1.0;
     let suffix = level.map(|l| l.suffix);
     let rp = pl.rp.clone();
-    let width = env.width.max(12.0);
+    let width = env.width.max(MIN_LINE_WIDTH);
     let base_right = (width - rp.indent_right).max(1.0);
     let default_tab = env.doc.settings.default_tab;
     let first_left = rp.indent_left + rp.indent_first;
@@ -1937,7 +1939,7 @@ fn break_lines(pl: &mut ParaLayout, env: &ParaEnv, mark_style: u32, level: Optio
                         narrowed = !rest.is_empty() || a > lo || b < base_right;
                         row_rest = rest;
                         row_first = lines.len();
-                        break (a, b.max(a + 12.0));
+                        break (a, b.max(a + MIN_LINE_WIDTH));
                     }
                     Err(below) if below > top && guard < 50 => {
                         top = below;
@@ -1945,7 +1947,7 @@ fn break_lines(pl: &mut ParaLayout, env: &ParaEnv, mark_style: u32, level: Optio
                     }
                     Ok((None, _)) | Err(_) => {
                         row_first = lines.len();
-                        break (lo, base_right.max(lo + 12.0));
+                        break (lo, base_right.max(lo + MIN_LINE_WIDTH));
                     }
                 }
             }
@@ -2225,7 +2227,9 @@ fn break_lines(pl: &mut ParaLayout, env: &ParaEnv, mark_style: u32, level: Optio
             // Spaces and tabs never make a line taller, whatever their size: Word sizes a line by
             // its other characters (a line of only them takes the paragraph mark's), measured in
             // Word for Windows with 9 pt text and 11–20 pt tabs, spaces and ideographic spaces.
-            if matches!(c.kind, ClKind::Marker | ClKind::Space | ClKind::Tab) || c0 + k < dropped {
+            // Floating and hidden drawings have no inline extent; their anchor font takes no height.
+            let anchor = matches!(c.kind, ClKind::Object(_)) && c.adv == 0.0 && c.obj_h == 0.0;
+            if matches!(c.kind, ClKind::Marker | ClKind::Space | ClKind::Tab) || anchor || c0 + k < dropped {
                 continue;
             }
             if let Some(st) = pl.styles.get(c.style as usize) {
@@ -2233,8 +2237,9 @@ fn break_lines(pl: &mut ParaLayout, env: &ParaEnv, mark_style: u32, level: Optio
                 // and descent, and grows above the baseline to fit a taller picture.
                 let (a, d) = if matches!(c.kind, ClKind::Object(_)) && c.obj_h > 0.0 {
                     if pl.maths.iter().any(|(k, _)| c.kind == ClKind::Object(*k)) {
-                        // An equation is text: its ascent and descent count like the text's.
-                        (c.obj_h, c.obj_d)
+                        // Exact spacing keeps the run's baseline; tall math may overflow the
+                        // fixed line box without moving adjacent text up by its denominator.
+                        if matches!(rp.line_spacing, LineSpacing::Exactly(_)) { (st.ascent, st.descent) } else { (c.obj_h, c.obj_d) }
                     } else {
                         obj_asc = obj_asc.max(c.obj_h);
                         (st.ascent, st.descent)
