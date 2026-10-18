@@ -1694,17 +1694,22 @@ fn path_from(b: &kurbo::BezPath) -> Option<Path> {
 /// limits refuse is refused on screen too. Applying `fx` then needs no allocation of its own
 /// beyond the RGBA copy every raw picture makes. A side past [`MAX_IMAGE_SIDE`] is refused from
 /// the header, before decoding, as it would be after.
-fn load_image(data: &Arc<Vec<u8>>, fx: PicFx) -> Option<Image> {
-    let fmt = image::guess_format(data).ok()?;
-    // The side check below used to run only after a full decode; applying it as a decode limit
-    // rejects a small file that declares a huge image at header time instead. The default
-    // allocation cap (512 MB, what `load_from_memory_with_format` applied) stays in force.
-    let mut reader = image::ImageReader::new(std::io::Cursor::new(data.as_slice())).with_guessed_format().ok()?;
+/// Decodes a picture under the export's limits. The side check in `load_image` used to run only
+/// after a full decode; applying it as a decode limit rejects a small file that declares a huge
+/// image at header time instead. The default allocation cap (512 MB, what
+/// `load_from_memory_with_format` applied) stays in force.
+fn decode_limited(data: &[u8]) -> image::ImageResult<image::DynamicImage> {
+    let mut reader = image::ImageReader::new(std::io::Cursor::new(data)).with_guessed_format()?;
     let mut limits = image::Limits::default();
     limits.max_image_width = Some(MAX_IMAGE_SIDE);
     limits.max_image_height = Some(MAX_IMAGE_SIDE);
     reader.limits(limits);
-    let dec = reader.decode().ok()?;
+    reader.decode()
+}
+
+fn load_image(data: &Arc<Vec<u8>>, fx: PicFx) -> Option<Image> {
+    let fmt = image::guess_format(data).ok()?;
+    let dec = decode_limited(data).ok()?;
     let (w, h) = (dec.width(), dec.height());
     if w == 0 || h == 0 || w > MAX_IMAGE_SIDE || h > MAX_IMAGE_SIDE {
         return None;

@@ -1648,6 +1648,8 @@ fn hostile_picture_header_is_refused_without_allocating() {
     png.extend_from_slice(&crc32(b"IDAT").to_be_bytes());
     assert_eq!(image::ImageReader::new(std::io::Cursor::new(&png)).with_guessed_format().unwrap().into_dimensions().unwrap(), (20_000, 20_000));
     let data = Arc::new(png.clone());
+    // Refused by the allocation limit itself, not by the missing pixel data that follows.
+    assert!(matches!(decode_limited(&png), Err(image::ImageError::Limits(_))), "{:?}", decode_limited(&png).map(|i| (i.width(), i.height())));
     assert!(load_image(&data, PicFx::new(80_000, -80_000, 0)).is_none());
     assert!(load_image(&data, PicFx::default()).is_none());
     let mut d = Document::new();
