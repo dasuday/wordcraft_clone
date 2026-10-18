@@ -2698,3 +2698,8 @@ preview	Title	Naslov
 	Type a size in any unit, such as 5 cm or 300 px. The other side follows, so the picture keeps its proportions.	Upišite veličinu u bilo kojoj jedinici, npr. 5 cm ili 300 px. Druga se strana prilagođava pa slika zadržava svoje proporcije.
 
 	Import…	Uvezi…
+# Cross-references as links (#2945)
+	Insert as hyperlink	Umetni kao poveznicu
+	Bookmark: {name}	Knjižna oznaka: {name}
+	Follow Link	Slijedi poveznicu
+	The place this link goes to is no longer in the document	Mjesto na koje vodi ova poveznica više nije u dokumentu

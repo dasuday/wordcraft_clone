@@ -898,6 +898,16 @@ impl WordApp {
         if matches!(id, "insert.picture" | "insert.icon") {
             self.select_inserted_picture(&r);
         }
+        // Follow Link on a web or email link opens it, as Ctrl/⌘+click does; scripts only get the address.
+        if id == "edit.followLink"
+            && let Some(url) = r.as_ref().ok().and_then(|v| v.get("url")).and_then(Value::as_str)
+        {
+            if canvas::is_followable_link(url) {
+                self.canvas.open_url = Some(url.to_string());
+            } else {
+                self.status(tl!("Only web (http, https) and email (mailto) links can be followed"));
+            }
+        }
         let r = system_clipboard::explain(self, id, r);
         // Check Accessibility shows its findings in the Accessibility pane, kept up to date there.
         if id == "file.accessibility" && r.is_ok() {
@@ -2803,6 +2813,20 @@ mod tests {
 
     fn app() -> WordApp {
         WordApp::new(Session::new(wordcraft_doc::Document::new()), Services::default())
+    }
+
+    /// #2945: Follow Link run from the interface (command search, a shortcut) opens a web link as
+    /// Ctrl/⌘+click does; a script or an agent only gets its address.
+    #[test]
+    fn follow_link_opens_web_links_from_the_interface_only() {
+        let mut a = WordApp::new(Session::new(wordcraft_doc::Document::from_text("See there")), Services::default());
+        a.run("select.text", json!({"text": "there"})).unwrap();
+        a.run("insert.link", json!({"url": "https://example.com/"})).unwrap();
+        a.run("select.text", json!({"text": "there"})).unwrap();
+        assert_eq!(a.execute("edit.followLink", json!({})).unwrap(), json!({"url": "https://example.com/"}));
+        assert_eq!(a.canvas.open_url, None);
+        a.run("edit.followLink", json!({})).unwrap();
+        assert_eq!(a.canvas.open_url.as_deref(), Some("https://example.com/"));
     }
 
     #[test]

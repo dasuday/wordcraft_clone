@@ -2707,3 +2707,8 @@ preview	Title	Esempio
 	Type a size in any unit, such as 5 cm or 300 px. The other side follows, so the picture keeps its proportions.	Scrivi una dimensione in qualsiasi unità, ad esempio 5 cm o 300 px. L'altro lato si adegua, così l'immagine mantiene le proporzioni.
 
 	Import…	Importa…
+# Cross-references as links (#2945)
+	Insert as hyperlink	Inserisci come collegamento ipertestuale
+	Bookmark: {name}	Segnalibro: {name}
+	Follow Link	Segui collegamento
+	The place this link goes to is no longer in the document	Il punto a cui porta questo collegamento non è più nel documento

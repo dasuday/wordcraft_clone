@@ -363,13 +363,15 @@ pub struct CrossRefForm {
     /// The document's targets of this type.
     pub targets: Vec<String>,
     pub selected: Option<usize>,
+    /// Insert as hyperlink: Ctrl/⌘+click on the reference goes to its target (`\h`, #2945).
+    pub hyperlink: bool,
 }
 
 impl CrossRefForm {
     pub fn read(app: &WordApp, to: &str) -> CrossRefForm {
         let targets: Vec<String> = wordcraft_engine::cmd::citations::ref_targets(&app.session, to).into_iter().map(|(t, _)| t).collect();
         let selected = (!targets.is_empty()).then_some(0);
-        CrossRefForm { to: to.into(), show: "text".into(), targets, selected }
+        CrossRefForm { to: to.into(), show: "text".into(), targets, selected, hyperlink: true }
     }
 
     /// What can be inserted for this type: (`show`, label).
@@ -384,7 +386,7 @@ impl CrossRefForm {
     /// `insert.crossReference` parameters, or `None` with nothing picked.
     pub fn params(&self) -> Option<Value> {
         let target = self.targets.get(self.selected?)?;
-        Some(json!({"to": self.to, "target": target, "show": self.show}))
+        Some(json!({"to": self.to, "target": target, "show": self.show, "hyperlink": self.hyperlink}))
     }
 }
 
@@ -401,8 +403,9 @@ fn cross_ref_ui(app: &mut WordApp, ui: &mut Ui, f: &mut CrossRefForm) -> Next {
         ui.end_row();
     });
     if f.to != was {
-        *f = CrossRefForm::read(app, &f.to);
+        *f = CrossRefForm { hyperlink: f.hyperlink, ..CrossRefForm::read(app, &f.to) };
     }
+    ui.checkbox(&mut f.hyperlink, tl!("Insert as hyperlink"));
     ui.add_space(4.0);
     ui.label(tl!("For which item:"));
     egui::Frame::group(ui.style()).show(ui, |ui| {
@@ -1227,6 +1230,51 @@ mod tests {
         assert!(a.session.doc.plain_text(StoryRef::Body).ends_with("See Equation 1"));
         // Nothing to pick: nothing to insert.
         assert_eq!(CrossRefForm::read(&a, "table").params(), None);
+    }
+
+    /// #2945: "Insert as hyperlink" is on when the dialog opens and writes `\h`; turned off, the
+    /// reference is inserted without it. It stays as set when the reference type changes.
+    #[test]
+    fn cross_reference_dialog_insert_as_hyperlink() {
+        use egui_kittest::kittest::Queryable;
+        let mut a = app("Kilns\nSee ");
+        a.run("select.text", json!({"text": "Kilns"})).unwrap();
+        a.run("styles.apply", json!({"style": "Heading 1"})).unwrap();
+        a.run("caret.docEnd", json!({})).unwrap();
+        let RefsDialog::CrossRef(f) = open("crossReference", &a).unwrap() else { panic!() };
+        assert!(f.hyperlink, "on by default");
+        assert_eq!(f.params().unwrap()["hyperlink"], json!(true));
+        a.run("insert.crossReference", json!({})).unwrap();
+        let mut h = egui_kittest::Harness::builder().with_size(vec2(1440.0, 900.0)).build_ui_state(
+            |ui, app: &mut WordApp| {
+                let ctx = ui.ctx().clone();
+                app.logic(&ctx);
+                app.ui(ui);
+            },
+            a,
+        );
+        h.run_steps(4);
+        h.get_by_label("Insert as hyperlink").click();
+        h.run_steps(2);
+        let RefsDialog::CrossRef(f) = form(h.state()) else { panic!() };
+        assert!(!f.hyperlink, "the click turned it off");
+        let insert = h.query_all_by_label("Insert").last().unwrap();
+        insert.click();
+        h.run_steps(3);
+        assert!(h.state().dialog.is_none(), "Insert closes the dialog");
+        let name = h.state().session.doc.bookmarks()[0].0.clone();
+        assert_eq!(instrs(h.state()), vec![format!("REF {name}")]);
+        // Changing the reference type keeps the choice.
+        h.state_mut().run("insert.crossReference", json!({})).unwrap();
+        h.run_steps(3);
+        h.get_by_label("Insert as hyperlink").click();
+        h.run_steps(2);
+        h.get_by_value("Heading").click();
+        h.run_steps(2);
+        h.get_by_label("Bookmark").click();
+        h.run_steps(2);
+        let RefsDialog::CrossRef(f) = form(h.state()) else { panic!() };
+        assert_eq!((f.to.as_str(), f.hyperlink), ("bookmark", false));
     }
 
     /// #402: Mark Entry opens with the selection; Insert Index opens with Word's defaults and

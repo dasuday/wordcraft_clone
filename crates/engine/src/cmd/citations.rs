@@ -342,7 +342,7 @@ pub fn specs() -> Vec<CommandSpec> {
             sel_result(s)
         }),
         CommandSpec::new("insert.crossReference", "Cross-reference", "Insert › Links", cross_ref)
-            .params(r#"{"to": "heading|bookmark|figure|table|equation", "target": string (text / name / number), "show"?: "text|page|number|aboveBelow"} or {} to list targets"#),
+            .params(r#"{"to": "heading|bookmark|figure|table|equation", "target": string (text / name / number), "show"?: "text|page|number|aboveBelow", "hyperlink"?: bool (default true: Ctrl/⌘+click goes to the target)} or {} to list targets"#),
         CommandSpec::new("references.noteOptions", "Footnote and Endnote", "References › Footnotes", super::references::note_options).params(
             r#"{"kind"?: "footnote|endnote", "pos"?: "pageBottom|beneathText" (footnotes) | "sectEnd|docEnd" (endnotes), "numFmt"?: "decimal|lowerRoman|upperRoman|lowerLetter|upperLetter|…", "numStart"?: 1-32767, "numRestart"?: "continuous|eachSect|eachPage" (each page: footnotes only), "scope"?: "document|section", "footnoteFormat"?: …, "endnoteFormat"?: …} — no settings: the options in effect at the caret"#,
         ),
@@ -985,7 +985,14 @@ fn cross_ref(s: &mut Session, v: &Value) -> CmdResult {
         let (_, pos) = find(ref_targets(s, to)).ok_or_else(|| CmdError::Params(format!("no {to} `{target}`")))?;
         ref_bookmark(s, &pos, show == "number", at)?
     };
-    let instr = format!("{} {name} \\h", if show == "page" { "PAGEREF" } else { "REF" });
+    // `\p` shows "above" or "below"; `\h` links the reference to its target (Insert as hyperlink).
+    let mut instr = format!("{} {name}", if show == "page" { "PAGEREF" } else { "REF" });
+    if show == "aboveBelow" {
+        instr.push_str(" \\p");
+    }
+    if p::bool(v, "hyperlink").unwrap_or(true) {
+        instr.push_str(" \\h");
+    }
     let end = s.doc.insert_object(
         &at,
         InlineObject::Field { instr, result: result.clone(), locked: false, dirty: false, code: false, form: String::new() },
@@ -1249,6 +1256,22 @@ mod tests {
         s.run("references.updateFields", &json!({})).unwrap();
         assert_eq!(fields(&s)[0].1, "KILNS");
         assert!(s.doc.plain_text(StoryRef::Body).ends_with("See here.KILNS1"), "{}", s.doc.plain_text(StoryRef::Body));
+    }
+
+    /// #2945: "Insert as hyperlink" (on unless `hyperlink` is false) writes `\h`; Above/below
+    /// writes `\p`, so Update Field keeps "above" or "below".
+    #[test]
+    fn cross_reference_hyperlink_and_above_below_switches() {
+        let mut s = Session::new(wordcraft_doc::Document::from_text("Kilns\nSee "));
+        s.run("caret.docStart", &json!({})).unwrap();
+        s.run("styles.apply", &json!({"style": "Heading 1"})).unwrap();
+        s.run("caret.docEnd", &json!({})).unwrap();
+        s.run("insert.crossReference", &json!({"to": "heading", "target": "Kilns", "hyperlink": false})).unwrap();
+        s.run("insert.crossReference", &json!({"to": "heading", "target": "Kilns", "show": "aboveBelow"})).unwrap();
+        let name = s.doc.bookmarks()[0].0.clone();
+        assert_eq!(fields(&s), vec![(format!("REF {name}"), "Kilns".to_string()), (format!("REF {name} \\p \\h"), "above".to_string())]);
+        s.run("references.updateFields", &json!({})).unwrap();
+        assert_eq!(fields(&s)[1].1, "above");
     }
 
     #[test]

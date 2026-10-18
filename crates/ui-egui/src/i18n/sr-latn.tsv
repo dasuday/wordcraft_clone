@@ -2298,3 +2298,8 @@
 	Type a size in any unit, such as 5 cm or 300 px. The other side follows, so the picture keeps its proportions.	Unesite veličinu u bilo kojoj jedinici, na primer 5 cm ili 300 px. Druga strana se prilagođava, pa slika zadržava svoje proporcije.
 
 	Import…	Uvezi…
+# Cross-references as links (#2945)
+	Insert as hyperlink	Umetni kao hipervezu
+	Bookmark: {name}	Obeleživač: {name}
+	Follow Link	Prati vezu
+	The place this link goes to is no longer in the document	Mesto na koje vodi ova veza više nije u dokumentu

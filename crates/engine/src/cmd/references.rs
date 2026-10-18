@@ -1087,7 +1087,7 @@ pub fn date_picture(instr: &str) -> Option<String> {
 /// The text a bookmark marks (field results included), up to its end in the same paragraph or
 /// the paragraph's end. `None` when there is no such bookmark.
 pub fn bookmark_text(doc: &wordcraft_doc::Document, name: &str) -> Option<String> {
-    let (_, start) = doc.bookmarks().into_iter().find(|(n, _)| n == name)?;
+    let start = super::insert::find_bookmark(doc, name)?;
     let para = doc.para(start.story, &start.path)?;
     let end = para
         .object_offsets()

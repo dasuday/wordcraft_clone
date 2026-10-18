@@ -88,10 +88,11 @@ pub fn field_name(instr: &str) -> String {
     instr.split_whitespace().next().unwrap_or("").trim_start_matches('=').to_ascii_uppercase()
 }
 
-/// REF's hyperlink switch links its cached result without updating that result.
-pub(crate) fn reference_link(instr: &str) -> Option<String> {
+/// The link (`#bookmark`) a cross-reference field's `\h` switch makes of its result: REF,
+/// PAGEREF and NOTEREF. Linking doesn't change the result.
+pub fn reference_link(instr: &str) -> Option<String> {
     let (name, args) = instr.trim_start().split_once(char::is_whitespace)?;
-    if !name.eq_ignore_ascii_case("REF") {
+    if !["REF", "PAGEREF", "NOTEREF"].iter().any(|n| name.eq_ignore_ascii_case(n)) {
         return None;
     }
     let args = args.trim_start();
@@ -235,10 +236,12 @@ mod tests {
 
     #[test]
     fn ref_link_switches() {
-        for instr in [r"REF mark\w\h", r#" REF "mark" \h"#, "REF\tmark \\H"] {
+        for instr in [r"REF mark\w\h", r#" REF "mark" \h"#, "REF\tmark \\H", r"PAGEREF mark \h", r"pageref mark \p\h", r"NOTEREF mark \f \h"] {
             assert_eq!(reference_link(instr).as_deref(), Some("#mark"), "{instr}");
         }
-        for instr in ["", "REF", r"REF \h", r#"REF "" \h"#, r#"REF "mark \h"#, r"REF mark \hidden", r"NOTEREF mark \h", r#"REF mark \d "\h""#] {
+        for instr in
+            ["", "REF", r"REF \h", r#"REF "" \h"#, r#"REF "mark \h"#, r"REF mark \hidden", r"PAGEREF mark", r"SEQ mark \h", r#"REF mark \d "\h""#]
+        {
             assert_eq!(reference_link(instr), None, "{instr}");
         }
     }

@@ -697,7 +697,11 @@ impl Session {
     /// Remember the caret as the place of an edit, for Go Back. Edits in the same paragraph as
     /// the last one (typing on) update that place rather than adding one.
     fn note_edit(&mut self) {
-        let at = self.sel.focus.clone();
+        self.note_place(self.sel.focus.clone());
+    }
+
+    /// Remember `at` as a place Go Back returns to: an edit, or where a followed link was.
+    pub(crate) fn note_place(&mut self, at: Pos) {
         match self.edit_marks.last_mut() {
             Some(last) if last.story == at.story && last.path == at.path => *last = at,
             _ => {

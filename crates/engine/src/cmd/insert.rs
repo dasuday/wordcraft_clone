@@ -463,8 +463,22 @@ pub fn bookmark_name_ok(name: &str) -> bool {
 
 /// Where bookmark `name` is: see [`bookmark_span`]. `None` when there is no such bookmark.
 pub fn bookmark_range(doc: &wordcraft_doc::Document, name: &str) -> Option<(Pos, Pos)> {
-    let (_, start) = doc.bookmarks().into_iter().find(|(n, _)| n == name)?;
+    let start = find_bookmark(doc, name)?;
     Some(bookmark_span(doc, name, &start))
+}
+
+/// The start mark of bookmark `name`: in the body, else in a note, header, footer or text box.
+pub fn find_bookmark(doc: &wordcraft_doc::Document, name: &str) -> Option<Pos> {
+    std::iter::once(StoryRef::Body).chain(doc.parts.keys().map(|k| StoryRef::Part(*k))).find_map(|story| {
+        doc.para_paths(story).into_iter().find_map(|path| {
+            let para = doc.para(story, &path)?;
+            let off = para
+                .object_offsets()
+                .into_iter()
+                .find(|o| matches!(para.object_at(*o), Some(InlineObject::BookmarkStart { name: n }) if n == name))?;
+            Some(Pos { story, path, off })
+        })
+    })
 }
 
 /// The text of bookmark `name` whose start mark is at `start`: from just after that mark to its
