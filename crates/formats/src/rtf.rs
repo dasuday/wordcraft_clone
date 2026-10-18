@@ -160,7 +160,51 @@ fn style_num(k: Kind) -> Option<u32> {
     }
 }
 
+fn rtf_border_style(s: wordcraft_doc::props::BorderStyle) -> &'static str {
+    use wordcraft_doc::props::BorderStyle;
+    match s {
+        BorderStyle::None => "\\brdrnone",
+        BorderStyle::Single => "\\brdrs",
+        BorderStyle::Double => "\\brdrdb",
+        BorderStyle::Dotted => "\\brdrdot",
+        BorderStyle::Dashed => "\\brdrdash",
+        BorderStyle::Thick => "\\brdrth",
+        BorderStyle::Triple => "\\brdrtriple",
+        BorderStyle::DotDash => "\\brdrdashd",
+        BorderStyle::Wave => "\\brdrwavy",
+    }
+}
+
 impl Writer {
+    fn write_border(&mut self, prefix: &str, side: char, b: wordcraft_doc::props::Border, out: &mut String) {
+        out.push_str(&format!("\\{prefix}{side}"));
+        out.push_str(rtf_border_style(b.style));
+        let w = ((b.width * 20.0).round() as i64).clamp(1, 150);
+        out.push_str(&format!("\\brdrw{w}"));
+        if prefix == "brdr" {
+            let sp = (b.space * 20.0).round() as i64;
+            if sp > 0 {
+                out.push_str(&format!("\\brsp{sp}"));
+            }
+        }
+        if let Some(c) = b.color {
+            let i = self.t.color(c);
+            out.push_str(&format!("\\brdrcf{i}"));
+        }
+    }
+
+    fn cell_borders(&mut self, borders: Option<&wordcraft_doc::props::Borders>, borderless: bool, out: &mut String) {
+        if let Some(b) = borders {
+            for (side, opt) in [('t', &b.top), ('l', &b.left), ('b', &b.bottom), ('r', &b.right)] {
+                if let Some(border) = opt.filter(|x| x.is_visible()) {
+                    self.write_border("clbrdr", side, border, out);
+                }
+            }
+        } else if !borderless {
+            out.push_str("\\clbrdrt\\brdrs\\brdrw10\\clbrdrl\\brdrs\\brdrw10\\clbrdrb\\brdrs\\brdrw10\\clbrdrr\\brdrs\\brdrw10");
+        }
+    }
+
     /// `\revtbl` index of a tracked change's author (0 = "Unknown").
     fn author(&mut self, a: &str) -> usize {
         let authors = self.authors.get_or_insert_with(Vec::new);
@@ -379,12 +423,23 @@ impl Writer {
             let words = self.rev_words("\\prauth", "\\prdate", &c.mark);
             out.push_str(&words);
         }
+        if p.kind != Kind::Rule
+            && let Some(b) = &p.borders
+        {
+            for (side, opt) in [('t', &b.top), ('l', &b.left), ('b', &b.bottom), ('r', &b.right)] {
+                if let Some(border) = opt.filter(|x| x.is_visible()) {
+                    self.write_border("brdr", side, border, out);
+                }
+            }
+        }
         if let (Some(li), Some((n, label))) = (p.list, &ls) {
             let lv = li.level.min(8);
             out.push_str(&format!("\\ls{n}\\ilvl{lv}\\fi-360\\li{}", 720 * (u32::from(lv) + 1)));
+            // The closing brace ends the label; a space after it would be text.
             out.push_str(&format!(" {{\\listtext\\pard\\plain {}\\tab}}", esc(label)));
+        } else {
+            out.push(' ');
         }
-        out.push(' ');
         self.base = style_fmt(p.kind);
         self.inlines(&p.inlines, out);
         self.base = Fmt::default();
@@ -543,7 +598,7 @@ impl Writer {
                 } else if c.rowspan > 1 {
                     out.push_str("\\clvmgf");
                 }
-                out.push_str("\\clbrdrt\\brdrs\\brdrw10\\clbrdrl\\brdrs\\brdrw10\\clbrdrb\\brdrs\\brdrw10\\clbrdrr\\brdrs\\brdrw10");
+                self.cell_borders(c.borders.as_ref(), t.borderless, out);
                 if let Some(s) = c.shading {
                     let i = self.t.color(s);
                     out.push_str(&format!("\\clcbpat{i}"));
@@ -733,8 +788,9 @@ fn export_with(m: &Meta, w: &Writer, body: &str, sec: &wordcraft_doc::SectionPro
     }
     out.push_str("}\n");
     let tw = |v: f32| (v * 20.0).round() as i64;
+    let landscape = if sec.landscape { "\\landscape" } else { "" };
     out.push_str(&format!(
-        "\\paperw{}\\paperh{}\\margl{}\\margr{}\\margt{}\\margb{}\\viewkind4\n",
+        "\\paperw{}\\paperh{}\\margl{}\\margr{}\\margt{}\\margb{}{landscape}\\viewkind4\n",
         tw(sec.page_w),
         tw(sec.page_h),
         tw(sec.margin_left),
@@ -2208,24 +2264,78 @@ fn spacing(st: &St) -> model::Spacing {
     model::Spacing { before: gap(st.sb), after: gap(st.sa), line, left: st.li.map(pt), right: st.ri.map(pt), first: st.fi.map(pt) }
 }
 
-/// The target of a `HYPERLINK "url"` (or `HYPERLINK \l "bookmark"`) field instruction.
+/// The target of a `HYPERLINK "url"` (or `HYPERLINK "url" \l "bookmark"`, `HYPERLINK \l "bookmark"`) field instruction.
 fn hyperlink(instr: &str) -> Option<String> {
     let t = instr.trim();
-    let rest = t.strip_prefix("HYPERLINK").or_else(|| t.strip_prefix("hyperlink"))?;
-    let local = rest.contains("\\l");
-    let q0 = rest.find('"');
-    let target = match q0 {
-        Some(a) => {
-            let r = rest.get(a + 1..)?;
-            r.get(..r.find('"').unwrap_or(r.len()))?.to_string()
-        }
-        None => rest.split_whitespace().find(|w| !w.starts_with('\\'))?.to_string(),
+    let rest = if t.get(..9).is_some_and(|h| h.eq_ignore_ascii_case("hyperlink")) {
+        t[9..].trim()
+    } else {
+        return None;
     };
-    let target = target.replace("%22", "\"");
-    if target.is_empty() {
+    if rest.is_empty() {
         return None;
     }
-    Some(if local && !target.starts_with('#') { format!("#{target}") } else { target })
+
+    let mut url: Option<String> = None;
+    let mut local: Option<String> = None;
+    let mut switch: Option<&str> = None;
+
+    let mut i = 0;
+    let bytes = rest.as_bytes();
+    while i < bytes.len() {
+        while i < bytes.len() && bytes[i].is_ascii_whitespace() {
+            i += 1;
+        }
+        if i >= bytes.len() {
+            break;
+        }
+        if bytes[i] == b'\\' {
+            let start = i;
+            i += 1;
+            while i < bytes.len() && (bytes[i].is_ascii_alphabetic() || bytes[i] == b'*') {
+                i += 1;
+            }
+            switch = Some(&rest[start..i]);
+            continue;
+        }
+        let arg = if bytes[i] == b'"' {
+            i += 1;
+            let start = i;
+            while i < bytes.len() && bytes[i] != b'"' {
+                i += 1;
+            }
+            let val = &rest[start..i];
+            if i < bytes.len() && bytes[i] == b'"' {
+                i += 1;
+            }
+            val.to_string()
+        } else {
+            let start = i;
+            while i < bytes.len() && !bytes[i].is_ascii_whitespace() {
+                i += 1;
+            }
+            rest[start..i].to_string()
+        };
+        let clean_arg = arg.replace("%22", "\"");
+        if switch.take() == Some("\\l") {
+            local = Some(clean_arg);
+        } else if url.is_none() {
+            url = Some(clean_arg);
+        }
+    }
+
+    match (url, local) {
+        (Some(u), Some(l)) if !u.is_empty() && !l.is_empty() => {
+            let frag = l.trim_start_matches('#');
+            if u.contains('#') { Some(u) } else { Some(format!("{u}#{frag}")) }
+        }
+        (Some(u), _) if !u.is_empty() => Some(u),
+        (None, Some(l)) if !l.is_empty() => {
+            let frag = l.trim_start_matches('#');
+            Some(format!("#{frag}"))
+        }
+        _ => None,
+    }
 }
 
 /// Parse RTF bytes into the flow model.
@@ -2594,6 +2704,13 @@ mod tests {
         let d = import(rtf).unwrap();
         let first = d.body.iter().find_map(|b| if let wordcraft_doc::Block::Para(p) = &**b { Some(p) } else { None }).unwrap();
         assert!(first.props.borders.and_then(|b| b.bottom).is_some());
+        // Paragraph borders round-trip through export and import.
+        let exported = export(&d);
+        assert!(exported.contains("\\brdrb\\brdrs\\brdrw10\\brdrcf1"), "{exported}");
+        let back = import(exported.as_bytes()).unwrap();
+        let first = back.body.iter().find_map(|b| if let wordcraft_doc::Block::Para(p) = &**b { Some(p) } else { None }).unwrap();
+        let b = first.props.borders.unwrap().bottom.unwrap();
+        assert_eq!((b.style, b.width, b.color), (wordcraft_doc::props::BorderStyle::Single, 0.5, Some(Rgb(216, 216, 216))));
     }
 
     #[test]
@@ -2702,6 +2819,8 @@ mod tests {
         assert!(!s.landscape);
         let d = import(br"{\rtf1\ansi\paperw11906\paperh16838\landscape x\par}").unwrap();
         assert!(d.last_section.landscape && d.last_section.page_w > d.last_section.page_h);
+        let exported = export(&d);
+        assert!(exported.contains("\\landscape"), "exported RTF must include \\landscape: {exported}");
         // Nonsense keeps Word's defaults.
         let d = import(br"{\rtf1\ansi\paperw0\margl99999 x\par}").unwrap();
         assert_eq!(d.last_section, wordcraft_doc::SectionProps::default());
@@ -2751,6 +2870,25 @@ mod tests {
         let t = d.body.iter().find_map(|b| if let wordcraft_doc::Block::Table(t) = &**b { Some(t) } else { None }).unwrap();
         assert!(t.props.style.is_none());
         assert!(t.rows[0].cells[0].props.borders.and_then(|b| b.bottom).is_some());
+        // Borderless tables export without cell borders and round-trip borderless.
+        let d = import(br"{\rtf1\ansi\trowd\cellx2000\pard\intbl a\cell\row}").unwrap();
+        let exported = export(&d);
+        assert!(!exported.contains("\\clbrdr"), "{exported}");
+        let back = import(exported.as_bytes()).unwrap();
+        let tb = back.body.iter().find_map(|b| if let wordcraft_doc::Block::Table(t) = &**b { Some(t) } else { None }).unwrap();
+        assert!(tb.props.style.is_none());
+        assert!(tb.rows[0].cells[0].props.borders.is_none());
+
+        // Cell borders round-trip through export and import.
+        let d = import(br"{\rtf1\ansi{\colortbl;\red174\green174\blue174;}\trowd\clbrdrb\brdrdb\brdrw15\brdrcf1\cellx2000\pard\intbl a\cell\row}")
+            .unwrap();
+        let exported = export(&d);
+        assert!(exported.contains("\\clbrdrb\\brdrdb\\brdrw15\\brdrcf1"), "{exported}");
+        let back = import(exported.as_bytes()).unwrap();
+        let tb = back.body.iter().find_map(|b| if let wordcraft_doc::Block::Table(t) = &**b { Some(t) } else { None }).unwrap();
+        let b = tb.rows[0].cells[0].props.borders.unwrap().bottom.unwrap();
+        assert_eq!((b.style, b.width, b.color), (wordcraft_doc::props::BorderStyle::Double, 0.75, Some(Rgb(174, 174, 174))));
+
         // The table sizes to the document's page, not Letter.
         let d = import(br"{\rtf1\ansi\paperw11906\margl1134\margr1134\trowd\cellx4818\cellx9638\pard\intbl a\cell b\cell\row}").unwrap();
         let t = d.body.iter().find_map(|b| if let wordcraft_doc::Block::Table(t) = &**b { Some(t) } else { None }).unwrap();
@@ -2782,6 +2920,9 @@ mod tests {
         assert_eq!(texts(&f), ["Normal:ÒÚÛ"]);
         let f = parse(br"{\rtf1\ansi\deff0{\fonttbl{\f0 Arial;}{\f1\fcharset77 Geneva;}}caf\'e9 {\f1 caf\'8e \'d2ok\'d3}\par}").unwrap();
         assert_eq!(texts(&f), ["Normal:café café “ok”"]);
+        // \fcharset255 is the standard OEM character set (CP437).
+        let f = parse(br"{\rtf1\ansi\deff0{\fonttbl{\f0 Arial;}{\f1\fcharset255 Terminal;}}caf\'e9 {\f1 caf\'82}\par}").unwrap();
+        assert_eq!(texts(&f), ["Normal:café café"]);
         // DOS documents: `\pc` is code page 437, `\pca` 850; a font can name one with `\cpg`.
         let f = parse(br"{\rtf1\pc\deff0{\fonttbl{\f0 Courier;}}caf\'82 \'a0 la carte\par}").unwrap();
         assert_eq!(texts(&f), ["Normal:café á la carte"]);
@@ -3642,5 +3783,14 @@ mod tests {
     #[test]
     fn escapes() {
         assert_eq!(esc("a{b}\\c\té😀"), "a\\{b\\}\\\\c\\tab \\u233?\\u-10179?\\u-8704?");
+    }
+
+    #[test]
+    fn hyperlink_field_targets() {
+        assert_eq!(hyperlink(r#"HYPERLINK "http://example.com" \l "heading""#), Some("http://example.com#heading".into()));
+        assert_eq!(hyperlink(r#"HYPERLINK \l "heading""#), Some("#heading".into()));
+        assert_eq!(hyperlink(r#"Hyperlink "http://example.com""#), Some("http://example.com".into()));
+        assert_eq!(hyperlink(r#"HYPERLINK "http://example.com/path\latest""#), Some("http://example.com/path\\latest".into()));
+        assert_eq!(hyperlink(r#"HYPERLINK "http://example.com" \o "Help text""#), Some("http://example.com".into()));
     }
 }
