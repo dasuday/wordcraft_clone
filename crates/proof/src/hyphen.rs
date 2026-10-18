@@ -119,6 +119,10 @@ fn core_breaks(core: &[char], lang: ProofLang) -> (Vec<usize>, Source) {
     if n < 2 {
         return (vec![], Source::None);
     }
+    // Hungarian patterns are not bundled: never apply English hyphenation to Hungarian.
+    if lang == ProofLang::Hu {
+        return (vec![], Source::None);
+    }
     if lang == ProofLang::Pl {
         return core_breaks_pl(core);
     }

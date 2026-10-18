@@ -310,6 +310,10 @@ fn dictionaries(app: &mut WordApp, ui: &mut Ui) {
     });
     ui.data_mut(|d| d.insert_temp(id, folder));
     note(ui, "Hunspell .aff and .dic files here (pl_PL, pt_BR, it_IT, hr_HR, tr_TR) are used before the system's.");
+    ui.hyperlink_to(
+        tl!("Hungarian: bundled Magyar Ispell dictionary (LibreOffice, MPL 2.0)"),
+        "https://github.com/LibreOffice/dictionaries/tree/master/hu_HU",
+    );
     // The dictionary each language found, looked up again after the folder changes.
     let found_id = egui::Id::new("options_dictionaries_found");
     let generation = wordcraft_engine::proof::dictionary_generation();
@@ -352,6 +356,7 @@ fn language_name(lang: wordcraft_engine::proof::ProofLang) -> &'static str {
         ProofLang::Ru => tl!("Russian"),
         ProofLang::Cs => tl!("Czech"),
         ProofLang::Id => tl!("Indonesian"),
+        ProofLang::Hu => tl!("Hungarian"),
         // English uses its bundled word list; Bulgarian has no dictionary yet.
         ProofLang::En | ProofLang::Bg | ProofLang::Other => "",
     }

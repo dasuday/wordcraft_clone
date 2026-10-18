@@ -1,0 +1,7 @@
+# Preserve upstream dictionary/license bytes (including whitespace) and keep imported data
+# collapsed in reviews. Provenance and SHA-256 hashes are in assets/spelling/hu/SOURCE.json.
+assets/spelling/hu/hu_HU.aff -whitespace linguist-vendored
+assets/spelling/hu/hu_HU.dic -whitespace linguist-vendored
+assets/spelling/hu/COPYING.MPL -whitespace linguist-vendored
+assets/spelling/hu/README_hu_HU.txt -whitespace linguist-vendored
+vendor/spellbook/** linguist-vendored

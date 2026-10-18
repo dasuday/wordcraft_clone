@@ -3819,6 +3819,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "spellbook"
+version = "0.4.2"
+dependencies = [
+ "foldhash 0.2.0",
+ "hashbrown 0.16.1",
+]
+
+[[package]]
 name = "spirv"
 version = "0.4.0+sdk-1.4.341.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5362,6 +5370,7 @@ dependencies = [
  "log",
  "miniz_oxide 0.8.9",
  "proptest",
+ "spellbook",
 ]
 
 [[package]]
@@ -5542,6 +5551,8 @@ name = "xtask"
 version = "0.8.0"
 dependencies = [
  "serde_json",
+ "sha2",
+ "wordcraft-proof",
 ]
 
 [[package]]
