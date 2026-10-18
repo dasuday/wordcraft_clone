@@ -1244,19 +1244,22 @@ fn size_ui(app: &mut WordApp, ui: &mut Ui, f: &mut SizeForm) -> bool {
     let k = unit.pt_per_unit();
     // A length in the interface unit that takes any typed unit (`300 px` too), applied on Enter
     // so a half-typed number never resizes the other side; `None` until its value changes (while
-    // typing, the field reports each keystroke as a change).
+    // typing, the field reports each keystroke as a change). The range bounds what is typed or
+    // dragged only: a value already outside it (a 1 px picture is 0.75 pt) is shown as it is, not
+    // clamped, which egui would report as a change and so apply unasked.
     let length = |ui: &mut Ui, label: &str, pt: f32| {
         let name = ui.label(tl!(label));
         let was = pt / k;
         let mut v = was;
-        let field = egui::DragValue::new(&mut v).speed(1.0 / k).range(1.0 / k..=4000.0 / k).measure(unit).max_decimals(2);
+        let field =
+            egui::DragValue::new(&mut v).speed(1.0 / k).range(1.0 / k..=4000.0 / k).clamp_existing_to_range(false).measure(unit).max_decimals(2);
         let changed = ui.add(field.update_while_editing(false)).labelled_by(name.id).changed();
         (changed && v != was).then_some(v * k)
     };
     let percent = |ui: &mut Ui, label: &str, was: f32| {
         let name = ui.label(tl!(label));
         let mut v = was;
-        let field = egui::DragValue::new(&mut v).speed(1.0).range(1.0..=10_000.0).suffix(" %").max_decimals(1);
+        let field = egui::DragValue::new(&mut v).speed(1.0).range(1.0..=10_000.0).clamp_existing_to_range(false).suffix(" %").max_decimals(1);
         let changed = ui.add(field.update_while_editing(false)).labelled_by(name.id).changed();
         (changed && v != was).then_some(v)
     };
@@ -1902,5 +1905,29 @@ mod tests {
         assert_eq!(selected_size(h.state()), (90.0, 45.0), "60 px = 45 pt high, the width follows");
         h.state_mut().run("edit.undo", json!({})).unwrap();
         assert_eq!(selected_size(h.state()), (30.0, 15.0), "one undo step");
+    }
+
+    /// #2573 review: a value outside a field's range (a 1 px picture enlarged past 10000%) is shown
+    /// as it is. egui would otherwise clamp it on the first frame and report a change, which the
+    /// form would take as an edit and OK would apply unasked.
+    #[test]
+    fn size_dialog_leaves_out_of_range_values_alone() {
+        let mut a = picture_app(1, 1);
+        a.run("picture.size", json!({"width": 100.0, "height": 100.0, "lockAspect": false})).unwrap();
+        a.run("picture.size", json!({})).unwrap();
+        let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(1440.0, 900.0)).build_ui_state(
+            |ui, app: &mut WordApp| {
+                let ctx = ui.ctx().clone();
+                app.logic(&ctx);
+                app.ui(ui);
+            },
+            a,
+        );
+        h.run_steps(4);
+        let Some(Dialog::Layout(d)) = &h.state().dialog else { panic!("the Size dialog is open") };
+        let LayoutDialog::Size(f) = d.as_ref() else { panic!("size") };
+        assert!((f.scale().0 - 100.0 / 0.75 * 100.0).abs() < 1.0, "13333%: {:?}", f.scale());
+        assert_eq!((f.width, f.height), (100.0, 100.0), "the form keeps the size");
+        assert_eq!(selected_size(h.state()), (100.0, 100.0));
     }
 }

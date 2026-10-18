@@ -2568,7 +2568,14 @@ fn picture_format(app: &mut WordApp, ui: &mut Ui) {
                     let name = ui.label(egui::RichText::new(tl!(label)).small());
                     let was = pt / k;
                     let mut v = was;
-                    let field = egui::DragValue::new(&mut v).speed(1.0 / k).range(1.0 / k..=4000.0 / k).measure(unit).max_decimals(2);
+                    // Not `clamp_existing_to_range`: egui would clamp a size outside the range (a 1 px
+                    // picture is 0.75 pt) and report it as a change, resizing the picture unasked.
+                    let field = egui::DragValue::new(&mut v)
+                        .speed(1.0 / k)
+                        .range(1.0 / k..=4000.0 / k)
+                        .clamp_existing_to_range(false)
+                        .measure(unit)
+                        .max_decimals(2);
                     let r = ui.add(field.update_while_editing(false)).labelled_by(name.id).on_hover_text(tl!(
                         "Type a size in any unit, such as 5 cm or 300 px. The other side follows, so the picture keeps its proportions."
                     ));
@@ -3310,5 +3317,32 @@ mod tests {
         assert!((w - 225.0).abs() < 0.01 && (ht - 112.5).abs() < 0.01, "300 px = 225 pt, the height follows: {w}×{ht}");
         h.state_mut().run("edit.undo", json!({})).unwrap();
         assert_eq!(size(h.state()), Some((15.0, 7.5)), "one undo step");
+    }
+
+    /// #2573 review: showing Picture Format never resizes a picture whose size is outside the
+    /// fields' range (a 1×1 px spacer is 0.75 pt): egui clamps such a value by default and reports
+    /// it as a change.
+    #[test]
+    fn picture_format_leaves_a_tiny_picture_alone() {
+        let mut a = crate::WordApp::new(Session::new(wordcraft_doc::Document::new()), crate::Services::default());
+        let img = image::RgbaImage::from_pixel(1, 1, image::Rgba([0, 0, 0, 255]));
+        let mut png = Vec::new();
+        img.write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png).unwrap();
+        a.run("insert.picture", json!({"data": wordcraft_engine::cmd::insert::base64_encode(&png)})).unwrap();
+        a.run("ui.tab", json!({"tab": "Picture Format"})).unwrap();
+        let size = |a: &crate::WordApp| wordcraft_engine::cmd::objects::selected(&a.session).and_then(|(_, o)| o.frame().map(|(w, h, _)| (w, h)));
+        assert_eq!(size(&a), Some((0.75, 0.75)));
+        let undo = a.session.undo_depth();
+        let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(2560.0, 900.0)).build_ui_state(
+            |ui, app: &mut crate::WordApp| {
+                let ctx = ui.ctx().clone();
+                app.logic(&ctx);
+                app.ui(ui);
+            },
+            a,
+        );
+        h.run_steps(6);
+        assert_eq!(size(h.state()), Some((0.75, 0.75)), "shown, not resized");
+        assert_eq!(h.state().session.undo_depth(), undo, "no undo step");
     }
 }
