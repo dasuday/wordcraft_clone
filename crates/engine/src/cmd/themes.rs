@@ -423,7 +423,13 @@ fn open_theme(s: &mut Session, v: &Value) -> CmdResult {
         return Err(CmdError::Params("`path` is empty or too long".into()));
     }
     let bytes = match p::str(v, "data") {
-        Some(d) => super::insert::base64_decode(d).ok_or_else(|| CmdError::Params("bad base64".into()))?,
+        Some(d) => {
+            // Refuse before decoding: the decoder allocates from the text's length.
+            if d.len() > wordcraft_docx::MAX_THEME_FILE.div_ceil(3).saturating_mul(4) {
+                return Err(CmdError::Params("theme data is too large".into()));
+            }
+            super::insert::base64_decode(d).ok_or_else(|| CmdError::Params("bad base64".into()))?
+        }
         None => {
             let local = super::templates::local_path(path, None).ok_or_else(|| CmdError::Failed(format!("`{path}` is not a local file")))?;
             crate::io::read_file_capped(&local.to_string_lossy(), wordcraft_docx::MAX_THEME_FILE as u64, "theme file").map_err(CmdError::Failed)?

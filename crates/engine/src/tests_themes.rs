@@ -362,3 +362,11 @@ fn a_theme_whose_file_wont_go_stays() {
     assert_eq!(list["themes"], json!(["Seaside"]), "still listed after the failed delete");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn oversized_theme_data_is_refused_before_decoding() {
+    let mut t = Session::new(wordcraft_doc::Document::new());
+    let big = "A".repeat(wordcraft_docx::MAX_THEME_FILE.div_ceil(3) * 4 + 4);
+    let err = t.run("design.openTheme", &json!({"path": "x.thmx", "data": big})).unwrap_err();
+    assert!(err.to_string().contains("too large"), "{err}");
+}
