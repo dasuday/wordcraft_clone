@@ -2516,3 +2516,6 @@ preview	Title	제목
 	{added}; {count} couldn't be read: {names}	{added}; 읽을 수 없는 파일 {count}개: {names}
 	{names} and {n} more	{names} 외 {n}개
 	{added}; {n} skipped (limit {max})	{added}; {n}개 건너뜀 (한도 {max})
+	Border Styles	테두리 스타일
+	Border\nStyles	테두리\n스타일
+	Click a table border to paint it with the chosen border style. Esc stops.	표의 테두리를 클릭하면 선택한 테두리 스타일로 칠합니다. Esc 키를 누르면 중지합니다.
