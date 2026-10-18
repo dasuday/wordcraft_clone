@@ -44,7 +44,7 @@ pub fn specs() -> Vec<CommandSpec> {
     vec![
         CommandSpec::new("table.selectAt", "Select Table Cells by Clicking", "Table Layout › Table › Select", select_at)
             .params(
-                r#"{"page": n, "x": pt, "y": pt, "toX"?: pt, "toY"?: pt, "reach"?: pt, "extend"?: bool} (a click in page points, 0-based page, on a selection area of a table in the caret's story: just above a column selects the column, left of a row the row, along a cell's left edge inside it the cell, the move handle past the top-left corner the table; with toX/toY (a drag) every column, row or cell from there to that point; the page margin beside a table (its leading side: right for a right-to-left table) is a row area too, and `extend` (Shift+click) on one takes the rows from the selected ones' anchor. `reach` (default 3) is the column borders' resize reach, which the cell areas keep clear of.)"#,
+                r#"{"page": n, "x": pt, "y": pt, "toX"?: pt, "toY"?: pt, "reach"?: pt, "extend"?: bool, "anchorRow"?: n} (a click in page points, 0-based page, on a selection area of a table in the caret's story: just above a column selects the column, left of a row the row, along a cell's left edge inside it the cell, the move handle past the top-left corner the table; with toX/toY (a drag) every column, row or cell from there to that point; the page margin beside a table (its leading side: right for a right-to-left table) is a row area too, and `extend` (Shift+click) on one takes the rows from the selected ones' anchor, or from row `anchorRow` (0-based) when given, so a drag keeps its press's anchor. `reach` (default 3) is the column borders' resize reach, which the cell areas keep clear of.)"#,
             )
             .pure(),
         CommandSpec::new("table.insertAt", "Insert Row or Column by Clicking", "Table Layout › Rows & Columns", insert_at).params(
@@ -392,7 +392,12 @@ fn select_at(s: &mut Session, v: &Value) -> CmdResult {
         Spot::Row(r) => {
             let r2 = to.map_or(r, |(_, ty)| row_at(&geom, ty));
             // Shift+click: the rows from the selection's anchor row to the one clicked.
-            let anchor = if v.get("extend").and_then(Value::as_bool).unwrap_or(false) { anchor_row(s, &geom.table, r) } else { r };
+            // A drag after it keeps the anchor the press had (`anchorRow`).
+            let anchor = if v.get("extend").and_then(Value::as_bool).unwrap_or(false) {
+                p::u64(v, "anchorRow").map_or_else(|| anchor_row(s, &geom.table, r), |a| usize::try_from(a).unwrap_or(usize::MAX).min(last_row))
+            } else {
+                r
+            };
             ((anchor, r2), (0, last_col))
         }
         Spot::Cell(r, c) => {
@@ -413,8 +418,8 @@ fn select_at(s: &mut Session, v: &Value) -> CmdResult {
 
 /// The row a Shift+click on row `clicked` of table `tp` extends from: the end of the selected
 /// rows farther from it, or the caret's row; the clicked row itself when nothing of the table is
-/// selected.
-fn anchor_row(s: &Session, tp: &Path, clicked: usize) -> usize {
+/// selected. The app reads it at the press and sends it as `anchorRow` while the button is held.
+pub fn anchor_row(s: &Session, tp: &Path, clicked: usize) -> usize {
     if let Some(range) = s.cell_range().filter(|c| &c.table == tp) {
         return if clicked >= range.rows.0 { range.rows.0 } else { range.rows.1 };
     }
@@ -822,6 +827,26 @@ mod tests {
         let r0 = cell_rect(&mut s, 0, 0);
         s.run("table.selectAt", &json!({"page": 0, "x": right + 30.0, "y": mid_y(r0), "extend": true})).unwrap();
         assert_eq!(s.cell_range().map(|r| r.rows), Some((0, 2)), "the far edge of the old rows stays");
+    }
+
+    /// `anchorRow` fixes the row a Shift+click extends from, whatever is selected (a drag after
+    /// an upward Shift+click keeps its rows); out of range it's the last row.
+    #[test]
+    fn an_anchor_row_param_fixes_the_extend_anchor() {
+        let mut s = table_session(3, 3);
+        let (r0, r2) = (cell_rect(&mut s, 0, 0), cell_rect(&mut s, 2, 0));
+        let x = r0.x - 10.0;
+        s.run("table.selectAt", &json!({"page": 0, "x": x, "y": mid_y(r2)})).unwrap();
+        s.run("table.selectAt", &json!({"page": 0, "x": x, "y": mid_y(r0), "extend": true})).unwrap();
+        assert_eq!(s.cell_range().map(|r| r.rows), Some((0, 2)));
+        // Without it, the next frame of the drag would re-read the anchor as row 0.
+        s.run("table.selectAt", &json!({"page": 0, "x": x, "y": mid_y(r0), "toX": x, "toY": mid_y(r0) + 1.0, "extend": true, "anchorRow": 2}))
+            .unwrap();
+        assert_eq!(s.cell_range().map(|r| r.rows), Some((0, 2)), "the press's anchor stays");
+        s.run("table.selectAt", &json!({"page": 0, "x": x, "y": mid_y(r0), "extend": true, "anchorRow": 99999999999u64})).unwrap();
+        assert_eq!(s.cell_range().map(|r| r.rows), Some((0, 2)), "clamped to the last row");
+        s.run("table.selectAt", &json!({"page": 0, "x": x, "y": mid_y(r0), "extend": true, "anchorRow": 1})).unwrap();
+        assert_eq!(s.cell_range().map(|r| r.rows), Some((0, 1)));
     }
 
     /// The margin is the row bar only where the table is what's beside it: not at a column-2

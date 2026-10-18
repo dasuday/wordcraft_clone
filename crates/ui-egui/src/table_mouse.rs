@@ -28,6 +28,17 @@ pub(crate) struct TableDrag {
     target: Target,
     /// Shift was down at the press on a row area: the rows extend from the anchor row.
     extend: bool,
+    /// The row that Shift+click extends from, read at the press: the rows it selects would
+    /// otherwise move it on the next frame.
+    anchor: Option<usize>,
+}
+
+/// `table.selectAt`'s params, with the press's anchor row when it has one.
+fn select_params(mut at: serde_json::Value, anchor: Option<usize>) -> serde_json::Value {
+    if let (Some(a), Some(m)) = (anchor, at.as_object_mut()) {
+        m.insert("anchorRow".into(), json!(a));
+    }
+    at
 }
 
 /// Whether the table mouse is in reach: when resizing is, and not while a border is dragged.
@@ -56,7 +67,10 @@ pub fn pointer(app: &mut WordApp, ui: &Ui, resp: &egui::Response, rects: &[Rect]
             d.to = ((p.x - r.min.x) / sc, (p.y - r.min.y) / sc);
         }
         let down = ui.input(|i| i.pointer.primary_down());
-        let at = json!({"page": d.page, "x": d.from.0, "y": d.from.1, "reach": d.reach, "toX": d.to.0, "toY": d.to.1, "extend": d.extend});
+        let at = select_params(
+            json!({"page": d.page, "x": d.from.0, "y": d.from.1, "reach": d.reach, "toX": d.to.0, "toY": d.to.1, "extend": d.extend}),
+            d.anchor,
+        );
         if d.target.spot == Spot::Handle {
             if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
                 return true;
@@ -116,7 +130,11 @@ pub fn pointer(app: &mut WordApp, ui: &Ui, resp: &egui::Response, rects: &[Rect]
     if extend && !in_table(app, &target.geom.table) {
         return false;
     }
-    let at = json!({"page": page, "x": x, "y": y, "reach": reach, "extend": extend});
+    let anchor = match target.spot {
+        Spot::Row(r) if extend => Some(table_mouse::anchor_row(&app.session, &target.geom.table, r)),
+        _ => None,
+    };
+    let at = select_params(json!({"page": page, "x": x, "y": y, "reach": reach, "extend": extend}), anchor);
     match target.spot {
         Spot::InsertRow(_) | Spot::InsertColumn(_) => {
             if let Err(e) = app.run_keep_view("table.insertAt", at) {
@@ -130,7 +148,7 @@ pub fn pointer(app: &mut WordApp, ui: &Ui, resp: &egui::Response, rects: &[Rect]
             {
                 app.status(e);
             }
-            app.canvas.table_drag = Some(TableDrag { page, from: (x, y), to: (x, y), sent: (x, y), reach, target, extend });
+            app.canvas.table_drag = Some(TableDrag { page, from: (x, y), to: (x, y), sent: (x, y), reach, target, extend, anchor });
         }
     }
     true
@@ -379,6 +397,36 @@ mod tests {
         h.event(egui::Event::ModifiersChanged(egui::Modifiers::default()));
         h.step();
         assert_eq!(h.state().session.cell_range().map(|r| (r.rows, r.cols)), Some(((0, 1), (0, 2))), "extended by rows");
+    }
+
+    /// Shift+click beside an upper row with the last row selected takes the rows between, and
+    /// the pointer moving a little before the release keeps them: the anchor row is the one at
+    /// the press, not re-read from the rows the press selected.
+    #[test]
+    fn a_shift_click_up_the_margin_keeps_its_anchor_while_held() {
+        let mut h = table_window();
+        let (a, b) = (cell(&mut h, 0, 0), cell(&mut h, 1, 0));
+        let far = 20.0;
+        let at_b = screen(&mut h, far, b.y + b.h / 2.0);
+        click(&mut h, at_b);
+        assert_eq!(h.state().session.cell_range().map(|r| r.rows), Some((1, 1)));
+        let at = screen(&mut h, far, a.y + a.h / 2.0);
+        h.event(egui::Event::ModifiersChanged(egui::Modifiers::SHIFT));
+        h.step();
+        h.event(egui::Event::PointerMoved(at));
+        h.step();
+        button(&h, at, true);
+        h.step();
+        assert_eq!(h.state().session.cell_range().map(|r| r.rows), Some((0, 1)), "extended up");
+        for k in 1..=3 {
+            h.event(egui::Event::PointerMoved(at + vec2(k as f32, 1.0)));
+            h.step();
+        }
+        button(&h, at + vec2(3.0, 1.0), false);
+        steps(&mut h, 2);
+        h.event(egui::Event::ModifiersChanged(egui::Modifiers::default()));
+        h.step();
+        assert_eq!(h.state().session.cell_range().map(|r| (r.rows, r.cols)), Some(((0, 1), (0, 2))), "the jitter kept the rows");
     }
 
     /// Word: a triple-click, or Ctrl/Cmd+click, in the margin beside a table row selects the whole
