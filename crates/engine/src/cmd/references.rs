@@ -885,7 +885,11 @@ pub fn update_seq(s: &mut Session) -> Result<(), CmdError> {
         }
         let mut updates: Vec<(usize, String)> = Vec::new();
         for (k, o) in p.objects.iter().enumerate() {
-            let InlineObject::Field { instr, locked: false, .. } = o else { continue };
+            // Fields nested in this one's code aren't evaluated: it keeps its cached result (#1671).
+            let InlineObject::Field { instr, locked: false, code_xml, .. } = o else { continue };
+            if !code_xml.is_empty() {
+                continue;
+            }
             let f = FieldCode::parse(instr);
             match f.name.as_str() {
                 "SEQ" => {
@@ -1393,7 +1397,7 @@ mod tests {
             .unwrap()
             .insert_object(
                 0,
-                InlineObject::Field { instr: "TOC".into(), result: String::new(), locked: false, dirty: false, code: false, form: String::new() },
+                InlineObject::Field { instr: "TOC".into(), result: String::new(), locked: false, dirty: false, code: false, form: String::new(), code_xml: String::new() },
                 &CharProps::default(),
             )
             .unwrap();

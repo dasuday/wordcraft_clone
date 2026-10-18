@@ -68,6 +68,30 @@ fn update_field_keeps_a_nested_fields_result_and_nesting() {
     assert_eq!(begins(&saved(&s)), 2);
 }
 
+/// SEQ and STYLEREF are filled by their own pass, which must skip a field with nested code too.
+#[test]
+fn update_field_keeps_a_nested_seq_and_styleref_result() {
+    let mut paras = String::new();
+    for name in ["SEQ Figure ", "STYLEREF 1 "] {
+        let quote = format!("{}{}{}{}{}", fld("begin"), instr(r#" QUOTE "x" "#), fld("separate"), t("x"), fld("end"));
+        paras += &format!(
+            "<w:p>{}{}{quote}{}{}{}</w:p>",
+            fld("begin"),
+            instr(&format!(" {name}")),
+            fld("separate"),
+            t("old"),
+            fld("end"),
+        );
+    }
+    let doc = wordcraft_docx::read(&package(&paras)).unwrap();
+    let mut s = Session::new(doc);
+    let before = begins(&saved(&s));
+    s.run("references.updateFields", &json!({})).unwrap();
+    let text = s.doc.plain_text(wordcraft_doc::StoryRef::Body);
+    assert!(!text.contains('1'), "{text}");
+    assert_eq!(begins(&saved(&s)), before);
+}
+
 #[test]
 fn a_nested_field_is_a_field_its_code_can_be_edited() {
     let mut s = session();
