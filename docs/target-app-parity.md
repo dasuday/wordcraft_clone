@@ -251,6 +251,7 @@ can be used without committing Word output.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-17 | trivial | Proofing: LanguageTool checks each run in its own language (#763); no percentage change |
 | 2026-10-15 | trivial | Pictures, shapes, text boxes: Insert › Shapes adds the new shape beside the selection, as Word draws it, so a second shape no longer replaces the first (still selected after its insert) and selected text stays; a picture still replaces a selected picture, as in Word (#2019) |
 | 2026-10-16 | trivial | East Asian typography row: `w:eastAsianLayout` kept on save, not laid out; no percentage change |
 | 2026-10-15 | trivial | Equations: a script or limit after `_` or `^` is the whole run of letters and digits (`V_dd`, `x^ab`), as in Word for Mac 16.113.4, and Linear format writes it bare (#1609) |
