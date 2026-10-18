@@ -55,7 +55,13 @@ fn set_html_text(html: &str, text: &str) -> bool {
             *slot = open();
         }
         match slot.as_mut().map(|c| c.set().html(html, Some(text))) {
-            Some(Ok(())) => true,
+            Some(Ok(())) => {
+                #[cfg(target_os = "windows")]
+                if let Err(e) = platform::mark_own() {
+                    log::warn!("clipboard owner: {e}");
+                }
+                true
+            }
             Some(Err(e)) => {
                 log::warn!("clipboard: {e}");
                 *slot = None;
@@ -64,6 +70,71 @@ fn set_html_text(html: &str, text: &str) -> bool {
             None => false,
         }
     })
+}
+
+/// Windows: keep pixels, HTML and text in the same clipboard offer. The secondary writes
+/// explicitly avoid clearing the bitmap formats arboard has just published.
+#[cfg(target_os = "windows")]
+pub fn set_image(image: &wordcraft_ui_egui::system_clipboard::CopyImage, html: &str, text: &str) -> Result<(), String> {
+    let pixels = image.width.checked_mul(image.height);
+    if image.width == 0
+        || image.height == 0
+        || image.width > wordcraft_ui_egui::paste_picture::MAX_SIDE
+        || image.height > wordcraft_ui_egui::paste_picture::MAX_SIDE
+        || pixels.is_none_or(|n| n > wordcraft_ui_egui::paste_picture::MAX_PIXELS || n.checked_mul(4) != Some(image.rgba.len()))
+    {
+        return Err("invalid picture dimensions".into());
+    }
+    WRITER.with(|w| {
+        let mut slot = w.try_borrow_mut().map_err(|e| e.to_string())?;
+        if slot.is_none() {
+            *slot = open();
+        }
+        let clipboard = slot.as_mut().ok_or("the system clipboard couldn't be opened")?;
+        clipboard
+            .set_image(arboard::ImageData { width: image.width, height: image.height, bytes: std::borrow::Cow::Borrowed(&image.rgba) })
+            .map_err(|e| e.to_string())?;
+        platform::add_copy_formats(html, text)
+    })
+}
+
+#[cfg(target_os = "windows")]
+pub fn is_own() -> bool {
+    platform::is_own()
+}
+
+#[cfg(all(test, target_os = "windows"))]
+mod image_tests {
+    use super::*;
+    use wordcraft_ui_egui::system_clipboard::CopyImage;
+
+    #[test]
+    fn invalid_pixels_are_rejected_before_opening_the_clipboard() {
+        let image = CopyImage { width: usize::MAX, height: 2, rgba: Vec::new() };
+        assert!(set_image(&image, "", "").is_err());
+        let image = CopyImage { width: 2, height: 2, rgba: vec![0; 15] };
+        assert!(set_image(&image, "", "").is_err());
+    }
+
+    /// Explicit desktop integration check: this publishes a synthetic picture to the clipboard.
+    #[test]
+    #[ignore = "writes the real Windows clipboard; run explicitly during desktop validation"]
+    fn windows_image_offer_keeps_pixels_html_and_text_together() {
+        let rgba = vec![200; 2049 * 4];
+        let image = CopyImage { width: 2049, height: 1, rgba: rgba.clone() };
+        let html = "<p>Картинка</p>";
+        set_image(&image, html, "").unwrap();
+        let mut clipboard = open().unwrap();
+        let got = clipboard.get_image().unwrap();
+        assert_eq!((got.width, got.height), (2049, 1));
+        assert_eq!(got.bytes.as_ref(), rgba);
+        assert_eq!(clipboard.get_text().unwrap(), "");
+        assert_eq!(clipboard.get().html().unwrap(), html);
+        assert!(is_own());
+        // A subsequent copy from another program removes the private owner format.
+        clipboard.set_text("external synthetic text").unwrap();
+        assert!(!is_own());
+    }
 }
 
 /// The clipboard's text.
@@ -187,6 +258,36 @@ mod platform {
 #[cfg(target_os = "windows")]
 mod platform {
     use clipboard_win::{Clipboard, EnumFormats, raw};
+
+    const OWNER_FORMAT: &str = "WordCraft Copy Owner";
+
+    fn write_owner() -> Result<(), String> {
+        let format = raw::register_format(OWNER_FORMAT).ok_or("couldn't register clipboard owner")?;
+        raw::set_without_clear(format.get(), &std::process::id().to_le_bytes()).map_err(|e| e.to_string())
+    }
+
+    pub fn mark_own() -> Result<(), String> {
+        let _open = Clipboard::new_attempts(10).map_err(|e| e.to_string())?;
+        write_owner()
+    }
+
+    pub fn add_copy_formats(html: &str, text: &str) -> Result<(), String> {
+        let format = raw::register_format("HTML Format").ok_or("couldn't register HTML clipboard format")?;
+        let _open = Clipboard::new_attempts(10).map_err(|e| e.to_string())?;
+        raw::set_string_with(text, clipboard_win::options::NoClear).map_err(|e| e.to_string())?;
+        raw::set_html_with(format.get(), html, clipboard_win::options::NoClear).map_err(|e| e.to_string())?;
+        write_owner()
+    }
+
+    pub fn is_own() -> bool {
+        let Some(format) = raw::register_format(OWNER_FORMAT) else { return false };
+        let Ok(_open) = Clipboard::new_attempts(10) else { return false };
+        if raw::size(format.get()).is_none_or(|n| n.get() != 4) {
+            return false;
+        }
+        let mut bytes = Vec::new();
+        raw::get_vec(format.get(), &mut bytes).is_ok() && bytes == std::process::id().to_le_bytes()
+    }
 
     pub fn formats() -> Vec<String> {
         let Ok(_open) = Clipboard::new_attempts(10) else { return Vec::new() };

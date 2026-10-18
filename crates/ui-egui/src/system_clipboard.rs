@@ -11,6 +11,13 @@ use wordcraft_engine::cmd::paste::{MAX_PASTE_BYTES, MAX_PICTURE_BYTES};
 
 use crate::{WordApp, paste_picture};
 
+/// Straight RGBA8 pixels for a native image copy. Decode limits are applied before allocation.
+pub struct CopyImage {
+    pub width: usize,
+    pub height: usize,
+    pub rgba: Vec<u8>,
+}
+
 /// The commands that paste the clipboard.
 pub(crate) fn is_paste(id: &str) -> bool {
     matches!(id, "edit.paste" | "edit.pasteText" | "edit.pasteMerge" | "edit.pasteSpecial")
@@ -56,6 +63,11 @@ pub(crate) fn fill(app: &mut WordApp, id: &str, params: &mut Value) -> Option<Re
     if let Some(rtf) = app.services.clipboard_rtf.as_ref().and_then(|f| f()).filter(fits) {
         o.insert("rtf".into(), Value::String(rtf));
     }
+    // Native bitmap formats are for other programs. Our own paste keeps the original
+    // fragment (size, cropping and floating-picture properties), while its owner mark lasts.
+    if app.session.clipboard.is_some() && app.services.clipboard_is_own.as_ref().is_some_and(|f| f()) {
+        o.insert("text".into(), Value::String(app.session.clipboard_text.clone()));
+    }
     if id == "edit.pasteSpecial"
         && let Some(png) = paste_picture::clipboard_png(app)
     {
@@ -69,15 +81,9 @@ pub(crate) fn fill(app: &mut WordApp, id: &str, params: &mut Value) -> Option<Re
 
 /// Put a copy on the system clipboard: its HTML beside the text (the formatting, #1523, and
 /// equations as MathML, #816; a lone equation in the MathML formats too, #1297) when the host can
-/// set it, else the text through egui. egui sets its text at the end of the frame, which would
-/// replace the HTML, so only one of them runs.
+/// set it, else the text through egui. Only one write runs, so egui cannot replace native formats.
 pub(crate) fn put(app: &WordApp, ctx: &egui::Context, text: &str, html: &str, mathml: &str) {
-    if text.is_empty() {
-        // A copied picture or shape has no text, only HTML (#2276): empty the clipboard's text,
-        // else Paste would find the text copied before it and paste that instead of our copy.
-        if !html.is_empty() {
-            ctx.copy_text(String::new());
-        }
+    if text.is_empty() && html.is_empty() {
         return;
     }
     if !html.is_empty() && app.services.set_clipboard_html.as_ref().is_some_and(|f| f(html, text, mathml)) {
@@ -87,9 +93,77 @@ pub(crate) fn put(app: &WordApp, ctx: &egui::Context, text: &str, html: &str, ma
 }
 
 /// Put what Copy or Cut returned on the system clipboard (see [`put`]).
-pub(crate) fn put_result(app: &WordApp, ctx: &egui::Context, r: &Value) {
+pub(crate) fn put_result(app: &mut WordApp, ctx: &egui::Context, r: &Value) {
     let s = |k: &str| r.get(k).and_then(Value::as_str).unwrap_or("");
+    // No HTML means Copy took no selection. Never re-publish a previous picture in that case.
+    if r.get("html").is_some() && app.services.set_clipboard_image.is_some() {
+        match copied_image(app) {
+            Some(Ok(image)) => {
+                let result = app.services.set_clipboard_image.as_ref().map(|f| f(&image, s("html"), s("text")));
+                if let Some(Err(e)) = result {
+                    app.status(format!("Couldn't copy the picture: {e}"));
+                }
+                // No subsequent text/HTML write: it would replace the bitmap formats.
+                return;
+            }
+            Some(Err(e)) => {
+                app.status(format!("Couldn't copy the picture: {e}"));
+                return;
+            }
+            None => {}
+        }
+    }
     put(app, ctx, s("text"), s("html"), s("mathml"));
+}
+
+/// Only a selection consisting of one image becomes a bitmap. Mixed selections use HTML,
+/// which embeds their images and keeps the surrounding text rather than dropping it.
+fn copied_image(app: &WordApp) -> Option<Result<CopyImage, String>> {
+    use wordcraft_doc::{Block, para::InlineObject};
+    let fragment = app.session.clipboard.as_ref()?;
+    let [Block::Para(para)] = fragment.blocks.as_slice() else { return None };
+    let [InlineObject::Image { media, .. }] = para.objects.as_slice() else { return None };
+    if para.text != wordcraft_doc::para::OBJ.to_string() {
+        return None;
+    }
+    Some(match app.session.doc.media.get(media) {
+        Some(bytes) => {
+            if let Some((w, h, _)) = wordcraft_render::metafile_size(bytes) {
+                let rect = wordcraft_geom::Rect::new(0.0, 0.0, w, h);
+                let items = [wordcraft_layout::display::Draw::Image { rect, media: media.clone(), crop: [0.0; 4], alpha: 1.0, alt: String::new() }];
+                let image = wordcraft_render::render_items(&app.session.doc, &items, 0.0, 0.0, w, h, 96.0 / 72.0, &Default::default());
+                Ok(CopyImage { width: image.width as usize, height: image.height as usize, rgba: image.to_straight() })
+            } else {
+                decode_image(bytes)
+            }
+        }
+        None => Err("the picture data is missing".into()),
+    })
+}
+
+fn decode_image(bytes: &[u8]) -> Result<CopyImage, String> {
+    if bytes.len() as u64 > paste_picture::MAX_FILE_BYTES {
+        return Err("the picture file is larger than 200 MB".into());
+    }
+    let reader = || image::ImageReader::new(std::io::Cursor::new(bytes)).with_guessed_format().map_err(|e| e.to_string());
+    let (w, h) = reader()?.into_dimensions().map_err(|e| e.to_string())?;
+    let pixels = (w as usize).checked_mul(h as usize);
+    if w == 0
+        || h == 0
+        || w as usize > paste_picture::MAX_SIDE
+        || h as usize > paste_picture::MAX_SIDE
+        || pixels.is_none_or(|n| n > paste_picture::MAX_PIXELS)
+    {
+        return Err(format!("the picture is too large to copy ({w} × {h} pixels)"));
+    }
+    let mut limits = image::Limits::default();
+    limits.max_image_width = Some(paste_picture::MAX_SIDE as u32);
+    limits.max_image_height = Some(paste_picture::MAX_SIDE as u32);
+    limits.max_alloc = Some((paste_picture::MAX_PIXELS as u64).saturating_mul(4));
+    let mut reader = reader()?;
+    reader.limits(limits);
+    let rgba = reader.decode().map_err(|e| e.to_string())?.into_rgba8();
+    Ok(CopyImage { width: w as usize, height: h as usize, rgba: rgba.into_raw() })
 }
 
 /// Format names worth showing: not the clipboard protocol's own bookkeeping targets.
@@ -265,7 +339,7 @@ mod tests {
         a.run("select.all", json!({})).unwrap();
         let ctx = egui::Context::default();
         let r = a.run("edit.copy", json!({})).unwrap();
-        put_result(&a, &ctx, &r);
+        put_result(&mut a, &ctx, &r);
         let got_now = got.borrow().clone();
         assert_eq!(got_now.len(), 1);
         assert!(got_now[0].0.contains("<math") && got_now[0].1.contains("y=2x_s"), "{got_now:?}");
@@ -274,7 +348,7 @@ mod tests {
         // Text without an equation gets HTML too, so other programs keep its formatting (#1523).
         a.run("select.range", json!({"anchor": {"block": 0, "off": 0}, "focus": {"block": 0, "off": 5}})).unwrap();
         let r = a.run("edit.copy", json!({})).unwrap();
-        put_result(&a, &ctx, &r);
+        put_result(&mut a, &ctx, &r);
         let got_now = got.borrow().clone();
         assert_eq!(got_now.len(), 2);
         assert!(got_now[1].0.contains("Speed") && !got_now[1].0.contains("<math") && got_now[1].1 == "Speed", "{got_now:?}");
@@ -282,9 +356,129 @@ mod tests {
         // The equation alone: its MathML for the platform's MathML formats too (#1297).
         a.run("select.range", json!({"anchor": {"block": 0, "off": 6}, "focus": {"block": 0, "off": 9}})).unwrap();
         let r = a.run("edit.copy", json!({})).unwrap();
-        put_result(&a, &ctx, &r);
+        put_result(&mut a, &ctx, &r);
         let got_now = got.borrow().clone();
         assert_eq!(got_now.len(), 3);
         assert!(got_now[2].2.starts_with("<math") && got_now[2].2.contains("<msub>") && got_now[2].1 == "y=2x_s", "{got_now:?}");
+    }
+
+    #[test]
+    fn image_copy_accepts_more_than_2048_pixels_and_publishes_once() {
+        use std::{cell::RefCell, rc::Rc};
+        let sizes = Rc::new(RefCell::new(Vec::new()));
+        let sink = sizes.clone();
+        let mut a = app(Services {
+            set_clipboard_image: Some(Box::new(move |image, html, _| {
+                assert!(html.contains("data:image/png;base64,"));
+                sink.borrow_mut().push((image.width, image.height, image.rgba.clone()));
+                Ok(())
+            })),
+            set_clipboard_html: Some(Box::new(|_, _, _| panic!("a later HTML write would erase the bitmap"))),
+            ..Default::default()
+        });
+        let pixels = vec![200; 2049 * 4];
+        let png = paste_picture::png_from_rgba(2049, 1, pixels.clone()).unwrap();
+        a.run("insert.picture", json!({"data": wordcraft_engine::cmd::insert::base64_encode(&png)})).unwrap();
+        let ctx = egui::Context::default();
+        let r = a.run("edit.copy", json!({})).unwrap();
+        put_result(&mut a, &ctx, &r);
+        assert_eq!(*sizes.borrow(), [(2049, 1, pixels)]);
+        assert!(ctx.output(|o| o.commands.is_empty()), "no delayed text write through egui either");
+        // Cut uses its saved fragment after the picture has been removed from the document.
+        let r = a.run("edit.cut", json!({})).unwrap();
+        put_result(&mut a, &ctx, &r);
+        assert_eq!(sizes.borrow().len(), 2);
+        // Copy at a caret must not publish the old picture again.
+        let r = a.run("edit.copy", json!({})).unwrap();
+        put_result(&mut a, &ctx, &r);
+        assert_eq!(sizes.borrow().len(), 2);
+    }
+
+    #[test]
+    fn mixed_copy_embeds_the_image_and_keeps_text_in_one_html_write() {
+        use std::{cell::RefCell, rc::Rc};
+        let html = Rc::new(RefCell::new(Vec::new()));
+        let sink = html.clone();
+        let mut a = app(Services {
+            set_clipboard_image: Some(Box::new(|_, _, _| panic!("a mixed selection must not become just one bitmap"))),
+            set_clipboard_html: Some(Box::new(move |h, text, _| {
+                assert!(text.contains("Caption"));
+                sink.borrow_mut().push(h.to_string());
+                true
+            })),
+            ..Default::default()
+        });
+        a.run("text.insert", json!({"text": "Caption "})).unwrap();
+        let png = paste_picture::png_from_rgba(4, 4, vec![200; 64]).unwrap();
+        a.run("insert.picture", json!({"data": wordcraft_engine::cmd::insert::base64_encode(&png)})).unwrap();
+        a.run("select.all", json!({})).unwrap();
+        let r = a.run("edit.copy", json!({})).unwrap();
+        put_result(&mut a, &egui::Context::default(), &r);
+        let got = html.borrow();
+        assert_eq!(got.len(), 1);
+        assert!(got[0].contains("Caption") && got[0].contains("data:image/png;base64,"));
+    }
+
+    #[test]
+    fn own_image_paste_keeps_crop_and_display_size() {
+        let mut a = app(Services {
+            clipboard_is_own: Some(Box::new(|| true)),
+            clipboard_picture: Some(Box::new(|| panic!("our fragment must win over the bitmap"))),
+            ..Default::default()
+        });
+        let png = paste_picture::png_from_rgba(8, 4, vec![200; 128]).unwrap();
+        a.run("insert.picture", json!({"data": wordcraft_engine::cmd::insert::base64_encode(&png)})).unwrap();
+        a.run("picture.size", json!({"width": 123.5, "height": 45.25, "lockAspect": false})).unwrap();
+        a.run("picture.crop", json!({"left": 0.1, "right": 0.2})).unwrap();
+        let original = crate::objects::selected(&a).unwrap().1.clone();
+        a.run("edit.copy", json!({})).unwrap();
+        a.run("caret.docEnd", json!({})).unwrap();
+        a.run("edit.paste", json!({})).unwrap();
+        let paragraph = a.session.doc.para_at(&a.session.sel.focus).unwrap();
+        assert_eq!(paragraph.objects.len(), 2);
+        assert_eq!(paragraph.objects[1], original);
+    }
+
+    #[test]
+    fn image_decode_rejects_hostile_dimensions_before_reading_pixels() {
+        let png = paste_picture::png_from_rgba(1, 1, vec![255; 4]).unwrap();
+        let mut oversized = png.clone();
+        // PNG IHDR width/height, followed by its CRC. Dimension inspection doesn't need pixels.
+        oversized[16..20].copy_from_slice(&100_000u32.to_be_bytes());
+        let mut crc = !0u32;
+        for byte in &oversized[12..29] {
+            crc ^= u32::from(*byte);
+            for _ in 0..8 {
+                crc = (crc >> 1) ^ if crc & 1 != 0 { 0xedb8_8320 } else { 0 };
+            }
+        }
+        oversized[29..33].copy_from_slice(&(!crc).to_be_bytes());
+        assert!(decode_image(&oversized).err().unwrap().contains("too large"));
+        assert!(decode_image(b"not a picture").is_err());
+        assert_eq!(decode_image(&png).unwrap().rgba, [255; 4]);
+    }
+
+    #[test]
+    fn copied_emf_is_rasterized_for_other_programs() {
+        let words = |values: &[i32]| values.iter().flat_map(|v| v.to_le_bytes()).collect::<Vec<_>>();
+        let record =
+            |kind: u32, payload: Vec<u8>| [kind.to_le_bytes().to_vec(), ((payload.len() + 8) as u32).to_le_bytes().to_vec(), payload].concat();
+        // The same synthetic red-half-square geometry used by the renderer's EMF test.
+        let mut header = vec![0; 88];
+        header[0..4].copy_from_slice(&1u32.to_le_bytes());
+        header[4..8].copy_from_slice(&88u32.to_le_bytes());
+        header[8..24].copy_from_slice(&words(&[0, 0, 100, 100]));
+        header[24..40].copy_from_slice(&words(&[0, 0, 2500, 2500]));
+        header[40..44].copy_from_slice(&0x464d_4520u32.to_le_bytes());
+        header[72..88].copy_from_slice(&words(&[1000, 1000, 250, 250]));
+        let emf =
+            [header, record(39, words(&[1, 0, 0xff, 0])), record(37, words(&[1])), record(43, words(&[50, 0, 100, 100])), record(14, vec![0; 12])]
+                .concat();
+        let mut a = app(Services::default());
+        a.run("insert.picture", json!({"data": wordcraft_engine::cmd::insert::base64_encode(&emf)})).unwrap();
+        a.run("edit.copy", json!({})).unwrap();
+        let image = copied_image(&a).unwrap().unwrap();
+        assert!(image.width > 1 && image.height > 1);
+        assert!(image.rgba.chunks_exact(4).any(|p| p[0] > 200 && p[1] < 40 && p[2] < 40 && p[3] > 200));
     }
 }

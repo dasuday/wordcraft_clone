@@ -151,6 +151,10 @@ pub struct Services {
     /// as well, which Word reads a pasted equation from (#1297). `true` when the HTML and text are
     /// there; otherwise the copy's text goes through egui as usual.
     pub set_clipboard_html: Option<Box<dyn Fn(&str, &str, &str) -> bool>>,
+    /// Desktop: publish one picture's pixels, HTML and text together without clearing formats.
+    pub set_clipboard_image: Option<Box<dyn Fn(&system_clipboard::CopyImage, &str, &str) -> Result<(), String>>>,
+    /// Whether the clipboard still contains this process's last copy.
+    pub clipboard_is_own: Option<Box<dyn Fn() -> bool>>,
     /// Desktop: the RTF on the system clipboard, where the platform offers it (#687).
     pub clipboard_rtf: Option<Box<dyn Fn() -> Option<String>>>,
     /// Desktop: the names of the formats on the system clipboard (MIME types, Windows format
