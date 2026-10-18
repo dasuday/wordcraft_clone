@@ -152,6 +152,10 @@ pub struct Services {
     /// as well, which Word reads a pasted equation from (#1297). `true` when the HTML and text are
     /// there; otherwise the copy's text goes through egui as usual.
     pub set_clipboard_html: Option<Box<dyn Fn(&str, &str, &str) -> bool>>,
+    /// Desktop: publish one picture's pixels, HTML and text together without clearing formats.
+    pub set_clipboard_image: Option<Box<dyn Fn(&system_clipboard::CopyImage, &str, &str) -> Result<(), String>>>,
+    /// Whether the clipboard still contains this process's last copy.
+    pub clipboard_is_own: Option<Box<dyn Fn() -> bool>>,
     /// Desktop: the RTF on the system clipboard, where the platform offers it (#687).
     pub clipboard_rtf: Option<Box<dyn Fn() -> Option<String>>>,
     /// Desktop: the names of the formats on the system clipboard (MIME types, Windows format
@@ -499,6 +503,8 @@ pub struct WordApp {
     pub session: Session,
     pub ui: UiState,
     pub services: Services,
+    /// Only a successfully published copy may reuse this window's private fragment.
+    clipboard_published: bool,
     pub printing: printing::State,
     print_feedback_seen: Option<printing::Feedback>,
     pub canvas: canvas::CanvasState,
@@ -654,6 +660,7 @@ impl WordApp {
             session,
             ui: UiState::default(),
             services,
+            clipboard_published: false,
             printing: Default::default(),
             print_feedback_seen: None,
             canvas: canvas::CanvasState::default(),
@@ -1001,6 +1008,9 @@ impl WordApp {
         let document = self.session.document_id();
         let old_path = self.session.path.clone();
         let r = self.session.run(id, &params).map_err(|e| e.to_string());
+        if matches!(id, "edit.copy" | "edit.cut") && r.as_ref().is_ok_and(|v| v.get("html").is_some()) {
+            self.clipboard_published = false;
+        }
         // Copy and Cut put what they took on the system clipboard, whichever control ran them
         // (the ribbon, a context menu, the native menu, or the Cmd+C/X event). Only the key event
         // used to write it, so a Cut button deleted the words without copying them.

@@ -70,6 +70,8 @@ windows = { version = "0.62", features = ["UI_ViewManagement", "System_UserProfi
 # The clipboard's "Rich Text Format" and the names of its formats (#687, #833), which arboard
 # doesn't read. Already in the build through arboard, at this version.
 clipboard-win = { version = "5.4", features = ["std"] }
+# Encode the PNG offer beside DIBV5 without releasing the clipboard lock.
+image = { workspace = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 craft-print = { git = "https://github.com/storytold/craft-libs", rev = "d27646a5f7c8b4fc85d9dd3213b8c88b58e0088d" }

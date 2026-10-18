@@ -7,6 +7,8 @@
 //! HTML source can also be pasted as that format. Paste keeps the source formatting of another
 //! program's HTML or RTF; Merge Formatting keeps only its emphasis (#687).
 //! Plain text has no formatting to keep, so Paste inserts it as Keep Text Only does.
+//! A host that can verify native ownership passes `privateClipboard: false` when the
+//! system offer does not belong to the current private fragment, even if its text matches.
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -64,6 +66,9 @@ fn source(s: &Session, v: &Value, fmt: &str) -> Option<String> {
     let non_empty = |t: String| if t.is_empty() { None } else { Some(t) };
     match fmt {
         "formatted" => {
+            if v.get("privateClipboard").and_then(Value::as_bool) == Some(false) {
+                return None;
+            }
             let f = s.clipboard.as_ref()?;
             // System clipboard text that isn't our own copy means someone else copied since.
             match p::str(v, "text") {
@@ -268,6 +273,7 @@ pub enum Pasted {
 pub fn paste_content(s: &mut Session, v: &Value) -> Result<Pasted, CmdError> {
     let text = p::str(v, "text").map(|t| t.replace("\r\n", "\n"));
     if let Some(f) = &s.clipboard
+        && v.get("privateClipboard").and_then(Value::as_bool) != Some(false)
         && text.as_ref().is_none_or(|t| f.clipboard_text() == *t)
         && (text.is_some() || (p::str(v, "html").is_none() && p::str(v, "rtf").is_none()))
     {
