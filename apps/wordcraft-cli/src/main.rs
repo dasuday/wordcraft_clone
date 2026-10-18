@@ -111,7 +111,7 @@ fn audit(path: &Path) -> Result<(), Failure> {
 }
 
 /// The commands that open a file, and which of their arguments not starting with `--` it is (as
-/// `pos` counts). `run` opens the value of `--file`.
+/// `positionals` counts). `run` opens the value of `--file`.
 const OPENS_FILE: &[(&str, usize)] = &[("convert", 0), ("info", 0), ("text", 0), ("inspect", 0), ("audit", 0), ("render", 0), ("zotero", 1)];
 
 /// The arguments as text. Only the file the command opens may have a name that isn't valid Unicode,
@@ -465,11 +465,12 @@ fn run<S: AsRef<OsStr>>(args: &[S]) -> Result<(), Failure> {
             // Usage errors mean the audit could not run (exit 2), never
             // "findings present" (exit 1): a CI gate must not read a typo as
             // hidden information.
-            validate_options("audit", &rest, NO_OPTIONS).map_err(Failure::AuditError)?;
-            let text = pos(0).map_err(Failure::AuditError)?;
+            validate_options("audit", &rest, &[]).map_err(Failure::AuditError)?;
+            let paths = positionals(&rest, &[]);
+            let text = paths.first().ok_or_else(|| Failure::AuditError(format!("missing argument\n\n{USAGE}")))?;
             // The preserved OS path: `text` may have lost a non-UTF-8 file
             // name (#1440), exactly like the `open` closure above.
-            audit(file.as_deref().unwrap_or(Path::new(&text)))
+            audit(file.as_deref().unwrap_or(Path::new(text)))
         }
         "render" => {
             validate_options("render", &rest, RENDER_OPTIONS)?;
