@@ -169,6 +169,13 @@ fn rasters_past_the_cap_are_refused() {
     assert!(svg.render(10, 10, [f32::NAN, 0.0, 0.0, 1.0, 0.0, 0.0]).is_none());
 }
 
+/// PR review: the public draw estimate saturates for any size instead of overflowing.
+#[test]
+fn draw_bytes_saturates_at_any_size() {
+    let svg = parse(&halves()).unwrap();
+    assert_eq!(svg.draw_bytes(u32::MAX, u32::MAX, [1.0, 0.0, 0.0, 1.0, 0.0, 0.0]), u64::MAX);
+}
+
 #[test]
 fn external_pictures_are_never_loaded() {
     // A real PNG on disk, linked by absolute path and by file: URL: neither is read.

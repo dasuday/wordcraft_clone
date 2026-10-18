@@ -7989,6 +7989,21 @@ fn hostile_svg_pictures_are_refused() {
     }
 }
 
+/// PR review: inserting an SVG the document already has keeps its PNG fallback (Word's own, read
+/// from a DOCX) rather than drawing and pairing a new one.
+#[test]
+fn inserting_a_known_svg_keeps_the_existing_fallback() {
+    let svg_bytes = b"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"1\" height=\"1\"/>".to_vec();
+    let mut s = Session::new(wordcraft_doc::Document::new());
+    let svg = s.doc.add_media(svg_bytes.clone(), "svg");
+    let png = s.doc.add_media(tiny_png(), "png");
+    s.doc.svg_fallbacks.insert(svg.clone(), png.clone());
+    let r = run(&mut s, "insert.picture", json!({"data": crate::cmd::insert::base64_encode(&svg_bytes)}));
+    assert_eq!(r["media"].as_str(), Some(svg.as_str()));
+    assert_eq!(s.doc.svg_fallbacks.get(&svg), Some(&png), "the document's fallback is kept");
+    assert_eq!(s.doc.media.len(), 2, "no second fallback");
+}
+
 /// Review 2 N4: a pasted document's SVG pictures keep their PNG fallbacks (remapped to the new
 /// media keys); a fallback whose SVG isn't there isn't brought over.
 #[test]

@@ -620,7 +620,12 @@ impl Writer<'_> {
             let clean: String = key.chars().filter(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-')).take(80).collect();
             let has_known_ext = clean.rsplit_once('.').is_some_and(|(s, _)| !s.is_empty()) && content_type_for(&clean) != "application/octet-stream";
             let mut base = if has_known_ext && !clean.starts_with('.') {
-                clean
+                // SVG bytes under another picture's name are written as an SVG (with its PNG
+                // fallback), as the bytes are drawn.
+                match clean.rsplit_once('.') {
+                    Some((stem, ext)) if !ext.eq_ignore_ascii_case("svg") && wordcraft_svg::is_svg(bytes) => format!("{stem}.svg"),
+                    _ => clean,
+                }
             } else {
                 let stem = clean.trim_matches('.');
                 let stem = if stem.is_empty() { "image" } else { stem };

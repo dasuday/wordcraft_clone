@@ -33,7 +33,13 @@ pub const MAX_PIXELS: usize = 50_000_000;
 pub const MAX_FILE_BYTES: u64 = 200 << 20;
 /// Most picture files one paste inserts.
 const MAX_FILES: usize = 20;
-const IMAGE_EXTS: &[&str] = &["png", "jpg", "jpeg", "gif", "webp", "bmp", "wmf", "emf", "svg"];
+/// Picture file extensions (Insert › Picture, paste and drop all take these).
+pub(crate) const IMAGE_EXTS: &[&str] = &["png", "jpg", "jpeg", "gif", "webp", "bmp", "wmf", "emf", "svg"];
+
+/// Whether a file name or path ends in a picture extension ([`IMAGE_EXTS`], any case).
+pub(crate) fn is_picture_name(name: &str) -> bool {
+    name.rsplit_once('.').is_some_and(|(_, e)| IMAGE_EXTS.iter().any(|x| x.eq_ignore_ascii_case(e)))
+}
 
 /// PNG bytes for clipboard pixels, or why they can't be pasted.
 pub fn png_from_rgba(width: usize, height: usize, rgba: Vec<u8>) -> Result<Vec<u8>, String> {

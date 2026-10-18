@@ -1019,6 +1019,7 @@ fn bookmark_destination_is_the_page_of_its_start() {
         images: HashMap::new(),
         vectors: HashMap::new(),
         svgs: HashMap::new(),
+        svg_images_ok: HashMap::new(),
         tags: Vec::new(),
         tag_index: HashMap::new(),
         links: Vec::new(),
@@ -1735,6 +1736,33 @@ fn svg_with_a_broken_embedded_image_still_exports() {
     let raw = pdf_with_svg(&svg_with_png(10, 10), 75.0);
     assert!(raw.starts_with("%PDF"));
     assert!(raw.contains("/Width 150") || raw.contains("0.8156"), "a raster of the picture or the grey box");
+}
+
+/// PR review: the raster images an SVG picture holds are tried once per picture, not each time it
+/// is drawn.
+#[test]
+fn svg_embedded_images_are_tried_once() {
+    let mut d = Document::new();
+    let media = d.add_media(svg_with_png(10, 10), "svg");
+    d.body = (0..3)
+        .map(|_| {
+            let mut p = Paragraph::new();
+            let obj = InlineObject::Image {
+                media: media.clone(),
+                w: 75.0,
+                h: 75.0,
+                alt: String::new(),
+                float: Default::default(),
+                crop: [0.0; 4],
+                ole: None,
+            };
+            p.insert_object(0, obj, &CharProps::default()).unwrap();
+            para_block(p)
+        })
+        .collect();
+    IMAGE_DECODES.with(|n| n.set(0));
+    export(&d, &PdfOptions { compress: false, tagged: false, ..Default::default() }).unwrap();
+    assert_eq!(IMAGE_DECODES.with(|n| n.get()), 1);
 }
 
 /// #1910 review 11 C-14: a filter whose layer is rotated thin, and a filter in a nested picture

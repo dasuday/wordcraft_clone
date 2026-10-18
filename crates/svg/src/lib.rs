@@ -1094,7 +1094,7 @@ impl Svg {
     pub fn draw_bytes(&self, width: u32, height: u32, transform: [f32; 6]) -> u64 {
         let [sx, ky, kx, sy, tx, ty] = transform;
         let ts = resvg::tiny_skia::Transform::from_row(sx, ky, kx, sy, tx, ty);
-        cost::draw_bytes(self.tree.root(), ts, width, height).saturating_add(u64::from(width) * u64::from(height) * 4)
+        cost::draw_bytes(self.tree.root(), ts, width, height).saturating_add(u64::from(width).saturating_mul(u64::from(height)).saturating_mul(4))
     }
 
     fn pixmap(&self, width: u32, height: u32, transform: [f32; 6]) -> Option<resvg::tiny_skia::Pixmap> {

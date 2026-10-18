@@ -170,6 +170,7 @@ fn write_attempt(doc: &Document, lay: &DocLayout, opts: &PdfOptions, pages: &[us
         images: HashMap::new(),
         vectors: HashMap::new(),
         svgs: HashMap::new(),
+        svg_images_ok: HashMap::new(),
         tags: Vec::new(),
         tag_index: HashMap::new(),
         links: Vec::new(),
@@ -658,6 +659,8 @@ struct Exporter<'a> {
     vectors: HashMap<String, Option<Arc<Vector>>>,
     /// Parsed SVG pictures by media key (`None`: not readable).
     svgs: HashMap<String, Option<Arc<wordcraft_svg::Svg>>>,
+    /// Whether krilla can decode every raster image of the SVG picture of a media key.
+    svg_images_ok: HashMap<String, bool>,
     tags: Vec<TagEntry>,
     tag_index: HashMap<(StoryRef, DocPath), usize>,
     /// Link rectangles on the current page: (x0, y0, x1, y1, target).
@@ -1239,7 +1242,13 @@ impl Exporter<'_> {
             return;
         }
         if let Some(Some(svg)) = self.svg(media)
-            && svg_picture(s, &svg, rect, crop, &clip, alpha).is_some()
+            && svg_picture(s, &svg, rect, crop, &clip, alpha, || {
+                *self
+                    .svg_images_ok
+                    .entry(media.to_string())
+                    .or_insert_with(|| svg.raster_images().iter().all(|(kind, data)| image_decodes(kind, data)))
+            })
+            .is_some()
         {
             return;
         }
@@ -1723,8 +1732,18 @@ fn vector_picture(s: &mut Surface, v: &Vector, r: &Rect, crop: &[f32; 4], clip: 
 /// Draws an SVG picture into `rect` as vectors (krilla-svg), cropped by `crop` and faded by
 /// `alpha`. Filters become images at twice the page resolution; text is drawn as outlines in the
 /// document fonts the picture was parsed with.
-/// None when nothing could be drawn (the caller then draws the grey placeholder).
-fn svg_picture(s: &mut Surface, svg: &wordcraft_svg::Svg, rect: &Rect, crop: &[f32; 4], clip: &Path, alpha: f32) -> Option<()> {
+/// `images_ok` says whether krilla can decode the raster images it holds (asked only when the
+/// picture fits the vector budget). None when nothing could be drawn (the caller then draws the
+/// grey placeholder).
+fn svg_picture(
+    s: &mut Surface,
+    svg: &wordcraft_svg::Svg,
+    rect: &Rect,
+    crop: &[f32; 4],
+    clip: &Path,
+    alpha: f32,
+    images_ok: impl FnOnce() -> bool,
+) -> Option<()> {
     use krilla_svg::{SurfaceExt, SvgSettings};
     let [cl, ct, cr, cb] = crop.map(|v| if v.is_finite() { v.clamp(0.0, 0.95) } else { 0.0 });
     let (fw, fh) = (rect.w / (1.0 - cl - cr).max(0.05), rect.h / (1.0 - ct - cb).max(0.05));
@@ -1744,7 +1763,7 @@ fn svg_picture(s: &mut Surface, svg: &wordcraft_svg::Svg, rect: &Rect, crop: &[f
     let scale = page * (size.width() / sw).max(size.height() / sh);
     // krilla decodes the raster images an SVG holds when it writes the file: one it can't decode
     // would fail the whole export (review 11 I-8), so they are tried first.
-    let drawn = if svg.pdf_vectors_fit(scale) && svg.raster_images().iter().all(|(kind, data)| image_decodes(kind, data)) {
+    let drawn = if svg.pdf_vectors_fit(scale) && images_ok() {
         s.draw_svg(svg.tree(), size, SvgSettings { embed_text: false, filter_scale: 2.0 })
     } else {
         svg_raster(svg, size, page).map(|img| s.draw_image(img, size))
@@ -1819,10 +1838,18 @@ fn load_image_within(data: &Arc<Vec<u8>>, budget: u64) -> Option<Image> {
     Some(Image::from_rgba8(dec.into_rgba8().into_raw(), w, h))
 }
 
+#[cfg(test)]
+thread_local! {
+    /// How often [`image_decodes`] ran on this thread.
+    static IMAGE_DECODES: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
+}
+
 /// Whether krilla can embed a raster image of an SVG picture, `kind` as usvg read it: a JPEG as
 /// it is (krilla doesn't decode it), a GIF as krilla decodes it (the gif crate's own 50 MB limit;
 /// review 12 I-9), a PNG or WebP within the same limits as [`load_image`].
 fn image_decodes(kind: &str, data: &Arc<Vec<u8>>) -> bool {
+    #[cfg(test)]
+    IMAGE_DECODES.with(|n| n.set(n.get() + 1));
     let format = match kind {
         "jpeg" => return true,
         "gif" => {

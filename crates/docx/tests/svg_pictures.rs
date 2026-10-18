@@ -46,11 +46,26 @@ fn text(pkg: &[u8], name: &str) -> String {
     String::from_utf8(part(pkg, name).unwrap_or_default()).unwrap()
 }
 
+/// A paragraph holding a picture whose `a:blip` is `blip` (its `r:embed` attribute and contents).
+fn pic_para(blip: &str) -> String {
+    format!(
+        r#"<w:p><w:r><w:drawing><wp:inline><wp:extent cx="508000" cy="254000"/><wp:docPr id="1" name="Graphic 1" descr="logo"/><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic><pic:nvPicPr><pic:cNvPr id="1" name="Graphic 1"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip {blip}</a:blip><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="508000" cy="254000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>"#
+    )
+}
+
+/// Word's SVG picture blip: the PNG (`rId1`) under `r:embed`, the SVG (`rId2`) in the extension.
+fn svg_blip() -> String {
+    format!(r#"r:embed="rId1"><a:extLst><a:ext uri="{SVG_EXT}"><asvg:svgBlip xmlns:asvg="{SVG_NS}" r:embed="rId2"/></a:ext></a:extLst>"#)
+}
+
 /// A package as Word writes an SVG picture: the PNG under `r:embed`, the SVG in the extension.
 fn word_svg_package(svg: &[u8]) -> Vec<u8> {
-    let body = format!(
-        r#"<w:p><w:r><w:drawing><wp:inline><wp:extent cx="508000" cy="254000"/><wp:docPr id="1" name="Graphic 1" descr="logo"/><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic><pic:nvPicPr><pic:cNvPr id="1" name="Graphic 1"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="rId1"><a:extLst><a:ext uri="{SVG_EXT}"><asvg:svgBlip xmlns:asvg="{SVG_NS}" r:embed="rId2"/></a:ext></a:extLst></a:blip><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="508000" cy="254000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>"#
-    );
+    package(&pic_para(&svg_blip()), svg)
+}
+
+/// A package with `body`, `rId1` → `media/image1.png` (a PNG) and `rId2` → `media/image2.svg`
+/// (`svg`).
+fn package(body: &str, svg: &[u8]) -> Vec<u8> {
     let doc = format!(
         r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><w:body>{body}</w:body></w:document>"#
     );
@@ -104,6 +119,57 @@ fn unreadable_svg_part_falls_back_to_the_png() {
     let d = wordcraft_docx::read(&word_svg_package(b"\x89PNG not an svg")).unwrap();
     let (media, _, _) = only_picture(&d);
     assert_eq!(d.media.get(&media).map(|m| m.as_slice()), Some(tiny_png().as_slice()));
+}
+
+/// PR review: an SVG target an ordinary picture loaded first (so not checked as an SVG) is still
+/// checked when an `asvg:svgBlip` names it; the SVG picture then shows its PNG fallback.
+#[test]
+fn unreadable_svg_part_loaded_earlier_still_falls_back_to_the_png() {
+    let body = format!("{}{}", pic_para(r#"r:embed="rId2">"#), pic_para(&svg_blip()));
+    let d = wordcraft_docx::read(&package(&body, b"not an svg")).unwrap();
+    let media: Vec<String> = d
+        .body
+        .iter()
+        .filter_map(|b| b.as_para())
+        .flat_map(|p| p.objects.iter())
+        .filter_map(|o| match o {
+            InlineObject::Image { media, .. } => Some(media.clone()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(media.len(), 2);
+    assert_eq!(d.media.get(&media[1]).map(|m| m.as_slice()), Some(tiny_png().as_slice()), "the SVG picture shows its PNG");
+    assert!(d.svg_fallbacks.is_empty());
+}
+
+/// PR review: SVG media under a raster name (an `asvg:svgBlip` target named `.png`) is still
+/// written as an SVG picture: an `.svg` part with its PNG fallback.
+#[test]
+fn svg_media_with_a_raster_name_is_written_as_an_svg() {
+    let mut d = Document::new();
+    d.media.insert("image2.png".into(), std::sync::Arc::new(SVG.to_vec()));
+    let mut p = Paragraph::new();
+    let obj = InlineObject::Image {
+        media: "image2.png".into(),
+        w: 30.0,
+        h: 15.0,
+        alt: String::new(),
+        float: Default::default(),
+        crop: [0.0; 4],
+        ole: None,
+    };
+    p.insert_object(0, obj, &Default::default()).unwrap();
+    d.body = vec![para_block(p)];
+    let pkg = wordcraft_docx::write(&d).unwrap();
+    let xml = text(&pkg, "word/document.xml");
+    assert!(xml.contains("<asvg:svgBlip "), "{xml}");
+    let svgs: Vec<Vec<u8>> = entries(&pkg).into_iter().filter(|(n, _)| n.starts_with("word/media/") && n.ends_with(".svg")).map(|(_, b)| b).collect();
+    assert_eq!(svgs, vec![SVG.to_vec()]);
+    let pngs: Vec<Vec<u8>> = entries(&pkg).into_iter().filter(|(n, _)| n.starts_with("word/media/") && n.ends_with(".png")).map(|(_, b)| b).collect();
+    assert_eq!(pngs.len(), 1);
+    assert!(pngs[0].starts_with(b"\x89PNG"), "the fallback is a PNG");
+    let r = wordcraft_docx::read(&pkg).unwrap();
+    assert_eq!(r.media.get(&only_picture(&r).0).map(|m| m.as_slice()), Some(SVG));
 }
 
 fn svg_doc() -> Document {

@@ -256,11 +256,14 @@ pub(crate) fn picture_size(bytes: &[u8]) -> Result<(f32, f32, &'static str), Cmd
 }
 
 /// Store a picture's bytes as media; an SVG gets its PNG fallback made now and kept with it, so
-/// saves write it without drawing it again (#1910).
+/// saves write it without drawing it again (#1910). An SVG the document already has keeps its
+/// fallback.
 pub(crate) fn add_picture_media(s: &mut Session, bytes: Vec<u8>, ext: &str) -> String {
-    let fallback = if ext == "svg" { wordcraft_svg::fallback_png(&bytes).ok() } else { None };
     let key = s.doc.add_media(bytes, ext);
-    if let Some(png) = fallback {
+    if ext == "svg"
+        && !s.doc.svg_fallbacks.contains_key(&key)
+        && let Some(png) = s.doc.media.get(&key).and_then(|b| wordcraft_svg::fallback_png(b).ok())
+    {
         let png_key = s.doc.add_media(png, "png");
         s.doc.svg_fallbacks.insert(key.clone(), png_key);
     }
