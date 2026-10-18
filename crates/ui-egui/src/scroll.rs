@@ -297,6 +297,61 @@ impl CanvasScroll {
     }
 }
 
+/// Longest pause between the fingers lifting (`End`) and the system's momentum starting (`Start`)
+/// for the two to be one gesture. macOS sends the momentum a display frame after the lift; a new
+/// touch needs a finger to come down again, which takes far longer.
+const MOMENTUM_GAP: f64 = 0.15;
+
+/// Keeps a touchpad / Magic Mouse scroll gesture's Command state from the moment it began.
+///
+/// egui stamps every wheel event with the modifiers held *now*, but macOS keeps sending
+/// momentum events for a second or so after the fingers lift, so pressing ⌘ during that glide
+/// would turn the rest of a plain scroll into a zoom. winit gives only the edges of a gesture:
+/// `Start` (fingers down, or momentum begins) and `End` (fingers lift, or momentum ends); inside
+/// momentum every event is `Move`, the same as under the fingers. So a gesture is a `Start` up to
+/// its momentum's `End`, and a `Start` right after an `End` is that momentum. A gesture that
+/// began without ⌘ loses the ⌘ of its later events; one that began with it is left alone. Wheels
+/// that report no phases (every event is `Move`) never lock: ⌘ is read live.
+///
+/// Trade-off: a deliberate new gesture that starts within [`MOMENTUM_GAP`] of the previous one's
+/// `End` is taken as that gesture's momentum and keeps its mode.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct GestureLock {
+    /// The gesture in progress began without the zoom modifier.
+    plain: bool,
+    /// The gesture is locked at all.
+    locked: bool,
+    /// When the last `End` arrived, while a momentum `Start` may still follow.
+    ended_at: Option<f64>,
+}
+
+impl GestureLock {
+    /// Rewrite the zoom modifier of the wheel events in `events` (frame time `time`).
+    pub fn filter(&mut self, events: &mut [Event], time: f64, opts: &InputOptions) {
+        for event in events {
+            let Event::MouseWheel { phase, modifiers, .. } = event else { continue };
+            if self.ended_at.is_some_and(|t| time - t > MOMENTUM_GAP) && *phase != TouchPhase::Start {
+                *self = Self::default();
+            }
+            match phase {
+                TouchPhase::Start => {
+                    if !self.ended_at.is_some_and(|t| time - t <= MOMENTUM_GAP) {
+                        self.locked = true;
+                        self.plain = !modifiers.matches_any(opts.zoom_modifier);
+                    }
+                    self.ended_at = None;
+                }
+                TouchPhase::End | TouchPhase::Cancel => self.ended_at = Some(time),
+                TouchPhase::Move => {}
+            }
+            if self.locked && self.plain {
+                modifiers.command = false;
+                modifiers.mac_cmd = false;
+            }
+        }
+    }
+}
+
 /// Shift scrolls sideways and Alt scrolls vertically, like egui's own scroll areas.
 fn axis_lock(d: Vec2, modifiers: Modifiers, opts: &InputOptions) -> Vec2 {
     let horizontal = modifiers.matches_any(opts.horizontal_scroll_modifier);
@@ -579,5 +634,72 @@ mod tests {
         m.release();
         assert!(m.tick(FRAME).length() <= MAX_SPEED * FRAME);
         assert!(notch_px(f32::NAN).is_finite() && notch_px(-1.0) == NOTCH_PX);
+    }
+
+    fn phased(phase: TouchPhase, command: bool) -> Event {
+        let modifiers = Modifiers { command, mac_cmd: command, ..Modifiers::default() };
+        Event::MouseWheel { unit: MouseWheelUnit::Point, delta: Vec2::new(0.0, -5.0), phase, modifiers }
+    }
+
+    fn zooms(event: &Event, opts: &InputOptions) -> bool {
+        matches!(event, Event::MouseWheel { modifiers, .. } if modifiers.matches_any(opts.zoom_modifier))
+    }
+
+    /// Run `(time, phase, ⌘ held)` events through a fresh lock; which of them still zoom.
+    fn run(steps: &[(f64, TouchPhase, bool)]) -> Vec<bool> {
+        let opts = InputOptions::default();
+        let mut lock = GestureLock::default();
+        steps
+            .iter()
+            .map(|&(time, phase, command)| {
+                let mut events = [phased(phase, command)];
+                lock.filter(&mut events, time, &opts);
+                zooms(&events[0], &opts)
+            })
+            .collect()
+    }
+
+    #[test]
+    fn command_pressed_during_momentum_does_not_zoom() {
+        use TouchPhase::*;
+        // Fingers scroll, lift, momentum begins and runs; ⌘ goes down mid-glide.
+        let z = run(&[
+            (0.0, Start, false),
+            (0.01, Move, false),
+            (0.02, End, false),
+            (0.04, Start, false),
+            (0.06, Move, false),
+            (0.5, Move, true),
+            (0.6, Move, true),
+            (0.7, End, true),
+        ]);
+        assert!(z.iter().all(|z| !z), "{z:?}");
+    }
+
+    #[test]
+    fn new_gesture_with_command_zooms_even_when_it_interrupts_momentum() {
+        use TouchPhase::*;
+        let z = run(&[
+            (0.0, Start, false),
+            (0.02, End, false),
+            (0.04, Start, false),
+            (0.5, Move, true),
+            (0.6, End, true),
+            (0.8, Start, true),
+            (0.81, Move, true),
+            (0.9, End, true),
+        ]);
+        assert_eq!(z, [false, false, false, false, false, true, true, true]);
+    }
+
+    #[test]
+    fn zoom_gesture_and_unphased_wheel_keep_live_modifiers() {
+        use TouchPhase::*;
+        assert_eq!(run(&[(0.0, Start, true), (0.1, Move, true), (0.2, End, true)]), [true; 3]);
+        // A classic wheel never sends Start: ⌘ is read live, also long after an earlier gesture.
+        assert_eq!(
+            run(&[(0.0, Start, false), (0.1, End, false), (5.0, Move, true), (5.1, Move, false), (5.2, Move, true)]),
+            [false, false, true, false, true]
+        );
     }
 }

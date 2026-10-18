@@ -527,6 +527,8 @@ pub struct WordApp {
     pub(crate) synthetic: Vec<egui::Event>,
     /// macOS: the primary button went down with Control, so it is being read as the secondary.
     control_click: bool,
+    /// macOS: which touchpad scroll gestures began with ⌘ held, so momentum isn't read as a zoom.
+    gesture_lock: scroll::GestureLock,
     /// Badge rects recorded during layout for the current keytip phase (cleared by `logic`, painted by `show`).
     pub(crate) keytip_rects: Vec<(egui::Rect, String)>,
     /// The Navigation pane's search box takes the keyboard on its next frame (Ctrl+F, #712).
@@ -663,6 +665,7 @@ impl WordApp {
             pending_shots: Vec::new(),
             synthetic: Vec::new(),
             control_click: false,
+            gesture_lock: scroll::GestureLock::default(),
             keytip_rects: Vec::new(),
             nav_search_focus: false,
             styled: false,
@@ -2061,6 +2064,7 @@ impl WordApp {
     pub fn raw_input_hook(&mut self, raw: &mut egui::RawInput) {
         if cfg!(target_os = "macos") {
             control_click_as_secondary(&mut raw.events, &mut self.control_click);
+            self.gesture_lock.filter(&mut raw.events, raw.time.unwrap_or_default(), &egui::InputOptions::default());
         }
         if self.synthetic.is_empty() {
             return;
