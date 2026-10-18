@@ -472,10 +472,10 @@ fn lin_arg(a: &[MNode], s: &mut String, depth: usize) {
     }
     for (i, n) in a.iter().enumerate() {
         lin_node(n, s, depth + 1);
-        // A bare script or limit ends at a space: a letter or digit after it is its own item.
+        // A bare script or limit ends at a space: a letter, digit or period after it is its own item.
         if matches!(n, MNode::Script { kind, .. } if *kind != ScriptKind::Pre) || matches!(n, MNode::Lim { .. }) {
             let ends_bare = s.chars().next_back().is_some_and(|c| c.is_alphanumeric() || c == '.');
-            if ends_bare && a.get(i + 1).and_then(first_lin_char).is_some_and(char::is_alphanumeric) {
+            if ends_bare && a.get(i + 1).and_then(first_lin_char).is_some_and(|c| c.is_alphanumeric() || c == '.') {
                 s.push(' ');
             }
         }
@@ -1050,6 +1050,7 @@ mod tests {
             vec![sc(ScriptKind::Sub, "x", "i", ""), sin_x],
             vec![lim.clone(), run("y")],
             vec![sc(ScriptKind::Sub, "x", "ab", ""), run("y")],
+            vec![sc(ScriptKind::Sub, "x", "i", ""), run(".5")],
         ] {
             let lin = to_linear(&n);
             assert_eq!(parse_linear(&lin), n, "{lin}");
