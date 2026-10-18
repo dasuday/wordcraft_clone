@@ -107,10 +107,11 @@ fn buttons(ui: &mut Ui, ok: &str, ok_enabled: bool) -> (bool, bool) {
     ui.add_space(8.0);
     ui.horizontal(|ui| {
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if ui.button(tl!("Cancel")).clicked() || ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+            let (okb, cancelb) =
+                crate::dialogs::ok_cancel_responses(ui, |ui| ui.add_enabled(ok_enabled, crate::widgets::primary_button(ui, tl!(ok))), tl!("Cancel"));
+            if cancelb.clicked() || crate::dialogs::cancel_key_pressed(ui) {
                 r.1 = true;
             }
-            let okb = ui.add_enabled(ok_enabled, crate::widgets::primary_button(ui, tl!(ok)));
             if okb.clicked() {
                 r.0 = true;
             }
@@ -394,7 +395,7 @@ fn manual_ui(app: &mut WordApp, ui: &mut Ui, f: &mut ManualForm) -> bool {
 // Language
 
 /// Proofing languages offered, by BCP 47 tag, with their English names (translated for display).
-pub const LANGUAGES: [(&str, &str); 29] = [
+pub const LANGUAGES: [(&str, &str); 30] = [
     ("en-US", "English (United States)"),
     ("en-GB", "English (United Kingdom)"),
     ("de-DE", "German (Germany)"),
@@ -422,6 +423,7 @@ pub const LANGUAGES: [(&str, &str); 29] = [
     ("zh-CN", "Chinese (Simplified)"),
     ("zh-TW", "Chinese (Traditional)"),
     ("ko-KR", "Korean"),
+    ("id-ID", "Indonesian"),
     ("ar-SA", "Arabic"),
     ("he-IL", "Hebrew"),
 ];
