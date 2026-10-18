@@ -58,7 +58,7 @@ pub(crate) enum AfterPick {
     Picture,
     /// Fill the shape that was selected when the dialog opened with the picked picture (Shape
     /// Fill › Picture): the document's identity, the shape's position and the shape itself, checked again on return.
-    FillPicture { target: Option<FillTarget> },
+    FillPicture { target: Option<Box<FillTarget>> },
     /// Save the document there, then carry on.
     SaveAs(AfterSave),
     /// Save a copy there in this format (`pdf`, `docx`, `png`…).
@@ -336,9 +336,9 @@ impl WordApp {
     }
 
     /// Which shape is selected, and in which document: what a pending picture fill is bound to.
-    fn selected_shape_target(&self) -> Option<FillTarget> {
+    fn selected_shape_target(&self) -> Option<Box<FillTarget>> {
         let (pos, shape) = wordcraft_engine::cmd::objects::selected(&self.session)?;
-        Some((self.session.document_id(), pos, shape))
+        Some(Box::new((self.session.document_id(), pos, shape)))
     }
 
     /// Pick a font file to add (Add Font…; web: it arrives through the inbox).
