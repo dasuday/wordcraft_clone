@@ -305,3 +305,108 @@ fn findings_serialize_to_json() {
     // Deterministic order: re-running gives the same sequence.
     assert_eq!(ids_of(&bytes), ids_of(&bytes));
 }
+
+#[test]
+fn all_tracked_change_elements_report_authors() {
+    // Every `CT_TrackChange` / `CT_MoveBookmark` element carries `w:author`
+    // (ECMA-376 Part 1 §17.13.5); `w:tblGridChange` is excluded (no author).
+    let elements = [
+        "moveFrom",
+        "moveTo",
+        "moveFromRangeStart",
+        "moveToRangeStart",
+        "cellIns",
+        "cellDel",
+        "cellMerge",
+        "customXmlInsRangeStart",
+        "customXmlInsRangeEnd",
+        "customXmlDelRangeStart",
+        "customXmlDelRangeEnd",
+        "customXmlMoveFromRangeStart",
+        "customXmlMoveFromRangeEnd",
+        "customXmlMoveToRangeStart",
+        "customXmlMoveToRangeEnd",
+    ];
+    let mut body = String::from("<w:p>");
+    for (i, el) in elements.iter().enumerate() {
+        body.push_str(&format!(r#"<w:{el} w:id="{i}" w:author="Quill Ramsey"/>"#));
+    }
+    body.push_str("</w:p>");
+    let bytes = package(&[
+        ("[Content_Types].xml", &content_types()),
+        ("_rels/.rels", &root_rels()),
+        ("word/document.xml", &document(&body)),
+        ("word/_rels/document.xml.rels", &doc_rels("")),
+    ]);
+    let findings = findings_of(&bytes);
+    assert_eq!(findings.len(), elements.len());
+    assert!(findings.iter().all(|f| f.id == "author-pii/revision" && f.severity == "warn"));
+    for el in elements {
+        assert!(
+            findings.iter().any(|f| f.location == format!("word/document.xml <w:{el}>") && f.detail.contains("Quill Ramsey")),
+            "no finding for {el}"
+        );
+    }
+}
+
+#[test]
+fn tbl_grid_change_is_not_an_author_finding() {
+    // `w:tblGridChange` (`CT_TblGridChange`) defines no `w:author`: it must not
+    // produce an author-pii finding even with an (invalid) author attribute.
+    let body = r#"<w:p><w:tblGridChange w:id="1" w:author="Quill Ramsey"/></w:p>"#;
+    let bytes = package(&[
+        ("[Content_Types].xml", &content_types()),
+        ("_rels/.rels", &root_rels()),
+        ("word/document.xml", &document(body)),
+        ("word/_rels/document.xml.rels", &doc_rels("")),
+    ]);
+    assert!(findings_of(&bytes).is_empty());
+}
+
+#[test]
+fn mismatched_end_tag_is_an_error() {
+    let doc =
+        format!(r#"<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="{W}"><w:body><w:p><w:r></w:WRONG></w:r></w:p></w:body></w:document>"#);
+    let bytes = package(&[
+        ("[Content_Types].xml", &content_types()),
+        ("_rels/.rels", &root_rels()),
+        ("word/document.xml", &doc.into_bytes()),
+        ("word/_rels/document.xml.rels", &doc_rels("")),
+    ]);
+    assert!(matches!(audit_bytes(&bytes), Err(AuditError::Xml(_, _))));
+}
+
+#[test]
+fn unclosed_element_at_eof_is_an_error() {
+    let doc = format!(r#"<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="{W}"><w:body><w:p><w:r><w:t>never closed"#);
+    let bytes = package(&[
+        ("[Content_Types].xml", &content_types()),
+        ("_rels/.rels", &root_rels()),
+        ("word/document.xml", &doc.into_bytes()),
+        ("word/_rels/document.xml.rels", &doc_rels("")),
+    ]);
+    assert!(matches!(audit_bytes(&bytes), Err(AuditError::Xml(_, _))));
+}
+
+#[test]
+fn active_content_found_by_relationship_type_at_unusual_path() {
+    // Reachable active content at a non-standard path: caught by relationship
+    // type, and reachable means it is not an orphan.
+    let rels = doc_rels(concat!(
+        r#"<Relationship Id="rId2" Type="http://schemas.microsoft.com/office/2006/relationships/vbaProject" Target="custom/vba.bin"/>"#,
+        r#"<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/package" Target="custom/pack.bin"/>"#,
+    ));
+    let bytes = package(&[
+        ("[Content_Types].xml", &content_types()),
+        ("_rels/.rels", &root_rels()),
+        ("word/document.xml", &plain_paragraph()),
+        ("word/_rels/document.xml.rels", &rels),
+        ("word/custom/vba.bin", b"fake-macro-bytes"),
+        ("word/custom/pack.bin", b"fake-package-bytes"),
+    ]);
+    let findings = findings_of(&bytes);
+    assert_eq!(findings.len(), 2);
+    assert!(findings.iter().any(|f| f.id == "active-content/vba" && f.location == "word/custom/vba.bin"));
+    assert!(findings.iter().any(|f| f.id == "active-content/ole" && f.location == "word/custom/pack.bin"));
+    assert!(findings.iter().all(|f| f.id != "package/orphan-part"));
+}

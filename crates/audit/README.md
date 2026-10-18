@@ -8,13 +8,13 @@ of the file could learn about its authors.
 
 | ID | Severity | What |
 |---|---|---|
-| `author-pii/revision` | warn | `w:author`/`w:initials` on tracked insertions/deletions (`w:ins`/`w:del`) |
+| `author-pii/revision` | warn | `w:author`/`w:initials` on tracked-change elements (`w:ins`, `w:del`, `w:moveFrom`/`w:moveTo`, range markers, `w:cellIns`/`w:cellDel`/`w:cellMerge`, `w:customXml*` range markers; never `w:tblGridChange`, which defines no author) |
 | `author-pii/comment` | warn | `w:author`/`w:initials`/`w:date` on `w:comment` |
 | `author-pii/core-properties` | warn | `dc:creator` / `cp:lastModifiedBy` in `docProps/core.xml` |
 | `author-pii/extended-properties` | info | `Company` / `Manager` in `docProps/app.xml` |
 | `hidden-text` | warn | `w:vanish` run properties (text that renders hidden) |
-| `active-content/vba` | warn | a `word/vbaProject.bin` part (macros) |
-| `active-content/ole` | warn | parts under `word/embeddings/` (embedded objects) |
+| `active-content/vba` | warn | VBA macro project: by relationship type, or a `word/vbaProject.bin` part |
+| `active-content/ole` | warn | embedded object: by relationship type, or parts under `word/embeddings/` |
 | `package/orphan-part` | info | ZIP entries no relationship targets |
 
 Finding IDs are the crate's public vocabulary: they are stable and must not be
@@ -52,7 +52,8 @@ Exit codes: `0` = no findings, `1` = findings present (CI-gate usable),
 
 ## Spec references
 
-- ECMA-376 Part 1: `w:ins`/`w:del` (§17.13.5), `w:comment` (§17.13.4.2),
+- ECMA-376 Part 1: tracked-change elements (§17.13.5; `w:tblGridChange`
+  excluded — its type defines no `w:author`), `w:comment` (§17.13.4.2),
   `w:vanish` (§17.3.2.42), `ST_OnOff` (§17.18.67)
 - ECMA-376 Part 2: core properties (§12.3.1), extended properties (§12.3.2),
   OPC relationships (§12.2.4)
@@ -62,5 +63,7 @@ Exit codes: `0` = no findings, `1` = findings present (CI-gate usable),
 - Only `word/document.xml` is scanned for revisions and hidden text in v1;
   headers, footers, footnotes and endnotes can carry the same constructs.
 - A part that cannot be parsed is an error, never a silent pass (fail closed).
+  Malformed XML (mismatched or unclosed tags) fails the audit.
 - Hostile-input guards: at most 100,000 ZIP entries, 256 MiB per part,
+  1 GiB total decompressed bytes across all scanned parts,
   2,000,000 XML elements per part.

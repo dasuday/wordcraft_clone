@@ -77,10 +77,10 @@ fn open(path: &Path) -> Result<Session, String> {
 /// Exit contract: `Ok(())` (exit 0) when the file is clean, `Failure::Findings`
 /// (exit 1) when findings exist so scripts and CI can gate on it, and
 /// `Failure::AuditError` (exit 2) when the audit itself cannot run.
-fn audit(path: &str) -> Result<(), Failure> {
-    let bytes = std::fs::read(path).map_err(|e| Failure::AuditError(format!("audit: cannot read {path}: {e}")))?;
-    let findings = wordcraft_audit::audit_bytes(&bytes).map_err(|e| Failure::AuditError(format!("audit: {path}: {e}")))?;
-    let report = serde_json::json!({ "file": path, "findings": findings, "count": findings.len() });
+fn audit(path: &Path) -> Result<(), Failure> {
+    let bytes = std::fs::read(path).map_err(|e| Failure::AuditError(format!("audit: cannot read {}: {e}", path.display())))?;
+    let findings = wordcraft_audit::audit_bytes(&bytes).map_err(|e| Failure::AuditError(format!("audit: {}: {e}", path.display())))?;
+    let report = serde_json::json!({ "file": path.display().to_string(), "findings": findings, "count": findings.len() });
     let text = serde_json::to_string_pretty(&report).unwrap_or_default();
     write_stdout(|o| writeln!(o, "{text}"))?;
     if findings.is_empty() { Ok(()) } else { Err(Failure::Findings(findings.len())) }
@@ -371,8 +371,14 @@ fn run<S: AsRef<OsStr>>(args: &[S]) -> Result<(), Failure> {
             write_stdout(|o| writeln!(o, "{tree}"))
         }
         "audit" => {
-            validate_options("audit", &rest, NO_OPTIONS)?;
-            audit(&pos(0)?)
+            // Usage errors mean the audit could not run (exit 2), never
+            // "findings present" (exit 1): a CI gate must not read a typo as
+            // hidden information.
+            validate_options("audit", &rest, NO_OPTIONS).map_err(Failure::AuditError)?;
+            let text = pos(0).map_err(Failure::AuditError)?;
+            // The preserved OS path: `text` may have lost a non-UTF-8 file
+            // name (#1440), exactly like the `open` closure above.
+            audit(file.as_deref().unwrap_or(Path::new(&text)))
         }
         "render" => {
             validate_options("render", &rest, RENDER_OPTIONS)?;
@@ -607,9 +613,9 @@ mod tests {
         values.iter().map(|value| (*value).into()).collect()
     }
 
-    /// A synthetic `.docx` on disk for `audit` tests: `dirty` selects a tracked
+    /// The fixture bytes: a synthetic `.docx`; `dirty` selects a tracked
     /// change carrying an author name (one finding) versus plain text (clean).
-    fn audit_fixture(dirty: bool) -> std::path::PathBuf {
+    fn audit_fixture_bytes(dirty: bool) -> Vec<u8> {
         use std::io::Write as _;
         let w = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
         let rels = "http://schemas.openxmlformats.org/package/2006/relationships";
@@ -637,9 +643,13 @@ mod tests {
             writer.start_file(*name, zip::write::SimpleFileOptions::default()).unwrap();
             writer.write_all(data.as_bytes()).unwrap();
         }
-        let bytes = writer.finish().unwrap().into_inner();
+        writer.finish().unwrap().into_inner()
+    }
+
+    /// A synthetic `.docx` on disk for `audit` tests.
+    fn audit_fixture(dirty: bool) -> std::path::PathBuf {
         let path = std::env::temp_dir().join(format!("wordcraft-audit-test-{}-{}.docx", std::process::id(), if dirty { "dirty" } else { "clean" }));
-        std::fs::write(&path, bytes).unwrap();
+        std::fs::write(&path, audit_fixture_bytes(dirty)).unwrap();
         path
     }
 
@@ -648,8 +658,10 @@ mod tests {
         // Missing file: the audit cannot run (exit 2), not "a finding".
         let err = run(&args(&["audit", "/definitely/not/a/file.docx"])).unwrap_err();
         assert!(matches!(&err, Failure::AuditError(e) if e.contains("cannot read")), "{err:?}");
-        // Unknown options are rejected like every other subcommand.
-        assert!(run(&args(&["audit", "f.docx", "--bogus"])).is_err());
+        // Unknown options are usage errors: the audit could not run (exit 2),
+        // never "findings present" (exit 1).
+        let err = run(&args(&["audit", "f.docx", "--bogus"])).unwrap_err();
+        assert!(matches!(&err, Failure::AuditError(e) if e.contains("unknown option")), "{err:?}");
 
         let dirty = audit_fixture(true);
         let clean = audit_fixture(false);
@@ -660,6 +672,23 @@ mod tests {
         assert!(run(&args(&["audit", clean.to_str().unwrap()])).is_ok());
         let _ = std::fs::remove_file(dirty);
         let _ = std::fs::remove_file(clean);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn audit_opens_non_utf8_paths_by_their_real_name() {
+        use std::ffi::OsString;
+        use std::os::unix::ffi::OsStringExt;
+        // A dirty fixture at a Latin-1 path: the lossy text argument would
+        // point nowhere, so reaching the findings proves the preserved OS
+        // path is used (#1440).
+        let raw_name = OsString::from_vec(b"caf\xe9-audit.docx".to_vec());
+        let path = std::env::temp_dir().join(&raw_name);
+        std::fs::write(&path, audit_fixture_bytes(true)).unwrap();
+        let raw: Vec<OsString> = vec!["audit".into(), path.as_os_str().to_os_string()];
+        let err = run(&raw).unwrap_err();
+        assert!(matches!(&err, Failure::Findings(1)), "{err:?}");
+        let _ = std::fs::remove_file(&path);
     }
 
     #[test]

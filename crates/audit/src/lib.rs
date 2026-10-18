@@ -48,6 +48,9 @@ const NS_RELS: &[u8] = b"http://schemas.openxmlformats.org/package/2006/relation
 const MAX_PARTS: usize = 100_000;
 /// Cap on decompressed bytes read from a single part (zip-bomb guard).
 const MAX_PART_BYTES: u64 = 256 * 1024 * 1024;
+/// Cap on total decompressed bytes across all scanned parts. Per-part caps
+/// alone don't bound N parts that each compress well (zip-bomb guard).
+const MAX_TOTAL_BYTES: u64 = 1024 * 1024 * 1024;
 /// Cap on XML elements walked in a single part.
 const MAX_XML_ELEMENTS: u64 = 2_000_000;
 
@@ -58,8 +61,8 @@ const MAX_XML_ELEMENTS: u64 = 2_000_000;
 /// instead.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum FindingKind {
-    /// `w:author`/`w:initials` on a tracked insertion or deletion (`w:ins`/`w:del`,
-    /// ECMA-376 §17.13.5.18/§17.13.5.12).
+    /// `w:author`/`w:initials` on a tracked change (the `CT_TrackChange` and
+    /// `CT_MoveBookmark` elements, ECMA-376 Part 1 §17.13.5).
     RevisionAuthor,
     /// `w:author`/`w:initials`/`w:date` on a `w:comment` (ECMA-376 §17.13.4.2).
     CommentAuthor,
@@ -70,9 +73,11 @@ pub enum FindingKind {
     ExtendedProperties,
     /// A `w:vanish` run property (ECMA-376 §17.3.2.42): text that renders hidden.
     HiddenText,
-    /// A `word/vbaProject.bin` part: the document carries macros.
+    /// A VBA macro project part (by relationship type, or `word/vbaProject.bin`):
+    /// the document carries macros.
     VbaProject,
-    /// A part under `word/embeddings/`: an embedded (often OLE) object.
+    /// An embedded object part (by relationship type, or under
+    /// `word/embeddings/`): an embedded (often OLE) object.
     OleEmbedding,
     /// A ZIP entry no relationship targets: leftover content nothing references.
     OrphanPart,
@@ -159,12 +164,15 @@ pub enum AuditError {
 /// Fails closed: unreadable or unparsable input is an [`AuditError`], never an
 /// empty finding list that looks like a clean bill of health.
 pub fn audit_bytes(bytes: &[u8]) -> Result<Vec<AuditFinding>, AuditError> {
-    let names = part_names(bytes)?;
+    // One archive for the whole scan: re-opening it per part would re-parse
+    // the central directory each time (quadratic on hostile input).
+    let mut archive = zip::ZipArchive::new(Cursor::new(bytes)).map_err(|e| AuditError::Zip(e.to_string()))?;
+    let names = part_names(&mut archive)?;
     let mut parts: BTreeMap<String, Vec<u8>> = BTreeMap::new();
+    let mut total: u64 = 0;
     for name in names.iter().filter(|n| is_scanned_part(n)) {
-        if let Some(data) = read_part(bytes, name)? {
-            parts.insert(name.clone(), data);
-        }
+        let data = read_part(&mut archive, name, &mut total)?;
+        parts.insert(name.clone(), data);
     }
 
     let mut findings = Vec::new();
@@ -182,7 +190,7 @@ pub fn audit_bytes(bytes: &[u8]) -> Result<Vec<AuditFinding>, AuditError> {
     if let Some(xml) = parts.get("docProps/app.xml") {
         scan_extended_properties(xml, &mut findings)?;
     }
-    scan_active_content(&names, &mut findings);
+    scan_active_content(&names, &parts, &mut findings)?;
     scan_orphans(&names, &parts, &mut findings)?;
 
     findings.sort_by(|a, b| (&a.id, &a.location, &a.detail).cmp(&(&b.id, &b.location, &b.detail)));
@@ -195,8 +203,7 @@ fn is_scanned_part(name: &str) -> bool {
 }
 
 /// Every non-directory entry name in the ZIP, in archive order.
-fn part_names(bytes: &[u8]) -> Result<Vec<String>, AuditError> {
-    let mut archive = zip::ZipArchive::new(Cursor::new(bytes)).map_err(|e| AuditError::Zip(e.to_string()))?;
+fn part_names(archive: &mut zip::ZipArchive<Cursor<&[u8]>>) -> Result<Vec<String>, AuditError> {
     let len = archive.len();
     if len > MAX_PARTS {
         return Err(AuditError::Limit(format!("too many ZIP entries: {len}")));
@@ -212,21 +219,24 @@ fn part_names(bytes: &[u8]) -> Result<Vec<String>, AuditError> {
     Ok(names)
 }
 
-/// Read one part, capped against decompression bombs. `Ok(None)` when the part
-/// vanished between listing and reading (the archive is not re-read otherwise).
-fn read_part(bytes: &[u8], name: &str) -> Result<Option<Vec<u8>>, AuditError> {
-    let mut archive = zip::ZipArchive::new(Cursor::new(bytes)).map_err(|e| AuditError::Zip(e.to_string()))?;
-    let mut file = match archive.by_name(name) {
-        Ok(f) => f,
-        Err(_) => return Ok(None),
-    };
+/// Read one part, capped against decompression bombs, and charge it against
+/// the cumulative budget. Fails closed: with a single archive for the whole
+/// scan, a listed name that can't be read is an error, never a silent skip.
+fn read_part(archive: &mut zip::ZipArchive<Cursor<&[u8]>>, name: &str, total: &mut u64) -> Result<Vec<u8>, AuditError> {
     let mut data = Vec::new();
-    let mut limited = (&mut file).take(MAX_PART_BYTES + 1);
-    limited.read_to_end(&mut data).map_err(|e| AuditError::Zip(format!("{name}: {e}")))?;
+    {
+        let mut file = archive.by_name(name).map_err(|e| AuditError::Zip(format!("{name}: {e}")))?;
+        let mut limited = (&mut file).take(MAX_PART_BYTES + 1);
+        limited.read_to_end(&mut data).map_err(|e| AuditError::Zip(format!("{name}: {e}")))?;
+    }
     if data.len() as u64 > MAX_PART_BYTES {
         return Err(AuditError::Limit(format!("part too large: {name}")));
     }
-    Ok(Some(data))
+    *total = total.saturating_add(data.len() as u64);
+    if *total > MAX_TOTAL_BYTES {
+        return Err(AuditError::Limit(format!("package too large: {total} decompressed bytes over budget")));
+    }
+    Ok(data)
 }
 
 /// One element the walker saw: namespace URI, local name, decoded attributes.
@@ -246,10 +256,14 @@ fn for_each_element(xml: &[u8], part: &str, f: &mut impl FnMut(&Element) -> Resu
         config.trim_text_start = false;
         config.trim_text_end = false;
         config.expand_empty_elements = false;
-        config.check_end_names = false;
+        // Reject well-tokenized but mismatched closing tags: a malformed part
+        // must fail the audit, never produce a partial (possibly clean-looking)
+        // finding list.
+        config.check_end_names = true;
     }
     let mut buf = Vec::new();
     let mut count: u64 = 0;
+    let mut depth: u32 = 0;
     loop {
         buf.clear();
         let (resolution, event) = reader.read_resolved_event_into(&mut buf).map_err(|e| AuditError::Xml(part.to_string(), e.to_string()))?;
@@ -260,14 +274,30 @@ fn for_each_element(xml: &[u8], part: &str, f: &mut impl FnMut(&Element) -> Resu
             _ => Vec::new(),
         };
         match event {
-            Event::Start(ref e) | Event::Empty(ref e) => {
+            Event::Start(ref e) => {
+                depth = depth.saturating_add(1);
                 count += 1;
                 if count > MAX_XML_ELEMENTS {
                     return Err(AuditError::Limit(format!("{part}: too many XML elements")));
                 }
                 f(&element_of(&mut reader, &ns, e, part)?)?;
             }
-            Event::Eof => break,
+            Event::Empty(ref e) => {
+                count += 1;
+                if count > MAX_XML_ELEMENTS {
+                    return Err(AuditError::Limit(format!("{part}: too many XML elements")));
+                }
+                f(&element_of(&mut reader, &ns, e, part)?)?;
+            }
+            Event::End(_) => {
+                depth = depth.saturating_sub(1);
+            }
+            Event::Eof => {
+                if depth != 0 {
+                    return Err(AuditError::Xml(part.to_string(), "unclosed elements at end of part".to_string()));
+                }
+                break;
+            }
             _ => {}
         }
     }
@@ -313,18 +343,21 @@ fn texts_of(xml: &[u8], part: &str, ns: &[u8], local: &str) -> Result<Vec<String
         config.trim_text_start = false;
         config.trim_text_end = false;
         config.expand_empty_elements = false;
-        config.check_end_names = false;
+        // See `for_each_element`: malformed parts fail the audit.
+        config.check_end_names = true;
     }
     let mut buf = Vec::new();
     let mut out = Vec::new();
     let mut depth: u32 = 0;
+    let mut open: u32 = 0;
     let mut current = String::new();
     let mut count: u64 = 0;
     loop {
         buf.clear();
         let (resolution, event) = reader.read_resolved_event_into(&mut buf).map_err(|e| AuditError::Xml(part.to_string(), e.to_string()))?;
         match event {
-            Event::Start(ref e) | Event::Empty(ref e) => {
+            Event::Start(ref e) => {
+                open = open.saturating_add(1);
                 count += 1;
                 if count > MAX_XML_ELEMENTS {
                     return Err(AuditError::Limit(format!("{part}: too many XML elements")));
@@ -341,14 +374,29 @@ fn texts_of(xml: &[u8], part: &str, ns: &[u8], local: &str) -> Result<Vec<String
                 } else if depth > 0 {
                     depth = depth.saturating_add(1);
                 }
-                if matches!(event, Event::Empty(_)) && depth > 0 {
-                    depth = depth.saturating_sub(1);
-                    if depth == 0 {
-                        out.push(std::mem::take(&mut current));
-                    }
+            }
+            Event::Empty(ref e) => {
+                open = open.saturating_add(1);
+                count += 1;
+                if count > MAX_XML_ELEMENTS {
+                    return Err(AuditError::Limit(format!("{part}: too many XML elements")));
                 }
+                let el_ns: &[u8] = match &resolution {
+                    ResolveResult::Bound(n) => n.0,
+                    _ => b"",
+                };
+                let el_local = e.local_name();
+                let el_local = String::from_utf8_lossy(el_local.as_ref());
+                if depth == 0 && el_ns == ns && el_local.as_ref() == local {
+                    // An empty target element contributes its (empty) text.
+                    out.push(String::new());
+                } else if depth > 0 {
+                    // Empty elements open and close immediately: no depth change.
+                }
+                open = open.saturating_sub(1);
             }
             Event::End(_) => {
+                open = open.saturating_sub(1);
                 if depth > 0 {
                     depth = depth.saturating_sub(1);
                     if depth == 0 {
@@ -367,49 +415,76 @@ fn texts_of(xml: &[u8], part: &str, ns: &[u8], local: &str) -> Result<Vec<String
                     current.push_str(&String::from_utf8_lossy(t.as_ref()));
                 }
             }
-            Event::Eof => break,
+            Event::Eof => {
+                if open != 0 {
+                    return Err(AuditError::Xml(part.to_string(), "unclosed elements at end of part".to_string()));
+                }
+                break;
+            }
             _ => {}
         }
     }
     Ok(out)
 }
 
-/// `w:ins`/`w:del` authors and `w:vanish` runs in `word/document.xml`.
+/// Local names of the WordprocessingML revision elements that carry `w:author`
+/// (the `CT_TrackChange` and `CT_MoveBookmark` types, ECMA-376 Part 1 §17.13.5).
+/// `w:tblGridChange` is deliberately excluded: its type (`CT_TblGridChange`)
+/// defines no `w:author`.
+const REVISION_ELEMENTS: &[&str] = &[
+    "ins",
+    "del",
+    "moveFrom",
+    "moveTo",
+    "moveFromRangeStart",
+    "moveToRangeStart",
+    "cellIns",
+    "cellDel",
+    "cellMerge",
+    "customXmlInsRangeStart",
+    "customXmlInsRangeEnd",
+    "customXmlDelRangeStart",
+    "customXmlDelRangeEnd",
+    "customXmlMoveFromRangeStart",
+    "customXmlMoveFromRangeEnd",
+    "customXmlMoveToRangeStart",
+    "customXmlMoveToRangeEnd",
+];
+
+/// Author-bearing revision elements and `w:vanish` runs in `word/document.xml`.
 fn scan_revisions_and_hidden_text(xml: &[u8], findings: &mut Vec<AuditFinding>) -> Result<(), AuditError> {
     for_each_element(xml, "word/document.xml", &mut |el| {
         if el.ns.as_slice() != NS_W {
             return Ok(());
         }
-        match el.local.as_str() {
-            "ins" | "del" => {
-                if let Some(author) = attr(el, NS_W, "author")
-                    && !author.is_empty()
+        if REVISION_ELEMENTS.contains(&el.local.as_str()) {
+            if let Some(author) = attr(el, NS_W, "author")
+                && !author.is_empty()
+            {
+                let mut detail = format!("author=\"{author}\"");
+                if let Some(initials) = attr(el, NS_W, "initials")
+                    && !initials.is_empty()
                 {
-                    let mut detail = format!("author=\"{author}\"");
-                    if let Some(initials) = attr(el, NS_W, "initials")
-                        && !initials.is_empty()
-                    {
-                        detail.push_str(&format!(" initials=\"{initials}\""));
-                    }
-                    findings.push(AuditFinding::new(FindingKind::RevisionAuthor, format!("word/document.xml <w:{}>", el.local), detail));
+                    detail.push_str(&format!(" initials=\"{initials}\""));
                 }
+                findings.push(AuditFinding::new(FindingKind::RevisionAuthor, format!("word/document.xml <w:{}>", el.local), detail));
             }
-            // ECMA-376 §17.3.2.42 `CT_OnOff`: absent `w:val` means on; only an
-            // explicit false-ish value means the text is not hidden.
-            "vanish" => {
-                let hidden = match attr(el, NS_W, "val") {
-                    None => true,
-                    Some(v) => !matches!(v.to_ascii_lowercase().as_str(), "false" | "off" | "0" | "f" | "no"),
-                };
-                if hidden {
-                    findings.push(AuditFinding::new(
-                        FindingKind::HiddenText,
-                        "word/document.xml <w:vanish>".to_string(),
-                        "run property hides text".to_string(),
-                    ));
-                }
+            return Ok(());
+        }
+        // ECMA-376 §17.3.2.42 `CT_OnOff`: absent `w:val` means on; only an
+        // explicit false-ish value means the text is not hidden.
+        if el.local == "vanish" {
+            let hidden = match attr(el, NS_W, "val") {
+                None => true,
+                Some(v) => !matches!(v.to_ascii_lowercase().as_str(), "false" | "off" | "0" | "f" | "no"),
+            };
+            if hidden {
+                findings.push(AuditFinding::new(
+                    FindingKind::HiddenText,
+                    "word/document.xml <w:vanish>".to_string(),
+                    "run property hides text".to_string(),
+                ));
             }
-            _ => {}
         }
         Ok(())
     })
@@ -467,16 +542,53 @@ fn scan_extended_properties(xml: &[u8], findings: &mut Vec<AuditFinding>) -> Res
     Ok(())
 }
 
-/// `word/vbaProject.bin` and anything under `word/embeddings/`: reported as
-/// visibility, never blocked or removed.
-fn scan_active_content(names: &[String], findings: &mut Vec<AuditFinding>) {
+/// Relationship types that mark active content: the VBA project part and
+/// embedded objects/packages (ECMA-376 Part 2 §11, plus the Office VBA extension).
+const RT_VBA_PROJECT: &str = "http://schemas.microsoft.com/office/2006/relationships/vbaProject";
+const RT_OLE_OBJECT: &str = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/oleObject";
+const RT_PACKAGE: &str = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/package";
+
+/// Macro and embedded-object parts: reported as visibility, never blocked or
+/// removed. Detection is by relationship type first — a reachable VBA or OLE
+/// part may live at any valid package path — with the fixed names and
+/// directories as fallback for parts whose relationships are missing.
+fn scan_active_content(names: &[String], parts: &BTreeMap<String, Vec<u8>>, findings: &mut Vec<AuditFinding>) -> Result<(), AuditError> {
+    // Parts already reported, so the two passes never double-report one part.
+    let mut reported: BTreeSet<String> = BTreeSet::new();
+    let mut report = |kind: FindingKind, location: String, detail: &str, findings: &mut Vec<AuditFinding>| {
+        if reported.insert(location.clone()) {
+            findings.push(AuditFinding::new(kind, location, detail.to_string()));
+        }
+    };
     for name in names {
         if name == "word/vbaProject.bin" {
-            findings.push(AuditFinding::new(FindingKind::VbaProject, "word/vbaProject.bin".to_string(), "VBA macro project present".to_string()));
+            report(FindingKind::VbaProject, name.clone(), "VBA macro project present", findings);
         } else if name.starts_with("word/embeddings/") {
-            findings.push(AuditFinding::new(FindingKind::OleEmbedding, name.clone(), "embedded object present".to_string()));
+            report(FindingKind::OleEmbedding, name.clone(), "embedded object present", findings);
         }
     }
+    for name in names.iter().filter(|n| n.ends_with(".rels")) {
+        let Some(xml) = parts.get(name) else { continue };
+        let source_dir = source_dir_of_rels(name);
+        for_each_element(xml, name, &mut |el| {
+            if el.ns.as_slice() == NS_RELS
+                && el.local == "Relationship"
+                && attr(el, b"", "TargetMode") != Some("External")
+                && let Some(target) = attr(el, b"", "Target")
+            {
+                let resolved = resolve_target(&source_dir, target);
+                match attr(el, b"", "Type").unwrap_or("") {
+                    RT_VBA_PROJECT => report(FindingKind::VbaProject, resolved, "VBA macro project present (relationship type)", findings),
+                    RT_OLE_OBJECT | RT_PACKAGE => {
+                        report(FindingKind::OleEmbedding, resolved, "embedded object present (relationship type)", findings)
+                    }
+                    _ => {}
+                }
+            }
+            Ok(())
+        })?;
+    }
+    Ok(())
 }
 
 /// ZIP entries no relationship targets: content nothing references.
