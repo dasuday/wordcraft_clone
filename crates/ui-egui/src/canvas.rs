@@ -1895,12 +1895,14 @@ fn balloons(app: &mut WordApp, ui: &mut Ui, painter: &egui::Painter, rects: &[Re
             if beside + w <= view.max.x - 8.0 { (beside, w, false) } else { ((view.max.x - w - 8.0).max(view.min.x + 8.0), w, true) }
         };
         let mut next_y = pr.min.y;
+        // An author's colour, and the colour of their leader across the page.
         let mut color_of = |author: &str| {
             let ai = authors.iter().position(|a| a == author).unwrap_or_else(|| {
                 authors.push(author.to_string());
                 authors.len() - 1
             });
-            palette.get(ai % palette.len()).copied().unwrap_or(t.blue)
+            let color = palette.get(ai % palette.len()).copied().unwrap_or(t.blue);
+            (color, leaders.get(ai % leaders.len()).copied().unwrap_or(color))
         };
         for (ax, ay, item, pos) in list.iter() {
             let fs = (11.0 * page_scale / PX_PER_PT).clamp(8.0, 16.0);
@@ -1910,7 +1912,7 @@ fn balloons(app: &mut WordApp, ui: &mut Ui, painter: &egui::Painter, rects: &[Re
                 Balloon::Format(author, text) => {
                     // A read-only card: who formatted, and how.
                     let author = author_name(author);
-                    let color = color_of(&author);
+                    let (color, leader) = color_of(&author);
                     let top = (anchor.y - 12.0).max(next_y);
                     let head = painter.layout(author, semibold(fs), t.text, w - 16.0);
                     let body = painter.layout(text.clone(), regular(fs), t.text_dim, w - 16.0);
@@ -1920,7 +1922,7 @@ fn balloons(app: &mut WordApp, ui: &mut Ui, painter: &egui::Painter, rects: &[Re
                         continue;
                     }
                     let lead = Stroke::new(1.0, color.linear_multiply(0.7));
-                    let on_page = Stroke::new(1.0, leaders.get(ai % leaders.len()).copied().unwrap_or(color).linear_multiply(0.7));
+                    let on_page = Stroke::new(1.0, leader.linear_multiply(0.7));
                     dashed(painter, anchor, pos2(pr.max.x, anchor.y), on_page);
                     painter.line_segment([pos2(pr.max.x, anchor.y), pos2(x0, top + 10.0)], lead);
                     card_shapes(painter, &t, card, color, false, None);
@@ -1931,11 +1933,11 @@ fn balloons(app: &mut WordApp, ui: &mut Ui, painter: &egui::Painter, rects: &[Re
                     continue;
                 }
                 Balloon::Writing => {
-                    let color = color_of(&author_name(&app.session.author));
+                    let (color, leader) = color_of(&author_name(&app.session.author));
                     let top = (anchor.y + if over_page { 4.0 } else { -12.0 }).max(next_y);
                     let lead = Stroke::new(1.5, color);
                     if !over_page {
-                        dashed(painter, anchor, pos2(pr.max.x, anchor.y), lead);
+                        dashed(painter, anchor, pos2(pr.max.x, anchor.y), Stroke::new(1.5, leader));
                         painter.line_segment([pos2(pr.max.x, anchor.y), pos2(x0, top + 10.0)], lead);
                     }
                     let card = Rect::from_min_size(pos2(x0, top), vec2(w, app.canvas.draft_h.max(24.0)));
@@ -1948,7 +1950,7 @@ fn balloons(app: &mut WordApp, ui: &mut Ui, painter: &egui::Painter, rects: &[Re
             let Some(c) = app.session.doc.comments.get(id) else { continue };
             let resolved = c.resolved;
             let author = author_name(&c.author);
-            let color = color_of(&author);
+            let (color, leader) = color_of(&author);
             let thread: Vec<u32> = replies.get(id).cloned().unwrap_or_default();
             // Over the page the card goes under the commented line, not on it.
             let top = (anchor.y + if over_page { 4.0 } else { -12.0 }).max(next_y);
@@ -1987,10 +1989,7 @@ fn balloons(app: &mut WordApp, ui: &mut Ui, painter: &egui::Painter, rects: &[Re
             // Leader: from the anchor along the text to the page edge, then to the card.
             let lead = Stroke::new(if selected { 1.5 } else { 1.0 }, color.linear_multiply(if selected { 1.0 } else { 0.7 }));
             if !over_page {
-                let on_page = Stroke::new(
-                    lead.width,
-                    leaders.get(ai % leaders.len()).copied().unwrap_or(color).linear_multiply(if selected { 1.0 } else { 0.7 }),
-                );
+                let on_page = Stroke::new(lead.width, leader.linear_multiply(if selected { 1.0 } else { 0.7 }));
                 dashed(painter, anchor, pos2(pr.max.x, anchor.y), on_page);
                 painter.line_segment([pos2(pr.max.x, anchor.y), pos2(x0, top + 10.0)], lead);
             }
