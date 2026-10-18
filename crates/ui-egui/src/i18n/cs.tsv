@@ -2654,3 +2654,9 @@ preview	Title	Ukázka
 	{added}; {count} couldn't be read: {names}	{added}; nelze přečíst ({count}): {names}
 	{names} and {n} more	{names} a dalších {n}
 	{added}; {n} skipped (limit {max})	{added}; přeskočeno: {n} (limit {max})
+# Picture Format › Size: the Size dialog, sizes typed in any unit (#2573)
+	Lock aspect ratio	Zamknout poměr stran
+	Relative to original picture size	Vzhledem k původní velikosti obrázku
+	Original size	Původní velikost
+	{width} × {height} pixels	{width} × {height} pixelů
+	Type a size in any unit, such as 5 cm or 300 px. The other side follows, so the picture keeps its proportions.	Zadejte velikost v libovolné jednotce, například 5 cm nebo 300 px. Druhá strana se přizpůsobí, takže obrázek zachová své proporce.

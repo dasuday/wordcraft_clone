@@ -2262,3 +2262,9 @@
 	{added}; {count} couldn't be read: {names}	{added}; {count} nicht lesbar: {names}
 	{names} and {n} more	{names} und {n} weitere
 	{added}; {n} skipped (limit {max})	{added}; {n} übersprungen (Limit {max})
+# Picture Format › Size: the Size dialog, sizes typed in any unit (#2573)
+	Lock aspect ratio	Seitenverhältnis sperren
+	Relative to original picture size	Relativ zur ursprünglichen Bildgröße
+	Original size	Originalgröße
+	{width} × {height} pixels	{width} × {height} Pixel
+	Type a size in any unit, such as 5 cm or 300 px. The other side follows, so the picture keeps its proportions.	Geben Sie eine Größe in einer beliebigen Einheit ein, z. B. 5 cm oder 300 px. Die andere Seite passt sich an, sodass das Bild seine Proportionen behält.

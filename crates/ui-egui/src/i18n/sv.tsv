@@ -2677,3 +2677,9 @@ preview	Title	Titel
 	{added}; {count} couldn't be read: {names}	{added}; {count} kunde inte läsas: {names}
 	{names} and {n} more	{names} och {n} till
 	{added}; {n} skipped (limit {max})	{added}; {n} hoppades över (gräns {max})
+# Picture Format › Size: the Size dialog, sizes typed in any unit (#2573)
+	Lock aspect ratio	Lås proportioner
+	Relative to original picture size	I förhållande till bildens ursprungliga storlek
+	Original size	Ursprunglig storlek
+	{width} × {height} pixels	{width} × {height} pixlar
+	Type a size in any unit, such as 5 cm or 300 px. The other side follows, so the picture keeps its proportions.	Skriv en storlek i valfri enhet, till exempel 5 cm eller 300 px. Den andra sidan följer med, så att bilden behåller sina proportioner.

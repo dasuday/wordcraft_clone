@@ -2659,3 +2659,9 @@ preview	Title	Örnek
 	{added}; {count} couldn't be read: {names}	{added}; {count} okunamadı: {names}
 	{names} and {n} more	{names} ve {n} tane daha
 	{added}; {n} skipped (limit {max})	{added}; {n} atlandı (sınır {max})
+# Picture Format › Size: the Size dialog, sizes typed in any unit (#2573)
+	Lock aspect ratio	En boy oranını kilitle
+	Relative to original picture size	Özgün resim boyutuna göre
+	Original size	Özgün boyut
+	{width} × {height} pixels	{width} × {height} piksel
+	Type a size in any unit, such as 5 cm or 300 px. The other side follows, so the picture keeps its proportions.	Herhangi bir birimde bir boyut yazın, örneğin 5 cm veya 300 px. Diğer kenar da buna uyar, böylece resim oranlarını korur.

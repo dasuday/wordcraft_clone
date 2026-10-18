@@ -2277,3 +2277,9 @@
 	{added}; {count} couldn't be read: {names}	{added}; није могуће прочитати ({count}): {names}
 	{names} and {n} more	{names} и још {n}
 	{added}; {n} skipped (limit {max})	{added}; прескочено: {n} (ограничење {max})
+# Picture Format › Size: the Size dialog, sizes typed in any unit (#2573)
+	Lock aspect ratio	Закључај однос ширине и висине
+	Relative to original picture size	У односу на оригиналну величину слике
+	Original size	Оригинална величина
+	{width} × {height} pixels	{width} × {height} пиксела
+	Type a size in any unit, such as 5 cm or 300 px. The other side follows, so the picture keeps its proportions.	Унесите величину у било којој јединици, на пример 5 cm или 300 px. Друга страна се прилагођава, па слика задржава своје пропорције.

@@ -2658,3 +2658,9 @@
 	{added}; {count} couldn't be read: {names}	{added}; {count} nem olvasható: {names}
 	{names} and {n} more	{names} és még {n}
 	{added}; {n} skipped (limit {max})	{added}; {n} kihagyva (korlát: {max})
+# Picture Format › Size: the Size dialog, sizes typed in any unit (#2573)
+	Lock aspect ratio	Méretarány zárolása
+	Relative to original picture size	Az eredeti képmérethez viszonyítva
+	Original size	Eredeti méret
+	{width} × {height} pixels	{width} × {height} képpont
+	Type a size in any unit, such as 5 cm or 300 px. The other side follows, so the picture keeps its proportions.	Írj be egy méretet bármilyen mértékegységben, például 5 cm vagy 300 px. A másik oldal követi, így a kép megtartja az arányait.

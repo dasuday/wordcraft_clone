@@ -2551,31 +2551,35 @@ fn picture_format(app: &mut WordApp, ui: &mut Ui) {
             group_menu(ui, app, Some("Group"));
         });
     });
-    group(ui, "Size", None, app, |ui, app| {
+    // The launcher opens the Size dialog: scale, Lock aspect ratio, the original size (#2573).
+    group(ui, "Size", Some("picture.size"), app, |ui, app| {
         let (media, off, w0, h0, crop0, alt0) = match wordcraft_engine::cmd::objects::selected(&app.session) {
             Some((pos, wordcraft_doc::para::InlineObject::Image { media, w, h, alt, crop, .. })) => (media, pos.off, w, h, crop, alt),
             _ => (String::new(), 0, 0.0, 0.0, [0.0; 4], String::new()),
         };
         // `picture.size` locks the aspect ratio unless told otherwise, so one dimension suffices.
+        // The fields show the interface unit and take a size typed in any unit, pixels too
+        // (`300 px`, #1901), applied on Enter; a drag applies as it goes, one undo step.
+        let unit = crate::options::unit();
+        let k = unit.pt_per_unit();
         stack(ui, |ui| {
             crate::widgets::row(ui, |ui| {
-                ui.label(egui::RichText::new(tl!("W:")).small());
-                let mut w = w0;
-                let r = ui.add(egui::DragValue::new(&mut w).speed(1.0).range(4.0..=2000.0).suffix(format!(" {}", tl!("pt"))));
-                if r.changed() {
-                    if r.dragged() && !r.drag_started() {
-                        app.session.join_next_undo();
+                for (label, key, pt) in [("W:", "width", w0), ("H:", "height", h0)] {
+                    let name = ui.label(egui::RichText::new(tl!(label)).small());
+                    let was = pt / k;
+                    let mut v = was;
+                    let field = egui::DragValue::new(&mut v).speed(1.0 / k).range(1.0 / k..=4000.0 / k).measure(unit).max_decimals(2);
+                    let r = ui.add(field.update_while_editing(false)).labelled_by(name.id).on_hover_text(tl!(
+                        "Type a size in any unit, such as 5 cm or 300 px. The other side follows, so the picture keeps its proportions."
+                    ));
+                    // While typing, the field reports each keystroke as a change; only a new
+                    // value (Enter, a drag) resizes.
+                    if r.changed() && v != was {
+                        if r.dragged() && !r.drag_started() {
+                            app.session.join_next_undo();
+                        }
+                        let _ = app.run("picture.size", json!({key: v * k}));
                     }
-                    let _ = app.run("picture.size", json!({"width": w}));
-                }
-                ui.label(egui::RichText::new(tl!("H:")).small());
-                let mut h = h0;
-                let r = ui.add(egui::DragValue::new(&mut h).speed(1.0).range(4.0..=2000.0).suffix(format!(" {}", tl!("pt"))));
-                if r.changed() {
-                    if r.dragged() && !r.drag_started() {
-                        app.session.join_next_undo();
-                    }
-                    let _ = app.run("picture.size", json!({"height": h}));
                 }
                 rotation_field(ui, app);
             });
@@ -3265,5 +3269,46 @@ mod tests {
         assert_eq!(resolve_tab("Picture Format", &["Home"]), "Home");
         assert_eq!(resolve_tab("Table Design", &["Home"]), "Home");
         assert_eq!(resolve_tab("Home", &["Home"]), "Home");
+    }
+
+    /// #2573, #1901: Picture Format › Size's width shows the interface unit and takes a size typed
+    /// in pixels. It applies on Enter, not while typing, keeping the picture's proportions, as one
+    /// undo step.
+    #[test]
+    fn picture_width_typed_in_pixels_keeps_the_proportions() {
+        use egui::accesskit::Role;
+        use egui_kittest::kittest::Queryable;
+        let mut a = crate::WordApp::new(Session::new(wordcraft_doc::Document::new()), crate::Services::default());
+        a.run("file.options", json!({"units": "centimeters"})).unwrap();
+        a.run("insert.picture", json!({"data": png_data()})).unwrap();
+        a.run("ui.tab", json!({"tab": "Picture Format"})).unwrap();
+        let size = |a: &crate::WordApp| wordcraft_engine::cmd::objects::selected(&a.session).and_then(|(_, o)| o.frame().map(|(w, h, _)| (w, h)));
+        assert_eq!(size(&a), Some((15.0, 7.5)), "20×10 px at 96 ppi");
+        // Wide enough for the whole tab: the Size group is its last.
+        let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(2560.0, 900.0)).build_ui_state(
+            |ui, app: &mut crate::WordApp| {
+                let ctx = ui.ctx().clone();
+                app.logic(&ctx);
+                app.ui(ui);
+            },
+            a,
+        );
+        h.run_steps(4);
+        let shown = h.get_by_role_and_label(Role::SpinButton, "W:").value().unwrap_or_default();
+        assert!(shown.ends_with(" cm"), "the interface unit: {shown:?}");
+        h.get_by_role_and_label(Role::SpinButton, "W:").click();
+        h.run_steps(2);
+        // Editing, the field is still a spin button, now showing the bare number to type over.
+        let editing = h.get_by_role_and_label(Role::SpinButton, "W:");
+        assert!(editing.is_focused() && editing.value().is_some_and(|v| !v.ends_with(" cm")), "a click starts typing");
+        editing.type_text("300 px");
+        h.run_steps(2);
+        assert_eq!(size(h.state()), Some((15.0, 7.5)), "nothing applies while typing");
+        h.key_press(egui::Key::Enter);
+        h.run_steps(2);
+        let (w, ht) = size(h.state()).unwrap();
+        assert!((w - 225.0).abs() < 0.01 && (ht - 112.5).abs() < 0.01, "300 px = 225 pt, the height follows: {w}×{ht}");
+        h.state_mut().run("edit.undo", json!({})).unwrap();
+        assert_eq!(size(h.state()), Some((15.0, 7.5)), "one undo step");
     }
 }
