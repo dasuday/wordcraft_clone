@@ -14,6 +14,13 @@
 # translated UI was consulted or copied; add entries the same way.
 # Product, format and technology names (WordCraft, PDF, Markdown, MCP …) stay as they are.
 
+# Native save conflicts (#813)
+	The file changed or is unavailable	Filen har ändrats eller är inte tillgänglig
+	Your edits are still here. Save them to a different file to keep both versions.	Dina ändringar finns kvar här. Spara dem i en annan fil för att behålla båda versionerna.
+	Keep editing	Fortsätt redigera
+	Save copy…	Spara kopia…
+	Save conflict	Konflikt vid sparande
+
 	(no style)	(ingen stil)
 	(no suggestions)	(inga förslag)
 	1.5 Line Spacing	Radavstånd 1,5

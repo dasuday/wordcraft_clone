@@ -14,6 +14,13 @@
 # messages, dialog text) was written from the plain meaning of the English text in ordinary
 # computing vocabulary; no localisation string table or translated text was copied.
 
+# Native save conflicts (#813)
+	Save conflict	Conflitto di salvataggio
+	The file changed or is unavailable	Il file è stato modificato o non è disponibile
+	Your edits are still here. Save them to a different file to keep both versions.	Le modifiche sono ancora presenti. Salvale in un altro file per conservare entrambe le versioni.
+	Keep editing	Continua a modificare
+	Save copy…	Salva copia…
+
 	(no style)	(nessuno stile)
 	(no suggestions)	(nessun suggerimento)
 	1.5 Line Spacing	Interlinea 1,5
@@ -705,6 +712,8 @@
 	Rules	Regole
 	Résumé	Curriculum
 	Save	Salva
+
+# Save conflict dialog (#813).
 	Save As	Salva con nome
 	Save a copy in another format. Printing goes through a PDF you can print from any viewer.	Salva una copia in un altro formato. La stampa passa attraverso un PDF che puoi stampare da qualsiasi visualizzatore.
 	Save as Template	Salva come modello

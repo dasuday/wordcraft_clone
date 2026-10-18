@@ -9,6 +9,13 @@
 # Use count-neutral labels. This catalog does not add Estonian spell checking.
 # Author: @henno with Codex; MIT OR Apache-2.0, like WordCraft.
 
+# Native save conflicts (#813)
+	Save conflict	Salvestamise konflikt
+	The file changed or is unavailable	Fail on muutunud või pole saadaval
+	Your edits are still here. Save them to a different file to keep both versions.	Sinu muudatused on alles. Salvesta need teise faili, et mõlemad versioonid säiliksid.
+	Keep editing	Jätka redigeerimist
+	Save copy…	Salvesta koopia…
+
 	(no suggestions)	(soovitused puuduvad)
 	1.5 Line Spacing	Reavahe 1,5
 	A free, open-source word processor written from scratch in Rust.\nPart of the Crafting Apps from the ArtCraft team.	Tasuta avatud lähtekoodiga tekstitöötlusprogramm, mis on kirjutatud Rustis.\nArtCrafti meeskonna Crafting Appsi osa.
@@ -2118,6 +2125,7 @@
 	Turkish	Türgi
 	Ukrainian	Ukraina
 	{language} is now the document's default language.	{language} on nüüd dokumendi vaikekeel.
+# Save conflict dialog (#813).
 	Visual effects	Visuaalefektid
 	Animation effects:	Animatsiooniefektid:
 	On	Sees

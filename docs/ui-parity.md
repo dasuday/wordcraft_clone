@@ -57,6 +57,21 @@ Document title opens Rename Document; the account badge opens Options › Genera
 
 The Language dialog reads effective character formatting, including document defaults, paragraph styles and character styles. Accepting it unchanged keeps inherited language and no-proof choices (#2717); explicit direct formatting still takes precedence. Other proofing and Windows-specific reports remain separate.
 
+## Native save conflicts
+
+A user-initiated native Save that detects an external change opens a short dialog: Keep editing
+retains the unsaved document; Save Copy opens the existing asynchronous picker with a distinct
+suggested name. A cancelled picker writes nothing; its answer is bound to the document that
+opened it. Picking an alias of the conflicting file is refused again. Save before Close/New/Open
+also retains edits on conflict. AutoSave pauses and reports the conflict once. Programmatic
+engine calls return the typed error without opening a dialog. The dialog uses theme tokens and
+translation lookups; new text may fall back to English pending native-language review.
+
+On an external-change refusal from Save Changes, the existing prompt retains its pending
+New/Open/Close action and displays the error. Nothing closes or discards edits. A separate
+Save or AutoSave refusal offers Keep editing / Save copy; web saves still wait for the browser
+picker result before a pending close can continue.
+
 ## Find navigation (#2096)
 
 Find selects the Results tab, including when it prefills selected text. Editing the search query also reveals matching or empty results. Manual Headings and Pages navigation remains available until the next search action.
@@ -79,6 +94,7 @@ Find selects the Results tab, including when it prefills selected text. Editing 
 | 2026-10-16 | trivial | Comment and revision balloons are readable in the dark theme: the card, the markup area, the author stripes and the leader lines come from theme tokens, and the text reaches 4.5:1 (#2045) |
 | 2026-10-15 | trivial | Layout › Columns works on the selected text, as in Word: section breaks around it, the rest of the document unchanged; More Columns… adds "Selected text" to Apply to and picks it when text is selected (#2024) |
 | 2026-10-15 | trivial | Navigation Find and query edits expose Results (#2096) |
+| 2026-10-15 | trivial | Native Save conflict strings cover the Korean, Swedish and Croatian catalogs; Vietnamese additions from main retained |
 | 2026-10-15 | trivial | AutoCorrect Options › Exceptions: "Automatically add words to list" switches for First Letter and INitial CAps (#1857) |
 | 2026-10-16 | trivial | Multilevel List heading presets: every selected paragraph takes the first level (Heading 1), as Word for Mac does; headings outside the selection keep their styles and levels (#1793) |
 | 2026-10-16 | trivial | Multilevel List heading presets: selected paragraphs already in a Heading style keep their style and level, every other selected paragraph becomes Heading 1, as Word for Mac does (#1793) |
@@ -155,6 +171,7 @@ Find selects the Results tab, including when it prefills selected text. Editing 
 | 2026-10-11 | trivial | Built-in file browser when the system file dialog can't be shown on Linux/BSD; `ui.fileBrowser` (#576) |
 | 2026-10-11 | trivial | Every measurement now follows File › Options › Advanced › Measurement units: the Line Numbers "From text" distance and the Hyphenation zone were still fixed in inches (#755) |
 | 2026-10-11 | trivial | Track Changes Options › Show revisions in balloons works: tracked deletions in the body leave the text for "Deleted: …" balloons in the markup area, joined to where they were; inline again where no balloons show (Comments pane, Read Mode, side by side, Web Layout), and always inline in headers, footers, notes and text boxes |
+| 2026-10-11 | trivial | Native saves refuse pre-existing external changes without clearing edits; synthetic macOS checks, explicit race/platform limits; readiness unchanged |
 | 2026-10-11 | trivial | Mini toolbar in two rows like Word's (font, size, grow, shrink; B I U S, highlight, font colour, four alignments) with every button inside the bar; font and size lists drop from the box's left edge; dropdown arrows a readable size; font list entries take the theme's text colour in dark mode (#535) |
 | 2026-10-11 | trivial | Find and Replace: Special ▾ menu (^p, ^t, ^?, ^#, ^$, ^w, ^&, ^c … ; a shorter wildcard list), Use wildcards (`?` `*` `[a-z]` `[!x]` `{n,m}` `@` `<` `>` `( )`, `\1` in Replace with), Match prefix/suffix, Ignore punctuation and white space; `^p` matches and splits paragraphs, Replace All is one undo step (#543) |
 | 2026-10-11 | trivial | Update Style to Match Selection takes how the selection looks (its paragraph and character styles as well as direct formatting) and applies the style to it; Home › Styles gallery tiles get a right-click menu with Update to Match Selection and Modify… (#555) |

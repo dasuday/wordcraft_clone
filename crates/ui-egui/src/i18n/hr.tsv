@@ -12,6 +12,13 @@
 # Product, format and technology names (WordCraft, PDF, Markdown, MCP …) stay in Latin letters.
 # Counts use count-neutral wording (`Riječi: 21`), since Croatian numerals take three noun forms.
 
+# Native save conflicts (#813)
+	The file changed or is unavailable	Datoteka je promijenjena ili nije dostupna
+	Your edits are still here. Save them to a different file to keep both versions.	Vaše su izmjene još uvijek ovdje. Spremite ih u drugu datoteku kako biste zadržali obje verzije.
+	Keep editing	Nastavi uređivati
+	Save copy…	Spremi kopiju…
+	Save conflict	Sukob pri spremanju
+
 	% of all commits	% svih commitova
 	(All)	(Sve)
 	(Custom)	(Prilagođeno)

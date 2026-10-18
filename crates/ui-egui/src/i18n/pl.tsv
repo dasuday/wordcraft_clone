@@ -15,6 +15,13 @@
 # Author: Konrad Witkowski with Claude (AI agent); licensed MIT OR Apache-2.0, like WordCraft.
 # Not yet reviewed by a second native speaker.
 
+# Native save conflicts (#813)
+	Save conflict	Konflikt zapisu
+	The file changed or is unavailable	Plik został zmieniony lub jest niedostępny
+	Your edits are still here. Save them to a different file to keep both versions.	Twoje zmiany są nadal zachowane. Zapisz je w innym pliku, aby zachować obie wersje.
+	Keep editing	Kontynuuj edycję
+	Save copy…	Zapisz kopię…
+
 	(no suggestions)	(brak propozycji)
 	1.5 Line Spacing	Interlinia 1,5
 	A free, open-source word processor written from scratch in Rust.\nPart of the Crafting Apps from the ArtCraft team.	Darmowy edytor tekstu o otwartym kodzie, napisany od podstaw w języku Rust.\nCzęść rodziny Crafting Apps zespołu ArtCraft.
@@ -627,6 +634,8 @@
 	Rules	Reguły
 	Résumé	Życiorys
 	Save	Zapisz
+
+# Save conflict dialog (#813).
 	Save As	Zapisz jako
 	Save a copy in another format. Printing goes through a PDF you can print from any viewer.	Zapisz kopię w innym formacie. Drukowanie odbywa się przez plik PDF, który można wydrukować w dowolnej przeglądarce.
 	Save as Template	Zapisz jako szablon

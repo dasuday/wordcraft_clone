@@ -16,6 +16,13 @@
 # polite imperative (Въведете, Изберете). Counts use count-neutral wording (`Думи: 21`), so no
 # plural forms are needed.
 
+# Native save conflicts (#813)
+	Save conflict	Конфликт при запазване
+	The file changed or is unavailable	Файлът е променен или недостъпен
+	Your edits are still here. Save them to a different file to keep both versions.	Вашите промени са запазени тук. Запишете ги в друг файл, за да запазите и двете версии.
+	Keep editing	Продължаване на редактирането
+	Save copy…	Запазване на копие…
+
 	(no style)	(без стил)
 	(no suggestions)	(няма предложения)
 	1.5 Line Spacing	Междуредие 1,5

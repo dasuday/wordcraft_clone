@@ -1,5 +1,12 @@
 # Korean (ko) interface catalog. Same format and clean-room rules as zh-hans.tsv.
 
+# Native save conflicts (#813)
+	The file changed or is unavailable	파일이 변경되었거나 사용할 수 없습니다
+	Your edits are still here. Save them to a different file to keep both versions.	편집 내용은 그대로 남아 있습니다. 두 버전을 모두 보관하려면 다른 파일에 저장하세요.
+	Keep editing	계속 편집
+	Save copy…	복사본 저장…
+	Save conflict	저장 충돌
+
 	(no style)	(스타일 없음)
 	(no suggestions)	(제안 없음)
 	1.5 Line Spacing	1.5줄 간격

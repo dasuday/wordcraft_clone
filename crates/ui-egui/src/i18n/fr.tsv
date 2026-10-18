@@ -9,6 +9,13 @@
 #
 # French translations, written from the English source's meaning (clean-room, not copied
 # from any product's localization). License: MIT OR Apache-2.0.
+# Native save conflicts (#813)
+	Save conflict	Conflit lors de l’enregistrement
+	The file changed or is unavailable	Le fichier a été modifié ou est indisponible
+	Your edits are still here. Save them to a different file to keep both versions.	Vos modifications sont toujours ici. Enregistrez-les dans un autre fichier pour conserver les deux versions.
+	Keep editing	Continuer la modification
+	Save copy…	Enregistrer une copie…
+
 	(no style)	(Aucun style)
 	(no suggestions)	(aucune suggestion)
 	1.5 Line Spacing	Interligne 1,5

@@ -13,6 +13,13 @@
 # computing vocabulary. No Microsoft Word (or other product) localisation, string table or
 # translated UI was consulted or copied; add entries the same way.
 
+# Native save conflicts (#813)
+	Save conflict	Conflicto al guardar
+	The file changed or is unavailable	El archivo ha cambiado o no está disponible
+	Your edits are still here. Save them to a different file to keep both versions.	Tus cambios siguen aquí. Guárdalos en otro archivo para conservar ambas versiones.
+	Keep editing	Seguir editando
+	Save copy…	Guardar copia…
+
 	(no style)	(sin estilo)
 	(no suggestions)	(sin sugerencias)
 	1.5 Line Spacing	Interlineado 1,5
@@ -2124,6 +2131,7 @@
 	Turkish	Turco
 	Ukrainian	Ucraniano
 	{language} is now the document's default language.	{language} es ahora el idioma predeterminado del documento.
+# Save conflict dialog (#813).
 	Visual effects	Efectos visuales
 	Animation effects:	Efectos de animación:
 	On	Activado

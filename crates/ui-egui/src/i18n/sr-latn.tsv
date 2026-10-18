@@ -11,6 +11,13 @@
 # translated UI was consulted or copied; add entries the same way.
 # Product, format and technology names (WordCraft, PDF, Markdown, MCP …) stay in Latin letters.
 
+# Native save conflicts (#813)
+	Save conflict	Sukob pri čuvanju
+	The file changed or is unavailable	Datoteka je izmenjena ili nije dostupna
+	Your edits are still here. Save them to a different file to keep both versions.	Vaše izmene su i dalje ovde. Sačuvajte ih u drugu datoteku da biste zadržali obe verzije.
+	Keep editing	Nastavi uređivanje
+	Save copy…	Sačuvaj kopiju…
+
 	(no style)	(bez stila)
 	(no suggestions)	(nema predloga)
 	(picture or object)	(slika ili objekat)
@@ -2094,6 +2101,7 @@
 	Turkish	Turski
 	Ukrainian	Ukrajinski
 	{language} is now the document's default language.	{language} je sada podrazumevani jezik dokumenta.
+# Save conflict dialog (#813).
 	Visual effects	Vizuelni efekti
 	Animation effects:	Efekti animacije:
 	On	Uključeno
