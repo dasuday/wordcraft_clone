@@ -3081,7 +3081,16 @@ Caf\'e na\"ive \c{c}a \v{s}\'{e} and {\bfseries grouped bold} after.
         let tex = r"\href{https://example.com/~user/page}{Homepage} and \url{https://example.com/~user/page}";
         let flow = parse(tex);
         let FBlock::Para(p) = &flow.blocks[0] else { panic!() };
-        assert_eq!(p.inlines[0], Inline::Text("Homepage".to_string(), Fmt { link: Some("https://example.com/~user/page".to_string()), ..Default::default() }));
-        assert_eq!(p.inlines[2], Inline::Text("https://example.com/~user/page".to_string(), Fmt { link: Some("https://example.com/~user/page".to_string()), ..Default::default() }));
+        assert_eq!(
+            p.inlines[0],
+            Inline::Text("Homepage".to_string(), Fmt { link: Some("https://example.com/~user/page".to_string()), ..Default::default() })
+        );
+        assert_eq!(
+            p.inlines[2],
+            Inline::Text(
+                "https://example.com/~user/page".to_string(),
+                Fmt { link: Some("https://example.com/~user/page".to_string()), ..Default::default() }
+            )
+        );
     }
 }
