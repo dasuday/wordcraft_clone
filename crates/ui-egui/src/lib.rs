@@ -35,6 +35,7 @@ pub mod credits;
 pub mod crop;
 pub mod desktop_theme;
 pub mod dialogs;
+pub mod dialogs_bullet;
 pub mod dialogs_chart;
 pub mod dialogs_controls;
 pub mod dialogs_insert;

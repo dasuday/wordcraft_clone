@@ -175,6 +175,11 @@ pub enum Dialog {
         /// alone stays as it is.
         #[serde(skip)]
         start: serde_json::Map<String, Value>,
+        /// Formatting a bullet for Define New Bullet (#2786): OK hands the font, size, bold,
+        /// italic and colour back to that dialog instead of formatting the text, and Cancel goes
+        /// back to it unchanged.
+        #[serde(skip)]
+        bullet: Option<Box<crate::dialogs_bullet::DefineBulletForm>>,
     },
     Paragraph {
         /// Right-to-left reading order (Direction in Word's Paragraph dialog).
@@ -790,6 +795,18 @@ pub(crate) fn color_field(ui: &mut Ui, theme: &[wordcraft_doc::Rgb], value: &mut
 }
 
 impl Dialog {
+    /// The Define New Bullet form a Font or Symbol dialog opened from it carries (#2786).
+    fn bullet_form(&mut self) -> Option<crate::dialogs_bullet::DefineBulletForm> {
+        match self {
+            Dialog::Font { bullet, .. } => bullet.take().map(|b| *b),
+            Dialog::Insert(i) => match i.as_mut() {
+                crate::dialogs_insert::InsertDialog::Symbol(f) => f.bullet.take().map(|b| *b),
+                _ => None,
+            },
+            _ => None,
+        }
+    }
+
     pub fn name(&self) -> &'static str {
         match self {
             Dialog::RenameDocument { .. } => "renameDocument",
@@ -911,6 +928,7 @@ impl Dialog {
                     color: s("color"),
                     spacing: st.get("spacing").and_then(Value::as_f64).unwrap_or(0.0) as f32,
                     start: serde_json::Map::new(),
+                    bullet: None,
                 };
                 let props = font_props(&d);
                 if let Dialog::Font { start, .. } = &mut d {
@@ -1302,7 +1320,15 @@ pub fn show(app: &mut WordApp, ctx: &egui::Context) {
     });
     if let Some(shown) = &shown {
         count_dialog_frame(ctx, id);
-        close |= crate::window_close::show(ctx, &shown.response, &Tokens::get(ctx));
+        if crate::window_close::show(ctx, &shown.response, &Tokens::get(ctx)) && !close {
+            // The title bar's close box is Cancel: a dialog opened from Define New Bullet
+            // goes back to it, as its Cancel button does.
+            close = true;
+            if let Some(form) = d.bullet_form() {
+                app.dialog = Some(Dialog::Insert(Box::new(crate::dialogs_insert::InsertDialog::DefineBullet(form))));
+                return;
+            }
+        }
     }
     if close {
         app.canvas.want_focus = true;
@@ -1517,6 +1543,28 @@ fn east_asian_char(c: char) -> bool {
 /// The Font dialog's OK: one formatting step that sets only the properties the user changed, so
 /// formatting the dialog can't show or left alone stays as it is. Fonts are set by their stored
 /// (English) names, the Latin font for Persian/Arabic text too (as `format.font`).
+/// The Font dialog formatting Define New Bullet's bullet (#2786): it opens on the bullet's font,
+/// size, bold, italic and colour, and carries the form back (see `Dialog::Font::bullet`).
+pub fn font_for_bullet(app: &mut WordApp, form: crate::dialogs_bullet::DefineBulletForm) -> Option<Dialog> {
+    let mut d = Dialog::open("font", app)?;
+    if let Dialog::Font { font, font_was, size, bold, italic, color, .. } = &mut d {
+        if !form.font.is_empty() {
+            *font = app.previews.font_shown(&form.font);
+            *font_was = font.clone();
+        }
+        *size = form.size.clone();
+        *bold = form.bold;
+        *italic = form.italic;
+        *color = form.color.clone();
+    }
+    let props = font_props(&d);
+    if let Dialog::Font { start, bullet, .. } = &mut d {
+        *start = props;
+        *bullet = Some(Box::new(form));
+    }
+    Some(d)
+}
+
 fn apply_font(app: &mut WordApp, d: &Dialog) {
     let Dialog::Font { start, .. } = d else { return };
     let mut changed: serde_json::Map<String, Value> = font_props(d).into_iter().filter(|(k, v)| start.get(k) != Some(v)).collect();
@@ -1650,6 +1698,24 @@ fn body(app: &mut WordApp, ui: &mut Ui, d: &mut Dialog) -> bool {
             job.wrap.max_width = ui.available_width().min(400.0);
             ui.label(job);
             let (ok, cancel) = buttons(ui, tl!("OK"));
+            if (ok || cancel)
+                && let Dialog::Font { bullet, font, font_was, size, bold, italic, color, .. } = d
+                && let Some(mut form) = bullet.take()
+            {
+                if ok {
+                    // The stored (English) name, as `apply_font` stores it, and only when the
+                    // user changed it: a bullet in the text's font keeps following the text.
+                    if font.trim() != font_was.trim() {
+                        form.font = app.previews.font_stored(font.trim());
+                    }
+                    form.size = size.trim().to_string();
+                    form.bold = *bold;
+                    form.italic = *italic;
+                    form.color = color.clone();
+                }
+                app.dialog = Some(Dialog::Insert(Box::new(crate::dialogs_insert::InsertDialog::DefineBullet(*form))));
+                return true;
+            }
             if ok {
                 apply_font(app, d);
             }
@@ -4233,6 +4299,88 @@ mod tests {
         assert!(h.state().dialog.is_none(), "Enter pressed OK");
         let rc = h.state().session.doc.styles.resolve_char(Some("Normal"), &wordcraft_doc::CharProps::default());
         assert_eq!(rc.font, wordcraft_doc::styles::HEADING_FONT);
+    }
+
+    /// #2786: Define New Bullet's Font… is this Font dialog, opened on the bullet's formatting. OK
+    /// hands the font, size and bold back to Define New Bullet without formatting the text;
+    /// Cancel, and the title bar's close box, go back with the form as it was.
+    #[test]
+    fn font_dialog_formats_a_bullet_and_hands_it_back() {
+        use crate::dialogs_bullet::DefineBulletForm;
+        use crate::dialogs_insert::InsertDialog;
+        use egui_kittest::kittest::Queryable;
+        let back = |button: &str| -> (DefineBulletForm, wordcraft_doc::props::CharProps) {
+            let mut app = app_with("Example");
+            let _ = app.run("para.bullets", json!({"kind": "▪"}));
+            let form = DefineBulletForm { font: "Arial".into(), ..DefineBulletForm::plain("▪") };
+            app.dialog = font_for_bullet(&mut app, form);
+            let Some(Dialog::Font { size, bold, bullet, .. }) = &mut app.dialog else { panic!("the Font dialog is open") };
+            assert!(bullet.is_some(), "it carries the form");
+            assert!(!*bold && size.is_empty(), "it shows the bullet's formatting, not the text's");
+            *size = "16".into();
+            *bold = true;
+            let mut fonts = false;
+            let mut h = egui_kittest::Harness::builder().with_size(vec2(1440.0, 900.0)).build_ui_state(
+                move |ui, app: &mut WordApp| {
+                    let ctx = ui.ctx().clone();
+                    if fonts {
+                        show(app, &ctx);
+                    } else {
+                        crate::theme::install_fonts_for(&ctx, false);
+                        fonts = true;
+                    }
+                },
+                app,
+            );
+            h.run_steps(3);
+            h.get_by_label(button).click();
+            h.run_steps(3);
+            let app = h.state_mut();
+            let Some(Dialog::Insert(d)) = app.dialog.take() else { panic!("back to Define New Bullet") };
+            let InsertDialog::DefineBullet(f) = *d else { panic!("back to Define New Bullet") };
+            let text = app.session.doc.para_at(&wordcraft_doc::Pos::body(0, 0)).map(|p| p.props_of_char(0).clone()).unwrap_or_default();
+            (f, text)
+        };
+        let (f, text) = back("OK");
+        assert_eq!((f.ch.as_str(), f.font.as_str(), f.size.as_str(), f.bold), ("▪", "Arial", "16", true));
+        assert_ne!(text.bold, Some(true), "the text isn't formatted");
+        assert_ne!(text.size, Some(16.0), "the text isn't formatted");
+        for button in ["Cancel", "Close"] {
+            let (f, _) = back(button);
+            assert_eq!((f.font.as_str(), f.size.as_str(), f.bold), ("Arial", "", false), "{button} keeps the form");
+        }
+        // A bullet in the text's font (no font of its own) keeps it when OK doesn't change the
+        // font box, though the box shows the text's font (review of #2860).
+        let mut app = app_with("Example");
+        let _ = app.run("para.bullets", json!({"kind": "▪"}));
+        let Some(mut d) = font_for_bullet(&mut app, DefineBulletForm::plain("▪")) else { panic!("the Font dialog opens") };
+        if let Dialog::Font { font, .. } = &d {
+            assert!(!font.is_empty(), "the box shows the text's font");
+        }
+        if let Dialog::Font { bullet: Some(b), font, font_was, .. } = &mut d {
+            assert_eq!(font, font_was);
+            assert!(b.font.is_empty());
+        }
+        app.dialog = Some(d);
+        let mut fonts = false;
+        let mut h = egui_kittest::Harness::builder().with_size(vec2(1440.0, 900.0)).build_ui_state(
+            move |ui, app: &mut WordApp| {
+                let ctx = ui.ctx().clone();
+                if fonts {
+                    show(app, &ctx);
+                } else {
+                    crate::theme::install_fonts_for(&ctx, false);
+                    fonts = true;
+                }
+            },
+            app,
+        );
+        h.run_steps(3);
+        h.get_by_label("OK").click();
+        h.run_steps(3);
+        let Some(Dialog::Insert(d)) = h.state_mut().dialog.take() else { panic!("back to Define New Bullet") };
+        let InsertDialog::DefineBullet(f) = *d else { panic!("back to Define New Bullet") };
+        assert_eq!(f.font, "", "still the text's font");
     }
 
     /// A dialog was pinned by its anchor, so dragging its title bar did nothing (#732).

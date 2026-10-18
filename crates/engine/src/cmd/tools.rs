@@ -675,10 +675,9 @@ pub fn specs() -> Vec<CommandSpec> {
             sel_result(s)
         })
         .params(r#"{"value": n}"#),
-        CommandSpec::new("para.defineBullet", "Define New Bullet", "Home › Paragraph › Bullets", |s, v| {
-            s.run("para.bullets", &json!({"kind": p::str(v, "char").unwrap_or("★")}))
-        })
-        .params(r#"{"char": string}"#),
+        CommandSpec::new("para.defineBullet", "Define New Bullet", "Home › Paragraph › Bullets", define_bullet).params(
+            r#"{"char"?: one character (default ★), "font"?: family (the bullet's own font; "" = the text's), "size"?: pt, "bold"?: bool, "italic"?: bool, "color"?: "RRGGBB" | "auto", "align"?: "left|center|right"} (the selected paragraphs get a list of their own; each keeps its level)"#,
+        ),
         CommandSpec::new("para.defineNumber", "Define New Number Format", "Home › Paragraph › Numbering", |s, v| {
             let fmt = wordcraft_doc::section::NumFormat::from_ooxml(p::str(v, "format").unwrap_or("decimal"));
             let text = p::str(v, "text").unwrap_or("%1.").to_string();
@@ -749,6 +748,104 @@ pub fn specs() -> Vec<CommandSpec> {
         })
         .pure(),
     ]
+}
+
+/// Define New Bullet (#2786): the selected paragraphs go into a list of their own whose bullet is
+/// `char`, drawn in `font` (with `size`, `bold`, `italic` and `color` when given) and aligned by
+/// `align` at every level they use. A list of its own, so
+/// no other list using the same character changes, and it never toggles a bullet off the way
+/// `para.bullets` does. Each paragraph keeps its level (level 1 when it wasn't in a list).
+fn define_bullet(s: &mut Session, v: &Value) -> CmdResult {
+    let ch = match v.get("char") {
+        None => '★',
+        Some(c) => {
+            let c = c.as_str().ok_or_else(|| CmdError::Params("char must be one character".into()))?;
+            let mut it = c.chars();
+            match (it.next(), it.next()) {
+                (Some(c), None) if !c.is_control() => c,
+                _ => return Err(CmdError::Params("char must be one character".into())),
+            }
+        }
+    };
+    let font = match v.get("font") {
+        None => None,
+        Some(f) => {
+            let f = f.as_str().map(str::trim).ok_or_else(|| CmdError::Params("font must be a family name".into()))?;
+            if f.len() > 128 {
+                return Err(CmdError::Params("font name too long".into()));
+            }
+            (!f.is_empty()).then(|| f.to_string())
+        }
+    };
+    let size = match v.get("size") {
+        None => None,
+        Some(n) => match n.as_f64() {
+            Some(pt) if (1.0..=1638.0).contains(&pt) => Some(pt as f32),
+            _ => return Err(CmdError::Params("size must be 1 to 1638 points".into())),
+        },
+    };
+    let flag = |k: &str| -> Result<Option<bool>, CmdError> {
+        match v.get(k) {
+            None => Ok(None),
+            Some(b) => b.as_bool().map(Some).ok_or_else(|| CmdError::Params(format!("{k} must be true or false"))),
+        }
+    };
+    let (bold, italic) = (flag("bold")?, flag("italic")?);
+    let color = match v.get("color") {
+        None => None,
+        Some(c) => {
+            let c = c.as_str().ok_or_else(|| CmdError::Params("color must be RRGGBB or auto".into()))?;
+            Some(wordcraft_doc::props::TextColor::parse(c).ok_or_else(|| CmdError::Params("color must be RRGGBB or auto".into()))?)
+        }
+    };
+    let align = match p::str(v, "align") {
+        None if v.get("align").is_none() => None,
+        Some("left") => Some(wordcraft_doc::props::Align::Left),
+        Some("center") => Some(wordcraft_doc::props::Align::Center),
+        Some("right") => Some(wordcraft_doc::props::Align::Right),
+        _ => return Err(CmdError::Params("align must be left, center or right".into())),
+    };
+    // A paragraph's level, from its own numbering or its style's (List Bullet 2 numbers its
+    // paragraphs at level 2 without any of their own).
+    let styles = s.doc.styles.clone();
+    let level_of = |pp: &wordcraft_doc::props::ParaProps| styles.resolve_para(pp).numbering.filter(|n| n.num != 0).map_or(0, |n| n.level);
+    let story = s.sel.focus.story;
+    let used: std::collections::BTreeSet<u8> =
+        super::selected_paths(s).iter().filter_map(|p| s.doc.para(story, p)).map(|x| level_of(&x.props)).collect();
+    let mut levels = wordcraft_doc::numbering::levels_for(wordcraft_doc::numbering::ListKind::BulletChar(ch));
+    for l in used {
+        if let Some(lv) = levels.get_mut(usize::from(l)) {
+            lv.text = ch.to_string();
+            lv.chr.font = font.clone();
+            if size.is_some() {
+                lv.chr.size = size;
+            }
+            if bold.is_some() {
+                lv.chr.bold = bold;
+            }
+            if italic.is_some() {
+                lv.chr.italic = italic;
+            }
+            if color.is_some() {
+                lv.chr.color = color;
+            }
+            if let Some(a) = align {
+                lv.align = a;
+            }
+        }
+    }
+    let num = s.doc.numbering.try_add_levels(None, levels)?;
+    super::para::fmt(s, &|pp| {
+        let level = level_of(pp);
+        pp.numbering = Some(NumRef { num, level });
+        pp.indent_left = None;
+        pp.indent_first = None;
+        pp.indent_left_chars = None;
+        pp.indent_first_chars = None;
+        if pp.style.is_none() || pp.style.as_deref() == Some("Normal") {
+            pp.style = Some("ListParagraph".into());
+        }
+    })
 }
 
 /// Set Proofing Language: the selection's language and "do not check spelling or grammar",
