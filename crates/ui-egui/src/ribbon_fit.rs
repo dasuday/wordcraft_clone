@@ -140,6 +140,12 @@ pub fn begin(ctx: &Context, tab: &str, avail: f32) {
     });
 }
 
+/// How many groups of this ribbon row are drawn so far: the next group's place, which tells apart
+/// groups that share a title (a custom group named like a built-in one).
+pub fn position(ctx: &Context) -> usize {
+    ctx.data(|d| d.get_temp::<Frame>(frame_id()).map(|f| f.drawn.len())).unwrap_or(0)
+}
+
 /// The level the next group, `title`, draws at this frame.
 pub fn level(ctx: &Context, title: &str) -> u8 {
     ctx.data(|d| {
