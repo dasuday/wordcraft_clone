@@ -2605,6 +2605,9 @@ fn rulers(app: &mut WordApp, ui: &mut Ui, h: Rect, v: Rect, rects: &[Rect], layo
     let (Some(page), Some(pr)) = (layout.pages.get(pi), rects.get(pi)) else { return };
     let scale = page_screen_scale(*pr, page, scale);
     let sect = app.session.doc.sections().get(page.section).map(|(_, s)| (*s).clone()).unwrap_or_default();
+    // An even page of a mirrored layout is the odd page reflected: its visible left edge is the
+    // stored right margin and its visible right edge the stored left margin (#2914).
+    let mirrored = app.session.doc.settings.mirror_margins && page.number.is_multiple_of(2);
     // Horizontal.
     let hp = ui.painter_at(h);
     let x0 = pr.min.x;
@@ -2649,7 +2652,7 @@ fn rulers(app: &mut WordApp, ui: &mut Ui, h: Rect, v: Rect, rects: &[Rect], layo
         (MarginEdge::Left, Rect::from_min_max(pos2(le - 10.0, bar.min.y), pos2(le + 3.0, bar.max.y))),
         (MarginEdge::Right, Rect::from_min_max(pos2(re - 3.0, bar.min.y), pos2(re + 10.0, bar.max.y))),
     ] {
-        margin_handle(app, ui, edge, zone, |p| (p.x - x0) / scale, &sect);
+        margin_handle(app, ui, edge, zone, |p| (p.x - x0) / scale, &sect, mirrored);
     }
     // Indent markers for the caret's paragraph.
     if let Some(rp) = rp {
@@ -2733,7 +2736,7 @@ fn rulers(app: &mut WordApp, ui: &mut Ui, h: Rect, v: Rect, rects: &[Rect], layo
     vp.rect_filled(Rect::from_min_max(pos2(vbar.min.x, te), pos2(vbar.max.x, be)), 0.0, t.ruler);
     for (edge, ey) in [(MarginEdge::Top, te), (MarginEdge::Bottom, be)] {
         let zone = Rect::from_min_max(pos2(vbar.min.x, ey - 4.0), pos2(vbar.max.x, ey + 4.0));
-        margin_handle(app, ui, edge, zone, |p| (p.y - y0) / scale, &sect);
+        margin_handle(app, ui, edge, zone, |p| (p.y - y0) / scale, &sect, false);
     }
     // The same graduations down the page; the numbers keep clear of a table's row markers.
     let keep_clear = crate::table_ruler::row_markers(app, ui.ctx(), layout, pi, vbar, y0, scale);
@@ -2934,9 +2937,32 @@ pub(crate) fn dragged_margin(edge: MarginEdge, at: f32, s: &wordcraft_doc::secti
     ((raw / 4.5).round() * 4.5).clamp(0.0, room.max(0.0))
 }
 
+/// The stored margin a drag of the visible `edge` to `at` points from the page's visual left (or
+/// top) edits, and its new value. On an even page of a mirrored layout the text area is the odd
+/// page's reflected, so the visible left edge is the stored right margin and the visible right
+/// edge the stored left margin plus the inside gutter: reflect the pointer across the page and
+/// swap the edges (#2914). Top and bottom are the same on every page.
+pub(crate) fn margin_drag(edge: MarginEdge, at: f32, s: &wordcraft_doc::section::SectionProps, mirrored: bool) -> (MarginEdge, f32) {
+    let (edge, at) = match edge {
+        MarginEdge::Left if mirrored => (MarginEdge::Right, s.page_w - at),
+        MarginEdge::Right if mirrored => (MarginEdge::Left, s.page_w - at),
+        e => (e, at),
+    };
+    (edge, dragged_margin(edge, at, s))
+}
+
 /// A draggable margin edge on a ruler: `to_pt` turns the pointer into points from the page's
-/// left (or top) edge. A whole drag is one undo step, through `layout.margins`.
-fn margin_handle(app: &mut WordApp, ui: &Ui, edge: MarginEdge, zone: Rect, to_pt: impl Fn(Pos2) -> f32, sect: &wordcraft_doc::section::SectionProps) {
+/// left (or top) edge, and `mirrored` is an even page of a mirrored layout ([`margin_drag`]).
+/// A whole drag is one undo step, through `layout.margins`.
+fn margin_handle(
+    app: &mut WordApp,
+    ui: &Ui,
+    edge: MarginEdge,
+    zone: Rect,
+    to_pt: impl Fn(Pos2) -> f32,
+    sect: &wordcraft_doc::section::SectionProps,
+    mirrored: bool,
+) {
     let cursor =
         if matches!(edge, MarginEdge::Left | MarginEdge::Right) { egui::CursorIcon::ResizeHorizontal } else { egui::CursorIcon::ResizeVertical };
     let r = ui.interact(zone, ui.id().with(("ruler_margin", edge)), Sense::drag()).on_hover_cursor(cursor);
@@ -2944,11 +2970,11 @@ fn margin_handle(app: &mut WordApp, ui: &Ui, edge: MarginEdge, zone: Rect, to_pt
     if r.dragged()
         && let Some(pp) = r.interact_pointer_pos()
     {
-        let v = dragged_margin(edge, to_pt(pp), sect);
+        let (stored, v) = margin_drag(edge, to_pt(pp), sect, mirrored);
         if !r.drag_started() {
             app.session.join_next_undo();
         }
-        let _ = app.run("layout.margins", json!({ edge.param(): v }));
+        let _ = app.run("layout.margins", json!({ stored.param(): v }));
     }
 }
 
@@ -3655,6 +3681,168 @@ mod tests {
         assert!(after.page_w - after.margin_left - after.margin_right - after.gutter >= MIN_TEXT - 0.01);
         assert!(app.session.undo());
         assert_eq!(wordcraft_engine::cmd::page::sect(&app.session).margin_left, sect.margin_left);
+    }
+
+    /// #2914: on an even page of a mirrored layout the text area is the odd page's reflected, so
+    /// a drag of the visible left edge is the stored right margin and the visible right edge the
+    /// stored left margin. The pointer is reflected across the page and the inside gutter comes
+    /// off the stored left margin, not the right one.
+    #[test]
+    fn mirrored_margin_drags_swap_the_stored_edge() {
+        let s = wordcraft_doc::section::SectionProps {
+            page_w: 612.0,
+            page_h: 792.0,
+            margin_left: 72.0,
+            margin_right: 36.0,
+            gutter: 18.0,
+            ..Default::default()
+        };
+        // Unmirrored pages (and odd pages) keep the plain mapping: visible left is margin_left,
+        // visible right is margin_right.
+        assert_eq!(margin_drag(MarginEdge::Left, 108.0, &s, false), (MarginEdge::Left, dragged_margin(MarginEdge::Left, 108.0, &s)));
+        assert_eq!(margin_drag(MarginEdge::Right, 540.0, &s, false), (MarginEdge::Right, dragged_margin(MarginEdge::Right, 540.0, &s)));
+        // Even mirrored pages swap: the visible left edge is margin_right, the visible right
+        // edge is margin_left plus the gutter.
+        let (left, v) = margin_drag(MarginEdge::Left, 90.0, &s, true);
+        assert_eq!(left, MarginEdge::Right);
+        assert_eq!(v, 90.0, "the visible left edge is the stored right margin");
+        let (right, v) = margin_drag(MarginEdge::Right, 486.0, &s, true);
+        assert_eq!(right, MarginEdge::Left);
+        assert_eq!(v, 108.0, "612 - 486 - 18 gutter: the visible right edge is the stored left margin");
+        // Top and bottom do not swap.
+        assert_eq!(margin_drag(MarginEdge::Top, 50.0, &s, true), (MarginEdge::Top, dragged_margin(MarginEdge::Top, 50.0, &s)));
+        assert_eq!(margin_drag(MarginEdge::Bottom, 700.0, &s, true), (MarginEdge::Bottom, dragged_margin(MarginEdge::Bottom, 700.0, &s)));
+        // Junk keeps the current margin, on a mirrored page too.
+        assert_eq!(margin_drag(MarginEdge::Left, f32::NAN, &s, true), (MarginEdge::Right, 36.0));
+    }
+
+    /// #2914: dragging each ruler margin handle on a mirrored document moves the visible edge
+    /// under the pointer; on odd pages that is the stored left or right margin, on even pages the
+    /// other way round.
+    #[test]
+    fn ruler_margin_drags_on_odd_and_even_mirrored_pages_move_the_visible_edge() {
+        let mut app = WordApp::new(wordcraft_engine::Session::new(wordcraft_doc::Document::from_text("one")), Default::default());
+        app.session.doc.settings.mirror_margins = true;
+        app.run("layout.margins", json!({"left": 72.0, "right": 36.0, "gutter": 18.0})).unwrap();
+        app.run("caret.docEnd", json!({})).unwrap();
+        app.run("insert.pageBreak", json!({})).unwrap();
+        let body = |app: &mut WordApp, page: usize| {
+            let layout = app.session.layout();
+            let page = layout.pages.get(page).expect("the page exists");
+            (page.number, page.body)
+        };
+        let near = |a: f32, b: f32| (a - b).abs() < 0.01;
+        // Odd page: inside margin and gutter on the left. Even page: the odd page reflected.
+        let (number, odd) = body(&mut app, 0);
+        assert_eq!(number, 1);
+        assert!(near(odd.x, 72.0 + 18.0) && near(odd.right(), 612.0 - 36.0), "odd page text area ({}, {})", odd.x, odd.right());
+        let (number, even) = body(&mut app, 1);
+        assert_eq!(number, 2, "the second page is even");
+        assert!(near(even.x, 36.0) && near(even.right(), 612.0 - 72.0 - 18.0), "even page text area ({}, {})", even.x, even.right());
+        // Move a visible edge through the same mapping and command `margin_handle` uses.
+        let drag = |app: &mut WordApp, number: u32, edge: MarginEdge, at: f32| {
+            let sect = wordcraft_engine::cmd::page::sect(&app.session);
+            let (stored, v) = margin_drag(edge, at, &sect, app.session.doc.settings.mirror_margins && number.is_multiple_of(2));
+            app.run("layout.margins", json!({ stored.param(): v })).unwrap();
+            stored
+        };
+        let stored_margins = |app: &mut WordApp| {
+            let s = wordcraft_engine::cmd::page::sect(&app.session);
+            (s.margin_left, s.margin_right)
+        };
+
+        // Odd page: the left handle still edits margin_left, the right handle margin_right.
+        assert_eq!(drag(&mut app, 1, MarginEdge::Left, 108.0), MarginEdge::Left);
+        assert_eq!(stored_margins(&mut app), (90.0, 36.0), "odd left handle edits the left margin (108 - gutter)");
+        let (_, odd) = body(&mut app, 0);
+        assert!(near(odd.x, 108.0) && near(odd.right(), 612.0 - 36.0), "the odd left edge follows the pointer ({}, {})", odd.x, odd.right());
+        assert_eq!(drag(&mut app, 1, MarginEdge::Right, 540.0), MarginEdge::Right);
+        assert_eq!(stored_margins(&mut app), (90.0, 72.0), "odd right handle edits the right margin");
+        let (_, odd) = body(&mut app, 0);
+        assert!(near(odd.x, 108.0) && near(odd.right(), 540.0), "the odd right edge follows the pointer ({}, {})", odd.x, odd.right());
+
+        // Even page: the left handle edits margin_right and the right handle margin_left.
+        assert_eq!(drag(&mut app, 2, MarginEdge::Left, 90.0), MarginEdge::Right);
+        assert_eq!(stored_margins(&mut app), (90.0, 90.0), "even left handle edits the right margin");
+        let (_, even) = body(&mut app, 1);
+        assert!(
+            near(even.x, 90.0) && near(even.right(), 612.0 - 90.0 - 18.0),
+            "the even left edge follows the pointer ({}, {})",
+            even.x,
+            even.right()
+        );
+        assert_eq!(drag(&mut app, 2, MarginEdge::Right, 486.0), MarginEdge::Left);
+        assert_eq!(stored_margins(&mut app), (108.0, 90.0), "even right handle edits the left margin (612 - 486 - gutter)");
+        let (_, even) = body(&mut app, 1);
+        assert!(near(even.x, 90.0) && near(even.right(), 486.0), "the even right edge follows the pointer ({}, {})", even.x, even.right());
+        // The odd page keeps the same stored margins, reflected the other way.
+        let (_, odd) = body(&mut app, 0);
+        assert!(near(odd.x, 108.0 + 18.0) && near(odd.right(), 612.0 - 90.0), "the odd page follows the same margins ({}, {})", odd.x, odd.right());
+    }
+
+    /// #2914: through the ruler's pointer path too: pressing a visible margin handle on an even
+    /// page of a mirrored document and dragging it moves the visible edge under the pointer and
+    /// edits the reflected stored margin.
+    #[test]
+    fn ruler_margin_handles_on_even_mirrored_pages_follow_the_pointer() {
+        use egui::{Event, Modifiers, PointerButton};
+        let mut app = WordApp::new(wordcraft_engine::Session::new(wordcraft_doc::Document::from_text("one")), Default::default());
+        app.session.doc.settings.mirror_margins = true;
+        app.run("layout.margins", json!({"left": 72.0, "right": 36.0, "gutter": 18.0})).unwrap();
+        app.run("caret.docEnd", json!({})).unwrap();
+        app.run("insert.pageBreak", json!({})).unwrap();
+        app.run("text.insert", json!({"text": "two"})).unwrap();
+        let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(1440.0, 900.0)).with_step_dt(1.0 / 60.0).build_ui_state(
+            |ui, app: &mut WordApp| {
+                let ctx = ui.ctx().clone();
+                app.logic(&ctx);
+                app.ui(ui);
+            },
+            app,
+        );
+        h.run_steps(6);
+        assert_eq!(h.state().session.page_hint, 1, "the ruler shows the even page");
+        // On the ruler bar, above the indent markers that keep the pointer where they overlap.
+        let y = h.state().canvas.canvas_rect.expect("canvas").min.y - RULER + 5.0;
+        let screen_x = |h: &mut egui_kittest::Harness<'_, WordApp>, x: f32| page_to_screen(h.state_mut(), 1, x, 0.0).expect("on screen").x;
+        let drag = |h: &mut egui_kittest::Harness<'_, WordApp>, from: Pos2, to: Pos2| {
+            h.event(Event::PointerMoved(from));
+            h.step();
+            h.event(Event::PointerButton { pos: from, button: PointerButton::Primary, pressed: true, modifiers: Modifiers::NONE });
+            h.step();
+            for k in 1..=4 {
+                h.event(Event::PointerMoved(from + (to - from) * (k as f32 / 4.0)));
+                h.step();
+            }
+            h.event(Event::PointerButton { pos: to, button: PointerButton::Primary, pressed: false, modifiers: Modifiers::NONE });
+            h.step();
+            h.step();
+        };
+        let left = {
+            let layout = h.state_mut().session.layout();
+            layout.pages.get(1).expect("page 2").body.x
+        };
+        // A point just outside the page's text area, on the handle's side of its zone.
+        let handle = |h: &mut egui_kittest::Harness<'_, WordApp>, at: f32, outside: f32| pos2(screen_x(h, at) + outside, y);
+        let from = handle(&mut h, left, -8.0);
+        let to = handle(&mut h, 90.0, 0.0);
+        drag(&mut h, from, to);
+        let s = wordcraft_engine::cmd::page::sect(&h.state().session);
+        assert_eq!((s.margin_left, s.margin_right), (72.0, 90.0), "the even page's left handle edited the stored right margin");
+        let right = {
+            let layout = h.state_mut().session.layout();
+            layout.pages.get(1).expect("page 2").body.right()
+        };
+        let from = handle(&mut h, right, 8.0);
+        let to = handle(&mut h, 486.0, 0.0);
+        drag(&mut h, from, to);
+        let s = wordcraft_engine::cmd::page::sect(&h.state().session);
+        assert_eq!((s.margin_left, s.margin_right), (108.0, 90.0), "the even page's right handle edited the stored left margin");
+        let right = {
+            let layout = h.state_mut().session.layout();
+            layout.pages.get(1).expect("page 2").body.right()
+        };
+        assert!((right - 486.0).abs() < 0.01, "the visible right edge follows the pointer ({right})");
     }
 
     /// Show revisions in balloons: a document whose only revision is a deletion gets the markup
