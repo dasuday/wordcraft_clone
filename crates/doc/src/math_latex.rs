@@ -1055,7 +1055,6 @@ mod tests {
         }
     }
 
-
     #[test]
     fn hostile_latex_never_panics() {
         for s in ["", "\\", "{", "}", "^", "_", "\\frac", "\\sqrt[", "\\left(", "\\right)", "\\begin{matrix", "&&\\\\", "{{{{", "\\end{x}", "a^^b__c"]
