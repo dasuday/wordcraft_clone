@@ -2639,6 +2639,9 @@ preview	Title	Örnek
 # Reading Mode column widths (#1040)
 	Narrow	Dar
 	Medium	Orta
+	Crop to Shape	Şekle Kırp
+	Aspect Ratio	En Boy Oranı
+	Right Triangle	Dik Üçgen
 # Split Cells and Convert Text to Table (#2592)
 	Merge cells before split	Bölmeden önce hücreleri birleştir
 	Table size	Tablo boyutu

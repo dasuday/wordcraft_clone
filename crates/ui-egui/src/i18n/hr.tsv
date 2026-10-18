@@ -2640,6 +2640,9 @@ preview	Title	Naslov
 	Bottom Right Cell	Donja desna ćelija
 	Inside Horizontal Border	Unutarnji vodoravni obrub
 	Inside Vertical Border	Unutarnji okomiti obrub
+	Crop to Shape	Obreži na oblik
+	Aspect Ratio	Omjer slike
+	Right Triangle	Pravokutni trokut
 # Split Cells and Convert Text to Table (#2592)
 	Merge cells before split	Spoji ćelije prije razdvajanja
 	Table size	Veličina tablice

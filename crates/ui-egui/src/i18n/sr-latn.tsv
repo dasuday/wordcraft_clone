@@ -2253,6 +2253,9 @@
 # Reading Mode column widths (#1040)
 	Narrow	Uska
 	Medium	Srednja
+	Crop to Shape	Opseci na oblik
+	Aspect Ratio	Razmera
+	Right Triangle	Pravougli trougao
 # Split Cells and Convert Text to Table (#2592)
 	Merge cells before split	Spoji ćelije pre deljenja
 	Table size	Veličina tabele

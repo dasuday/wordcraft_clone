@@ -2255,6 +2255,9 @@
 # Reading Mode column widths (#1040)
 	Narrow	Estreita
 	Medium	Média
+	Crop to Shape	Cortar para Forma
+	Aspect Ratio	Proporção
+	Right Triangle	Triângulo retângulo
 # Split Cells and Convert Text to Table (#2592)
 	Merge cells before split	Mesclar células antes de dividir
 	Table size	Tamanho da tabela

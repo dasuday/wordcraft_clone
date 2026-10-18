@@ -202,6 +202,7 @@ Imported Word 97–2003 `.doc`/`.dot` files now ask for a supported DOCX target 
 | 2026-10-18 | Different First Page works from page 1 (#2826): Insert › Header and Edit Header with the caret on page 1, and a double-click there while another header is being edited, go into page 1's own header instead of the default one page 1 no longer shows. |
 | 2026-10-15 | Track Changes Options › Moves (gap #5): Moved from and Moved to each have a mark and a colour (by default green double strikethrough and double underline, as before and as in Word for Mac), saved per user; `review.trackingOptions` takes `moveFromMark`, `moveFromColor`, `moveToMark`, `moveToColor`, and `trackMoves`, the document's Track moves setting: off, a tracked cut and paste is an ordinary deletion and insertion. DOCX `w:doNotTrackMoves` round-trips |
 | 2026-10-17 | Language dialog keeps inherited proofing language and no-proof choices (#2717). Opening and accepting unchanged no longer replaces style-derived values with English US and proofing enabled. |
+| 2026-10-15 | Picture Format › Crop is a split button with Crop to Shape, Aspect Ratio, Fill and Fit (`picture.cropToShape`, `picture.cropAspect`, `picture.cropFill`, `picture.cropFit`): a picture clipped to a shape's outline on screen, in PDF and print, kept in DOCX as `a:prstGeom`; Aspect Ratio crops what shows, centred, and leaves the picture in crop mode; Fit pads the picture with transparent space, kept in DOCX as negative `a:srcRect` values; catalog +4 |
 | 2026-10-16 | Text with the legacy Outline, Shadow, Emboss or Engrave font effects (`w:outline`, `w:shadow`, `w:emboss`, `w:imprint`) is drawn with them on screen and in PDFs, no longer as plain text: hollow outlined letters, or a grey copy behind the letters; the PDF keeps the text (#2534) |
 | 2026-10-15 | Table Layout › Cell Margins opens an editable dialog initialized from the table defaults; confirming an unchanged dialog preserves imported margins, and changing one side retains the others (#1960) |
 | 2026-10-14 | Consistent preferred cell widths override a stale table grid when both totals agree, for fixed and AutoFit tables. Conflicting widths, spans and percentages remain unchanged. |
@@ -493,6 +494,7 @@ Imported Word 97–2003 `.doc`/`.dot` files now ask for a supported DOCX target 
 | 2026-10-15 | trivial | Progress log: image size limits checked before allocation (#1321) |
 | 2026-10-17 | trivial | Progress log: Read Aloud speaks each sentence in its own language, #1843 |
 | 2026-10-17 | trivial | Language dialog keeps inherited proofing language and no-proof choices (#2717); readiness estimates unchanged |
+| 2026-10-15 | trivial | Progress log: Picture Format › Crop: Crop to Shape, Aspect Ratio, Fill and Fit |
 | 2026-10-14 | trivial | Progress log: ASK and SET fields show nothing (#1765) |
 | 2026-10-15 | trivial | Progress log: at-least table rows start the next page whole (#1742) |
 | 2026-10-14 | trivial | Progress log: ODT sections on export (gap 19) |

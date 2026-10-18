@@ -2631,6 +2631,9 @@
 # Reading Mode column widths (#1040)
 	Narrow	Тясна
 	Medium	Средна
+	Crop to Shape	Изрязване във фигура
+	Aspect Ratio	Съотношение на страните
+	Right Triangle	Правоъгълен триъгълник
 # Split Cells and Convert Text to Table (#2592)
 	Merge cells before split	Обединяване на клетките преди разделяне
 	Table size	Размер на таблицата
