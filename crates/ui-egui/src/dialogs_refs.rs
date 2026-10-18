@@ -1274,6 +1274,39 @@ mod tests {
         assert!(a.session.doc.plain_text(StoryRef::Body).ends_with("Specimen 1"), "{}", a.session.doc.plain_text(StoryRef::Body));
     }
 
+    /// #2940: through the window: the dialog open on a custom label lists its caption, and the
+    /// Insert button puts a reference to it in the text. (The Reference type box and its items
+    /// are not in the accessibility tree the test harness clicks, so the type is set on the form.)
+    #[test]
+    fn cross_reference_dialog_inserts_a_reference_to_a_custom_label() {
+        use egui::accesskit::Role;
+        use egui_kittest::kittest::Queryable;
+        let mut a = app("Rock\nSee ");
+        a.run("select.text", json!({"text": "Rock"})).unwrap();
+        a.run("references.caption", json!({"label": "Specimen", "text": "A rock", "format": "ROMAN"})).unwrap();
+        a.run("caret.docEnd", json!({})).unwrap();
+        assert_eq!(a.run("insert.crossReference", json!({})).unwrap(), json!({"pending": "crossReference"}));
+        let form = CrossRefForm::read(&a, "label:Specimen");
+        assert_eq!(form.targets, vec!["Specimen I: A rock".to_string()]);
+        a.dialog = Some(Dialog::Refs(Box::new(RefsDialog::CrossRef(form))));
+        let mut h = egui_kittest::Harness::builder().with_size(vec2(1440.0, 900.0)).build_ui_state(
+            |ui, app: &mut WordApp| {
+                let ctx = ui.ctx().clone();
+                app.logic(&ctx);
+                app.ui(ui);
+            },
+            a,
+        );
+        h.run_steps(4);
+        h.get_by_role_and_label(Role::Window, "Cross-reference");
+        h.get_all_by_role_and_label(Role::Button, "Insert").last().expect("the dialog's Insert button").click();
+        h.run_steps(3);
+        assert!(h.state().dialog.is_none(), "Insert closes the dialog");
+        let text = h.state().session.doc.plain_text(StoryRef::Body);
+        assert!(text.ends_with("See Specimen I: A rock"), "{text}");
+        assert!(instrs(h.state()).iter().any(|i| i.starts_with("REF _Ref")), "{:?}", instrs(h.state()));
+    }
+
     /// #402: Mark Entry opens with the selection; Insert Index opens with Word's defaults and
     /// reads the index back; both write their switches.
     #[test]
