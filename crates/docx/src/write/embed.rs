@@ -709,7 +709,12 @@ enum Ids {
 
 /// The relationship ids XML part `bytes` uses that aren't in `kept`.
 fn missing_ids(bytes: &[u8], kept: &[&str]) -> Ids {
-    let Ok(root) = xml::parse(bytes) else { return Ids::NotXml };
+    let root = match xml::parse(bytes) {
+        Ok(root) => root,
+        // Real XML past the parser's limits may still name ids: it can't be checked.
+        Err(crate::DocxError::Limit(_)) => return Ids::TooMany,
+        Err(_) => return Ids::NotXml,
+    };
     let mut used = HashSet::new();
     if !rel_attr_values(&root, &mut used, 0) {
         return Ids::TooMany;
@@ -942,5 +947,12 @@ mod loss_tests {
         assert!(matches!(missing_ids(one, &["x"]), Ids::Missing(m) if m.is_empty()));
         assert!(matches!(missing_ids(one, &[]), Ids::Missing(m) if m == ["x"]));
         assert!(matches!(missing_ids(b"\x00 not xml", &[]), Ids::NotXml));
+    }
+
+    /// XML nested past the parser's depth limit is not "not XML": it can't be checked either.
+    #[test]
+    fn a_part_past_the_parser_limits_is_too_many() {
+        let deep = format!("{}{}", "<a>".repeat(MAX_DEPTH + 10), "</a>".repeat(MAX_DEPTH + 10));
+        assert!(matches!(missing_ids(deep.as_bytes(), &[]), Ids::TooMany));
     }
 }
