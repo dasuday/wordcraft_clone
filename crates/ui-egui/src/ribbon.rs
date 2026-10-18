@@ -915,6 +915,8 @@ fn format_painter_button(ui: &mut Ui, app: &mut WordApp) {
     let sticky = matches!(app.session.painter, Some((_, _, true)));
     let armed = app.session.painter.is_some();
     let resp = small_toggle(ui, app, "painter", Some("Format"), "Format Painter", "edit.formatPainter", json!({}), sticky);
+    // The one-shot armed state is on for a screen reader too, though only sticky draws pressed (#1012).
+    crate::widgets::describe_button(&resp, tl!("Format Painter"), ui.is_enabled(), Some(armed));
     if resp.double_clicked() {
         painter_double_click(app);
     } else if armed && !sticky {
@@ -2930,6 +2932,28 @@ mod tests {
         assert!(app.session.painter.is_none(), "the second click of a double-click turns it off");
         painter_double_click(&mut app);
         assert!(matches!(app.session.painter, Some((_, _, true))), "the double-click leaves it sticky");
+    }
+
+    /// #1012: a screen reader hears Format Painter as on once one click has armed it.
+    #[test]
+    fn format_painter_reports_the_armed_state() {
+        use egui::accesskit::Toggled;
+        use egui_kittest::kittest::{By, NodeT, Queryable};
+        let mut h = egui_kittest::Harness::builder().with_size(vec2(1600.0, 900.0)).build_ui_state(
+            |ui, app: &mut WordApp| {
+                let ctx = ui.ctx().clone();
+                app.logic(&ctx);
+                app.ui(ui);
+            },
+            WordApp::new(Session::new(wordcraft_doc::Document::from_text("Text")), crate::Services::default()),
+        );
+        h.run_steps(3);
+        let toggled = |h: &egui_kittest::Harness<'_, WordApp>| h.get(By::new().label(tl!("Format Painter"))).accesskit_node().toggled();
+        assert_eq!(toggled(&h), Some(Toggled::False), "off to begin with");
+        h.get(By::new().label(tl!("Format Painter"))).click();
+        h.run_steps(3);
+        assert!(h.state().session.painter.is_some(), "one click arms it");
+        assert_eq!(toggled(&h), Some(Toggled::True), "armed reads as on");
     }
 
     fn png_data() -> String {
