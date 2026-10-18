@@ -428,27 +428,37 @@ fn texts_of(xml: &[u8], part: &str, ns: &[u8], local: &str) -> Result<Vec<String
 }
 
 /// Local names of the WordprocessingML revision elements that carry `w:author`
-/// (the `CT_TrackChange` and `CT_MoveBookmark` types, ECMA-376 Part 1 §17.13.5).
-/// `w:tblGridChange` is deliberately excluded: its type (`CT_TblGridChange`)
-/// defines no `w:author`.
+/// (the `CT_TrackChange` and `CT_MoveBookmark` types plus the tracked
+/// property-change types, ECMA-376 Part 1 §17.13.5).
+/// Excluded: `w:tblGridChange` (`CT_TblGridChange`) and the `*RangeEnd`
+/// markers (`CT_MarkupRange`), whose types define no `w:author`.
 const REVISION_ELEMENTS: &[&str] = &[
+    // Insertions, deletions, moves.
     "ins",
     "del",
     "moveFrom",
     "moveTo",
+    // Move bookmarks.
     "moveFromRangeStart",
     "moveToRangeStart",
+    // Table revisions.
     "cellIns",
     "cellDel",
     "cellMerge",
+    // Custom XML markup revisions.
     "customXmlInsRangeStart",
-    "customXmlInsRangeEnd",
     "customXmlDelRangeStart",
-    "customXmlDelRangeEnd",
     "customXmlMoveFromRangeStart",
-    "customXmlMoveFromRangeEnd",
     "customXmlMoveToRangeStart",
-    "customXmlMoveToRangeEnd",
+    // Tracked property changes (run, paragraph, section, table, row, cell,
+    // numbering): Word writes these for every tracked formatting change.
+    "rPrChange",
+    "pPrChange",
+    "sectPrChange",
+    "tblPrChange",
+    "trPrChange",
+    "tcPrChange",
+    "numberingChange",
 ];
 
 /// Author-bearing revision elements and `w:vanish` runs in `word/document.xml`.
@@ -595,26 +605,35 @@ fn scan_active_content(names: &[String], parts: &BTreeMap<String, Vec<u8>>, find
 /// Reachability is computed lexically from every `*.rels` part; external
 /// relationship targets (`TargetMode="External"`) are not package parts.
 fn scan_orphans(names: &[String], parts: &BTreeMap<String, Vec<u8>>, findings: &mut Vec<AuditFinding>) -> Result<(), AuditError> {
+    // Reachability by traversal from the package root: only relationships in
+    // reachable parts count. A `.rels` file inside an orphaned subtree must
+    // not rescue its targets from orphan status.
+    let name_set: BTreeSet<&str> = names.iter().map(String::as_str).collect();
     let mut reachable: BTreeSet<String> = BTreeSet::new();
     reachable.insert("[Content_Types].xml".to_string());
-    for name in names {
-        if name.ends_with(".rels") {
-            reachable.insert(name.clone());
+    let mut stack = vec!["_rels/.rels".to_string()];
+    while let Some(rels_name) = stack.pop() {
+        if !name_set.contains(rels_name.as_str()) || !reachable.insert(rels_name.clone()) {
+            continue;
         }
-    }
-    for name in names.iter().filter(|n| n.ends_with(".rels")) {
-        let Some(xml) = parts.get(name) else { continue };
-        let source_dir = source_dir_of_rels(name);
-        for_each_element(xml, name, &mut |el| {
+        let Some(xml) = parts.get(&rels_name) else { continue };
+        let source_dir = source_dir_of_rels(&rels_name);
+        let mut targets = Vec::new();
+        for_each_element(xml, &rels_name, &mut |el| {
             if el.ns.as_slice() == NS_RELS
                 && el.local == "Relationship"
                 && let Some(target) = attr(el, b"", "Target")
                 && attr(el, b"", "TargetMode") != Some("External")
             {
-                reachable.insert(resolve_target(&source_dir, target));
+                targets.push(resolve_target(&source_dir, target));
             }
             Ok(())
         })?;
+        for target in targets {
+            if name_set.contains(target.as_str()) && reachable.insert(target.clone()) && let Some(rels) = rels_of_part(&target) {
+                stack.push(rels);
+            }
+        }
     }
     for name in names {
         if !reachable.contains(name) {
@@ -633,6 +652,23 @@ fn source_dir_of_rels(rels: &str) -> String {
         Some(i) => without_ext[..i].to_string(),
         None => String::new(),
     }
+}
+
+/// The `*.rels` path for a package part (`word/document.xml` →
+/// `word/_rels/document.xml.rels`), per OPC §12.2.4. `None` for parts that
+/// have no relationships part (`[Content_Types].xml`).
+fn rels_of_part(part: &str) -> Option<String> {
+    if part == "[Content_Types].xml" {
+        return None;
+    }
+    let (dir, file) = match part.rfind('/') {
+        Some(i) => (&part[..i], &part[i + 1..]),
+        None => ("", part),
+    };
+    if file.is_empty() {
+        return None;
+    }
+    Some(if dir.is_empty() { format!("_rels/{file}.rels") } else { format!("{dir}/_rels/{file}.rels") })
 }
 
 /// Resolve a relationship target against the source part's directory, lexically.

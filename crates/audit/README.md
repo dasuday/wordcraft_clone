@@ -8,7 +8,7 @@ of the file could learn about its authors.
 
 | ID | Severity | What |
 |---|---|---|
-| `author-pii/revision` | warn | `w:author`/`w:initials` on tracked-change elements (`w:ins`, `w:del`, `w:moveFrom`/`w:moveTo`, range markers, `w:cellIns`/`w:cellDel`/`w:cellMerge`, `w:customXml*` range markers; never `w:tblGridChange`, which defines no author) |
+| `author-pii/revision` | warn | `w:author`/`w:initials` on tracked-change elements: `w:ins`/`w:del`, moves, table revisions, custom XML markers, and tracked property changes (`w:rPrChange`, `w:pPrChange`, `w:sectPrChange`, `w:tblPrChange`, `w:trPrChange`, `w:tcPrChange`, `w:numberingChange`). Never `w:tblGridChange` or `*RangeEnd` markers (no `w:author` in their types) |
 | `author-pii/comment` | warn | `w:author`/`w:initials`/`w:date` on `w:comment` |
 | `author-pii/core-properties` | warn | `dc:creator` / `cp:lastModifiedBy` in `docProps/core.xml` |
 | `author-pii/extended-properties` | info | `Company` / `Manager` in `docProps/app.xml` |

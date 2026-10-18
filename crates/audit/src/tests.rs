@@ -308,8 +308,8 @@ fn findings_serialize_to_json() {
 
 #[test]
 fn all_tracked_change_elements_report_authors() {
-    // Every `CT_TrackChange` / `CT_MoveBookmark` element carries `w:author`
-    // (ECMA-376 Part 1 §17.13.5); `w:tblGridChange` is excluded (no author).
+    // Every `CT_TrackChange` / `CT_MoveBookmark` element plus the tracked
+    // property-change types carries `w:author` (ECMA-376 Part 1 §17.13.5).
     let elements = [
         "moveFrom",
         "moveTo",
@@ -319,13 +319,16 @@ fn all_tracked_change_elements_report_authors() {
         "cellDel",
         "cellMerge",
         "customXmlInsRangeStart",
-        "customXmlInsRangeEnd",
         "customXmlDelRangeStart",
-        "customXmlDelRangeEnd",
         "customXmlMoveFromRangeStart",
-        "customXmlMoveFromRangeEnd",
         "customXmlMoveToRangeStart",
-        "customXmlMoveToRangeEnd",
+        "rPrChange",
+        "pPrChange",
+        "sectPrChange",
+        "tblPrChange",
+        "trPrChange",
+        "tcPrChange",
+        "numberingChange",
     ];
     let mut body = String::from("<w:p>");
     for (i, el) in elements.iter().enumerate() {
@@ -409,4 +412,30 @@ fn active_content_found_by_relationship_type_at_unusual_path() {
     assert!(findings.iter().any(|f| f.id == "active-content/vba" && f.location == "word/custom/vba.bin"));
     assert!(findings.iter().any(|f| f.id == "active-content/ole" && f.location == "word/custom/pack.bin"));
     assert!(findings.iter().all(|f| f.id != "package/orphan-part"));
+}
+
+#[test]
+fn orphan_subtree_rels_do_not_rescue_parts() {
+    // Reachability is traversed from the package root: `word/secret.xml` is
+    // orphaned, so its own `.rels` file must not rescue `word/hidden.xml`.
+    // Both are orphans; the reachable `word/_rels/document.xml.rels` is not.
+    let secret_rels = doc_rels(
+        r#"<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="hidden.xml"/>"#,
+    );
+    let bytes = package(&[
+        ("[Content_Types].xml", &content_types()),
+        ("_rels/.rels", &root_rels()),
+        ("word/document.xml", &plain_paragraph()),
+        ("word/_rels/document.xml.rels", &doc_rels("")),
+        ("word/secret.xml", br#"<?xml version="1.0"?><secret/>"#),
+        ("word/_rels/secret.xml.rels", &secret_rels),
+        ("word/hidden.xml", br#"<?xml version="1.0"?><hidden/>"#),
+    ]);
+    let findings = findings_of(&bytes);
+    let orphans: Vec<&str> = findings.iter().filter(|f| f.id == "package/orphan-part").map(|f| f.location.as_str()).collect();
+    assert_eq!(findings.len(), orphans.len());
+    assert!(orphans.contains(&"word/secret.xml"));
+    assert!(orphans.contains(&"word/_rels/secret.xml.rels"));
+    assert!(orphans.contains(&"word/hidden.xml"));
+    assert!(!orphans.contains(&"word/_rels/document.xml.rels"));
 }
