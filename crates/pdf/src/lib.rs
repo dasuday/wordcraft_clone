@@ -177,6 +177,7 @@ fn write_attempt(doc: &Document, lay: &DocLayout, opts: &PdfOptions, pages: &[us
         tag_index: HashMap::new(),
         links: Vec::new(),
         bookmarks: std::cell::OnceCell::new(),
+        margin_areas: std::cell::OnceCell::new(),
     };
     if let Some(o) = ex.outline(pages) {
         pdf.set_outline(o);
@@ -677,6 +678,8 @@ struct Exporter<'a> {
     /// link up by walking the whole document made a long document with a linked table of contents
     /// take seconds to export.
     bookmarks: std::cell::OnceCell<HashMap<String, wordcraft_doc::Pos>>,
+    /// Each section's margin area, worked out once per export (a picture watermark's place).
+    margin_areas: std::cell::OnceCell<Vec<Rect>>,
 }
 
 /// What the content being drawn is, for tagging.
@@ -806,10 +809,16 @@ impl Exporter<'_> {
         if let Some(pic) = self.doc.settings.page_picture.clone() {
             self.tagged(s, Role::Artifact(ArtifactType::Other), None, |me, s| me.page_picture(s, &pic, w, h));
         }
-        if let Some(wm) = self.doc.settings.watermark.clone()
-            && !wm.text.trim().is_empty()
-        {
-            self.tagged(s, Role::Artifact(ArtifactType::Watermark), None, |me, s| me.watermark(s, &wm, w, h));
+        match self.doc.settings.watermark.clone() {
+            Some(wordcraft_doc::Watermark { picture: Some(pic), .. }) => {
+                let areas = self.margin_areas.get_or_init(|| self.doc.sections().iter().map(|(_, sp)| sp.margin_area()).collect());
+                let area = areas.get(page.section).copied().unwrap_or(page.body);
+                self.tagged(s, Role::Artifact(ArtifactType::Watermark), None, |me, s| me.watermark_picture(s, &pic, area));
+            }
+            Some(wm) if !wm.text.trim().is_empty() => {
+                self.tagged(s, Role::Artifact(ArtifactType::Watermark), None, |me, s| me.watermark(s, &wm, w, h));
+            }
+            _ => {}
         }
         let dopts = DisplayOptions {
             marks: false,
@@ -1574,6 +1583,36 @@ impl Exporter<'_> {
         Some(o)
     }
 
+    /// A picture watermark, centred in its section's margins (`area`) at its scale; washed out,
+    /// its pixels are faded as Word does (from a copy at most
+    /// [`wordcraft_doc::watermark::MAX_WASHED_PX`] on its longer side) and embedded once.
+    fn watermark_picture(&mut self, s: &mut Surface, pic: &wordcraft_doc::WatermarkPicture, area: Rect) {
+        let Some(data) = self.doc.media.get(&pic.media).cloned() else { return };
+        let Some((pw, ph)) =
+            image::ImageReader::new(std::io::Cursor::new(data.as_slice())).with_guessed_format().ok().and_then(|r| r.into_dimensions().ok())
+        else {
+            return;
+        };
+        // Pixels at 96 ppi, as for an inserted picture.
+        let Some(r) = pic.place(pw as f32 * 0.75, ph as f32 * 0.75, area) else { return };
+        let img = if pic.washout {
+            let key = format!("{}\u{0}washout", pic.media);
+            if let Some(i) = self.images.get(&key) {
+                i.clone()
+            } else {
+                let i = washed_image_within(&data, wordcraft_geom::MAX_DECODED_BYTES);
+                self.images.insert(key, i.clone());
+                i
+            }
+        } else {
+            self.image(&pic.media)
+        };
+        let (Some(img), Some(size)) = (img, Size::from_wh(r.w, r.h)) else { return };
+        s.push_transform(&Transform::from_translate(r.x, r.y));
+        s.draw_image(img, size);
+        s.pop();
+    }
+
     fn watermark(&mut self, s: &mut Surface, wm: &wordcraft_doc::Watermark, w: f32, h: f32) {
         let r = wordcraft_fonts::word::resolve(&wm.font, false, false);
         let face = r.face;
@@ -1614,7 +1653,7 @@ impl Exporter<'_> {
             .collect();
         s.push_transform(&Transform::from_row(c, sn, -sn, c, c * dx - sn * dy + cx, sn * dx + c * dy + cy));
         s.set_stroke(None);
-        s.set_fill(Some(fill(wm.color, if wm.semitransparent { 0.5 } else { 1.0 })));
+        s.set_fill(Some(fill(wm.color, wm.opacity())));
         match font {
             Some(font) => {
                 s.draw_glyphs(Point::from_xy(0.0, 0.0), &glyphs, font, &text, size, false);
@@ -1731,26 +1770,52 @@ fn load_image(data: &Arc<Vec<u8>>) -> Option<Image> {
 /// [`load_image`] with an explicit RGBA byte budget (a small one in tests).
 fn load_image_within(data: &Arc<Vec<u8>>, budget: u64) -> Option<Image> {
     let fmt = image::guess_format(data).ok()?;
+    let dec = decode_within(data, budget)?;
+    if fmt == image::ImageFormat::Jpeg && matches!(dec.color(), image::ColorType::L8 | image::ColorType::Rgb8) {
+        return Image::from_jpeg(data.clone().into(), true).ok();
+    }
+    let (w, h) = (dec.width(), dec.height());
+    Some(Image::from_rgba8(dec.into_rgba8().into_raw(), w, h))
+}
+
+/// The picture with Word's Washout on every pixel ([`wordcraft_doc::watermark::washout`]),
+/// within an RGBA byte budget. It is scaled down first to
+/// [`wordcraft_doc::watermark::MAX_WASHED_PX`] on its longer side: the faded pixels are embedded
+/// as RGBA, not as the original file.
+fn washed_image_within(data: &[u8], budget: u64) -> Option<Image> {
+    use wordcraft_doc::watermark::MAX_WASHED_PX;
+    let img = decode_within(data, budget)?;
+    let img = if img.width().max(img.height()) > MAX_WASHED_PX {
+        img.resize(MAX_WASHED_PX, MAX_WASHED_PX, image::imageops::FilterType::Triangle)
+    } else {
+        img
+    };
+    let mut rgba = img.into_rgba8();
+    let wash = wordcraft_doc::watermark::washout;
+    for p in rgba.pixels_mut() {
+        let [r, g, b, a] = p.0;
+        p.0 = [wash(r), wash(g), wash(b), a];
+    }
+    let (w, h) = rgba.dimensions();
+    Some(Image::from_rgba8(rgba.into_raw(), w, h))
+}
+
+/// Decode a picture, refusing one past the RGBA byte `budget` or the side limit.
+fn decode_within(data: &[u8], budget: u64) -> Option<image::DynamicImage> {
     // Header-only size check before anything is allocated (decode buffer + RGBA conversion are
     // charged); the side limits and the default 512 MB allocation cap stay as a second guard.
-    let (hw, hh) = image::ImageReader::new(std::io::Cursor::new(data.as_slice())).with_guessed_format().ok()?.into_dimensions().ok()?;
+    let (hw, hh) = image::ImageReader::new(std::io::Cursor::new(data)).with_guessed_format().ok()?.into_dimensions().ok()?;
     if !wordcraft_geom::decode_fits(hw, hh, budget) {
         return None;
     }
-    let mut reader = image::ImageReader::new(std::io::Cursor::new(data.as_slice())).with_guessed_format().ok()?;
+    let mut reader = image::ImageReader::new(std::io::Cursor::new(data)).with_guessed_format().ok()?;
     let mut limits = image::Limits::default();
     limits.max_image_width = Some(MAX_IMAGE_SIDE);
     limits.max_image_height = Some(MAX_IMAGE_SIDE);
     reader.limits(limits);
     let dec = reader.decode().ok()?;
     let (w, h) = (dec.width(), dec.height());
-    if w == 0 || h == 0 || w > MAX_IMAGE_SIDE || h > MAX_IMAGE_SIDE {
-        return None;
-    }
-    if fmt == image::ImageFormat::Jpeg && matches!(dec.color(), image::ColorType::L8 | image::ColorType::Rgb8) {
-        return Image::from_jpeg(data.clone().into(), true).ok();
-    }
-    Some(Image::from_rgba8(dec.into_rgba8().into_raw(), w, h))
+    (w > 0 && h > 0 && w <= MAX_IMAGE_SIDE && h <= MAX_IMAGE_SIDE).then_some(dec)
 }
 
 #[cfg(test)]

@@ -42,6 +42,7 @@ pub mod smart_art;
 pub mod styles;
 pub mod symbol_fonts;
 pub mod table;
+pub mod watermark;
 pub mod wordart;
 pub mod wrap;
 
@@ -58,6 +59,7 @@ pub use props::{Align, CharProps, ParaProps, Rgb, TextColor};
 pub use section::SectionProps;
 pub use styles::{Style, StyleKind, StyleSheet};
 pub use table::{Cell, Row, Table};
+pub use watermark::{Watermark, WatermarkPicture};
 
 #[derive(Debug, thiserror::Error, Clone, PartialEq)]
 pub enum DocError {
@@ -621,22 +623,6 @@ pub struct PagePicture {
     pub fill_type: String,
     /// `o:title` of the fill (texture name), kept for round trip.
     pub title: String,
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(default)]
-pub struct Watermark {
-    pub text: String,
-    pub font: String,
-    pub color: Rgb,
-    pub diagonal: bool,
-    pub semitransparent: bool,
-}
-
-impl Default for Watermark {
-    fn default() -> Self {
-        Watermark { text: "DRAFT".into(), font: styles::BODY_FONT.into(), color: Rgb(0xC0, 0xC0, 0xC0), diagonal: true, semitransparent: true }
-    }
 }
 
 /// Our default theme colours.

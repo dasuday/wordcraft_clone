@@ -131,6 +131,8 @@ pub struct StoryCtx {
     pub story_depth: usize,
     /// Reading a header or footer (not a text box inside one): where Word keeps its watermark.
     pub in_hf: bool,
+    /// This header's Word picture watermark is the document's watermark (see `watermark::plan`).
+    pub picture_wm: bool,
 }
 
 /// Paragraph content under construction.
@@ -176,7 +178,7 @@ fn clean_text(s: &str) -> String {
         .collect()
 }
 
-fn children_of_choice(ac: &El) -> Option<&El> {
+pub(super) fn children_of_choice(ac: &El) -> Option<&El> {
     // Prefer a Choice whose requirements we understand; else the Fallback; else any Choice.
     // `m`: Office Math (a producer may guard an equation with a picture fallback, #1273).
     const KNOWN: &[&str] = &["wps", "wpg", "wpc", "wpi", "w14", "w15", "wp14", "a14", "w16se", "w16cid", "w16", "w16cex", "w16sdtdh", "v", "m"];
@@ -1502,7 +1504,7 @@ impl Reader<'_> {
                 break;
             }
             if sc.in_hf
-                && let Some(wm) = vml_watermark(e)
+                && let Some(wm) = vml_watermark(e).or_else(|| self.picture_watermark(sc, e, rels))
             {
                 // The document's watermark (the first one found); drawn on every page, not as
                 // a shape, so it is not one of the objects this picture contributes.
@@ -2102,7 +2104,7 @@ fn vml_textbox(e: &El, depth: usize) -> Option<(&El, &El)> {
     })
 }
 
-fn vml_style<'a>(style: &'a str, key: &str) -> Option<&'a str> {
+pub(super) fn vml_style<'a>(style: &'a str, key: &str) -> Option<&'a str> {
     style.rsplit(';').filter_map(|d| d.split_once(':')).find(|(k, _)| k.trim().eq_ignore_ascii_case(key)).map(|(_, v)| v.trim())
 }
 
@@ -2176,10 +2178,10 @@ fn vml_float(shape: &El, style: &str, in_hf: bool) -> Float {
 
 /// Word's text watermark (Design › Watermark): a VML shape in a header whose `v:textpath` draws
 /// its `string` as text (ECMA-376 Part 4, VML `textpath`), in the textpath's `font-family`, filled
-/// with the shape's `fillcolor`, semitransparent when its `v:fill` has an `opacity` below 1, and
+/// with the shape's `fillcolor`, as transparent as its `v:fill` `opacity` says (any value), and
 /// diagonal when the shape is turned. Only Word's watermark shape counts (its `id`), or text
 /// placed absolutely and centred both ways; other header WordArt (a logo or a title) is None.
-fn vml_watermark(shape: &El) -> Option<wordcraft_doc::Watermark> {
+pub(super) fn vml_watermark(shape: &El) -> Option<wordcraft_doc::Watermark> {
     let tp = shape.child("v:textpath")?;
     if tp.attr("on").is_some_and(|v| matches!(v, "f" | "false" | "0")) {
         return None;
@@ -2206,11 +2208,13 @@ fn vml_watermark(shape: &El) -> Option<wordcraft_doc::Watermark> {
         .unwrap_or(default.font);
     let color = shape.attr("fillcolor").and_then(vml_color).unwrap_or(default.color);
     let opacity = shape.child("v:fill").and_then(|f| f.attr("opacity")).and_then(vml_fraction).unwrap_or(1.0);
-    Some(wordcraft_doc::Watermark { text, font, color, diagonal: vml_spin(style).deg != 0.0, semitransparent: opacity < 1.0 })
+    let mut wm = wordcraft_doc::Watermark { text, font, color, diagonal: vml_spin(style).deg != 0.0, ..default };
+    wm.set_transparency(((1.0 - opacity) * 100.0).round() as u8);
+    Some(wm)
 }
 
 /// A VML fraction (`opacity`): a number, a percentage, or 65536ths with an `f` suffix; 0..=1.
-fn vml_fraction(v: &str) -> Option<f32> {
+pub(super) fn vml_fraction(v: &str) -> Option<f32> {
     let v = v.trim();
     let f = if let Some(n) = v.strip_suffix('f') {
         n.trim().parse::<f32>().ok()? / 65_536.0
@@ -2224,7 +2228,7 @@ fn vml_fraction(v: &str) -> Option<f32> {
 
 /// A VML shape's turn: `rotation` in degrees, or 65536ths of one with an `fd` suffix; `flip`: `x`
 /// and/or `y`.
-fn vml_spin(style: &str) -> wordcraft_geom::Spin {
+pub(super) fn vml_spin(style: &str) -> wordcraft_geom::Spin {
     let get = |k: &str| vml_style(style, k);
     let rot = get("rotation").and_then(|v| match v.strip_suffix("fd") {
         Some(fd) => fd.trim().parse::<f32>().ok().map(|f| f / 65_536.0),

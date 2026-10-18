@@ -1324,7 +1324,7 @@ impl Writer<'_> {
     fn watermark_headers(&mut self, s: &SectionProps) -> wordcraft_doc::section::HeaderSet {
         let mut set = s.headers;
         let linked = &mut self.linked_headers;
-        if self.doc.settings.watermark.as_ref().and_then(super::watermark::text).is_some() {
+        if super::watermark::shown(self.doc) {
             let id = self.wm_header;
             if set.default.or(linked.default).is_none() {
                 set.default = Some(id);
@@ -1348,6 +1348,9 @@ impl Writer<'_> {
         for (set, footer) in [(&headers, false), (&s.footers, true)] {
             for (kind, id) in [("default", set.default), ("first", set.first), ("even", set.even)] {
                 let Some(id) = id else { continue };
+                if !footer {
+                    self.hf_page.entry(id).or_insert_with(|| s.clone());
+                }
                 if let Some(rid) = self.hf_rel(id, footer, rels) {
                     w.empty(if footer { "w:footerReference" } else { "w:headerReference" }, &[("w:type", kind), ("r:id", &rid)]);
                 }

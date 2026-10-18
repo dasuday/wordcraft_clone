@@ -11,6 +11,7 @@ mod props;
 mod sdt;
 mod shape_style;
 mod story;
+mod watermark;
 mod wordart;
 
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -96,6 +97,8 @@ pub(crate) struct Reader<'p> {
     /// Linked text boxes as read: (`wps:txbx/@id` or `wps:linkedTxbx/@id`, `seq` (0 for the box
     /// holding the text), text box part). See [`link_text_boxes`].
     pub txbx_links: Vec<(u32, u32, u32)>,
+    /// The document's picture watermark from the headers, if any (`watermark::plan`).
+    picture_wm: watermark::Plan,
 }
 
 /// The package path that internal relationship `id` points at, if it has type `kind` (an `rt`
@@ -159,6 +162,7 @@ pub(crate) fn read_opened(pkg: &Package) -> Result<Document, DocxError> {
         content_types: None,
         embedded: EmbeddedManifest::default(),
         txbx_links: Vec::new(),
+        picture_wm: watermark::Plan::default(),
     };
     r.pc.major_font = r.doc.settings.major_font.clone();
     r.pc.minor_font = r.doc.settings.minor_font.clone();
@@ -246,6 +250,7 @@ pub(crate) fn read_opened(pkg: &Package) -> Result<Document, DocxError> {
         }
     }
     if let Some(body) = root.child("w:body") {
+        r.picture_wm = watermark::plan(&r, body, &rels);
         let mut sc = StoryCtx::default();
         let mut blocks = Blocks::new();
         r.read_blocks(&mut sc, body, &rels, &mut blocks, 0);
@@ -680,6 +685,7 @@ impl Reader<'_> {
         let rels = self.pkg.rels(path);
         let mut sc = StoryCtx::default();
         sc.in_hf = true;
+        sc.picture_wm = !footer && self.picture_wm_header(path);
         let mut blocks = Blocks::new();
         self.hf_depth += 1;
         self.read_blocks(&mut sc, &root, &rels, &mut blocks, 0);

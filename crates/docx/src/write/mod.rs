@@ -9,7 +9,7 @@ mod math;
 mod props;
 mod sdt;
 mod story;
-mod watermark;
+pub(crate) mod watermark;
 mod wordart;
 
 use std::collections::{BTreeMap, HashMap};
@@ -95,6 +95,9 @@ pub(crate) struct Writer<'d> {
     wm_header: u32,
     /// The watermark shape to put at the start of the next top-level paragraph (a header's first).
     pending_watermark: Option<String>,
+    /// Each header's first section (in body order): the page its watermark is sized for, as the
+    /// reader measures it.
+    hf_page: HashMap<u32, wordcraft_doc::SectionProps>,
     /// Paragraphs that need a `w14:paraId` (last paragraph of each comment), by address.
     para_ids: HashMap<usize, String>,
     /// A note reference mark to put at the start of the next paragraph.
@@ -164,6 +167,7 @@ pub(crate) fn write_parts(doc: &Document, flavor: Flavor) -> Result<Vec<(String,
         linked_headers: Default::default(),
         wm_header: (0..=u32::MAX).rev().find(|id| !doc.parts.contains_key(id)).unwrap_or(u32::MAX),
         pending_watermark: None,
+        hf_page: HashMap::new(),
         para_ids: HashMap::new(),
         pending_mark: None,
         current_note: None,
@@ -246,9 +250,17 @@ pub(crate) fn write_parts(doc: &Document, flavor: Flavor) -> Result<Vec<(String,
         let tag = if footer { "w:ftr" } else { "w:hdr" };
         w.open(tag, &ns_refs);
         let blocks: Blocks = doc.parts.get(&id).map(|p| p.blocks.clone()).unwrap_or_default();
-        // The watermark goes in every header, at the start of its first paragraph.
+        // The watermark goes in every header, at the start of its first paragraph, sized for the
+        // first section showing that header.
+        let page = wr.hf_page.get(&id).cloned().unwrap_or_else(|| doc.last_section.clone());
         wr.pending_watermark = match &doc.settings.watermark {
-            Some(wm) if !footer => watermark::run(wm, done, &doc.last_section),
+            Some(wm) if !footer && wm.picture.is_some() => watermark::picture(doc).and_then(|(pic, own)| {
+                let file = wr.media_files.get(&pic.media)?;
+                let rid = prels.add(rt::IMAGE, &format!("media/{file}"), false);
+                wr.used_media.insert(pic.media.clone());
+                watermark::picture_run(pic, own, done, &page, &rid)
+            }),
+            Some(wm) if !footer => watermark::run(wm, done, &page),
             _ => None,
         };
         wr.blocks(&mut w, &blocks, &mut prels, false, 0);

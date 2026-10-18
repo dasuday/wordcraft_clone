@@ -500,6 +500,11 @@ pub fn read_file_capped(path: &str, max: u64, what: &str) -> Result<Vec<u8>, Str
     std::fs::read(path).map_err(|e| format!("{path}: {e}"))
 }
 
+#[cfg(target_arch = "wasm32")]
+pub fn read_file_capped(path: &str, _max: u64, _what: &str) -> Result<Vec<u8>, String> {
+    read_file(path)
+}
+
 /// The first `max` bytes of the file at `path` (fewer when it is shorter), inside the automation
 /// read root when there is one: enough to tell a file's format by its start.
 #[cfg(not(target_arch = "wasm32"))]
