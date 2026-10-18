@@ -307,3 +307,58 @@ fn delete_custom_is_not_a_document_edit() {
     assert!(!s.dirty);
     assert_ne!(s.last_command.as_ref().map(|c| c.0.as_str()), Some("design.deleteCustom"));
 }
+
+/// A rename is one command: the new set is in and the old one out, in memory and in `custom.json`.
+#[test]
+fn renaming_a_set_replaces_the_old_one_in_one_step() {
+    let dir = temp_dir("rename");
+    let mut s = s();
+    s.load_custom_themes(&dir);
+    run(&mut s, "design.customColors", json!({"name": "Harbour", "colors": twelve(1)}));
+    run(&mut s, "design.customFonts", json!({"name": "Bookish", "heading": "Palatino"}));
+    run(&mut s, "design.customColors", json!({"name": "Dock", "colors": twelve(2), "renameFrom": "harbour"}));
+    run(&mut s, "design.customFonts", json!({"name": "Booky", "heading": "Palatino", "renameFrom": "Bookish"}));
+    let list = run(&mut s, "design.customThemes", json!({}));
+    assert_eq!(list["colors"].as_array().unwrap().len(), 1);
+    assert_eq!(list["colors"][0]["name"], "Dock");
+    assert_eq!(list["fonts"].as_array().unwrap().len(), 1);
+    assert_eq!(list["fonts"][0]["name"], "Booky");
+    let mut b = self::s();
+    b.load_custom_themes(&dir);
+    let saved = run(&mut b, "design.customThemes", json!({}));
+    assert_eq!(saved["colors"][0]["name"], "Dock", "custom.json holds the new set only");
+    assert_eq!(saved["colors"].as_array().unwrap().len(), 1);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A rename that can't go through changes nothing: the old set stays.
+#[test]
+fn a_refused_rename_keeps_the_old_set() {
+    let mut s = s();
+    run(&mut s, "design.customColors", json!({"name": "Harbour", "colors": twelve(1)}));
+    run(&mut s, "design.customColors", json!({"name": "Dock", "colors": twelve(2)}));
+    assert!(s.run("design.customColors", &json!({"name": "Dock", "colors": twelve(3), "renameFrom": "Harbour"})).is_err(), "Dock is taken");
+    assert!(s.run("design.customColors", &json!({"name": "Pier", "colors": twelve(3), "renameFrom": "Nowhere"})).is_err(), "no such set");
+    assert!(s.run("design.customColors", &json!({"name": "Craft", "colors": twelve(3), "renameFrom": "Harbour"})).is_err(), "built-in name");
+    let list = run(&mut s, "design.customThemes", json!({}));
+    let names: Vec<&str> = list["colors"].as_array().unwrap().iter().filter_map(|c| c["name"].as_str()).collect();
+    assert_eq!(names, vec!["Harbour", "Dock"]);
+}
+
+/// A theme whose file can't be removed isn't deleted: it would come back from the folder.
+#[test]
+fn a_theme_whose_file_wont_go_stays() {
+    let dir = temp_dir("delfail");
+    let mut s = s();
+    s.load_custom_themes(&dir);
+    run(&mut s, "design.saveTheme", json!({"name": "Seaside"}));
+    let file = dir.join("Seaside.thmx");
+    assert!(file.exists());
+    // Swap the file for a non-empty folder of the same name: removing it as a file fails.
+    std::fs::remove_file(&file).unwrap();
+    std::fs::create_dir_all(file.join("inner")).unwrap();
+    assert!(s.run("design.deleteCustom", &json!({"kind": "theme", "name": "Seaside"})).is_err());
+    let list = run(&mut s, "design.customThemes", json!({}));
+    assert_eq!(list["themes"], json!(["Seaside"]), "still listed after the failed delete");
+    let _ = std::fs::remove_dir_all(&dir);
+}

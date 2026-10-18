@@ -77,15 +77,16 @@ fn free_name(taken: impl Fn(&str) -> bool) -> String {
         .unwrap_or_else(|| tl!("Custom").to_string())
 }
 
-/// Save: create (or, editing, update) the set, then drop the old one when it was renamed.
-fn save(app: &mut WordApp, id: &str, mut params: serde_json::Value, name: &str, editing: Option<&str>, kind: &str) -> Result<(), String> {
+/// Save: create (or, editing, update) the set. A renamed set replaces the old one in the same
+/// command, so a failed save can't leave both.
+fn save(app: &mut WordApp, id: &str, mut params: serde_json::Value, name: &str, editing: Option<&str>) -> Result<(), String> {
     let same = editing.is_some_and(|e| e.eq_ignore_ascii_case(name.trim()));
     params["name"] = json!(name);
     params["replace"] = json!(same);
-    app.run(id, params)?;
     if let Some(old) = editing.filter(|_| !same) {
-        app.run("design.deleteCustom", json!({"kind": kind, "name": old}))?;
+        params["renameFrom"] = json!(old);
     }
+    app.run(id, params)?;
     Ok(())
 }
 
@@ -119,7 +120,7 @@ impl ColorsForm {
     }
 
     pub fn apply(&self, app: &mut WordApp) -> Result<(), String> {
-        save(app, "design.customColors", json!({"colors": self.colors}), &self.name, self.editing.as_deref(), "colors")
+        save(app, "design.customColors", json!({"colors": self.colors}), &self.name, self.editing.as_deref())
     }
 }
 
@@ -243,7 +244,7 @@ impl FontsForm {
     }
 
     pub fn apply(&self, app: &mut WordApp) -> Result<(), String> {
-        save(app, "design.customFonts", json!({"heading": self.heading, "body": self.body}), &self.name, self.editing.as_deref(), "fonts")
+        save(app, "design.customFonts", json!({"heading": self.heading, "body": self.body}), &self.name, self.editing.as_deref())
     }
 }
 

@@ -217,9 +217,9 @@ pub fn specs() -> Vec<CommandSpec> {
     const LOC: &str = "Design › Document Formatting";
     vec![
         CommandSpec::new("design.customColors", "Customize Colors", LOC, custom_colors)
-            .params(r#"{"name": string, "colors": [12 × "RRGGBB": dark 1, light 1, dark 2, light 2, accent 1–6, hyperlink, followed hyperlink], "replace"?: bool (update the set of that name)} (from the ribbon, the app shows the dialog)"#),
+            .params(r#"{"name": string, "colors": [12 × "RRGGBB": dark 1, light 1, dark 2, light 2, accent 1–6, hyperlink, followed hyperlink], "replace"?: bool (update the set of that name), "renameFrom"?: string (a set to drop as this one is saved)} (from the ribbon, the app shows the dialog)"#),
         CommandSpec::new("design.customFonts", "Customize Fonts", LOC, custom_fonts)
-            .params(r#"{"name": string, "heading": string, "body"?: string (default: heading), "replace"?: bool} (from the ribbon, the app shows the dialog)"#),
+            .params(r#"{"name": string, "heading": string, "body"?: string (default: heading), "replace"?: bool, "renameFrom"?: string} (from the ribbon, the app shows the dialog)"#),
         CommandSpec::new("design.deleteCustom", "Delete", LOC, delete_custom)
             .params(r#"{"kind": "colors|fonts|theme", "name": string}"#)
             .pure(),
@@ -268,6 +268,7 @@ fn custom_colors(s: &mut Session, v: &Value) -> CmdResult {
     }
     let replace = p::bool(v, "replace").unwrap_or(false);
     let list = &mut s.custom_themes.colors;
+    drop_renamed(list, |c| &c.name, v, &name, replace, "colour set")?;
     let at = list.iter().position(|c| c.name.eq_ignore_ascii_case(&name));
     match at {
         Some(_) if !replace => return Err(CmdError::Params(format!("a colour set named `{name}` exists (pass `replace` to update it)"))),
@@ -294,6 +295,7 @@ fn custom_fonts(s: &mut Session, v: &Value) -> CmdResult {
     let replace = p::bool(v, "replace").unwrap_or(false);
     let set = CustomFonts { name: name.clone(), heading: heading.clone(), body: body.clone() };
     let list = &mut s.custom_themes.fonts;
+    drop_renamed(list, |c| &c.name, v, &name, replace, "font set")?;
     let at = list.iter().position(|c| c.name.eq_ignore_ascii_case(&name));
     match at {
         Some(_) if !replace => return Err(CmdError::Params(format!("a font set named `{name}` exists (pass `replace` to update it)"))),
@@ -313,28 +315,51 @@ fn custom_fonts(s: &mut Session, v: &Value) -> CmdResult {
 fn delete_custom(s: &mut Session, v: &Value) -> CmdResult {
     let kind = p::req_str(v, "kind")?;
     let name = check_name(p::req_str(v, "name")?)?;
-    let c = &mut s.custom_themes;
-    let before = (c.colors.len(), c.fonts.len(), c.themes.len());
-    match kind {
-        "colors" => c.colors.retain(|x| !x.name.eq_ignore_ascii_case(&name)),
-        "fonts" => c.fonts.retain(|x| !x.name.eq_ignore_ascii_case(&name)),
-        "theme" => c.themes.retain(|x| !x.name.eq_ignore_ascii_case(&name)),
+    let c = &s.custom_themes;
+    let exists = match kind {
+        "colors" => c.colors.iter().any(|x| x.name.eq_ignore_ascii_case(&name)),
+        "fonts" => c.fonts.iter().any(|x| x.name.eq_ignore_ascii_case(&name)),
+        "theme" => c.themes.iter().any(|x| x.name.eq_ignore_ascii_case(&name)),
         _ => return Err(CmdError::Params(format!("unknown `kind` `{kind}` (colors, fonts or theme)"))),
-    }
-    if before == (c.colors.len(), c.fonts.len(), c.themes.len()) {
+    };
+    if !exists {
         return Err(CmdError::Params(format!("no custom {kind} named `{name}`")));
     }
     if kind == "theme" {
-        if let Some(dir) = &s.themes_dir {
-            let file = theme_file(dir, &name);
-            if let Err(e) = crate::io::remove_file(&file) {
-                log::warn!("custom themes: couldn't remove {}: {e}", file.display());
+        // The file goes first: if it can't be removed the theme stays, so it doesn't come back
+        // from the folder at the next start while looking deleted now.
+        if let Some(dir) = s.themes_dir.clone() {
+            let file = theme_file(&dir, &name);
+            if file.exists() {
+                crate::io::remove_file(&file).map_err(|e| CmdError::Failed(format!("couldn't delete the theme: {e}")))?;
             }
         }
+        s.custom_themes.themes.retain(|x| !x.name.eq_ignore_ascii_case(&name));
     } else {
+        match kind {
+            "colors" => s.custom_themes.colors.retain(|x| !x.name.eq_ignore_ascii_case(&name)),
+            _ => s.custom_themes.fonts.retain(|x| !x.name.eq_ignore_ascii_case(&name)),
+        }
         persist(s);
     }
     Ok(json!({"deleted": name, "kind": kind}))
+}
+
+/// Renaming a set (`renameFrom`): the old set goes in the same step as the new one is written, so
+/// `custom.json` is saved once and never holds both, or neither. Nothing changes unless it all can.
+fn drop_renamed<T>(list: &mut Vec<T>, name_of: impl Fn(&T) -> &str, v: &Value, name: &str, replace: bool, what: &str) -> Result<(), CmdError> {
+    let Some(from) = p::str(v, "renameFrom").map(check_name).transpose()? else { return Ok(()) };
+    if from.eq_ignore_ascii_case(name) {
+        return Ok(());
+    }
+    let Some(old) = list.iter().position(|c| name_of(c).eq_ignore_ascii_case(&from)) else {
+        return Err(CmdError::Params(format!("no custom {what} named `{from}`")));
+    };
+    if !replace && list.iter().any(|c| name_of(c).eq_ignore_ascii_case(name)) {
+        return Err(CmdError::Params(format!("a {what} named `{name}` exists (pass `replace` to update it)")));
+    }
+    list.remove(old);
+    Ok(())
 }
 
 fn save_theme(s: &mut Session, v: &Value) -> CmdResult {
