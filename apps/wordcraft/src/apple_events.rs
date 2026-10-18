@@ -47,6 +47,8 @@ pub fn poll(inbox: &Inbox, app: &mut WordApp, ctx: &egui::Context) {
                         Ok(_) => app.ui.backstage = false,
                         Err(e) => {
                             app.report_open_failure(p, &e);
+                            // Backstage hides the status bar, so leave it to show the error.
+                            app.ui.backstage = false;
                         }
                     }
                 }

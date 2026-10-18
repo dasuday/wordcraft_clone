@@ -346,7 +346,8 @@ fn main() -> eframe::Result {
     let mut files = Vec::new();
     let mut sample = false;
     let (args, other_files) = text_args();
-    let args = without_launch_args(args);
+    // Only macOS (Finder / LaunchServices) adds these; elsewhere `-NS…` could be a real file name.
+    let args = if cfg!(target_os = "macos") { without_launch_args(args) } else { args };
     let mut bad_control: Option<Option<String>> = None;
     let mut args = args.into_iter().peekable();
     while let Some(a) = args.next() {
