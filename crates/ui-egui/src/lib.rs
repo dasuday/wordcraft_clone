@@ -1243,7 +1243,11 @@ impl WordApp {
             match outcome {
                 // Only when nothing changed since and no later save of it is still unconfirmed.
                 async_saves::SaveOutcome::Saved if !self.session.dirty && self.session.rev() == wait.rev && !self.save_unconfirmed() => {
-                    if let Err(e) = self.execute_user(&wait.then, wait.params) {
+                    // A failed open was already reported by name in `execute_user`.
+                    let is_open = wait.then == "file.open";
+                    if let Err(e) = self.execute_user(&wait.then, wait.params)
+                        && !is_open
+                    {
                         self.status(e);
                     }
                 }
