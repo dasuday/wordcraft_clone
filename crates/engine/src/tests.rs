@@ -5804,6 +5804,10 @@ fn split_cells_of_a_vertically_merged_cell() {
     assert!(matches!(e, crate::CmdError::Params(_)), "{e:?}");
     assert!(e.to_string().contains("The number must be a divisor of 4"), "3 doesn't divide 4: {e}");
     assert_eq!((s.undo_depth(), table_vmerge(&s)), (depth, before));
+    // 1 × 1 on the 4-row cell changes nothing either.
+    let mut s = merged();
+    run(&mut s, "table.split", json!({"columns": 1, "rows": 1}));
+    assert_eq!(table_vmerge(&s), [[Restart, No], [Continue, No], [Continue, No], [Continue, No]]);
 }
 
 /// #2592 review: cells split one by one split a vertically merged cell once, not once per row it
@@ -5936,8 +5940,7 @@ fn convert_text_to_table_initial_column_width() {
 }
 
 /// #2592, as Word does: a vertically merged cell splits into 1 to its height rows; its height
-/// cuts it into one cell per row, 1 × 1 cuts the top row off (2 rows: 1 + 1, 3 rows: 1 + 2),
-/// a number that doesn't divide the height or more than it is refused with Word's messages and
+/// cuts it into one cell per row, 1 × 1 changes nothing, a number that doesn't divide the height or more than it is refused with Word's messages and
 /// nothing changes, also when neighbours are merged with it first.
 #[test]
 fn split_cells_of_a_merged_cell_follow_word() {
@@ -5956,15 +5959,20 @@ fn split_cells_of_a_merged_cell_follow_word() {
         assert!(e.contains("The number must be between 1 and 2"), "{e}");
         assert_eq!((s.undo_depth(), table_vmerge(&s)), (depth, before));
     }
-    for params in [json!({"columns": 1, "rows": 2}), json!({"columns": 1, "rows": 1})] {
+    // 1 × 1 on a merged cell is a no-op (Word, 2 to 5 rows).
+    let mut s = merged();
+    let before = table_vmerge(&s);
+    run(&mut s, "table.split", json!({"columns": 1, "rows": 1}));
+    assert_eq!(table_vmerge(&s), before);
+    {
+        let params = json!({"columns": 1, "rows": 2});
         let mut s = merged();
         run(&mut s, "table.split", params.clone());
         assert_eq!(table_vmerge(&s), [[No, No], [No, No], [No, No], [No, No]], "{params}");
         assert_eq!(table_texts(&s)[0][0], "AC");
         assert_eq!(table_texts(&s)[1][0], "");
     }
-    // A 3-row cell: 2 rows is not a divisor (Word's alert, nothing changes); 1 × 1 cuts the top row
-    // off (1 + 2); 3 rows gives one cell per row.
+    // A 3-row cell: 2 rows is not a divisor (Word's alert, nothing changes); 1 × 1 is a no-op; 3 rows gives one cell per row.
     let tall = || {
         let mut s = table_from("A\tB\nC\tD\nE\tF\nG\tH");
         run(&mut s, "select.range", json!({"anchor": cell(0, 0), "focus": cell(2, 0)}));
@@ -5981,7 +5989,7 @@ fn split_cells_of_a_merged_cell_follow_word() {
     }
     let mut s = tall();
     run(&mut s, "table.split", json!({"columns": 1, "rows": 1}));
-    assert_eq!(table_vmerge(&s), [[No, No], [Restart, No], [Continue, No], [No, No]]);
+    assert_eq!(table_vmerge(&s), [[Restart, No], [Continue, No], [Continue, No], [No, No]]);
     assert_eq!(table_texts(&s)[0][0], "ACE");
     let mut s = tall();
     run(&mut s, "table.split", json!({"columns": 1, "rows": 3}));
