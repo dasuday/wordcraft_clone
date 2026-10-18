@@ -486,6 +486,29 @@ impl Table {
         true
     }
 
+    /// Split Cells 1 × 1 on a cell merged down: Word cuts the top row off it, leaving the rest
+    /// merged (2 rows → 1 + 1, 3 rows → 1 + 2). Returns false when the cell isn't merged down.
+    pub fn split_off_top_row(&mut self, r: usize, c: usize) -> bool {
+        let Some((top, k)) = self.vertical_extent(r, c) else { return false };
+        if k < 2 {
+            return false;
+        }
+        let g = self.grid_col(r, c);
+        for i in 0..k {
+            if let Some(cj) = self.cell_at_grid(top + i, g)
+                && let Some(cell) = self.rows.get_mut(top + i).and_then(|row| row.cells.get_mut(cj))
+            {
+                cell.props.vmerge = match i {
+                    0 => VMerge::None,
+                    1 if k == 2 => VMerge::None,
+                    1 => VMerge::Restart,
+                    _ => VMerge::Continue,
+                };
+            }
+        }
+        true
+    }
+
     pub fn total_width(&self) -> f32 {
         self.grid.iter().sum()
     }

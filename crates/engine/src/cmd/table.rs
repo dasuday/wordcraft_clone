@@ -763,14 +763,20 @@ fn split(s: &mut Session, v: &Value) -> CmdResult {
     cells.sort_unstable_by_key(|&(top, g)| std::cmp::Reverse((g, top)));
     for &(top, g) in &cells {
         let Some(ci) = t.cell_at_grid(top, g) else { continue };
-        // 1 × 1 on a cell that was already merged down cuts it back into one cell per row, as
-        // Word does; a cell just merged by Merge cells before split stays one cell.
+        // 1 × 1 on a cell that was already merged down: Word cuts the top row off it (2 rows
+        // give 1 + 1, 3 rows 1 + 2; taller cells are unmeasured and still cut into rows). A cell
+        // just merged by Merge cells before split stays one cell.
         let height = t.vertical_extent(top, ci).map_or(1, |(_, k)| k);
+        if !merge_first && cols == 1 && rows == 1 && (2..=3).contains(&height) {
+            t.split_off_top_row(top, ci);
+            continue;
+        }
         let rows = if !merge_first && height > 1 && rows == 1 && cols == 1 { height } else { rows };
+        if height > 1 && rows > 1 && height % rows != 0 {
+            return Err(CmdError::Params(format!("The number must be a divisor of {height}.")));
+        }
         if !t.split_cell_grid(top, ci, cols, rows) {
-            return Err(CmdError::Failed(format!(
-                "can't split into {rows} rows: a merged cell splits into a number of rows that divides its height"
-            )));
+            return Err(CmdError::Failed(format!("can't split into {rows} rows: the table would get too many rows")));
         }
     }
     // The caret goes to the first part of the first cell (the top of a merged cell).
