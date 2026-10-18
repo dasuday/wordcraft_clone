@@ -56,6 +56,8 @@ fn every_char_prop_round_trips() {
     let all = CharProps {
         style: Some("Strong".into()),
         font: Some("Georgia".into()),
+        // The symbol's own font: the run is written as `w:sym` characters (#2036).
+        sym_font: Some("Wingdings".into()),
         size: Some(10.5),
         bold: Some(true),
         italic: Some(false),
@@ -75,6 +77,7 @@ fn every_char_prop_round_trips() {
         scale: Some(150.0),
         position: Some(3.0),
         kern: Some(8.0),
+        ligatures: Some(wordcraft_doc::props::Ligatures { standard: true, historical: true, ..Default::default() }),
         outline: Some(true),
         shadow: Some(true),
         emboss: Some(false),
