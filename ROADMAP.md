@@ -150,11 +150,6 @@ Ranked, to beta (detail and remaining milestones in [docs/roadmap.md](docs/roadm
 | 2026-10-15 | Saved DOCX files keep the order of mixed right-to-left and left-to-right text in Word: Hebrew around a Latin name, numbers, brackets or an e-mail address no longer changes places, and Word reports the Hebrew as Hebrew rather than Arabic (#1543). |
 | 2026-10-15 | Web: typing in Cyrillic or another non-Latin script no longer repeats text. WordCraft now honours the input method's request to erase around the caret before retyping (#1480). Chrome can still move the hidden text field's caret, so later letters may still land out of order. That cause is still open |
 |---|---|
-| 2026-10-15 | Selection bar mirrors for right-to-left paragraphs (the right margin) and works beside table rows: a click in the page margin beside a row selects the row, a drag selects rows, Shift+click extends by rows (a right-to-left table's bar is on the right); `table.selectAt {"extend"}`. Word's right-pointing arrow still missing |
-| 2026-10-14 | DOCX row table border exceptions render and survive saving. Explicit cell borders win; a row exception does not change other rows. |
-| 2026-10-14 | Tab stops edited on the ruler: the corner selector picks Left/Center/Right/Decimal/Bar, a click sets a stop (Alt skips the snap), dragging moves it with a guide line and position tooltip, dragging off the ruler clears it; markers draw per kind and mirror for RTL; one `para.tabs` call and one undo step per gesture |
-| 2026-10-12 | Fields keep `w:dirty` through DOCX saves (#877): a begin marker flagged by a generator that couldn't compute a result (pandoc-style TOC placeholders) keeps the flag on open/save — as a buffered field or a range field — so Word still refreshes it on open; computing a result (Update Field, Update Table) clears it, like Word's F9 |
-|---|---|
 | 2026-10-15 | The font family caches are bounded (4096 families for text, 1024 for math, names over 256 bytes aren't remembered), so a document naming thousands of missing fonts can't grow memory; equation fonts are looked up again after a font is added or removed instead of keeping the old choice (#1354) |
 | 2026-10-15 | AutoCorrect recognizes `-->` as `→` (#2223), respecting replacement settings and undo without changing paragraph-start arrow bullets. |
 | 2026-10-15 | Numbered headings (#1793): the Multilevel List gallery offers four lists linked to Heading 1–9 (1 / 1.1 / 1.1.1, Article I. / Section 1.01 / (a), I. / A. / 1., Chapter 1; `list.multilevelPreset`). The heading styles carry the numbers, so paragraphs already in a Heading style keep their style and level, any other selected paragraph (Normal, Quote, Title) becomes Heading 1 (checked in Word), a new Heading 2 is numbered 2.1 by itself and body text stays unnumbered; Numbering or typing `1. ` keeps a heading a heading |
@@ -182,11 +177,9 @@ Ranked, to beta (detail and remaining milestones in [docs/roadmap.md](docs/roadm
 | 2026-10-12 | Fields keep `w:dirty` through DOCX saves (#877): a begin marker flagged by a generator that couldn't compute a result (pandoc-style TOC placeholders) keeps the flag on open/save — as a buffered field or a range field — so Word still refreshes it on open; computing a result (Update Field, Update Table) clears it, like Word's F9 |
 | 2026-10-18 | Different First Page works from page 1 (#2826): Insert › Header and Edit Header with the caret on page 1, and a double-click there while another header is being edited, go into page 1's own header instead of the default one page 1 no longer shows. |
 | 2026-10-15 | Track Changes Options › Moves (gap #5): Moved from and Moved to each have a mark and a colour (by default green double strikethrough and double underline, as before and as in Word for Mac), saved per user; `review.trackingOptions` takes `moveFromMark`, `moveFromColor`, `moveToMark`, `moveToColor`, and `trackMoves`, the document's Track moves setting: off, a tracked cut and paste is an ordinary deletion and insertion. DOCX `w:doNotTrackMoves` round-trips |
+| 2026-10-15 | Selection bar mirrors for right-to-left paragraphs (the right margin) and works beside table rows: a click in the page margin beside a row selects the row, a drag selects rows, Shift+click extends by rows (a right-to-left table's bar is on the right); `table.selectAt {"extend"}`. Word's right-pointing arrow still missing |
 | 2026-10-17 | Language dialog keeps inherited proofing language and no-proof choices (#2717). Opening and accepting unchanged no longer replaces style-derived values with English US and proofing enabled. |
-<<<<<<< HEAD
 | 2026-10-16 | Text with the legacy Outline, Shadow, Emboss or Engrave font effects (`w:outline`, `w:shadow`, `w:emboss`, `w:imprint`) is drawn with them on screen and in PDFs, no longer as plain text: hollow outlined letters, or a grey copy behind the letters; the PDF keeps the text (#2534) |
->>>>>>> e9f6d80 (gap: selection bar review fixes (row bar only beside the table, Shift+click from outside, text-box tables))
-=======
 | 2026-10-14 | Consistent preferred cell widths override a stale table grid when both totals agree, for fixed and AutoFit tables. Conflicting widths, spans and percentages remain unchanged. |
 | 2026-10-14 | Legacy VML freeforms (`v:shape` with its own `path`), such as the rule lines in many older headers, are read as freeform shapes: they show on screen and in PDFs and are saved back as DrawingML custom geometry instead of vanishing |
 | 2026-10-14 | Field instructions spanning paragraphs no longer add blank lines during pagination; empty result paragraphs still take a line. |
@@ -468,6 +461,7 @@ Ranked, to beta (detail and remaining milestones in [docs/roadmap.md](docs/roadm
 | 2026-10-15 | trivial | Progress log: image size limits checked before allocation (#1321) |
 | 2026-10-17 | trivial | Progress log: Read Aloud speaks each sentence in its own language, #1843 |
 | 2026-10-17 | trivial | Language dialog keeps inherited proofing language and no-proof choices (#2717); readiness estimates unchanged |
+| 2026-10-15 | trivial | Progress log: selection bar for right-to-left paragraphs and table rows |
 | 2026-10-17 | trivial | Explicit DrawingML preset/custom outline dashes survive import/save and paint in raster/PDF, scaled to the effective stroke width even for zero-width paths. Synthetic controls; theme-inherited dashes and line caps remain unverified. |
 | 2026-10-15 | trivial | `wordcraft-cli convert --update-fields` explicitly refreshes unlocked fields before conversion; ordinary conversion keeps cached results. Field refresh can change pagination |
 | 2026-10-17 | trivial | Arial Unicode MS uses Arial and its proportional substitutes; glyph coverage and exact Word line height remain font-dependent. |
@@ -489,7 +483,6 @@ Ranked, to beta (detail and remaining milestones in [docs/roadmap.md](docs/roadm
 | 2026-10-16 | trivial | Progress log: Hebrew field results and smart quotes (#1670) |
 | 2026-10-16 | trivial | Progress log: Ctrl+wheel zoom no longer scrolls the document (#1743) |
 | 2026-10-16 | trivial | Hint-reliant CJK fonts execute TrueType contour assembly; Windows DFKai-SB no longer loses strokes. Synthetic local-font regression; no font binaries bundled. |
-| 2026-10-15 | trivial | Progress log: selection bar for right-to-left paragraphs and table rows |
 | 2026-10-14 | trivial | Progress log: row table border exceptions |
 | 2026-10-12 | minor | Czech proofing review: short-word splits rank after deletion, NOSUGGEST excludes suggestions while accepting typed forms, affix comments apply only to headers, ratios keep spaces and repeated-word messages use Czech quotes; synthetic engine end-to-end and latency checks |
 | 2026-10-12 | minor | Czech spelling from the installed Hunspell dictionary, runtime-table suggestions and generic checks; Czech interface writes cs-CZ documents; no Czech hyphenation patterns bundled; estimates unchanged |
