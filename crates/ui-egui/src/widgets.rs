@@ -330,6 +330,8 @@ pub fn split(
     }
     let (arrow_title, _) = tooltip_lines(&crate::i18n::fmt(tl!("{name} options"), &[("name", tip)]), "", "", None);
     show_hint(&aresp, &arrow_title, &[]);
+    // The split button reads as one control named after its tip, so a screen reader (and the
+    // tests) can find it; the arrow is its menu.
     resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, on, tip));
     if !on {
         return;
