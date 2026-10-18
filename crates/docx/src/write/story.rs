@@ -247,7 +247,16 @@ impl Writer<'_> {
         // Split into pieces with their props.
         let mut pieces: Vec<(Piece, &CharProps)> = Vec::new();
         let mut k = 0usize;
-        for (range, props) in p.run_ranges() {
+        // Runs of mixed direction are split so Word orders them as WordCraft does (#1543).
+        let rtl_para = self.doc.styles.resolve_para(&p.props).bidi;
+        let styles = &self.doc.styles;
+        let para_style = p.props.style.as_deref();
+        let para_lang = super::bidi::para_inherits_lang_bidi(styles, para_style);
+        let spans =
+            super::bidi::direction_spans(&p.text, rtl_para, p.run_ranges(), |c| para_lang || super::bidi::char_style_has_lang_bidi(styles, c));
+        for (range, props) in &spans {
+            let props: &CharProps = props;
+            let range = range.clone();
             let base = range.start;
             let Some(text) = p.text.get(range) else { continue };
             let mut buf = String::new();
@@ -785,6 +794,17 @@ impl Writer<'_> {
                 w.close("w:r");
                 self.rev_close(w, props);
             }
+            InlineObject::PositionalTab { align, relative_to, leader } => {
+                self.rev_open(w, props);
+                w.open("w:r", &[]);
+                self.rpr(w, props);
+                w.empty(
+                    "w:ptab",
+                    &[("w:relativeTo", relative_to.ooxml()), ("w:alignment", align.ooxml()), ("w:leader", super::props::tab_leader(*leader))],
+                );
+                w.close("w:r");
+                self.rev_close(w, props);
+            }
             InlineObject::Opaque { format, xml, text } => {
                 if format == "docx" && crate::xml::parse(xml.as_bytes()).is_ok() {
                     w.raw(xml);
@@ -1048,6 +1068,7 @@ impl Writer<'_> {
                     w.empty("a:srgbClr", &[("val", &c.hex())]);
                 }
                 w.close("a:solidFill");
+                line_dash(w, &extra.dash);
                 if ink {
                     w.empty("a:round", &[]);
                 }
@@ -1057,6 +1078,7 @@ impl Writer<'_> {
             None => {
                 w.open("a:ln", &[]);
                 w.empty("a:noFill", &[]);
+                line_dash(w, &extra.dash);
                 w.close("a:ln");
             }
         }
@@ -1491,6 +1513,28 @@ fn cust_geom(w: &mut W, f: &wordcraft_doc::freeform::Freeform, sw: f32, sh: f32)
     }
     w.close("a:pathLst");
     w.close("a:custGeom");
+}
+
+/// Explicit DrawingML outline dashes, before joins and arrowheads.
+fn line_dash(w: &mut W, dash: &wordcraft_doc::line_dash::LineDash) {
+    use wordcraft_doc::line_dash::{LineDash, MAX_DASH_STOPS};
+    if dash.is_solid() {
+        return;
+    }
+    if let Some(preset) = dash.ooxml() {
+        w.empty("a:prstDash", &[("val", preset)]);
+        return;
+    }
+    if let LineDash::Custom(stops) = dash {
+        if stops.is_empty() {
+            return;
+        }
+        w.open("a:custDash", &[]);
+        for (d, sp) in stops.iter().take(MAX_DASH_STOPS) {
+            w.empty("a:ds", &[("d", &d.to_string()), ("sp", &sp.to_string())]);
+        }
+        w.close("a:custDash");
+    }
 }
 
 /// A shape's `a:effectLst` (ECMA-376 Part 1 §20.1.8.26), children in schema order.

@@ -163,6 +163,11 @@ fn word_default_shortcuts_resolve() {
         assert_eq!(id("Alt+F1"), Some("fields.next"));
     }
     assert_eq!(id("Mod+PageUp"), Some("edit.findPrevious"));
+    // The Spike: Word's Ctrl+F3 and Ctrl+Shift+F3 (⌘F3 and ⌘⇧F3 in Word for Mac).
+    assert_eq!(id("Mod+F3"), Some("edit.spike"));
+    assert_eq!(id("Mod+Shift+F3"), Some("edit.insertSpike"));
+    assert_eq!(id("F3"), Some("edit.findNext"));
+    assert_eq!(id("Shift+F3"), Some("format.changeCase"));
     assert_eq!(id("F12"), Some("file.saveAs"));
     assert_eq!(id("Mod+Alt+M"), Some("review.newComment"));
     assert_eq!(id("Mod+H"), Some("edit.findReplace"));
@@ -948,6 +953,99 @@ fn copying_an_equation_puts_mathml_on_the_clipboard() {
     assert!(r["html"].as_str().is_some_and(|h| h.contains("Speed") && !h.contains("<math")), "{r}");
 }
 
+/// Whether `xml` is one element whose tags all nest and close (enough to check a clipboard
+/// payload without an XML parser in the engine's tests).
+fn one_balanced_element(xml: &str) -> bool {
+    let mut stack: Vec<String> = Vec::new();
+    let mut closed_root = false;
+    let mut rest = xml;
+    while let Some(lt) = rest.find('<') {
+        if closed_root || (stack.is_empty() && !rest[..lt].trim().is_empty()) {
+            return false;
+        }
+        let Some(gt) = rest[lt..].find('>') else { return false };
+        let tag = &rest[lt + 1..lt + gt];
+        rest = &rest[lt + gt + 1..];
+        if let Some(name) = tag.strip_prefix('/') {
+            if stack.pop().as_deref() != Some(name.trim()) {
+                return false;
+            }
+            closed_root = stack.is_empty();
+        } else if !tag.ends_with('/') {
+            stack.push(tag.split_whitespace().next().unwrap_or_default().to_string());
+        } else if stack.is_empty() {
+            closed_root = true;
+        }
+    }
+    closed_root && stack.is_empty() && rest.trim().is_empty()
+}
+
+#[test]
+fn copying_one_equation_gives_its_mathml_for_the_math_clipboard_formats() {
+    // #1297: Word reads a pasted equation first from the clipboard's "MathML" formats; a copy of
+    // one equation alone carries its MathML for the host to put there.
+    let cases = [
+        ("y=(a+b)/(c-d)", "<mfrac>"),
+        ("x_i^2+e^(-t)", "<msubsup>"),
+        ("√(x^2+1)+∛8", "<msqrt>"),
+        ("∑_(k=1)^n k^2", "<munderover>"),
+        ("∫_0^1 f(x)dx", "∫"),
+        ("■(1&0@0&1)", "<mtable>"),
+    ];
+    for (linear, element) in cases {
+        let mut s = s();
+        run(&mut s, "insert.equation", json!({"linear": linear, "edit": false}));
+        run(&mut s, "select.all", json!({}));
+        let r = run(&mut s, "edit.copy", json!({}));
+        let mathml = r["mathml"].as_str().unwrap_or_default().to_string();
+        assert!(mathml.starts_with("<math xmlns=\"http://www.w3.org/1998/Math/MathML\""), "{linear}: {mathml}");
+        assert!(mathml.contains(element), "{linear}: {mathml}");
+        // Alone on its line, it is a display equation.
+        assert!(mathml.contains("display=\"block\""), "{linear}: {mathml}");
+        assert!(one_balanced_element(&mathml), "{linear}: not one well-formed element: {mathml}");
+        // No XML prolog: the W3C transfer rules want `<math` first, so readers that sniff the
+        // start of the text recognise it.
+        assert!(!mathml.contains("<?xml"), "{mathml}");
+        // Pasting it back (as a MathML reader would get it) gives the same equation.
+        let mut t = s_with_paste(&mathml);
+        assert_eq!(equations(&t), equations(&s), "{mathml}");
+        // Its presentation elements alone, without our linear-format annotation (which Word
+        // ignores), still read as an equation of the same shape.
+        let bare = match (mathml.find("<annotation"), mathml.find("</annotation>")) {
+            (Some(a), Some(b)) => format!("{}{}", &mathml[..a], &mathml[b + "</annotation>".len()..]),
+            _ => mathml.clone(),
+        };
+        t = s_with_paste(&bare);
+        assert_eq!(equations(&t).len(), 1, "{linear}: {bare}");
+    }
+}
+
+fn s_with_paste(html: &str) -> Session {
+    let mut t = s();
+    run(&mut t, "edit.paste", json!({"text": "", "html": html}));
+    t
+}
+
+#[test]
+fn copying_an_equation_with_text_offers_no_math_clipboard_formats() {
+    // #1297: Word takes the "MathML" format before the HTML, so offering it for a copy with text
+    // around the equation would drop the text. Text alone has none either.
+    let mut s = s();
+    run(&mut s, "document.setText", json!({"text": "Speed "}));
+    run(&mut s, "caret.docEnd", json!({}));
+    run(&mut s, "insert.equation", json!({"linear": "y=2x_s", "edit": false}));
+    run(&mut s, "select.all", json!({}));
+    let r = run(&mut s, "edit.copy", json!({}));
+    assert!(r.get("mathml").is_none() && r["html"].as_str().is_some_and(|h| h.contains("<math")), "{r}");
+    run(&mut s, "select.range", json!({"anchor": {"block": 0, "off": 0}, "focus": {"block": 0, "off": 5}}));
+    let r = run(&mut s, "edit.copy", json!({}));
+    assert!(r.get("mathml").is_none(), "{r}");
+    // Cut of the equation alone offers it.
+    run(&mut s, "select.range", json!({"anchor": {"block": 0, "off": 6}, "focus": {"block": 0, "off": 9}}));
+    let r = run(&mut s, "edit.cut", json!({}));
+    assert!(r["mathml"].as_str().is_some_and(|m| m.contains("<msub>") && !m.contains("display=")), "an inline equation: {r}");
+}
+
 #[test]
 fn copying_bold_text_puts_html_on_the_clipboard() {
     // #1523: formatted text reaches other programs as HTML, not only as plain text.
@@ -1240,6 +1338,62 @@ fn paste_keeps_source_formatting_from_other_programs() {
     assert_eq!(props_at(&s, 4).italic, Some(true));
 }
 
+/// A CF_HTML ("HTML Format") clipboard payload around `html`, with the byte offsets Windows writes.
+fn cf_html(html: &str) -> String {
+    let n = "Version:1.0\r\nStartHTML:0000000000\r\nEndHTML:0000000000\r\nStartFragment:0000000000\r\nEndFragment:0000000000\r\n".len();
+    let a = html.find("<body>").map_or(0, |i| i + 6);
+    let b = html.find("</body>").unwrap_or(html.len());
+    format!(
+        "Version:1.0\r\nStartHTML:{n:010}\r\nEndHTML:{:010}\r\nStartFragment:{:010}\r\nEndFragment:{:010}\r\n{html}",
+        n + html.len(),
+        n + a,
+        n + b
+    )
+}
+
+/// LibreOffice copies a paragraph indented on both sides as `<blockquote>`, its margins in the
+/// page's stylesheet (#1270). Pasting it gives a Normal paragraph with those indents — not the
+/// Quote style (centred, italic) — by Paste and by Paste Special > HTML alike.
+#[test]
+fn pasted_blockquote_is_an_indented_paragraph_not_a_quote() {
+    let page = "<!DOCTYPE html><html><head><meta name=\"generator\" content=\"LibreOffice\"/><style type=\"text/css\">\
+        blockquote { margin-left: 1cm; margin-right: 2cm; background: transparent }\
+        p { line-height: 115%; margin-bottom: 0.25cm }</style></head>\
+        <body><p>First plain.</p><blockquote lang=\"en-US\"><b>Bold indented.</b></blockquote><p>Last plain.</p></body></html>";
+    let check = |s: &Session, left: f32, right: f32| {
+        assert!(text(s).starts_with("First plain.\nBold indented.\nLast plain."), "{}", text(s));
+        let q = s.doc.body.get(1).and_then(|b| b.as_para()).unwrap();
+        assert_ne!(q.props.style.as_deref(), Some("Quote"), "not the Quote style");
+        let rp = s.doc.styles.resolve_para(&q.props);
+        assert_ne!(rp.align, wordcraft_doc::props::Align::Center, "not centred");
+        assert!((rp.indent_left - left).abs() < 0.1, "left {}", rp.indent_left);
+        assert!((rp.indent_right - right).abs() < 0.1, "right {}", rp.indent_right);
+        let rc = s.doc.styles.resolve_char(q.props.style.as_deref(), q.props_of_char(0));
+        assert!(!rc.italic, "not italic");
+        assert!(rc.bold, "keeps its bold");
+    };
+    let mut s = s();
+    run(&mut s, "edit.paste", json!({"text": "First plain.\nBold indented.\nLast plain.", "html": cf_html(page)}));
+    check(&s, 72.0 / 2.54, 144.0 / 2.54);
+    let mut s2 = self::s();
+    run(&mut s2, "edit.pasteSpecial", json!({"as": "html", "html": cf_html(page)}));
+    check(&s2, 72.0 / 2.54, 144.0 / 2.54);
+    // No margins given: half an inch each side.
+    let mut s3 = self::s();
+    run(&mut s3, "edit.paste", json!({"text": "a\nq", "html": "<p>a</p><blockquote>q</blockquote>"}));
+    let q = s3.doc.body.get(1).and_then(|b| b.as_para()).unwrap();
+    assert_ne!(q.props.style.as_deref(), Some("Quote"));
+    assert_eq!((q.props.indent_left, q.props.indent_right), (Some(36.0), Some(36.0)));
+}
+
+/// Opening an .html file keeps `<blockquote>` as the Quote style, so HTML round-trips.
+#[test]
+fn opened_html_blockquote_stays_a_quote() {
+    let d = crate::io::open_bytes("q.html", b"<p>a</p><blockquote>q</blockquote>").unwrap();
+    let q = d.body.get(1).and_then(|b| b.as_para()).unwrap();
+    assert_eq!(q.props.style.as_deref(), Some("Quote"));
+}
+
 /// Paste Special lists a picture on the system clipboard and pastes it (#687).
 #[test]
 fn paste_special_lists_and_pastes_a_picture() {
@@ -1287,6 +1441,102 @@ fn clipboard_pane_collects_copies_and_pastes_one_undoably() {
     run(&mut s, "edit.clearClipboard", json!({}));
     assert!(s.clip_history.is_empty());
     assert!(s.run("edit.pasteClipboardItem", &json!({"index": 0})).is_err());
+}
+
+fn spiked(s: &Session) -> Option<String> {
+    s.building_blocks.get("Spike").map(|f| f.plain_text())
+}
+
+#[test]
+fn spike_collects_cuts_and_insert_spike_pastes_them_and_empties_it() {
+    let mut s = Session::new(wordcraft_doc::Document::from_text("Alpha beta gamma.\n"));
+    run(&mut s, "select.text", json!({"text": "beta"}));
+    run(&mut s, "edit.copy", json!({}));
+    run(&mut s, "select.text", json!({"text": "Alpha"}));
+    run(&mut s, "edit.spike", json!({}));
+    run(&mut s, "select.text", json!({"text": "gamma"}));
+    run(&mut s, "edit.spike", json!({}));
+    assert_eq!(text(&s), " beta .\n", "Ctrl+F3 cuts");
+    assert_eq!(spiked(&s).as_deref(), Some("Alpha\ngamma\n"), "each piece is followed by a paragraph mark");
+    assert_eq!((s.clipboard_text.as_str(), s.clip_history.len()), ("beta", 1), "the clipboard is left alone");
+    // Ctrl+Shift+F3 on the empty last paragraph: everything, in the order it was collected.
+    run(&mut s, "caret.docEnd", json!({}));
+    run(&mut s, "edit.insertSpike", json!({}));
+    assert_eq!(text(&s), " beta .\nAlpha\ngamma\n");
+    assert_eq!(spiked(&s), None, "Ctrl+Shift+F3 empties the Spike");
+    assert!(matches!(s.run("edit.insertSpike", &json!({})), Err(crate::CmdError::Disabled(_))));
+}
+
+#[test]
+fn spike_keeps_character_formatting() {
+    let mut s = Session::new(wordcraft_doc::Document::from_text("Bold plain\n"));
+    run(&mut s, "select.text", json!({"text": "Bold"}));
+    run(&mut s, "format.bold", json!({}));
+    run(&mut s, "edit.spike", json!({}));
+    run(&mut s, "caret.docEnd", json!({}));
+    run(&mut s, "edit.insertSpike", json!({}));
+    assert_eq!(text(&s), " plain\nBold\n");
+    let p = s.doc.para_at(&Pos::body(1, 0)).unwrap();
+    assert_eq!(p.props_of_char(0).bold, Some(true));
+}
+
+#[test]
+fn spike_and_insert_spike_are_one_undo_step_each() {
+    let mut s = Session::new(wordcraft_doc::Document::from_text("one two\n"));
+    run(&mut s, "select.text", json!({"text": "one"}));
+    run(&mut s, "edit.spike", json!({}));
+    run(&mut s, "edit.undo", json!({}));
+    assert_eq!(text(&s), "one two\n");
+    assert_eq!(spiked(&s).as_deref(), Some("one\n"), "like Cut and the clipboard, undo leaves the Spike as it is");
+    run(&mut s, "caret.docEnd", json!({}));
+    let before = text(&s);
+    run(&mut s, "edit.insertSpike", json!({}));
+    assert_eq!(text(&s), "one two\none\n");
+    run(&mut s, "edit.undo", json!({}));
+    assert_eq!(text(&s), before);
+}
+
+#[test]
+fn spike_needs_a_selection() {
+    let mut s = Session::new(wordcraft_doc::Document::from_text("one two"));
+    let r = s.run("edit.spike", &json!({}));
+    assert!(matches!(r, Err(crate::CmdError::Disabled(_))), "{r:?}");
+    assert_eq!(spiked(&s), None);
+    assert_eq!(text(&s), "one two");
+}
+
+#[test]
+fn autotext_inserts_the_spike_without_emptying_it() {
+    let mut s = Session::new(wordcraft_doc::Document::from_text("Alpha beta\n"));
+    run(&mut s, "select.text", json!({"text": "Alpha"}));
+    run(&mut s, "edit.spike", json!({}));
+    run(&mut s, "caret.docEnd", json!({}));
+    run(&mut s, "insert.autoText", json!({"insert": "Spike"}));
+    run(&mut s, "insert.autoText", json!({"insert": "Spike"}));
+    assert_eq!(text(&s), " beta\nAlpha\nAlpha\n");
+    assert_eq!(spiked(&s).as_deref(), Some("Alpha\n"));
+}
+
+#[test]
+fn spike_outside_the_editable_regions_changes_nothing() {
+    let mut s = Session::new(wordcraft_doc::Document::from_text("Locked intro.\nFill in here.\n"));
+    run(&mut s, "select.text", json!({"text": "Fill in here."}));
+    run(&mut s, "review.restrict", json!({"exception": "add"}));
+    run(&mut s, "review.restrict", json!({"mode": "readOnly"}));
+    // Collected inside the exception: allowed.
+    run(&mut s, "select.text", json!({"text": "here"}));
+    run(&mut s, "edit.spike", json!({}));
+    assert_eq!(spiked(&s).as_deref(), Some("here\n"));
+    // Outside it: refused, and neither the document nor the Spike changes.
+    let before = text(&s);
+    run(&mut s, "select.text", json!({"text": "intro"}));
+    assert!(s.run("edit.spike", &json!({})).is_err());
+    assert_eq!(text(&s), before);
+    assert_eq!(spiked(&s).as_deref(), Some("here\n"));
+    // Inserting outside it: refused, and the Spike keeps what it holds.
+    assert!(s.run("edit.insertSpike", &json!({})).is_err());
+    assert_eq!(text(&s), before);
+    assert_eq!(spiked(&s).as_deref(), Some("here\n"));
 }
 
 #[test]
@@ -1784,6 +2034,20 @@ fn layout_size_refuses_a_page_its_margins_dont_fit() {
     }
     run(&mut s, "layout.size", json!({"width": 180.0, "height": 180.0}));
     assert_eq!((s.doc.last_section.page_w, s.doc.last_section.page_h), (180.0, 180.0), "exactly 36 pt of room is enough");
+}
+
+/// A negative margin (or gutter) counts as zero, so it can't offset an oversized one past the
+/// text-room check: `layout.margins` refuses and changes nothing.
+#[test]
+fn layout_margins_negative_cannot_hide_an_oversized_margin() {
+    let mut s = s();
+    run(&mut s, "layout.margins", json!({"preset": "normal"}));
+    let before = s.doc.last_section.clone();
+    for v in [json!({"top": 2000, "bottom": -2000}), json!({"left": 2000, "right": -2000}), json!({"left": 600, "right": 0, "gutter": -600})] {
+        let e = s.run("layout.margins", &v).unwrap_err().to_string();
+        assert!(e.contains("margins leave no room for text"), "{v}: {e}");
+        assert_eq!(s.doc.last_section, before, "{v} changes nothing");
+    }
 }
 
 /// #1433: the smallest page there can be (0.1" wide, no margins, set straight through Page
@@ -2926,6 +3190,17 @@ fn word_count_includes_numbered_list_labels_in_words_but_not_characters() {
     // so Word excludes it from character counts: "Apple" has 5 characters.
     assert_eq!(v["characters"].as_u64(), Some(5));
     assert_eq!(v["charactersWithSpaces"].as_u64(), Some(5));
+}
+
+#[test]
+fn word_count_excludes_carriage_returns_from_character_counts() {
+    let mut s = s();
+    run(&mut s, "text.insert", json!({"text": "Hello\r\nWorld"}));
+    run(&mut s, "select.all", json!({}));
+    let v = run(&mut s, "review.wordCount", json!({}));
+    assert_eq!(v["words"].as_u64(), Some(2));
+    assert_eq!(v["characters"].as_u64(), Some(10));
+    assert_eq!(v["charactersWithSpaces"].as_u64(), Some(10));
 }
 
 /// The laid-out area of the only text box.
@@ -4127,6 +4402,26 @@ fn navigation_pane_opens_without_changing_view_mode() {
         run(&mut s, "view.navigationPane", json!({"value": true}));
         assert!(s.view.nav_pane);
         assert_eq!((s.view.mode, s.view.read_mode), before, "{command}");
+    }
+}
+
+#[test]
+fn interface_theme_queues_a_front_end_request_and_rejects_junk() {
+    // #1861: the session can't paint, so the command asks the front end; the document,
+    // view state and undo stack are untouched.
+    let mut s = s();
+    let dirty = s.dirty;
+    for value in ["light", "dark", "system"] {
+        let r = run(&mut s, "view.interfaceTheme", json!({"value": value}));
+        assert_eq!(r["value"], value);
+        assert_eq!(s.ui_requests.last().unwrap()["interfaceTheme"], value);
+    }
+    let r = run(&mut s, "view.interfaceTheme", json!({}));
+    assert_eq!(r["value"], "toggle");
+    assert_eq!(s.ui_requests.last().unwrap()["toggle"], "interfaceTheme");
+    assert_eq!(s.dirty, dirty);
+    for bad in [json!({"value": "midnight"}), json!({"value": 3})] {
+        assert!(s.run("view.interfaceTheme", &bad).is_err(), "{bad}");
     }
 }
 
@@ -5771,6 +6066,26 @@ fn note_options_per_section_and_convert_notes() {
     assert!(s.run("references.convertNotes", &json!({"to": "sideways"})).is_err());
 }
 
+#[test]
+fn next_footnote_skips_endnotes() {
+    let mut s = s();
+    run(&mut s, "text.insert", json!({"text": "A"}));
+    run(&mut s, "references.footnote", json!({"text": "Fn1"}));
+    s.sel = crate::Selection::caret(s.doc.end_of(StoryRef::Body));
+    run(&mut s, "text.insert", json!({"text": "B"}));
+    run(&mut s, "references.endnote", json!({"text": "En1"}));
+    s.sel = crate::Selection::caret(s.doc.end_of(StoryRef::Body));
+    run(&mut s, "text.insert", json!({"text": "C"}));
+    run(&mut s, "references.footnote", json!({"text": "Fn2"}));
+
+    s.sel = crate::Selection::caret(Pos::body(0, 0));
+    run(&mut s, "references.nextFootnote", json!({}));
+    assert_eq!(s.sel.focus.off, 1);
+
+    run(&mut s, "references.nextFootnote", json!({}));
+    assert_eq!(s.sel.focus.off, 9);
+}
+
 /// A tiny synthetic Polish Hunspell dictionary (written for these tests). Real dictionaries are
 /// installed on the system, never bundled; every Polish test installs this same one.
 fn polish_test_dictionary() {
@@ -6617,6 +6932,10 @@ fn ordinals_and_untagged_text_sort_and_sum_as_numbers() {
     let mut t = column_table("pl-PL", &["10.", "2.", "1."]);
     run(&mut t, "table.sort", json!({"column": 0, "header": false}));
     assert_eq!(column_texts(&t), ["1.", "2.", "10."]);
+
+    let mut t = column_table("en-US", &["10", "(50)", "20"]);
+    run(&mut t, "table.sort", json!({"column": 0, "header": false}));
+    assert_eq!(column_texts(&t), ["(50)", "10", "20"]);
 
     let mut s = s();
     s.set_editing_language(Some("pl-PL"));
@@ -7692,4 +8011,75 @@ fn quick_parts_use_the_documents_building_blocks() {
     assert_eq!(s.doc.glossary.iter().map(|e| e.name.as_str()).collect::<Vec<_>>(), ["Signature", "Disclaimer"]);
     assert!(s.run("insert.quickParts", &json!({"save": " ", "in": "document"})).is_err());
     assert!(s.run("insert.quickParts", &json!({"insert": "Closing"})).is_err());
+}
+
+#[test]
+fn toc_collects_cell_headings() {
+    use std::sync::Arc;
+    use wordcraft_doc::{Block, CharProps, InlineObject, Paragraph, Path, Table, para_block};
+    let mut earlier = Table::new(1, 1, 180.0);
+    earlier.rows[0].cells[0].blocks = vec![para_block(Paragraph::with_text("Earlier", CharProps::default()).styled("Heading1"))];
+    let mut nested = Table::new(1, 1, 180.0);
+    nested.rows[0].cells[0].blocks = vec![para_block(Paragraph::with_text("Nested", CharProps::default()).styled("Heading3"))];
+    let mut later = Paragraph::with_text("Later", CharProps::default());
+    later.props.outline_level = Some(1);
+    let mut table = Table::new(1, 1, 180.0);
+    table.rows[0].cells[0].blocks =
+        vec![para_block(later), Arc::new(Block::Table(nested)), para_block(Paragraph::with_text("Unlisted", CharProps::default()))];
+    let mut toc = Paragraph::with_text("Contents", CharProps::default()).styled("TOCHeading");
+    toc.insert_object(
+        toc.len(),
+        InlineObject::Field {
+            instr: r#"TOC \o "1-3" \h \u"#.into(),
+            result: String::new(),
+            locked: false,
+            dirty: true,
+            code: false,
+            form: String::new(),
+        },
+        &CharProps::default(),
+    )
+    .unwrap();
+    let mut d = wordcraft_doc::Document::new();
+    d.body = vec![
+        Arc::new(Block::Table(earlier)),
+        para_block(toc),
+        para_block(Paragraph::with_text("\u{000C}", CharProps::default())),
+        Arc::new(Block::Table(table)),
+    ];
+    let mut s = Session::new(wordcraft_docx::read(&wordcraft_docx::write(&d).unwrap()).unwrap());
+    for command in ["references.updateFields", "references.updateToc"] {
+        run(&mut s, command, json!({}));
+        let entries: Vec<_> = s
+            .doc
+            .body
+            .iter()
+            .filter_map(|b| b.as_para())
+            .filter(|p| p.props.style.as_deref().is_some_and(|st| st.starts_with("TOC") && st != "TOCHeading"))
+            .cloned()
+            .collect();
+        assert_eq!(entries.len(), 3, "{command}: {}", text(&s));
+        let layout = s.layout();
+        let bookmarks = s.doc.bookmarks();
+        let mut pages = Vec::new();
+        for (p, title) in entries.iter().zip(["Earlier", "Later", "Nested"]) {
+            let value = p.plain_text();
+            assert!(value.starts_with(title), "{value}");
+            let shown: u32 = value.rsplit_once('\t').unwrap().1.parse().unwrap();
+            let name = p.props_of_char(0).link.as_ref().unwrap().strip_prefix('#').unwrap();
+            let (_, target) = bookmarks.iter().find(|(n, _)| n == name).unwrap();
+            assert!(target.path.depth() > 0);
+            let paragraph = s.doc.para(StoryRef::Body, &target.path).unwrap();
+            assert_eq!(paragraph.plain_text(), title);
+            let caret = layout.caret(target).unwrap();
+            assert_eq!(shown, layout.pages[caret.page].number, "{title}");
+            pages.push(caret.page);
+        }
+        assert!(pages[1] > pages[0]);
+        assert_eq!(bookmarks.iter().filter(|(n, _)| n.starts_with("_Toc")).count(), 3);
+        // The block-index-only link API must not misidentify a cell paragraph as a body block.
+        let targets = s.run("link.targets", &json!({})).unwrap();
+        assert_eq!(targets["headings"].as_array().unwrap().len(), 0);
+        assert!(s.doc.para(StoryRef::Body, &Path::top(1)).is_some());
+    }
 }
