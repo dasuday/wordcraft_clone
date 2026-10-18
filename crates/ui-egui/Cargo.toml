@@ -43,6 +43,7 @@ chrono = { version = "0.4.45", default-features = false, features = ["clock"] }
 js-sys = "0.3"
 
 [dev-dependencies]
+cfb = { workspace = true }
 egui_kittest = { workspace = true, features = ["wgpu", "snapshot"] }
 zip = { workspace = true }
 

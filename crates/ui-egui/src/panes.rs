@@ -129,6 +129,7 @@ fn nav(app: &mut WordApp, ui: &mut Ui) {
         out.state.store(ui.ctx(), r.id);
     }
     if r.changed() || picked.is_some() {
+        app.ui.nav_tab = "results".into();
         ui.data_mut(|d| d.insert_temp(qid, q.clone()));
         if !q.is_empty() {
             let _ = app.session.run("edit.find", &json!({"text": q}));
@@ -245,6 +246,7 @@ fn clipboard(app: &mut WordApp, ui: &mut Ui) {
         }
         if ui.add_enabled(!items.is_empty(), egui::Button::new(tl!("Clear All"))).clicked() {
             let _ = app.run("edit.clearClipboard", json!({}));
+            app.canvas.want_focus = true;
         }
     });
     ui.add_space(4.0);
@@ -268,6 +270,7 @@ fn clipboard(app: &mut WordApp, ui: &mut Ui) {
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
                     if ui.small_button(tl!("Delete")).clicked() {
                         let _ = app.run("edit.deleteClipboardItem", json!({"index": i}));
+                        app.canvas.want_focus = true;
                     }
                 });
             });
@@ -337,10 +340,12 @@ fn styles(app: &mut WordApp, ui: &mut Ui) {
                     }
                     if ui.button(tl!("Update to Match Selection")).clicked() {
                         let _ = app.run("styles.updateToMatch", json!({"style": id}));
+                        app.canvas.want_focus = true;
                         ui.close();
                     }
                     if ui.button(tl!("Delete")).clicked() {
                         let _ = app.run("styles.delete", json!({"style": id}));
+                        app.canvas.want_focus = true;
                         ui.close();
                     }
                 });
@@ -466,6 +471,13 @@ pub(crate) struct NewComment {
 fn current(app: &WordApp) -> Option<&CommentDrafts> {
     let d = &app.comment_drafts;
     (d.document == app.session.document_id()).then_some(d)
+}
+
+/// Whether the open document has a comment or reply draft not yet written to it (typed, or
+/// kept after the document refused it): closing the page would lose it.
+pub(crate) fn has_comment_drafts(app: &WordApp) -> bool {
+    let d = &app.comment_drafts;
+    d.document == app.session.document_id() && !(d.edits.is_empty() && d.replies.is_empty())
 }
 
 fn drafts(app: &mut WordApp) -> &mut CommentDrafts {
@@ -1068,6 +1080,9 @@ fn describe(prop: &str, v: &Value) -> String {
         "suppressLineNumbers" => "Suppress line numbers",
         "bidi" => "Right-to-left",
         "dropCap" => "Drop cap",
+        "dropCapMargin" => "In margin",
+        "dropCapDistance" => "Distance from text",
+        "dropCapFont" => "Font",
         "style" => "Style",
         "numbering" => "Numbering",
         "lang" => "Language",
@@ -1088,6 +1103,7 @@ fn describe(prop: &str, v: &Value) -> String {
             l @ 0..=8 => crate::i18n::fmt(tl!("Level {n}"), &[("n", &(l + 1).to_string())]),
             _ => tl!("Body Text").to_string(),
         },
+        ("dropCapFont", Value::String(s)) => s.clone(),
         ("dropCap", Value::Number(n)) => crate::i18n::fmt(tl!("{n} lines"), &[("n", &n.to_string())]),
         (_, Value::Number(n)) => pt(n.as_f64().unwrap_or(0.0)),
         ("align", Value::String(s)) => tl!(match s.as_str() {
@@ -1135,6 +1151,40 @@ fn camel_words(s: &str) -> String {
         }
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    /// #1902: Clipboard Delete returns focus to the document like paste does.
+    #[test]
+    #[cfg(not(target_arch = "wasm32"))]
+    fn clipboard_delete_returns_focus_to_the_document() {
+        use egui_kittest::kittest::Queryable;
+
+        let mut app = crate::WordApp::new(wordcraft_engine::Session::new(wordcraft_doc::Document::from_text("Hello")), crate::Services::default());
+        app.run("select.all", serde_json::json!({})).unwrap();
+        app.run("edit.copy", serde_json::json!({})).unwrap();
+        assert_eq!(app.session.clip_history.items().len(), 1);
+        app.run("edit.clipboardPane", serde_json::json!({"value": true})).unwrap();
+        let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(1440.0, 900.0)).build_ui_state(
+            |ui, app: &mut crate::WordApp| {
+                let ctx = ui.ctx().clone();
+                app.logic(&ctx);
+                app.ui(ui);
+            },
+            app,
+        );
+        h.run_steps(4);
+        // Focus the button for real: a bare accesskit click leaves egui focus empty, and an
+        // unrelated chrome-click helper would hand focus to the canvas on its own.
+        h.get_by_label("Delete").focus();
+        h.run_steps(2);
+        h.state_mut().canvas.want_focus = false;
+        h.get_by_label("Delete").click();
+        h.run_steps(4);
+        assert!(h.state().canvas.focused, "Delete returns focus to the document");
+        assert!(h.state().session.clip_history.items().is_empty(), "the item was deleted");
+    }
 }
 
 #[cfg(test)]
