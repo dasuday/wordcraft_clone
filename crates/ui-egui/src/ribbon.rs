@@ -3421,7 +3421,9 @@ mod tests {
         // Underline and Bullets are split buttons: the button toggles, the arrow opens a menu.
         let underline: Vec<_> = h.query_all(By::new().role(Role::Button).label(tl!("Underline"))).map(|n| n.accesskit_node()).collect();
         assert!(underline.iter().any(|n| n.toggled() == Some(Toggled::False)), "Underline toggles");
-        assert!(underline.iter().any(|n| n.has_popup() == Some(HasPopup::Menu)), "Underline's arrow opens a menu");
+        let arrow = format!("{} {}", tl!("Underline"), tl!("Options"));
+        let underline_arrow: Vec<_> = h.query_all(By::new().role(Role::Button).label(&arrow)).map(|n| n.accesskit_node()).collect();
+        assert!(underline_arrow.iter().any(|n| n.has_popup() == Some(HasPopup::Menu)), "Underline's arrow opens a menu");
         let bullets: Vec<_> = h.query_all(By::new().role(Role::Button).label(tl!("Bullets"))).map(|n| n.accesskit_node()).collect();
         assert!(bullets.iter().any(|n| n.toggled() == Some(Toggled::True)), "Bullets are on");
         let paste: Vec<_> = h.query_all(By::new().role(Role::Button).label_contains(tl!("Paste"))).map(|n| n.accesskit_node()).collect();
