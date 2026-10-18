@@ -395,10 +395,12 @@ fn properties(s: &mut Session, v: &Value) -> CmdResult {
     Ok(out)
 }
 
-/// Longest custom property name (Word's limit).
-const MAX_CUSTOM_NAME: usize = 255;
-/// Largest custom property value we accept from a command.
-const MAX_CUSTOM_VALUE: usize = 1024 * 1024;
+/// Longest custom property name (Word's limit). The Custom Properties dialog validates with it
+/// too (#2982).
+pub const MAX_CUSTOM_NAME: usize = 255;
+/// Largest custom property value we accept from a command. The Custom Properties dialog
+/// validates with it too (#2982).
+pub const MAX_CUSTOM_VALUE: usize = 1024 * 1024;
 
 fn info(s: &mut Session, _: &Value) -> CmdResult {
     let l = s.layout();

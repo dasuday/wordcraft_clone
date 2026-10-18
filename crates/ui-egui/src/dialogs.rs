@@ -547,6 +547,147 @@ pub enum Dialog {
     },
     /// Line Numbers, Hyphenation, Language, Envelopes and Labels (#407).
     Layout(Box<crate::dialogs_layout::LayoutDialog>),
+    /// File › Info › Properties › Advanced Properties › Custom: the document's custom
+    /// properties (#2982).
+    CustomProperties(Box<CustomPropertiesForm>),
+}
+
+/// The Custom tab of File › Info › Properties › Advanced Properties (#2982): the document's
+/// custom properties, edited as a working copy. OK sends the whole difference from what the
+/// dialog opened with as one undoable `file.properties` step (marking the document changed and
+/// refreshing File › Info); Cancel sends nothing. Text properties only for now: Word's
+/// number/date/yes-no types aren't offered, and a property of another type keeps its stored
+/// form — only a value the user changes is saved as text.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CustomPropertiesForm {
+    /// The working copy, in document order.
+    pub props: Vec<wordcraft_doc::CustomProp>,
+    /// What the document held when the dialog opened; OK sends only what differs.
+    start: Vec<wordcraft_doc::CustomProp>,
+    /// The row the list selection is on.
+    pub selected: usize,
+    /// The name/value boxes under the list.
+    pub name: String,
+    pub value: String,
+    /// The last error to show under the form (a refused name, a failed command).
+    pub message: String,
+}
+
+impl CustomPropertiesForm {
+    pub(crate) fn read(app: &WordApp) -> Self {
+        let props = app.session.doc.custom_props.clone();
+        Self { props: props.clone(), start: props, selected: 0, name: String::new(), value: String::new(), message: String::new() }
+    }
+
+    /// Clicking a row: it fills the name and value boxes, as in Word.
+    pub(crate) fn select(&mut self, i: usize) {
+        self.selected = i;
+        self.message.clear();
+        match self.props.get(i) {
+            Some(p) => {
+                self.name = p.name.clone();
+                self.value = p.value.clone();
+            }
+            None => {
+                self.name.clear();
+                self.value.clear();
+            }
+        }
+    }
+
+    /// The typed name and value, validated against the engine's own limits
+    /// (`file.properties`, which refuses them the same way).
+    fn form(&self) -> Result<(String, String), String> {
+        let max_name = wordcraft_engine::cmd::file::MAX_CUSTOM_NAME;
+        let name = self.name.trim();
+        if name.is_empty() || name.chars().count() > max_name {
+            return Err(crate::i18n::fmt(tl!("Property names are 1–{max} characters."), &[("max", &max_name.to_string())]));
+        }
+        if self.value.len() > wordcraft_engine::cmd::file::MAX_CUSTOM_VALUE {
+            let max = wordcraft_engine::cmd::file::MAX_CUSTOM_VALUE;
+            return Err(crate::i18n::fmt(tl!("Property values are at most {max} bytes."), &[("max", &max.to_string())]));
+        }
+        Ok((name.to_string(), self.value.clone()))
+    }
+
+    /// Add: the typed name and value join the list, replacing a property of the same name
+    /// (names compare case-insensitively, as in Word and the engine).
+    pub(crate) fn add(&mut self) {
+        match self.form() {
+            Ok((name, value)) => {
+                self.message.clear();
+                match self.props.iter().position(|p| p.name.eq_ignore_ascii_case(&name)) {
+                    Some(i) => {
+                        self.props[i].value = value;
+                        self.selected = i;
+                    }
+                    None => {
+                        self.props.push(wordcraft_doc::CustomProp { name, kind: "lpwstr".into(), value });
+                        self.selected = self.props.len().saturating_sub(1);
+                    }
+                }
+            }
+            Err(m) => self.message = m,
+        }
+    }
+
+    /// Modify: the selected property takes the typed name and value; a different name moves it
+    /// there (replacing a property already of that name). A refused form keeps the list as it
+    /// was.
+    pub(crate) fn modify(&mut self) {
+        let Some(old) = self.props.get(self.selected).cloned() else {
+            self.message = tl!("Select a property to change.").to_string();
+            return;
+        };
+        let (name, value) = match self.form() {
+            Ok(f) => f,
+            Err(m) => {
+                self.message = m;
+                return;
+            }
+        };
+        self.message.clear();
+        self.props.remove(self.selected);
+        match self.props.iter().position(|p| p.name.eq_ignore_ascii_case(&name)) {
+            Some(i) => {
+                self.props[i].value = value;
+                self.selected = i;
+            }
+            None => {
+                let i = self.selected.min(self.props.len());
+                self.props.insert(i, wordcraft_doc::CustomProp { name, kind: old.kind.clone(), value });
+                self.selected = i;
+            }
+        }
+    }
+
+    /// Delete: the selected property leaves the list.
+    pub(crate) fn delete(&mut self) {
+        if self.selected < self.props.len() {
+            self.props.remove(self.selected);
+            self.select(self.selected.min(self.props.len().saturating_sub(1)));
+        }
+    }
+
+    /// The one `file.properties` call OK makes: a property gone since the dialog opened is
+    /// null, one added or changed is its value. Untouched properties aren't sent, so one of
+    /// another type (Zotero's raw XML, a number) keeps its stored form.
+    pub(crate) fn params(&self) -> Value {
+        let mut custom = serde_json::Map::new();
+        for p in &self.start {
+            if !self.props.iter().any(|q| q.name.eq_ignore_ascii_case(&p.name)) {
+                custom.insert(p.name.clone(), Value::Null);
+            }
+        }
+        for p in &self.props {
+            let changed = self.start.iter().find(|q| q.name.eq_ignore_ascii_case(&p.name)).is_none_or(|was| was.value != p.value);
+            if changed {
+                custom.insert(p.name.clone(), json!(p.value));
+            }
+        }
+        json!({"custom": custom})
+    }
 }
 
 /// The Table Properties dialog's fields. Lengths are in the interface unit
@@ -1008,6 +1149,7 @@ impl Dialog {
             Dialog::NoteOptions { .. } => "noteOptions",
             Dialog::Templates { .. } => "templates",
             Dialog::Organizer { .. } => "organizer",
+            Dialog::CustomProperties(..) => "customProperties",
             Dialog::Layout(d) => d.name(),
         }
     }
@@ -1282,6 +1424,7 @@ impl Dialog {
             "noteOptions" => Dialog::NoteOptions { form: Box::new(crate::dialogs_notes::NoteForm::read(app)) },
             "templates" => Dialog::Templates { form: Box::new(crate::dialogs_templates::TemplatesForm::read(app)) },
             "organizer" => Dialog::Organizer { form: Box::new(crate::dialogs_templates::OrganizerForm::read(app, None)) },
+            "customProperties" => Dialog::CustomProperties(Box::new(CustomPropertiesForm::read(app))),
             "controlProperties" => match crate::dialogs_controls::ControlForm::read(app) {
                 Some(form) => Dialog::Control { form: Box::new(form) },
                 None => {
@@ -1466,6 +1609,7 @@ pub fn show(app: &mut WordApp, ctx: &egui::Context) {
         Dialog::NoteOptions { .. } => "Footnote and Endnote",
         Dialog::Templates { .. } => "Templates and Add-ins",
         Dialog::Organizer { .. } => "Organizer",
+        Dialog::CustomProperties { .. } => "Custom Document Properties",
         Dialog::Layout(d) => d.title(),
     };
     let id = egui::Id::new(("dialog", title));
@@ -2950,6 +3094,7 @@ fn body(app: &mut WordApp, ui: &mut Ui, d: &mut Dialog) -> bool {
         Dialog::NoteOptions { form } => crate::dialogs_notes::note_options(app, ui, form),
         Dialog::Templates { form } => crate::dialogs_templates::templates(app, ui, form),
         Dialog::Organizer { form } => crate::dialogs_templates::organizer(app, ui, form),
+        Dialog::CustomProperties(form) => custom_properties(app, ui, form),
         Dialog::Layout(d) => crate::dialogs_layout::body(app, ui, d),
         Dialog::FindRecipient { text, message } => {
             ui.horizontal(|ui| {
@@ -3707,6 +3852,69 @@ fn close_button(ui: &mut Ui) -> bool {
         close |= ui.add(crate::widgets::primary_button(ui, tl!("Close"))).clicked();
     });
     close
+}
+
+/// The Custom tab of File › Info › Properties › Advanced Properties (#2982): the document's
+/// custom properties with Add, Modify and Delete over a name/value form. OK is one undo step
+/// (one `file.properties` call), Cancel leaves the document as it was.
+fn custom_properties(app: &mut WordApp, ui: &mut Ui, f: &mut CustomPropertiesForm) -> bool {
+    let t = Tokens::get(ui.ctx());
+    let mut clicked = None;
+    let rows = f.props.len().min(8);
+    egui::ScrollArea::vertical().id_salt("custom_props").max_height(rows as f32 * 18.0 + 4.0).auto_shrink([false, true]).show(ui, |ui| {
+        if f.props.is_empty() {
+            ui.label(egui::RichText::new(tl!("This document has no custom properties.")).color(t.text_dim));
+        }
+        for (i, p) in f.props.iter().enumerate() {
+            let row = ui.selectable_label(f.selected == i, format!("{} = {}", p.name, p.value));
+            if row.clicked() {
+                clicked = Some(i);
+            }
+        }
+    });
+    if let Some(i) = clicked {
+        f.select(i);
+    }
+    ui.horizontal(|ui| {
+        if ui.button(tl!("Add")).clicked() {
+            f.add();
+        }
+        if ui.add_enabled(f.selected < f.props.len(), egui::Button::new(tl!("Modify"))).clicked() {
+            f.modify();
+        }
+        if ui.add_enabled(f.selected < f.props.len(), egui::Button::new(tl!("Delete"))).clicked() {
+            f.delete();
+        }
+    });
+    ui.separator();
+    egui::Grid::new("custom_props_form").num_columns(2).spacing(vec2(10.0, 6.0)).show(ui, |ui| {
+        ui.label(tl!("Name:"));
+        ui.add(egui::TextEdit::singleline(&mut f.name).desired_width(300.0).char_limit(wordcraft_engine::cmd::file::MAX_CUSTOM_NAME));
+        ui.end_row();
+        ui.label(tl!("Value:"));
+        ui.add(egui::TextEdit::singleline(&mut f.value).desired_width(300.0));
+        ui.end_row();
+    });
+    if !f.message.is_empty() {
+        ui.colored_label(ui.visuals().error_fg_color, f.message.as_str());
+    }
+    ui.label(egui::RichText::new(tl!("Text properties only: Word's number, date and yes-no types aren't offered.")).small().weak());
+    let (ok, cancel) = buttons(ui, tl!("OK"));
+    if cancel {
+        return true;
+    }
+    if ok {
+        let params = f.params();
+        if params["custom"].as_object().is_some_and(serde_json::Map::is_empty) {
+            return true;
+        }
+        // One call: one undo step, the document marked changed, File › Info reads it afresh.
+        match app.run("file.properties", params) {
+            Ok(_) => return true,
+            Err(e) => f.message = e,
+        }
+    }
+    false
 }
 
 /// A style's description: its type, the formatting it sets and what it is based on.
@@ -5025,5 +5233,134 @@ mod tests {
         let pages = &s.layout().pages;
         assert!(pages[0].footer_story.is_none(), "the title page shows no page number");
         assert!(pages[1].footer_story.is_some(), "the next page keeps its number");
+    }
+
+    /// #2982: File › Info's Advanced Properties… opens the Custom Properties dialog; it lists
+    /// the document's custom properties, and Add / Modify / Delete edit a working copy that OK
+    /// applies as one undoable `file.properties` step, Cancel discarding it.
+    #[test]
+    fn the_custom_properties_dialog_adds_edits_and_deletes_in_one_step() {
+        use egui_kittest::kittest::Queryable;
+        let mut app = app_with("Report body");
+        let _ = app.run("file.properties", json!({"custom": {"Status": "draft", "Owner": "Mira"}}));
+        let _ = app.run("ui.dialog", json!({"name": "customProperties"}));
+        assert!(matches!(&app.dialog, Some(Dialog::CustomProperties(_))), "opens via the command");
+        assert_eq!(app.dialog.as_ref().map(|d| d.name()), Some("customProperties"));
+        let mut h = egui_kittest::Harness::builder().with_size(vec2(1440.0, 900.0)).build_ui_state(
+            |ui, app: &mut WordApp| {
+                let ctx = ui.ctx().clone();
+                app.logic(&ctx);
+                app.ui(ui);
+            },
+            app,
+        );
+        for _ in 0..4 {
+            h.step();
+        }
+        let texts: Vec<String> = h
+            .output()
+            .shapes
+            .iter()
+            .filter_map(|s| match &s.shape {
+                egui::Shape::Text(t) => Some(t.galley.text().to_string()),
+                _ => None,
+            })
+            .collect();
+        assert!(texts.iter().any(|t| t == "Status = draft"), "the list shows the properties: {texts:?}");
+        // Add one, and replace a duplicate name's value (names compare case-insensitively).
+        let Some(Dialog::CustomProperties(f)) = h.state_mut().dialog.as_mut() else { panic!("the dialog is open") };
+        f.name = "Reviewer".into();
+        f.value = "Ada".into();
+        f.add();
+        f.name = "status".into();
+        f.value = "final".into();
+        f.add();
+        assert_eq!(f.props.len(), 3, "the duplicate replaced the value");
+        // The seeded names arrived in the object's order: Owner, Status.
+        assert_eq!(f.props.iter().find(|p| p.name.eq_ignore_ascii_case("status")).map(|p| p.value.as_str()), Some("final"));
+        // Edit the selected one through the form.
+        f.select(2);
+        assert_eq!((f.name.as_str(), f.value.as_str()), ("Reviewer", "Ada"));
+        f.value = "Ada L.".into();
+        f.modify();
+        // Delete the selected one.
+        f.delete();
+        assert_eq!(f.props.len(), 2);
+        // OK: one call, so one undo step, marking the document changed.
+        let depth = h.state().session.undo_depth();
+        h.state_mut().session.dirty = false;
+        h.step();
+        h.get_by_role_and_label(egui::accesskit::Role::Button, "OK").click();
+        for _ in 0..4 {
+            h.step();
+        }
+        assert!(h.state().dialog.is_none(), "OK closes the dialog");
+        let props: Vec<(String, String)> = h.state().session.doc.custom_props.iter().map(|p| (p.name.clone(), p.value.clone())).collect();
+        // The seeded names arrive in the object's order: Owner, Status.
+        assert_eq!(props, [("Owner".to_string(), "Mira".to_string()), ("Status".to_string(), "final".to_string())]);
+        assert!(h.state().session.dirty, "the document is marked changed");
+        assert_eq!(h.state().session.undo_depth(), depth + 1, "one undo step");
+        // One undo brings the old values back.
+        let _ = h.state_mut().run("edit.undo", json!({}));
+        assert_eq!(h.state().session.doc.custom_prop("Status"), Some("draft"), "one undo step");
+    }
+
+    /// #2982: Cancel leaves the document as it was, and empty or oversized names are refused
+    /// with a message in the dialog instead of a panic or a half-applied edit.
+    #[test]
+    fn the_custom_properties_dialog_cancel_changes_nothing_and_refuses_bad_names() {
+        use egui_kittest::kittest::Queryable;
+        let mut app = app_with("Report body");
+        let _ = app.run("file.properties", json!({"custom": {"Status": "draft"}}));
+        let _ = app.run("ui.dialog", json!({"name": "customProperties"}));
+        let mut h = egui_kittest::Harness::builder().with_size(vec2(1440.0, 900.0)).build_ui_state(
+            |ui, app: &mut WordApp| {
+                let ctx = ui.ctx().clone();
+                app.logic(&ctx);
+                app.ui(ui);
+            },
+            app,
+        );
+        for _ in 0..4 {
+            h.step();
+        }
+        let depth = h.state().session.undo_depth();
+        {
+            let Some(Dialog::CustomProperties(f)) = h.state_mut().dialog.as_mut() else { panic!("the dialog is open") };
+            // Empty and blank names are refused, keeping the list as it was.
+            f.name = String::new();
+            f.value = "v".into();
+            f.add();
+            assert!(!f.message.is_empty(), "a blank name is refused");
+            f.name = "   ".into();
+            f.add();
+            assert!(!f.message.is_empty(), "a whitespace name is refused");
+            // A name over Word's limit is refused (the box caps typing; paste is checked too).
+            f.name = "x".repeat(wordcraft_engine::cmd::file::MAX_CUSTOM_NAME + 1);
+            f.add();
+            assert!(!f.message.is_empty(), "an oversized name is refused");
+            // An oversized value likewise.
+            f.name = "Big".into();
+            f.value = "v".repeat(wordcraft_engine::cmd::file::MAX_CUSTOM_VALUE + 1);
+            f.add();
+            assert!(!f.message.is_empty(), "an oversized value is refused");
+            assert_eq!(f.props.len(), 1, "nothing was added");
+            // A valid entry, so Cancel has something to discard.
+            f.name = "Reviewer".into();
+            f.value = "Ada".into();
+            f.add();
+            assert_eq!(f.props.len(), 2);
+        }
+        // The edits changed the dialog's layout; let it settle so the buttons sit where the
+        // click looks for them.
+        h.step();
+        h.get_by_role_and_label(egui::accesskit::Role::Button, "Cancel").click();
+        for _ in 0..4 {
+            h.step();
+        }
+        assert!(h.state().dialog.is_none(), "Cancel closes the dialog");
+        let names: Vec<&str> = h.state().session.doc.custom_props.iter().map(|p| p.name.as_str()).collect();
+        assert_eq!(names, ["Status"], "the document is untouched");
+        assert_eq!(h.state().session.undo_depth(), depth, "no step was recorded");
     }
 }
