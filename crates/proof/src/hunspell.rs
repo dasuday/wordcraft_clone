@@ -182,9 +182,34 @@ fn decode_high(bytes: &[u8], high: &str) -> String {
     bytes.iter().map(|&b| if b < 0x80 { char::from(b) } else { high.get(usize::from(b - 0x80)).copied().unwrap_or('\u{fffd}') }).collect()
 }
 
+/// ISO 8859-7 (Greek, 2003 edition): the encoding of the Greek `el_GR` dictionary. Bytes with no
+/// character (0xAE, 0xD2, 0xFF) become U+FFFD.
+fn iso_8859_7(b: u8) -> char {
+    let at = |base: u32, first: u8| char::from_u32(base + u32::from(b - first)).unwrap_or('\u{fffd}');
+    match b {
+        0xA1 => '\u{2018}',
+        0xA2 => '\u{2019}',
+        0xA3 => '£',
+        0xA4 => '€',
+        0xA5 => '\u{20AF}',
+        0xAA => '\u{037A}',
+        0xAE | 0xD2 | 0xFF => '\u{fffd}',
+        0xAF => '\u{2015}',
+        // Tonos, dialytika tonos and the accented capitals; the rest of the row is as in Latin-1.
+        0xB4..=0xB6 => at(0x0384, 0xB4),
+        0xB8..=0xBA => at(0x0388, 0xB8),
+        0xBC => '\u{038C}',
+        0xBE..=0xBF => at(0x038E, 0xBE),
+        // ΐ, Α–Ω, Ϊ Ϋ, ά έ ή ί, ΰ, α–ω, ϊ ϋ ό ύ ώ: U+0390 onwards in order.
+        0xC0..=0xFE => at(0x0390, 0xC0),
+        _ => char::from(b),
+    }
+}
+
 /// Decode an `.aff`/`.dic` pair to UTF-8 from the encoding the `.aff`'s `SET` line names
 /// (UTF-8 when there is none; ISO 8859-2 is the other one Polish dictionaries use, ISO 8859-1 the
-/// one the original Portuguese VERO uses, KOI8-R and Windows-1251 the ones older Russian dictionaries use).
+/// one the original Portuguese VERO uses, KOI8-R and Windows-1251 the ones older Russian dictionaries use,
+/// ISO 8859-7 the Greek one).
 pub fn decode(aff: &[u8], dic: &[u8]) -> Result<(String, String), String> {
     let head = String::from_utf8_lossy(aff.get(..aff.len().min(8192)).unwrap_or_default()).to_string();
     let set = head.lines().find_map(|l| l.trim_start_matches('\u{feff}').strip_prefix("SET ")).map(str::trim).unwrap_or("UTF-8").to_ascii_uppercase();
@@ -197,6 +222,10 @@ pub fn decode(aff: &[u8], dic: &[u8]) -> Result<(String, String), String> {
         "ISO8859-2" | "ISO-8859-2" => Ok((decode_latin2(aff), decode_latin2(dic))),
         "KOI8-R" | "KOI8R" => Ok((decode_high(aff, KOI8_R_HIGH), decode_high(dic, KOI8_R_HIGH))),
         "CP1251" | "WINDOWS-1251" | "MICROSOFT-CP1251" => Ok((decode_high(aff, CP1251_HIGH), decode_high(dic, CP1251_HIGH))),
+        "ISO8859-7" | "ISO-8859-7" => {
+            let greek = |b: &[u8]| b.iter().map(|&c| iso_8859_7(c)).collect::<String>();
+            Ok((greek(aff), greek(dic)))
+        }
         other => Err(format!("unsupported encoding {other}")),
     }
 }
@@ -236,6 +265,20 @@ mod tests {
     }
 
     #[test]
+    fn decodes_greek() {
+        // `καλημέρα ΐ Ώ` in ISO 8859-7.
+        let (a, d) = decode(b"SET ISO8859-7\nTRY \xe1\n", b"1\n\xea\xe1\xeb\xe7\xec\xdd\xf1\xe1 \xc0 \xbf\n").unwrap();
+        assert!(a.contains("TRY α"));
+        assert_eq!(d, "1\nκαλημέρα ΐ Ώ\n");
+        let all: Vec<u8> = (0x80..=0xff).collect();
+        let (_, d) = decode(b"SET iso-8859-7\n", &all).unwrap();
+        assert_eq!(d.chars().count(), 128);
+        assert_eq!(d.chars().filter(|&c| c == '\u{fffd}').count(), 3);
+        assert!(d.contains("Ά·ΈΉΊ»Ό½ΎΏ"));
+        assert!(d.contains("αβγδεζηθικλμνξοπρςστυφχψωϊϋόύώ"));
+    }
+
+    #[test]
     fn decodes_latin1() {
         // `orçamento esperávamos` in ISO 8859-1: ç = 0xE7, á = 0xE1.
         let (a, d) = decode(b"SET ISO8859-1\nTRY \xe7\n", b"1\nor\xe7amento/A\nesper\xe1vamos\n").unwrap();
@@ -261,6 +304,7 @@ mod tests {
         // `dict-pt-BR`, so both the primary-language folder and the dashed full name are tried.
         assert_eq!(super::lo_ext_dirs("cs_CZ"), ["dict-cs", "dict-cs-CZ"]);
         assert_eq!(super::lo_ext_dirs("id_ID"), ["dict-id", "dict-id-ID"]);
+        assert_eq!(super::lo_ext_dirs("el_GR"), ["dict-el", "dict-el-GR"]);
         assert_eq!(super::lo_ext_dirs("pl_PL"), ["dict-pl", "dict-pl-PL"]);
         assert_eq!(super::lo_ext_dirs("pt_BR"), ["dict-pt", "dict-pt-BR"]);
         assert_eq!(super::lo_ext_dirs("de-DE"), ["dict-de", "dict-de-DE"]);

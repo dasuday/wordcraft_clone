@@ -431,6 +431,31 @@ fn autocorrect_replacement_list_follows_the_texts_language() {
     assert_eq!(s.doc.plain_text(StoryRef::Body), "So I think ");
 }
 
+/// Greek AutoCorrect: the Greek list applies to Greek words (tagged or typed under English), a
+/// final `σ` becomes `ς`, `;` ends a Greek question, words in capitals keep their missing
+/// accents, and cAPS LOCK gives a final `ς`.
+#[test]
+fn greek_autocorrect_as_you_type() {
+    let s = typed("κια ειναι λογοσ. τι κανεισ; καλα ");
+    assert_eq!(s.doc.plain_text(StoryRef::Body), "Και είναι λογος. Τι κανεις; Καλά ");
+    let s = typed("ΕΙΝΑΙ ΑΠΟ (λογοσ) σ. κ. παπας ");
+    assert_eq!(s.doc.plain_text(StoryRef::Body), "ΕΙΝΑΙ ΑΠΟ (λογος) σ. κ. παπας ");
+    let s = typed("το κΑΛΟΣ ");
+    assert_eq!(s.doc.plain_text(StoryRef::Body), "Το Καλος ");
+    // Tagged Greek; the English list stays out of it, and Greek stays out of English.
+    let mut s = self::s();
+    run(&mut s, "review.language", json!({"lang": "el-GR", "default": true}));
+    typ(&mut s, "απο εδω teh ");
+    assert_eq!(s.doc.plain_text(StoryRef::Body), "Από εδώ teh ");
+    let s = typed("apo teh ");
+    assert_eq!(s.doc.plain_text(StoryRef::Body), "Apo the ");
+    // Off with Replace text as you type.
+    let mut s = self::s();
+    run(&mut s, "tools.autocorrect", json!({"replaceText": false}));
+    typ(&mut s, "κια λογοσ ");
+    assert_eq!(s.doc.plain_text(StoryRef::Body), "Κια λογοσ ");
+}
+
 #[test]
 fn autocorrect_options_change_what_typing_does() {
     let mut s = s();

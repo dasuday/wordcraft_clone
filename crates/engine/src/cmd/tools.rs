@@ -59,11 +59,76 @@ pub const AUTOCORRECT: &[(&str, &str)] = &[
     ("1/2", "½"),
     ("1/4", "¼"),
     ("3/4", "¾"),
+    // Greek (our own list): swapped letters and words typed without their accent that are
+    // never right without it.
+    ("κια", "και"),
+    ("κάι", "και"),
+    ("καί", "και"),
+    ("ειναι", "είναι"),
+    ("εινια", "είναι"),
+    ("ειανι", "είναι"),
+    ("απο", "από"),
+    ("οτι", "ότι"),
+    ("εχω", "έχω"),
+    ("εχει", "έχει"),
+    ("εχουν", "έχουν"),
+    ("ηταν", "ήταν"),
+    ("ημουν", "ήμουν"),
+    ("θελω", "θέλω"),
+    ("μπορω", "μπορώ"),
+    ("μπορει", "μπορεί"),
+    ("πρεπει", "πρέπει"),
+    ("γινεται", "γίνεται"),
+    ("κανω", "κάνω"),
+    ("ξερω", "ξέρω"),
+    ("γιατι", "γιατί"),
+    ("επισης", "επίσης"),
+    ("ομως", "όμως"),
+    ("οπως", "όπως"),
+    ("οταν", "όταν"),
+    ("οπου", "όπου"),
+    ("τοτε", "τότε"),
+    ("εδω", "εδώ"),
+    ("εκει", "εκεί"),
+    ("τωρα", "τώρα"),
+    ("ετσι", "έτσι"),
+    ("μονο", "μόνο"),
+    ("ακομα", "ακόμα"),
+    ("ακομη", "ακόμη"),
+    ("δηλαδη", "δηλαδή"),
+    ("μαζι", "μαζί"),
+    ("μετα", "μετά"),
+    ("κατα", "κατά"),
+    ("πολυ", "πολύ"),
+    ("λιγο", "λίγο"),
+    ("καλα", "καλά"),
+    ("ολα", "όλα"),
+    ("ενα", "ένα"),
+    ("ενας", "ένας"),
+    ("οχι", "όχι"),
+    ("εγω", "εγώ"),
+    ("εσυ", "εσύ"),
+    ("εμεις", "εμείς"),
+    ("εσεις", "εσείς"),
+    ("αυτο", "αυτό"),
+    ("σημερα", "σήμερα"),
+    ("αυριο", "αύριο"),
+    ("ευχαριστω", "ευχαριστώ"),
+    ("παρακαλω", "παρακαλώ"),
+    ("τιποτα", "τίποτα"),
+    ("κατι", "κάτι"),
 ];
 
-/// A built-in entry that is an English word (letters and apostrophes only), not a symbol.
-fn is_english_entry(from: &str) -> bool {
-    from.chars().any(char::is_alphabetic) && from.chars().all(|c| c.is_alphabetic() || c == '\'')
+/// The language of a built-in entry: Greek for Greek letters, English for other words (letters
+/// and apostrophes only), `None` for a symbol, which applies in every language.
+fn entry_lang(from: &str) -> Option<wordcraft_proof::ProofLang> {
+    if from.chars().any(wordcraft_proof::el::is_greek_letter) {
+        Some(wordcraft_proof::ProofLang::El)
+    } else if from.chars().any(char::is_alphabetic) && from.chars().all(|c| c.is_alphabetic() || c == '\'') {
+        Some(wordcraft_proof::ProofLang::En)
+    } else {
+        None
+    }
 }
 
 /// Compare and Combine take the same settings.
@@ -178,20 +243,26 @@ impl AutoCorrectPrefs {
     /// The replacement for `word` in English text, if any: the user's entry, else a built-in
     /// one not deleted. Built-in lowercase entries also match a capitalised word ("Teh" → "The").
     pub fn replacement(&self, word: &str) -> Option<String> {
-        self.replacement_in(word, true)
+        self.replacement_in(word, wordcraft_proof::ProofLang::En)
     }
 
-    /// The replacement for `word` in text that is (`english`) or isn't English: the built-in
-    /// English words ("teh", "i", "dont") apply only to English text, as Word keeps a list per
-    /// language (#835: Polish "i" means "and"); symbols, fractions and the user's entries apply
-    /// whatever the language.
-    pub fn replacement_in(&self, word: &str, english: bool) -> Option<String> {
+    /// The replacement for `word` in text in `lang`: the built-in English words ("teh", "i",
+    /// "dont") apply only to English text and the Greek ones ("κια", "ειναι") only to Greek, as
+    /// Word keeps a list per language (#835: Polish "i" means "and"); symbols, fractions and the
+    /// user's entries apply whatever the language. Greek in capitals has no accents, so a Greek
+    /// entry never matches a word in capitals.
+    pub fn replacement_in(&self, word: &str, lang: wordcraft_proof::ProofLang) -> Option<String> {
         if let Some((_, b)) = self.entries.iter().find(|(a, _)| a == word) {
             return Some(b.clone());
         }
+        let caps = word.chars().filter(|c| c.is_alphabetic()).count() > 1 && !word.chars().any(char::is_lowercase);
         AUTOCORRECT
             .iter()
-            .filter(|(a, _)| english || !is_english_entry(a))
+            .filter(|(a, _)| match entry_lang(a) {
+                None => true,
+                Some(l @ wordcraft_proof::ProofLang::El) => l == lang && !caps,
+                Some(l) => l == lang,
+            })
             .filter(|(a, _)| !self.removed.iter().any(|r| r == a) && !self.entries.iter().any(|(e, _)| e == a))
             .filter(|(a, _)| self.fractions || !FRACTIONS.contains(a))
             .find(|(a, _)| {
@@ -841,7 +912,7 @@ pub fn autocorrect_word(s: &mut Session, on_enter: bool) -> Result<(), CmdError>
     let Some(text) = s.doc.para_at(&f).map(|p| p.text.clone()) else { return Ok(()) };
     let Some(before) = text.get(..f.off) else { return Ok(()) };
     let Some(last) = before.chars().next_back() else { return Ok(()) };
-    if !(on_enter || last == ' ' || ",.;:!?".contains(last)) {
+    if !(on_enter || last == ' ' || ",.;:!?\u{037E}".contains(last)) {
         return Ok(());
     }
     let trigger = if on_enter { 0 } else { last.len_utf8() };
@@ -893,8 +964,18 @@ pub fn autocorrect_word(s: &mut Session, on_enter: bool) -> Result<(), CmdError>
     }
     // A whole-word replacement, else "wait..." → "wait…". Proofing decides what is English the
     // same way (#835).
-    let english = s.doc.para_at(&f).is_none_or(|_| wordcraft_proof::ProofLang::from_tag(lang.as_deref()) == wordcraft_proof::ProofLang::En);
-    let found = if ac.replace_text { ac.replacement_in(&word, english) } else { None };
+    // Greek letters under English are Greek, as proofing decides.
+    let text_lang = match wordcraft_proof::ProofLang::from_tag(lang.as_deref()) {
+        wordcraft_proof::ProofLang::En if wordcraft_proof::el::is_greek_word(&word) => wordcraft_proof::ProofLang::El,
+        l => l,
+    };
+    // A Greek word never ends in `σ`: "λογοσ" → "λογος", then the list ("εχεισ" → "έχεις").
+    let sigma = final_sigma(&word);
+    let found = if ac.replace_text {
+        ac.replacement_in(&word, text_lang).or_else(|| sigma.as_deref().map(|w| ac.replacement_in(w, text_lang).unwrap_or_else(|| w.to_string())))
+    } else {
+        None
+    };
     let (from, rep) = match found {
         Some(r) => (start, Some(r)),
         None if ac.replace_text && word.len() > 3 && word.ends_with("...") => (start + word.len() - 3, Some("…".to_string())),
@@ -990,6 +1071,19 @@ pub fn autocorrect_word(s: &mut Session, on_enter: bool) -> Result<(), CmdError>
     Ok(())
 }
 
+/// `word` with a final `σ` made `ς` ("λογοσ" → "λογος", "(λογοσ)" → "(λογος)"), when the
+/// letter before it is another Greek letter (not a lone `σ`, nor `σσ`); `None` when nothing
+/// changes.
+fn final_sigma(word: &str) -> Option<String> {
+    let body = word.trim_end_matches(|c: char| !c.is_alphabetic());
+    let head = body.strip_suffix('σ')?;
+    let prev = head.chars().next_back()?;
+    if !wordcraft_proof::el::is_greek_letter(prev) || prev == 'σ' || prev == 'ς' {
+        return None;
+    }
+    Some(format!("{head}ς{}", word.get(body.len()..).unwrap_or("")))
+}
+
 /// The lowercase token before a word that starts a sentence ("there." in "there. world"), as
 /// [`starts_sentence`] reads it; empty at the start of a paragraph.
 fn prev_token(before: &str) -> String {
@@ -1067,7 +1161,10 @@ fn case_fix(caps: &AutoCorrectPrefs, word: &str, turkic: bool) -> Option<(usize,
     }
     if caps.caps_lock && a.is_lowercase() && b.is_uppercase() && more.iter().all(|c| c.is_uppercase()) && !CAPS_LOCK_EXCEPTIONS.contains(&letters) {
         let up = upper_char(a, turkic);
-        return Some((at, std::iter::once(up).chain(std::iter::once(lower(b))).chain(more.iter().map(|&c| lower(c))).collect()));
+        // A Greek word's last `Σ` is `ς` in lowercase ("κΑΛΟΣ" → "Καλος").
+        let last = more.len().saturating_sub(1);
+        let tail = more.iter().enumerate().map(|(i, &c)| if c == 'Σ' && i == last { "ς".to_string() } else { lower(c) });
+        return Some((at, std::iter::once(up).chain(std::iter::once(lower(b))).chain(tail).collect()));
     }
     None
 }
@@ -1093,7 +1190,8 @@ fn ordinal_suffix(word: &str) -> Option<usize> {
 /// Abbreviations whose full stop doesn't end a sentence.
 const NOT_SENTENCE_END: &[&str] = &[
     "e.g.", "i.e.", "etc.", "vs.", "cf.", "mr.", "mrs.", "ms.", "dr.", "st.", "no.", "approx.", "fig.", "p.", "pp.", "jr.", "sr.", "ca.", "inc.",
-    "ltd.", "co.", "vol.", "a.m.", "p.m.",
+    "ltd.", "co.", "vol.", "a.m.", "p.m.", // Greek
+    "κ.", "κα.", "π.χ.", "λ.χ.", "δηλ.", "βλ.", "σελ.", "τηλ.", "αρ.", "οδ.", "π.μ.", "μ.μ.",
 ];
 
 /// Names of days, capitalised as you type (Capitalize names of days).
@@ -1109,8 +1207,11 @@ fn starts_sentence(before: &str, exceptions: &[String]) -> bool {
     if t.len() == before.len() {
         return false; // no space between the previous text and the word
     }
-    let t = t.trim_end_matches(|c: char| "\"'”’)]".contains(c));
-    if !t.ends_with(['.', '!', '?']) || t.ends_with("..") || t.ends_with('…') {
+    let t = t.trim_end_matches(|c: char| "\"'”’)]»".contains(c));
+    // `;` is the Greek question mark after a Greek word.
+    let greek_question =
+        t.ends_with([';', '\u{037E}']) && t.trim_end_matches([';', '\u{037E}']).chars().next_back().is_some_and(wordcraft_proof::el::is_greek_letter);
+    if !(t.ends_with(['.', '!', '?']) || greek_question) || t.ends_with("..") || t.ends_with('…') {
         return false;
     }
     let prev = t.rsplit(char::is_whitespace).next().unwrap_or(t).trim_start_matches(|c: char| "\"'“‘([".contains(c));

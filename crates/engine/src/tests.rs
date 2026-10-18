@@ -6362,6 +6362,7 @@ fn dictionaries_folder_option_is_saved_searched_and_reported() {
         ("pl_PL", POLISH_TEST_AFF, POLISH_TEST_DIC),
         ("pt_BR", PORTUGUESE_TEST_AFF, PORTUGUESE_TEST_DIC),
         ("id_ID", INDONESIAN_TEST_AFF, INDONESIAN_TEST_DIC),
+        ("el_GR", GREEK_TEST_AFF, GREEK_TEST_DIC),
     ] {
         std::fs::write(dir.join(format!("{name}.aff")), aff).unwrap();
         std::fs::write(dir.join(format!("{name}.dic")), dic).unwrap();
@@ -6380,6 +6381,7 @@ fn dictionaries_folder_option_is_saved_searched_and_reported() {
     assert_eq!(file("pl"), Some(json!(dir.join("pl_PL.dic").to_string_lossy())));
     assert_eq!(file("pt"), Some(json!(dir.join("pt_BR.dic").to_string_lossy())));
     assert_eq!(file("id"), Some(json!(dir.join("id_ID.dic").to_string_lossy())));
+    assert_eq!(file("el"), Some(json!(dir.join("el_GR.dic").to_string_lossy())));
     // Polish text is checked against the folder's dictionary.
     run(&mut s, "document.setText", json!({"text": "rzeka płynie żeka"}));
     run(&mut s, "select.all", json!({}));
@@ -6469,6 +6471,44 @@ fn indonesian_proofing_through_the_review_commands() {
     assert_eq!(left.len(), 1);
     assert_eq!(left[0]["kind"], "grammar");
     assert_eq!(left[0]["lang"], "id");
+}
+
+fn greek_test_dictionary() {
+    wordcraft_proof::el::install_dictionary(GREEK_TEST_AFF, GREEK_TEST_DIC).unwrap();
+}
+
+// Hand-written synthetic fixture (no system dictionary data).
+const GREEK_TEST_AFF: &str = "SET UTF-8\nFLAG UTF-8\nTRY αεοιηυωνστκπρλμδγχθφβζξψάέόίήύώς\nSFX A Y 1\nSFX A 0 α ι\n";
+const GREEK_TEST_DIC: &str = "11\nτο\nσπίτι/A\nμου\nείναι\nμεγάλο\nκαι\nτη\nτην\nμητέρα\nπόλη\nβλέπω\n";
+
+/// Greek proofing through the same commands as Review, F7, Change and Add to Dictionary. Greek
+/// typed under the default English language is proofed as Greek, as Word detects it.
+#[test]
+fn greek_proofing_through_the_review_commands() {
+    greek_test_dictionary();
+    let mut s = s();
+    run(&mut s, "document.setText", json!({"text": "Το σπιτι μου είναι μεγάλο και το το βλέπω."}));
+    let issues = run(&mut s, "review.issues", json!({}));
+    let arr = issues.as_array().unwrap();
+    assert_eq!(arr.len(), 2, "{issues}");
+    assert!(arr.iter().all(|i| i["lang"] == "el"), "{issues}");
+    assert!(arr.iter().any(|i| i["text"] == "σπιτι" && i["kind"] == "spelling" && i["suggestions"][0] == "σπίτι"), "{issues}");
+    assert!(arr.iter().any(|i| i["text"] == "το το" && i["kind"] == "grammar"), "{issues}");
+    run(&mut s, "caret.docStart", json!({}));
+    assert_eq!(run(&mut s, "review.spelling", json!({}))["text"], "σπιτι");
+    run(&mut s, "review.applySuggestion", json!({"text": "σπίτι"}));
+    assert!(text(&s).starts_with("Το σπίτι μου"), "{}", text(&s));
+    // Tagged Greek works the same, and the final-ν rule applies.
+    run(&mut s, "document.setText", json!({"text": "Βλέπω την μητέρα και τη πόλη."}));
+    run(&mut s, "select.all", json!({}));
+    run(&mut s, "review.language", json!({"lang": "el_gr", "default": true}));
+    assert_eq!(s.doc.styles.default_chr.lang.as_deref(), Some("el-GR"));
+    let issues = run(&mut s, "review.issues", json!({}));
+    let arr = issues.as_array().unwrap();
+    assert_eq!(arr.len(), 2, "{issues}");
+    assert!(arr.iter().all(|i| i["lang"] == "el" && i["kind"] == "grammar"), "{issues}");
+    assert!(arr.iter().any(|i| i["text"] == "την" && i["suggestions"][0] == "τη"), "{issues}");
+    assert!(arr.iter().any(|i| i["text"] == "τη" && i["suggestions"][0] == "την"), "{issues}");
 }
 
 /// Czech proofing through the same commands as Review, F7, Change and Add to Dictionary.
