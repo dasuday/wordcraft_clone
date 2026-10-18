@@ -144,6 +144,9 @@ fn start(app: &mut WordApp, cmd: Command, ctx: Option<egui::Context>) -> Result<
     let stop = Arc::new(AtomicBool::new(false));
     let mut opts = app.zotero.options.clone();
     opts.cancel = Some(stop.clone());
+    // The whole command, dialogs included, ends with the client's session limit.
+    let started = std::time::Instant::now();
+    let session_limit = opts.session_timeout;
     let spawned = std::thread::Builder::new().name("zotero".into()).spawn(move || {
         let r = wordcraft_zotero::client::run_command(&opts, cmd, &mut |call| {
             let (tx, rx) = channel();
@@ -153,7 +156,11 @@ fn start(app: &mut WordApp, cmd: Command, ctx: Option<egui::Context>) -> Result<
             if let Some(c) = &wake {
                 c.request_repaint();
             }
-            rx.recv().unwrap_or_else(|_| Err("WordCraft closed the document".into()))
+            match rx.recv_timeout(session_limit.saturating_sub(started.elapsed())) {
+                Ok(answer) => answer,
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => Err("the command ran out of time waiting for an answer in WordCraft".into()),
+                Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => Err("WordCraft closed the document".into()),
+            }
         });
         let _ = done_tx.send(r.map_err(|e| e.to_string()));
         if let Some(c) = &wake {
