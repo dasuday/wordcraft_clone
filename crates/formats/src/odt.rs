@@ -99,6 +99,8 @@ struct Writer {
     pending_start: Option<SecStart>,
     /// The next top-level list continues the one that ended the previous section.
     continue_list: bool,
+    /// The name and level kinds of the last top-level list written.
+    last_list: Option<(String, [bool; 9])>,
     /// The page the block being written starts.
     master: Option<SecStart>,
     /// Cell styles by shading.
@@ -502,8 +504,25 @@ impl Writer {
                         }
                         i += 1;
                     }
-                    self.list_styles.push(kinds);
-                    let lname = format!("L{}", self.list_styles.len());
+                    // A list cut by a section boundary goes on numbering (ODF 1.3 §19.743) only
+                    // when it shares the earlier list's numbering style.
+                    let wants_continue = depth == 0 && start == 0 && std::mem::take(&mut self.continue_list);
+                    let reused = if wants_continue {
+                        self.last_list.as_ref().filter(|(_, k)| *k == kinds).map(|(n, _)| n.clone())
+                    } else {
+                        None
+                    };
+                    let mut continue_here = reused.is_some();
+                    let lname = match reused {
+                        Some(name) => name,
+                        None => {
+                            self.list_styles.push(kinds);
+                            format!("L{}", self.list_styles.len())
+                        }
+                    };
+                    if depth == 0 {
+                        self.last_list = Some((lname.clone(), kinds));
+                    }
                     // Open lists: per level, whether a list-item is open.
                     let mut stack: Vec<bool> = Vec::new();
                     for (qi, q) in blocks.get(start..i).unwrap_or(&[]).iter().enumerate() {
@@ -523,8 +542,7 @@ impl Writer {
                                 *top = true;
                             }
                             if stack.is_empty() {
-                                // A list cut by a section boundary goes on numbering (ODF 1.3 §19.743).
-                                let cont = if depth == 0 && start == 0 && std::mem::take(&mut self.continue_list) {
+                                let cont = if std::mem::take(&mut continue_here) {
                                     " text:continue-numbering=\"true\""
                                 } else {
                                     ""
@@ -2891,6 +2909,8 @@ mod tests {
         let bytes = export(&doc).unwrap();
         let xml = String::from_utf8(read_entry(&mut archive(&bytes), "content.xml").unwrap()).unwrap();
         assert_eq!(xml.matches("text:continue-numbering=\"true\"").count(), 1, "{xml}");
+        // The continued list shares the first list's numbering style, so the attribute means something.
+        assert_eq!(xml.matches("<text:list-style ").count(), 1, "{xml}");
         assert_eq!(section_summary(&import(&bytes).unwrap()), section_summary(&doc));
     }
 
