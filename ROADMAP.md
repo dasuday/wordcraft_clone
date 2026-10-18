@@ -139,11 +139,8 @@ Imported Word 97–2003 `.doc`/`.dot` files now ask for a supported DOCX target 
 - 2026-10-15: Find opens Navigation on Results; editing the query restores Results after manual Headings/Pages navigation. Typed and selected-text searches retain document contents (#2096).
 
 | Date | What landed |
-<<<<<<< HEAD
 | 2026-10-16 | The page colour follows the interface theme (#1722): File › Options › General › Never change the document page color (off by default) replaces Dark page; a light theme gives a light page, a dark theme a dark one, updating with the theme; View › Switch Modes flips it; an old Dark page preference keeps its dark page. Saving, printing and PDF unchanged. |
-=======
 | 2026-10-18 | Symbols keep their font (#2036): a `w:sym` or Insert › Symbol character in Wingdings, Symbol or Webdings remembers its symbol font apart from the text's font, so selecting all and changing the font (or Clear Formatting) no longer turns the symbols into boxes; saved back to DOCX as `w:sym`, so Word shows them too. Typed text and the Format Painter don't pick up the symbol font. |
->>>>>>> origin/main
 | 2026-10-14 | RTF export writes every section (gap 19): `\sect` ends each section and `\sectd` carries its break type, page size and orientation, margins, columns, page numbering and title page, so multi-section documents survive an RTF round trip |
 | 2026-10-14 | `ASK` and `SET` fields no longer show their stored result on the page or in PDFs (#1765): like Word, they only assign text to a bookmark and draw nothing; the stored result is kept and saved |
 | 2026-10-15 | Table rows with an at-least height start the next page whole when less than their minimum is left on a page that already holds something, so one-row-per-page booklets keep their pages; rows taller than a page split from the top of the next page and repeated header rows go with the row (#1742) |
