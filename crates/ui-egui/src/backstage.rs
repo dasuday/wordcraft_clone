@@ -6,7 +6,7 @@ use serde_json::json;
 use crate::theme::{APP_COLOR, Tokens, medium, regular, semibold};
 use crate::{WordApp, icons};
 
-const PAGES: [(&str, &str); 11] = [
+pub(crate) const PAGES: [(&str, &str); 11] = [
     ("home", "Home"),
     ("new", "New"),
     ("open", "Open"),

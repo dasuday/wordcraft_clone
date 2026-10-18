@@ -3531,12 +3531,15 @@ mod tests {
         use egui_kittest::kittest::{By, NodeT, Queryable};
         let mut h = app_harness(WordApp::new(Session::new(wordcraft_doc::Document::from_text("Text")), crate::Services::default()));
         h.run_steps(3);
-        h.state_mut().run("ui.backstage", json!({"value": true, "page": "info"})).unwrap();
+        // Through the File tab, as a user does.
+        h.get(By::new().role(Role::Tab).label(tl!("File"))).click();
         h.run_steps(4);
         assert!(h.state().ui.backstage);
         let n = h.query(By::new().predicate(|n| n.is_focused())).expect("the keyboard has a target in Backstage");
         assert_eq!(n.accesskit_node().role(), Role::Button);
-        assert_eq!(n.accesskit_node().label().unwrap_or_default(), tl!("Info"));
+        let page = h.state().ui.backstage_page.clone();
+        let label = crate::backstage::PAGES.iter().find(|(id, _)| *id == page.as_str()).map(|(_, l)| tl!(l)).unwrap_or_default();
+        assert_eq!(n.accesskit_node().label().unwrap_or_default(), label, "the open page ({page}) has the keyboard");
     }
 
     /// #1012: keytips that end because the window lost focus give the keyboard back to the page,
