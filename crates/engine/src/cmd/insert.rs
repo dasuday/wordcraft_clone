@@ -886,18 +886,27 @@ fn symbol(s: &mut Session, v: &Value) -> CmdResult {
         return Err(CmdError::Params("font: a family name".into()));
     }
     let base = s.typing_props();
-    let mut props = base.clone();
     // A symbol font's character remembers it as its own font (`w:sym`), so changing the text's
     // font later keeps the symbol; other fonts are ordinary run formatting. `w:sym` holds a 16-bit
     // code, so a character beyond the Basic Multilingual Plane stays ordinary text in that font.
-    let bmp = c.chars().all(|ch| u32::from(ch) <= 0xFFFF);
-    if bmp && (wordcraft_doc::symbol_fonts::is_symbol_font(font) || c.chars().all(|ch| ('\u{F020}'..='\u{F0FF}').contains(&ch))) {
-        props.sym_font = Some(font.to_string());
-    } else {
-        props.font = Some(font.to_string());
+    // Each character decides for itself, so a mixed string keeps its symbols and its text apart.
+    let font_is_symbol = wordcraft_doc::symbol_fonts::is_symbol_font(font);
+    let mut r = Ok(());
+    let mut buf = [0u8; 4];
+    for ch in c.chars() {
+        let mut props = base.clone();
+        let private_use = ('\u{F020}'..='\u{F0FF}').contains(&ch);
+        if u32::from(ch) <= 0xFFFF && (font_is_symbol || private_use) {
+            props.sym_font = Some(font.to_string());
+        } else {
+            props.font = Some(font.to_string());
+        }
+        s.pending = Some(props);
+        r = type_text(s, ch.encode_utf8(&mut buf));
+        if r.is_err() {
+            break;
+        }
     }
-    s.pending = Some(props);
-    let r = type_text(s, c);
     // Typing on after the symbol goes on in the text's own font.
     s.pending = Some(base);
     r?;
@@ -1164,6 +1173,17 @@ mod tests {
     }
 
     /// Insert › Symbol with a font: only the symbol takes it, the caret's font carries on after.
+    #[test]
+    fn a_mixed_symbol_string_keeps_symbols_and_text_apart() {
+        let mut s = Session::new(wordcraft_doc::Document::from_text("a"));
+        s.run("caret.docEnd", &json!({})).unwrap();
+        s.run("insert.symbol", &json!({"char": "\u{F041}A", "font": "My Custom Font"})).unwrap();
+        let p = s.doc.para(StoryRef::Body, &Path::top(0)).unwrap();
+        assert_eq!(p.props_of_char(1).sym_font.as_deref(), Some("My Custom Font"), "the private-use glyph");
+        assert_eq!(p.props_of_char(4).sym_font, None, "the plain letter");
+        assert_eq!(p.props_of_char(4).font.as_deref(), Some("My Custom Font"));
+    }
+
     #[test]
     fn an_astral_symbol_stays_text_in_its_font() {
         let mut s = Session::new(wordcraft_doc::Document::from_text("a"));
