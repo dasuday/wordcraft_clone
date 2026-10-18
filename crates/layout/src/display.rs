@@ -440,8 +440,25 @@ pub fn page_display(doc: &Document, page: &Page, opts: &DisplayOptions) -> Vec<D
 fn unturn(before: Vec<Draw>, t: Option<(Rect, Spin)>, out: &mut Vec<Draw>) {
     let inner = std::mem::replace(out, before);
     match t {
-        Some((rect, spin)) => spun(spin, rect, inner, out),
+        Some((rect, spin)) => {
+            // Link areas are axis-aligned page rectangles: turned text gets none.
+            let mut inner = inner;
+            clear_links(&mut inner);
+            spun(spin, rect, inner, out)
+        }
         None => out.extend(inner),
+    }
+}
+
+/// Take the hyperlink off every glyph run in `draws`, however deeply nested.
+fn clear_links(draws: &mut [Draw]) {
+    for d in draws {
+        match d {
+            Draw::Glyphs { link, .. } => *link = None,
+            Draw::Turned { items, .. } | Draw::Rotated { items, .. } | Draw::Clip { items, .. } => clear_links(items),
+            Draw::Figure { draws, .. } => clear_links(draws),
+            _ => {}
+        }
     }
 }
 

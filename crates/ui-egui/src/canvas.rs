@@ -2427,7 +2427,8 @@ fn mouse(app: &mut WordApp, ui: &Ui, resp: &egui::Response, rects: &[Rect], layo
         let Some(pos) = layout.hit_shown(page, x, y, story, straight) else { return };
         // Ctrl/⌘+click follows a hyperlink.
         if mods.command
-            && let Some(link) = link_under(app, layout, page, x, y, &pos)
+            && let shown = layout.shown_point(page, x, y, story, straight)
+            && let Some(link) = link_under(app, layout, page, shown.x, shown.y, &pos)
         {
             if let Some(name) = link.strip_prefix('#') {
                 // The caret goes to the bookmark's start, as in Word (Go To selects its text).
@@ -2535,8 +2536,10 @@ fn mouse(app: &mut WordApp, ui: &Ui, resp: &egui::Response, rects: &[Rect], layo
     // Hover a link: show its target.
     if resp.hovered()
         && !app.canvas.dragging
-        && let Some(pos) = layout.hit(page, x, y, story)
-        && let Some(link) = link_under(app, layout, page, x, y, &pos)
+        && let straight = straight_box(app, layout)
+        && let Some(pos) = layout.hit_shown(page, x, y, story, straight)
+        && let shown = layout.shown_point(page, x, y, story, straight)
+        && let Some(link) = link_under(app, layout, page, shown.x, shown.y, &pos)
     {
         let key = if cfg!(target_os = "macos") { "⌘" } else { "Ctrl" };
         let target = if is_generated_bookmark_link(&link) { tl!("Current Document").to_string() } else { link };
@@ -3278,6 +3281,43 @@ mod tests {
         assert_eq!(h.state().session.sel.focus.story, StoryRef::Body);
         let layout = h.state_mut().session.layout();
         assert_eq!(straight_box(h.state(), &layout), None, "left, the box turns back");
+    }
+
+    /// Ctrl/⌘+click on a link in a turned text box (drawn turned, not edited) follows it: the
+    /// point is taken into the box's unturned frame before the link is looked up.
+    #[test]
+    fn ctrl_click_follows_a_link_in_a_turned_text_box() {
+        use crate::objects::tests::{on_screen, turned_box_window};
+        let (mut h, id) = turned_box_window();
+        let story = StoryRef::Part(id);
+        let pos = |off| Pos { story, path: wordcraft_doc::Path::top(0), off };
+        h.state_mut().run("select.range", json!({"anchor": pos(0), "focus": pos(16)})).unwrap();
+        h.state_mut().run("insert.link", json!({"url": "https://example.com/"})).unwrap();
+        h.state_mut().session.sel = wordcraft_engine::Selection::caret(Pos::body(0, 10));
+        for _ in 0..3 {
+            h.step();
+        }
+        let layout = h.state_mut().session.layout();
+        assert_eq!(straight_box(h.state(), &layout), None, "the box is drawn turned");
+        let o = layout.text_box(id, 0).expect("laid out");
+        let (a, b) = (layout.caret_on(&pos(8), 0).unwrap(), layout.caret_on(&pos(9), 0).unwrap());
+        let (ux, uy) = (a.x + (b.x - a.x) * 0.5, a.top + a.height / 2.0);
+        let (x, y) = wordcraft_geom::Spin::new(30.0, false, false).apply(o.rect.x + o.rect.w / 2.0, o.rect.y + o.rect.h / 2.0, ux, uy);
+        let at = on_screen(&h, x, y);
+        let mods = egui::Modifiers::COMMAND;
+        h.event(egui::Event::ModifiersChanged(mods));
+        h.event(egui::Event::PointerMoved(at));
+        h.event(egui::Event::PointerButton { pos: at, button: egui::PointerButton::Primary, pressed: true, modifiers: mods });
+        h.step();
+        // The app hands the link to the system in the same frame.
+        let opened: Vec<&str> = h
+            .output()
+            .platform_output
+            .commands
+            .iter()
+            .filter_map(|c| if let egui::OutputCommand::OpenUrl(u) = c { Some(u.url.as_str()) } else { None })
+            .collect();
+        assert_eq!(opened, ["https://example.com/"], "the link under the turned text is followed");
     }
 
     /// The page image is redrawn when the edited turned box changes (so it never shows a box

@@ -346,3 +346,31 @@ fn a_turned_box_shape_draws_the_same_alone_as_on_the_page() {
     assert_eq!(alone, whole, "the PDF's shadow matches the screen's");
     assert!((alone - 330.0).abs() < 0.01, "cast 30° back inside the turn, so it falls to the right on the page: {alone}");
 }
+
+/// Whether any glyph run of the box text ("box" in it) in `ds` carries a hyperlink.
+fn box_text_links(ds: &[Draw]) -> Vec<String> {
+    ds.iter()
+        .flat_map(|d| match d {
+            Draw::Glyphs { text, link: Some(l), .. } if text.contains("box") => vec![l.clone()],
+            Draw::Rotated { items, .. } | Draw::Clip { items, .. } | Draw::Turned { items, .. } | Draw::Figure { draws: items, .. } => {
+                box_text_links(items)
+            }
+            _ => Vec::new(),
+        })
+        .collect()
+}
+
+#[test]
+fn a_link_in_a_rotated_text_box_gets_no_link_area_but_an_upright_box_keeps_it() {
+    for (deg, linked) in [(30.0, false), (0.0, true)] {
+        let mut d = Document::from_text("Body words around it.");
+        let id = turned_box(&mut d, deg, false, false);
+        let story = StoryRef::Part(id);
+        let n = d.para(story, &Path::top(0)).unwrap().len();
+        let at = |off| Pos { story, path: Path::top(0), off };
+        d.format_range(&at(0), &at(n), &|c| c.link = Some("https://a.example/".into())).unwrap();
+        let l = lay(&d);
+        let links = box_text_links(&display::page_display(&d, &l.pages[0], &display::DisplayOptions::default()));
+        assert_eq!(!links.is_empty(), linked, "turn {deg}: {links:?}");
+    }
+}

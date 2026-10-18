@@ -297,17 +297,23 @@ impl DocLayout {
     /// edited: in a turned text box drawn turned, the point is taken into the box's unturned
     /// frame first, so a click lands on the character drawn under it.
     pub fn hit_shown(&self, page: usize, x: f32, y: f32, story: StoryRef, straight: Option<u32>) -> Option<Pos> {
-        let pt = match story {
-            StoryRef::Part(id) => {
-                let p = self.pages.get(page)?;
+        let pt = self.shown_point(page, x, y, story, straight);
+        self.hit(page, pt.x, pt.y, story)
+    }
+
+    /// The point (x, y) on `page` as shown while text box story `straight` is edited, taken into
+    /// the unturned frame of the turned text box showing `story` (as [`DocLayout::hit_shown`]
+    /// does); the point itself for the body or an unturned box.
+    pub fn shown_point(&self, page: usize, x: f32, y: f32, story: StoryRef, straight: Option<u32>) -> Point {
+        match (story, self.pages.get(page)) {
+            (StoryRef::Part(id), Some(p)) => {
                 let boxes: Vec<ObjectHit> = all_objects(p, page).filter(|o| o.text_box == Some(id)).collect();
                 // Linked boxes show one story: the one under the point, else the first.
                 let o = boxes.iter().find(|o| o.rect.contains(o.text_point(x, y, straight))).or(boxes.first());
                 o.map_or(Point::new(x, y), |o| o.text_point(x, y, straight))
             }
-            StoryRef::Body => Point::new(x, y),
-        };
-        self.hit(page, pt.x, pt.y, story)
+            _ => Point::new(x, y),
+        }
     }
 
     /// The story whose text is under a point (body, footnotes, endnotes, text boxes; not
