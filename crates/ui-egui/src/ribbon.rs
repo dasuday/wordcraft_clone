@@ -6,7 +6,7 @@ use serde_json::{Value, json};
 use crate::colors::{Remember, Target};
 use crate::options::MeasureExt;
 use crate::theme::{Tokens, medium, regular, semibold};
-use crate::widgets::{CONTENT_H, LABEL_H, big, big_toggle, combo, font_combo_with_recent, group, menu_button, small, split};
+use crate::widgets::{CONTENT_H, LABEL_H, big, big_toggle, group, menu_button, small, split};
 use crate::{WordApp, icons};
 
 pub const TABS: [&str; 13] = wordcraft_engine::ribbon::TABS;
@@ -645,6 +645,17 @@ pub(crate) fn mi(ui: &mut Ui, app: &mut WordApp, label: &str, id: &str, params: 
     mi_text(ui, app, tl!(label), id, params);
 }
 
+/// [`mi`] with a drawn icon before the label.
+fn mi_icon(ui: &mut Ui, app: &mut WordApp, icon: &str, label: &str, id: &str, params: Value) {
+    let sc = crate::widgets::shortcut_text(app, id);
+    let enabled = crate::widgets::enabled(app, id);
+    let resp = ui.add_enabled_ui(enabled, |ui| crate::widgets::icon_menu_item(ui, icon, tl!(label), &sc, 200.0)).inner;
+    if resp.clicked() {
+        crate::widgets::run_from_ribbon(app, id, params);
+        ui.close();
+    }
+}
+
 /// A menu item whose text is already in the interface language.
 fn mi_text(ui: &mut Ui, app: &mut WordApp, text: &str, id: &str, params: Value) {
     let sc = crate::widgets::shortcut_text(app, id);
@@ -800,6 +811,12 @@ pub(crate) fn caret_missing_dictionary(app: &WordApp) -> Option<&'static str> {
     wordcraft_engine::proof::missing_dictionary(caret_lang_tag(app).as_deref())
 }
 
+/// The dictionary file and reason when the caret's language has a dictionary installed that
+/// couldn't be read, so "no dictionary" would send the user to reinstall it for nothing (#2830).
+pub(crate) fn caret_unreadable_dictionary(app: &WordApp) -> Option<(std::path::PathBuf, String)> {
+    wordcraft_engine::proof::unreadable_dictionary(caret_lang_tag(app).as_deref()).map(|(_, file, reason)| (file, reason))
+}
+
 /// Review › Language (and the status bar's language): set the selection's proofing language, or
 /// leave it unchecked. The current choice has a check mark; a language outside the short list
 /// (French, German…) shows checked above it. Set Proofing Language… opens the Language dialog
@@ -946,7 +963,7 @@ fn home(app: &mut WordApp, ui: &mut Ui) {
                 let fams = app.previews.families();
                 let recent: Vec<String> = app.ui.recent_fonts.iter().map(|f| app.previews.font_shown(f)).collect();
                 let prev = app.previews.font_preview_fn();
-                if let Some(f) = font_combo_with_recent(ui, "font", 150.0, &font, &fams, &recent, Some(&*prev)) {
+                if let Some(f) = crate::widgets::font_combo_with_recent_hint(ui, "font", 150.0, &font, &fams, &recent, Some(&*prev), tl!("Font")) {
                     let _ = if f == crate::widgets::ADD_FONT {
                         app.run("font.add", json!({}))
                     } else if f == crate::widgets::LOAD_SYSTEM_FONTS {
@@ -963,7 +980,7 @@ fn home(app: &mut WordApp, ui: &mut Ui) {
                     .unwrap_or_default();
                 let sizes: Vec<String> =
                     wordcraft_engine::cmd::format::SIZES.iter().map(|s| if s.fract() == 0.0 { format!("{s:.0}") } else { s.to_string() }).collect();
-                if let Some(v) = combo(ui, "size", 52.0, &size, &sizes, None)
+                if let Some(v) = crate::widgets::combo_hint(ui, "size", 52.0, &size, &sizes, None, tl!("Font Size"))
                     && let Ok(x) = v.trim().parse::<f64>()
                 {
                     let _ = app.run("format.size", json!({"size": x}));
@@ -1021,25 +1038,17 @@ fn home(app: &mut WordApp, ui: &mut Ui) {
                     mi(ui, app, "Double Strikethrough", "format.doubleStrikethrough", json!({}));
                 });
                 let hl = app.canvas.last_highlight.clone();
-                split(ui, app, "highlight", "Text Highlight Color", "format.highlight", json!({"color": hl}), false, None, |ui, app| {
-                    let grid = wordcraft_doc::props::Highlight::ALL;
-                    egui::Grid::new("hl").spacing(vec2(3.0, 3.0)).show(ui, |ui| {
-                        for (i, h) in grid.iter().enumerate().skip(1) {
-                            let c = h.rgb().unwrap_or(wordcraft_doc::Rgb::WHITE);
-                            let (r, resp) = ui.allocate_exact_size(vec2(18.0, 18.0), Sense::click());
-                            ui.painter().rect_filled(r, 2.0, egui::Color32::from_rgb(c.0, c.1, c.2));
-                            if resp.on_hover_text(h.name()).clicked() {
-                                app.canvas.last_highlight = h.ooxml().to_string();
-                                let _ = app.run("format.highlight", json!({"color": h.ooxml()}));
-                                ui.close();
-                            }
-                            if i % 5 == 0 {
-                                ui.end_row();
-                            }
-                        }
-                    });
-                    mi(ui, app, "No Color", "format.highlight", json!({"color": "none"}));
-                });
+                split(
+                    ui,
+                    app,
+                    "highlight",
+                    "Text Highlight Color",
+                    "format.highlight",
+                    json!({"color": hl}),
+                    false,
+                    None,
+                    crate::mini_toolbar::highlight_menu,
+                );
                 let fc = app.canvas.last_font_color.clone();
                 let sw = wordcraft_doc::Rgb::parse(&fc).map(crate::theme::c32);
                 split(ui, app, "fontcolor", "Font Color", "format.color", json!({"color": fc}), false, sw, |ui, app| {
@@ -1240,10 +1249,10 @@ fn insert(app: &mut WordApp, ui: &mut Ui) {
                 ("Star", "star"),
                 ("Heart", "heart"),
             ] {
-                mi(ui, app, l, "insert.shape", json!({"kind": k}));
+                mi_icon(ui, app, &format!("shape.{k}"), l, "insert.shape", json!({"kind": k}));
             }
             ui.separator();
-            mi(ui, app, "New Drawing Canvas", "insert.canvas", json!({}));
+            mi_icon(ui, app, "canvas", "New Drawing Canvas", "insert.canvas", json!({}));
             // Connectors: glue their ends to shapes by dragging them (shape.connect).
             for (l, k, arrow) in [
                 ("Straight Connector", "straightConnector", "none"),
@@ -1253,7 +1262,8 @@ fn insert(app: &mut WordApp, ui: &mut Ui) {
                 ("Curved Connector", "curvedConnector", "none"),
                 ("Curved Arrow Connector", "curvedConnector", "end"),
             ] {
-                mi(ui, app, l, "insert.shape", json!({"kind": k, "arrow": arrow}));
+                let icon = if arrow == "end" { k.replace("Connector", "ArrowConnector") } else { k.to_string() };
+                mi_icon(ui, app, &format!("shape.{icon}"), l, "insert.shape", json!({"kind": k, "arrow": arrow}));
             }
         });
         stack(ui, |ui| {
@@ -1317,7 +1327,7 @@ fn insert(app: &mut WordApp, ui: &mut Ui) {
             menu_button(ui, app, "wordArt", Some("WordArt"), "WordArt", false, "", |ui, app| {
                 crate::wordart_menus::style_gallery(ui, app, "insert.wordArt")
             });
-            small(ui, app, "dropCap", Some("Drop Cap"), "Drop Cap", "insert.dropCap", json!({}), false);
+            menu_button(ui, app, "dropCap", Some("Drop Cap"), "Drop Cap", false, "insert.dropCap", drop_cap_items);
         });
         stack(ui, |ui| {
             small(ui, app, "signature", None, "Signature Line", "insert.signatureLine", json!({}), false);
@@ -1359,6 +1369,17 @@ fn insert(app: &mut WordApp, ui: &mut Ui) {
             mi(ui, app, "More Symbols…", "ui.dialog", json!({"name": "symbol"}));
         });
     });
+}
+
+/// Insert › Drop Cap's menu (#2601): None, Dropped and In margin (the current one checked),
+/// then the Drop Cap dialog.
+fn drop_cap_items(ui: &mut Ui, app: &mut WordApp) {
+    let current = wordcraft_engine::cmd::insert::drop_cap_state(&app.session).position;
+    for (label, v) in [("None", "none"), ("Dropped", "dropped"), ("In margin", "margin")] {
+        mi_check(ui, app, label, current == v, "insert.dropCap", json!({"position": v}));
+    }
+    ui.separator();
+    mi(ui, app, "Drop Cap Options…", "ui.dialog", json!({"name": "dropCap"}));
 }
 
 fn draw(app: &mut WordApp, ui: &mut Ui) {
@@ -2158,7 +2179,7 @@ fn outlining(app: &mut WordApp, ui: &mut Ui) {
                 small(ui, app, "outlineTop", None, "Promote to Heading 1", "outline.promoteToHeading1", json!({}), false);
                 small(ui, app, "outlinePromote", None, "Promote", "outline.promote", json!({}), false);
                 let levels: Vec<String> = (1..=BODY).map(name).collect();
-                if let Some(v) = combo(ui, "outlineLevel", 100.0, &name(level), &levels, None)
+                if let Some(v) = crate::widgets::combo_hint(ui, "outlineLevel", 100.0, &name(level), &levels, None, tl!("Outline Level"))
                     && let Some(i) = levels.iter().position(|x| *x == v)
                 {
                     let l = if i + 1 >= usize::from(BODY) { json!("body") } else { json!(i + 1) };
@@ -2178,7 +2199,7 @@ fn outlining(app: &mut WordApp, ui: &mut Ui) {
                 let mut shown: Vec<String> = vec![tl!("All Levels").to_string()];
                 shown.extend((1..BODY).map(name));
                 let current = shown.get(usize::from(o.show_level)).cloned().unwrap_or_default();
-                if let Some(v) = combo(ui, "outlineShowLevel", 90.0, &current, &shown, None)
+                if let Some(v) = crate::widgets::combo_hint(ui, "outlineShowLevel", 90.0, &current, &shown, None, tl!("Show Level"))
                     && let Some(i) = shown.iter().position(|x| *x == v)
                 {
                     let l = if i == 0 { json!("all") } else { json!(i) };
