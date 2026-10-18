@@ -46,12 +46,19 @@ pub fn open_filters(purpose: &str) -> &'static [(&'static str, &'static [&'stati
     }
 }
 
+/// The shape a pending Shape Fill › Picture is for: its document, position and content, so a
+/// replaced shape at the same place isn't taken for it.
+pub(crate) type FillTarget = (u64, wordcraft_doc::Pos, wordcraft_doc::para::InlineObject);
+
 /// What to do with the path picked in a dialog.
 pub(crate) enum AfterPick {
     /// Open the picked document.
     OpenDocument,
     /// Insert the picked picture, or replace the pending Change Picture target.
     Picture,
+    /// Fill the shape that was selected when the dialog opened with the picked picture (Shape
+    /// Fill › Picture): the document's identity, the shape's position and the shape itself, checked again on return.
+    FillPicture { target: Option<Box<FillTarget>> },
     /// Save the document there, then carry on.
     SaveAs(AfterSave),
     /// Save a copy there in this format (`pdf`, `docx`, `png`…).
@@ -194,6 +201,14 @@ impl WordApp {
                 };
                 self.insert_or_change_picture(json!({"path": path}))
             }
+            AfterPick::FillPicture { target } => {
+                let Some(path) = picked else { return Ok(json!({"cancelled": true})) };
+                // The selection (or document) may have changed while the dialog was open.
+                if target != self.selected_shape_target() {
+                    return Ok(json!({"cancelled": true}));
+                }
+                self.run("shape.fill", json!({"picture": {"path": path}}))
+            }
             AfterPick::Font => {
                 let Some(path) = picked else { return Ok(json!({"cancelled": true})) };
                 self.run("font.add", json!({"path": path}))
@@ -307,6 +322,23 @@ impl WordApp {
             return;
         }
         let _ = self.ask_file(FileDialogRequest::Open { purpose: "picture".into() }, AfterPick::Picture);
+    }
+
+    /// Shape Fill › Picture: pick the picture to fill the selected shape with. The browser has no
+    /// paths to hand the command, so it isn't offered there yet.
+    pub(crate) fn pick_fill_picture(&mut self) {
+        if self.services.open_async.is_some() {
+            self.status(tl!("Picture fills aren't available in the browser yet."));
+            return;
+        }
+        let target = self.selected_shape_target();
+        let _ = self.ask_file(FileDialogRequest::Open { purpose: "picture".into() }, AfterPick::FillPicture { target });
+    }
+
+    /// Which shape is selected, and in which document: what a pending picture fill is bound to.
+    fn selected_shape_target(&self) -> Option<Box<FillTarget>> {
+        let (pos, shape) = wordcraft_engine::cmd::objects::selected(&self.session)?;
+        Some(Box::new((self.session.document_id(), pos, shape)))
     }
 
     /// Pick a font file to add (Add Font…; web: it arrives through the inbox).
@@ -618,5 +650,43 @@ mod tests {
         let mut a = WordApp::new(Session::new(wordcraft_doc::Document::new()), Services::default());
         a.run("font.loadSystem", json!({})).unwrap();
         assert_eq!(a.status_msg.as_ref().map(|(s, _)| s.as_str()), Some("All system fonts are already available."));
+    }
+
+    /// Shape Fill › Picture belongs to the shape (and document) that was selected when the dialog
+    /// opened: if either changed while the dialog was up, the picked picture is dropped, not
+    /// applied to whatever is selected now.
+    #[test]
+    fn picture_fill_stays_with_the_shape_it_was_opened_for() {
+        let png = crate::paste_picture::png_from_rgba(2, 2, vec![255; 16]).unwrap();
+        let dir = scratch("fill");
+        let path = dir.join("fill.png");
+        std::fs::write(&path, png).unwrap();
+        let path = path.to_string_lossy().into_owned();
+        let filled = |a: &WordApp| matches!(wordcraft_engine::cmd::objects::selected(&a.session), Some((_, wordcraft_doc::para::InlineObject::Shape { extra, .. })) if extra.picture.is_some());
+        let setup = || {
+            let (mut a, shown) = async_app();
+            a.run("insert.shape", json!({"kind": "rectangle", "width": 100, "height": 50})).unwrap();
+            a.pick_fill_picture();
+            assert_eq!(shown.borrow().len(), 1, "the picker opened");
+            (a, shown)
+        };
+        // Nothing changes while the picker is up: the shape is filled.
+        let (mut a, shown) = setup();
+        answer(&shown, Some(&path));
+        assert!(a.poll_file_dialog().is_some());
+        assert!(filled(&a));
+        // Another shape is selected meanwhile: the picture is dropped, not put on that one.
+        let (mut a, shown) = setup();
+        a.run("insert.shape", json!({"kind": "ellipse", "width": 40, "height": 40})).unwrap();
+        answer(&shown, Some(&path));
+        assert_eq!(a.poll_file_dialog().unwrap().unwrap(), json!({"cancelled": true}));
+        assert!(!filled(&a));
+        // Another document replaces this one, with a shape in the same place: dropped too.
+        let (mut a, shown) = setup();
+        a.session.set_document(wordcraft_doc::Document::new());
+        a.run("insert.shape", json!({"kind": "rectangle", "width": 100, "height": 50})).unwrap();
+        answer(&shown, Some(&path));
+        assert_eq!(a.poll_file_dialog().unwrap().unwrap(), json!({"cancelled": true}));
+        assert!(!filled(&a));
     }
 }
