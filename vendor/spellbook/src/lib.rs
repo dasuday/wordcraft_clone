@@ -5,9 +5,9 @@
 //! (but requires alloc) and carries only [`hashbrown`] as a dependency.
 //!
 //! ```
-//! let aff = std::fs::read_to_string("./vendor/en_US/en_US.aff").unwrap();
-//! let dic = std::fs::read_to_string("./vendor/en_US/en_US.dic").unwrap();
-//! let dict = spellbook::Dictionary::new(&aff, &dic).unwrap();
+//! let aff = "SET UTF-8\nSFX G Y 2\nSFX G e ing e\nSFX G 0 ing [^e]\n";
+//! let dic = "4\nhello\nworld\noptimize\nadventure/G\n";
+//! let dict = spellbook::Dictionary::new(aff, dic).unwrap();
 //!
 //! assert!(dict.check("hello"));
 //! assert!(dict.check("world"));
@@ -128,9 +128,9 @@ impl Dictionary<DefaultHashBuilder> {
     /// # Example
     ///
     /// ```
-    /// let aff = std::fs::read_to_string("./vendor/en_US/en_US.aff").unwrap();
-    /// let dic = std::fs::read_to_string("./vendor/en_US/en_US.dic").unwrap();
-    /// let dict = spellbook::Dictionary::new(&aff, &dic).unwrap();
+    /// let aff = "SET UTF-8\nSFX G Y 2\nSFX G e ing e\nSFX G 0 ing [^e]\n";
+    /// let dic = "4\nhello\nworld\noptimize\nadventure/G\n";
+    /// let dict = spellbook::Dictionary::new(aff, dic).unwrap();
     /// ```
     // TODO: what to accept other than `&str`? Would this play well with the Read trait? An
     // iterator over lines?
@@ -151,8 +151,8 @@ impl<S: BuildHasher + Clone> Dictionary<S> {
     /// # Example
     ///
     /// ```
-    /// let aff = std::fs::read_to_string("./vendor/en_US/en_US.aff").unwrap();
-    /// let dic = std::fs::read_to_string("./vendor/en_US/en_US.dic").unwrap();
+    /// let aff = "SET UTF-8\nSFX G Y 2\nSFX G e ing e\nSFX G 0 ing [^e]\n";
+    /// let dic = "4\nhello\nworld\noptimize\nadventure/G\n";
     /// let hasher = foldhash::fast::RandomState::default();
     /// let dict = spellbook::Dictionary::new_with_hasher(&aff, &dic, hasher).unwrap();
     /// ```
@@ -178,9 +178,9 @@ impl<S: BuildHasher> Dictionary<S> {
     /// # Example
     ///
     /// ```
-    /// let aff = std::fs::read_to_string("./vendor/en_US/en_US.aff").unwrap();
-    /// let dic = std::fs::read_to_string("./vendor/en_US/en_US.dic").unwrap();
-    /// let dict = spellbook::Dictionary::new(&aff, &dic).unwrap();
+    /// let aff = "SET UTF-8\nSFX G Y 2\nSFX G e ing e\nSFX G 0 ing [^e]\n";
+    /// let dic = "4\nhello\nworld\noptimize\nadventure/G\n";
+    /// let dict = spellbook::Dictionary::new(aff, dic).unwrap();
     ///
     /// assert!(dict.check("optimize"));
     /// assert!(!dict.check("optimise")); // allowed by en_GB but not en_US.
@@ -227,12 +227,12 @@ impl<S: BuildHasher> Dictionary<S> {
     /// # Example
     ///
     /// ```
-    /// let aff = std::fs::read_to_string("./vendor/en_US/en_US.aff").unwrap();
-    /// let dic = std::fs::read_to_string("./vendor/en_US/en_US.dic").unwrap();
-    /// let mut dict = spellbook::Dictionary::new(&aff, &dic).unwrap();
+    /// let aff = "SET UTF-8\nSFX G Y 2\nSFX G e ing e\nSFX G 0 ing [^e]\n";
+    /// let dic = "4\nhello\nworld\noptimize\nadventure/G\n";
+    /// let mut dict = spellbook::Dictionary::new(aff, dic).unwrap();
     ///
     /// assert!(!dict.check("foobarbaz"));
-    /// // In the `en_US` dictionary the 'G' suffix allows "ing" at the end of the word.
+    /// // This example defines a 'G' suffix that adds "ing" to a word.
     /// dict.add("foobarbaz/G").unwrap();
     /// assert!(dict.check("foobarbaz"));
     /// assert!(dict.check("foobarbazing"));
@@ -267,9 +267,9 @@ impl<S: BuildHasher> Dictionary<S> {
     /// # Example
     ///
     /// ```
-    /// let aff = std::fs::read_to_string("./vendor/en_US/en_US.aff").unwrap();
-    /// let dic = std::fs::read_to_string("./vendor/en_US/en_US.dic").unwrap();
-    /// let mut dict = spellbook::Dictionary::new(&aff, &dic).unwrap();
+    /// let aff = "SET UTF-8\nSFX G Y 2\nSFX G e ing e\nSFX G 0 ing [^e]\n";
+    /// let dic = "4\nhello\nworld\noptimize\nadventure/G\n";
+    /// let mut dict = spellbook::Dictionary::new(aff, dic).unwrap();
     ///
     /// assert!(dict.check("adventure"));
     /// assert!(dict.check("adventuring"));
@@ -503,14 +503,14 @@ fn erase_chars<'a>(word: &'a str, ignore: &[char]) -> Cow<'a, str> {
 }
 
 #[cfg(test)]
-const EN_US_AFF: &str = include_str!("../vendor/en_US/en_US.aff");
+extern crate std;
 #[cfg(test)]
-const EN_US_DIC: &str = include_str!("../vendor/en_US/en_US.dic");
-// It's a little overkill to use a real dictionary for unit tests but it compiles so
-// quickly that if we only compile it once it doesn't slow down the test suite.
+mod test_fixture;
 #[cfg(test)]
-static EN_US: once_cell::sync::Lazy<Dictionary> =
-    once_cell::sync::Lazy::new(|| Dictionary::new(EN_US_AFF, EN_US_DIC).unwrap());
+use test_fixture::{AFF as TEST_AFF, DIC as TEST_DIC};
+#[cfg(test)]
+static TEST_DICT: std::sync::LazyLock<Dictionary> =
+    std::sync::LazyLock::new(|| Dictionary::new(TEST_AFF, TEST_DIC).unwrap());
 
 #[cfg(test)]
 mod test {
@@ -620,7 +620,7 @@ mod test {
 
     #[test]
     fn add_word() {
-        let mut dict = Dictionary::new(EN_US_AFF, EN_US_DIC).unwrap();
+        let mut dict = Dictionary::new(TEST_AFF, TEST_DIC).unwrap();
         assert!(!dict.check("foobarbaz"));
         dict.add("foobarbaz/G").unwrap();
         assert!(dict.check("foobarbaz"));

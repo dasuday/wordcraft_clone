@@ -1151,7 +1151,7 @@ mod test {
     use super::*;
     use crate::{
         alloc::{string::ToString, vec},
-        Dictionary, EN_US,
+        Dictionary, TEST_DICT,
     };
 
     #[test]
@@ -1224,50 +1224,50 @@ mod test {
 
     #[test]
     fn empty_suggest() {
-        assert!(suggest(&EN_US, "").is_empty());
+        assert!(suggest(&TEST_DICT, "").is_empty());
     }
 
     #[test]
     fn huge_word_is_skipped() {
-        assert!(suggest(&EN_US, &"hello".repeat(MAX_WORD_LEN)).is_empty());
+        assert!(suggest(&TEST_DICT, &"hello".repeat(MAX_WORD_LEN)).is_empty());
     }
 
     #[test]
     fn existing_suggestions_are_cleared() {
         let mut suggestions = Vec::new();
         suggestions.push("example".to_string());
-        EN_US.suggest("", &mut suggestions);
+        TEST_DICT.suggest("", &mut suggestions);
         assert!(suggestions.is_empty())
     }
 
     #[test]
     fn uppercase_suggest() {
         // "ANSI" is correct in en_US and not "ansi".
-        assert!(suggest(&EN_US, "ansi").contains(&"ANSI".to_string()));
+        assert!(suggest(&TEST_DICT, "ansi").contains(&"ANSI".to_string()));
     }
 
     #[test]
     fn extra_char_suggest() {
-        assert!(suggest(&EN_US, "adveenture").contains(&"adventure".to_string()));
+        assert!(suggest(&TEST_DICT, "adveenture").contains(&"adventure".to_string()));
     }
 
     #[test]
     fn rep_suggest() {
         // Uses the en_US `REP size cise`. Sounds similar but "cise" is correct here.
-        assert!(suggest(&EN_US, "exsize").contains(&"excise".to_string()));
+        assert!(suggest(&TEST_DICT, "exsize").contains(&"excise".to_string()));
     }
 
     #[test]
     fn forgotten_char_suggest() {
-        assert!(suggest(&EN_US, "helo").contains(&"hello".to_string()));
-        assert!(suggest(&EN_US, "wrld").contains(&"world".to_string()));
+        assert!(suggest(&TEST_DICT, "helo").contains(&"hello".to_string()));
+        assert!(suggest(&TEST_DICT, "wrld").contains(&"world".to_string()));
         // trailing position: missing char at end of word
-        assert!(suggest(&EN_US, "hell").contains(&"hello".to_string()));
+        assert!(suggest(&TEST_DICT, "hell").contains(&"hello".to_string()));
     }
 
     #[test]
     fn wrong_char_suggest() {
-        let suggestions = suggest(&EN_US, "faver");
+        let suggestions = suggest(&TEST_DICT, "faver");
         assert!(suggestions.contains(&"fiver".to_string()));
         //                              ^
         assert!(suggestions.contains(&"faker".to_string()));
@@ -1296,40 +1296,40 @@ mod test {
     #[test]
     fn adjacent_swap_suggest() {
         // Main part of `adjacent_swap_suggest`: swap any two characters.
-        assert!(suggest(&EN_US, "exmaple").contains(&"example".to_string()));
-        assert!(suggest(&EN_US, "examlpe").contains(&"example".to_string()));
+        assert!(suggest(&TEST_DICT, "exmaple").contains(&"example".to_string()));
+        assert!(suggest(&TEST_DICT, "examlpe").contains(&"example".to_string()));
         // The part at the end of the function: extra swaps for words with 4 or 5 characters.
         // 4 characters double swap - first and last two characters:
-        assert!(suggest(&EN_US, "ende").contains(&"need".to_string()));
+        assert!(suggest(&TEST_DICT, "ende").contains(&"need".to_string()));
         // 5 characters double swap - first and last two characters:
-        assert!(suggest(&EN_US, "rdema").contains(&"dream".to_string()));
+        assert!(suggest(&TEST_DICT, "rdema").contains(&"dream".to_string()));
         // 5 characters double swap - second and third and last two characters:
-        assert!(suggest(&EN_US, "derma").contains(&"dream".to_string()));
+        assert!(suggest(&TEST_DICT, "derma").contains(&"dream".to_string()));
     }
 
     #[test]
     fn distant_swap_suggest() {
-        assert!(suggest(&EN_US, "epamxle").contains(&"example".to_string()));
+        assert!(suggest(&TEST_DICT, "epamxle").contains(&"example".to_string()));
     }
 
     #[test]
     fn doubled_two_chars_suggest() {
-        assert!(suggest(&EN_US, "bananana").contains(&"banana".to_string()));
-        assert!(suggest(&EN_US, "exexecute").contains(&"execute".to_string()));
+        assert!(suggest(&TEST_DICT, "bananana").contains(&"banana".to_string()));
+        assert!(suggest(&TEST_DICT, "exexecute").contains(&"execute".to_string()));
     }
 
     #[test]
     fn two_words_suggest() {
-        assert!(suggest(&EN_US, "helloworld").contains(&"hello world".to_string()));
-        assert!(suggest(&EN_US, "helloworld").contains(&"hello-world".to_string()));
+        assert!(suggest(&TEST_DICT, "helloworld").contains(&"hello world".to_string()));
+        assert!(suggest(&TEST_DICT, "helloworld").contains(&"hello-world".to_string()));
     }
 
     #[test]
     fn move_char_suggest() {
         // Move the 'o' to the end
-        assert!(suggest(&EN_US, "hoell").contains(&"hello".to_string()));
+        assert!(suggest(&TEST_DICT, "hoell").contains(&"hello".to_string()));
         // move the 'h' to the beginning
-        assert!(suggest(&EN_US, "ellho").contains(&"hello".to_string()));
+        assert!(suggest(&TEST_DICT, "ellho").contains(&"hello".to_string()));
 
         let aff = r#""#;
         // This word uses each possible UTF-8 length:

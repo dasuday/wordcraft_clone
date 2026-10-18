@@ -312,7 +312,7 @@ fn dictionaries(app: &mut WordApp, ui: &mut Ui) {
     note(ui, "Hunspell .aff and .dic files here (pl_PL, pt_BR, it_IT, hr_HR, tr_TR) are used before the system's.");
     ui.hyperlink_to(
         tl!("Hungarian: bundled Magyar Ispell dictionary (LibreOffice, MPL 2.0)"),
-        "https://github.com/LibreOffice/dictionaries/tree/master/hu_HU",
+        "https://github.com/LibreOffice/dictionaries/tree/74b6ae2a2df22fd9d6e253f0391ac3a67cb7b3f8/hu_HU",
     );
     // The dictionary each language found, looked up again after the folder changes.
     let found_id = egui::Id::new("options_dictionaries_found");

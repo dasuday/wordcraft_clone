@@ -1,6 +1,6 @@
 # Installing spelling dictionaries
 
-> **Last reviewed:** 2026-10-16 · **Last updated:** 2026-10-18 · **Change:** minor (Hungarian offline proofing, attribution and pinned dictionary updates); previously trivial (ISO 8859-1 dictionaries are read, #2824; previously major: first version)
+> **Last reviewed:** 2026-10-16 · **Last updated:** 2026-10-19 · **Change:** minor (Hungarian offline proofing, attribution and pinned dictionary updates); previously trivial (ISO 8859-1 dictionaries are read, #2824; previously major: first version)
 
 English and Hungarian spelling work out of the box. Polish, Russian, Portuguese, Czech, Italian, Croatian and
 Turkish spelling use a standard **Hunspell** dictionary (an `.aff` and a `.dic` file) that
@@ -37,11 +37,22 @@ checks the MPL option in the upstream license statement, parses the candidate fi
 representative correct/incorrect words **before** replacing bundled files. A changed license
 statement or failed language check stops the import. It preserves all original bytes and notices,
 and records the revision and SHA-256 hashes in `SOURCE.json`; review the diff before committing.
+Updates hold an OS file lock and stage files in a private `.work/` directory. Publication
+renames whole directories and verifies the installed hashes. The previous complete directory
+remains in `.work/hungarian-backup` until verification succeeds; a subsequent updater invocation
+restores it if an earlier process stopped mid-publication. During the brief rename gap a build
+can fail on missing assets; individual files are never copied into the live directory.
+Do not build or edit dictionary assets while running the updater. If it was interrupted, run
+the already-built xtask executable with the same arguments to recover before building
+(`target/debug/xtask update-hungarian <commit>`, or under your `CARGO_TARGET_DIR`). If
+`assets/spelling/hu` is missing and the executable is unavailable, move the complete
+`.work/hungarian-backup` directory back to `assets/spelling/hu` before invoking Cargo.
+Do not delete that backup or restore individual files from it.
 There are no automatic background downloads or uploads of document text.
 
 The runtime adapter converts legacy byte flags to distinct Unicode identifiers in memory;
-UTF-8 words and the original source files stay intact. Spellbook's local signed-syllable and
-case-index fixes remain MPL-2.0; see `vendor/spellbook/WORDCRAFT-NOTICE.txt`.
+UTF-8 words and the original source files stay intact. Spellbook's local arithmetic, case-index, affix-condition, compound and
+suggestion fixes remain MPL-2.0; see `vendor/spellbook/WORDCRAFT-NOTICE.txt`.
 When redistributing binaries, provide the corresponding MPL source (including modifications)
 and the notices, and tell recipients where to obtain it, as described in `NOTICE`.
 
@@ -151,12 +162,13 @@ from the LibreOffice repository (for example `it_IT/it_IT.aff`).
 - The log file (`%APPDATA%\WordCraft\logs\wordcraft.log` on Windows) says
   `Portuguese spelling: no Hunspell pt_BR dictionary installed` when none was found.
 
-Never commit dictionary files to this repository: they stay on the user's system.
+Do not commit system-installed dictionaries: they stay on the user's system. The bundled Hungarian dictionary is the exception; commit reviewed updates together with their source manifest and license notices.
 
 ## Revision history
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-19 | minor | PR #2980 review: affix/compound/suggestion regressions, recoverable dictionary updates and consistent Hungarian status |
 | 2026-10-18 | minor | Hungarian offline spelling, basic grammar, source/license notices and a pinned LibreOffice updater |
 | 2026-10-18 | trivial | ISO 8859-1 (`SET ISO8859-1`) dictionaries are read, so the original VERO `pt_BR` works without converting it to UTF-8 (#2824) |
 | 2026-10-18 | minor | An installed dictionary that can't be read shows **(dictionary unreadable)** in the status bar, with the file and reason in its tooltip and in File › Options › Proofing (#2830) |

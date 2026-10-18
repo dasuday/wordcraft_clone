@@ -184,6 +184,14 @@ fn cmd_ci() -> Result<(), String> {
                 run(c, "cargo test --workspace")
             }),
         ),
+        (
+            "spellbook tests",
+            Box::new(|| {
+                let mut c = cargo();
+                c.args(["test", "--manifest-path", "vendor/spellbook/Cargo.toml"]);
+                run(c, "cargo test --manifest-path vendor/spellbook/Cargo.toml")
+            }),
+        ),
         ("assets", Box::new(|| assets::run(&root()))),
         ("layers", Box::new(cmd_layers)),
         ("wasm", Box::new(cmd_wasm)),

@@ -10,3 +10,6 @@ plan/
 /craft-fonts/
 
 /.work/
+
+# Standalone vendored library test resolution (workspace builds use the root lockfile).
+/vendor/spellbook/Cargo.lock

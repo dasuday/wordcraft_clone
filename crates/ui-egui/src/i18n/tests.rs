@@ -1123,13 +1123,28 @@ fn an_italian_interface_writes_new_documents_in_italian() {
 #[test]
 fn a_hungarian_interface_writes_new_documents_in_hungarian() {
     let mut app = crate::WordApp::new(wordcraft_engine::Session::new(wordcraft_doc::Document::new()), Default::default());
-    let ctx = egui::Context::default();
-    let frame = |app: &mut crate::WordApp| ctx.run_ui(egui::RawInput::default(), |ui| app.logic(ui.ctx())).drop_without_applying_deltas();
-    frame(&mut app);
-    app.run("ui.language", serde_json::json!({"value": "hu"})).unwrap();
-    frame(&mut app);
+    use egui_kittest::kittest::Queryable;
+    app.run("file.options", serde_json::json!({"pane": "language"})).unwrap();
+    let mut harness = egui_kittest::Harness::builder().with_size(egui::vec2(1440.0, 1200.0)).build_ui_state(
+        |ui, app: &mut crate::WordApp| {
+            app.logic(ui.ctx());
+            app.ui(ui);
+        },
+        app,
+    );
+    harness.run_steps(4);
+    harness.get_by_role(egui::accesskit::Role::ComboBox).click();
+    harness.run_steps(4);
+    harness.get_by_label("Magyar").scroll_to_me();
+    harness.run_steps(8);
+    harness.get_by_label("Magyar").click();
+    harness.run_steps(4);
+    let app = harness.state_mut();
+    assert_eq!(app.ui.language, "hu", "the visible language picker selection was applied");
     assert_eq!(app.session.editing_lang.as_deref(), Some("hu-HU"));
     assert_eq!(app.session.doc.styles.default_chr.lang.as_deref(), Some("hu-HU"), "the untouched first document follows");
+    app.run("file.new", serde_json::json!({})).unwrap();
+    assert_eq!(app.session.doc.styles.default_chr.lang.as_deref(), Some("hu-HU"), "new documents follow the selected interface language");
     // Typing Hungarian then shows no English misspellings; the status bar names the language.
     app.session.run("text.insert", &serde_json::json!({"text": "Árvíztűrő tükörfúrógép"})).unwrap();
     let issues = app.session.run("review.issues", &serde_json::json!({})).unwrap();

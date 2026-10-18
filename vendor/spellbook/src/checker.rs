@@ -62,9 +62,9 @@ impl<'a, S: BuildHasher> Checker<'a, S> {
     /// # Example
     ///
     /// ```
-    /// let aff = std::fs::read_to_string("./vendor/en_US/en_US.aff").unwrap();
-    /// let dic = std::fs::read_to_string("./vendor/en_US/en_US.dic").unwrap();
-    /// let dict = spellbook::Dictionary::new(&aff, &dic).unwrap();
+    /// let aff = "SET UTF-8";
+    /// let dic = "2\nAlice\nRSVP\n";
+    /// let dict = spellbook::Dictionary::new(aff, dic).unwrap();
     ///
     /// assert!(!dict.check("alice"));
     /// assert!(dict.checker().check_lower_as_title(true).check("alice"));
@@ -81,9 +81,9 @@ impl<'a, S: BuildHasher> Checker<'a, S> {
     /// # Example
     ///
     /// ```
-    /// let aff = std::fs::read_to_string("./vendor/en_US/en_US.aff").unwrap();
-    /// let dic = std::fs::read_to_string("./vendor/en_US/en_US.dic").unwrap();
-    /// let dict = spellbook::Dictionary::new(&aff, &dic).unwrap();
+    /// let aff = "SET UTF-8";
+    /// let dic = "2\nAlice\nRSVP\n";
+    /// let dict = spellbook::Dictionary::new(aff, dic).unwrap();
     ///
     /// assert!(!dict.check("rsvp"));
     /// assert!(dict.checker().check_lower_as_upper(true).check("rsvp"));
@@ -1045,7 +1045,7 @@ impl<'a, S: BuildHasher> Checker<'a, S> {
 
                 let stem2 = prefix.to_stem(&stem);
 
-                if !prefix.condition_matches(&stem) {
+                if !prefix.condition_matches(&stem2) {
                     continue;
                 }
 
@@ -1288,7 +1288,7 @@ impl<'a, S: BuildHasher> Checker<'a, S> {
 
                 let stem2 = suffix.to_stem(&stem);
 
-                if !suffix.condition_matches(&stem) {
+                if !suffix.condition_matches(&stem2) {
                     continue;
                 }
 
@@ -1663,7 +1663,7 @@ impl<'a, S: BuildHasher> Checker<'a, S> {
         if prev_cp_idx == 0 {
             return None;
         }
-        let (_, prev_cp2) = prev_codepoint(word, i)?;
+        let (_, prev_cp2) = prev_codepoint(word, prev_cp_idx)?;
         if prev_cp != prev_cp2 {
             return None;
         }
@@ -2366,7 +2366,40 @@ impl<'aff> CompoundingResult<'aff> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::EN_US;
+    use crate::TEST_DICT;
+
+    #[test]
+    fn affix_conditions_use_the_stem_after_each_removal() {
+        let aff = "SFX o Y 1\nSFX o 0 z .\nSFX i Y 1\nSFX i 0 y/o .\nPFX p Y 1\nPFX p 0 pre s\n";
+        let dict = Dictionary::new(aff, "2\nstem/pi\nxstem/pi\n").unwrap();
+        let checker = dict.checker();
+        assert!(checker
+            .strip_suffix_then_prefix_then_suffix("prestemyz", HiddenHomonym::default())
+            .is_some());
+        assert!(checker
+            .strip_suffix_then_prefix_then_suffix("prexstemyz", HiddenHomonym::default())
+            .is_none());
+        // Reversed affix order, with the condition on the suffix's remaining stem.
+        let aff = "COMPLEXPREFIXES\nPFX o Y 1\nPFX o 0 out .\nPFX i Y 1\nPFX i 0 in/o .\nSFX s Y 1\nSFX s 0 z m\n";
+        let dict = Dictionary::new(aff, "2\nstem/is\nstex/is\n").unwrap();
+        let checker = dict.checker();
+        assert!(checker
+            .strip_prefix_then_suffix_then_prefix("outinstemz", HiddenHomonym::default())
+            .is_some());
+        assert!(checker
+            .strip_prefix_then_suffix_then_prefix("outinstexz", HiddenHomonym::default())
+            .is_none());
+    }
+
+    #[test]
+    fn simplified_triple_requires_two_equal_preceding_characters() {
+        let aff = "SET UTF-8\nCOMPOUNDBEGIN B\nCOMPOUNDEND E\nCOMPOUNDMIN 2\nSIMPLIFIEDTRIPLE\n";
+        let dict = Dictionary::new(aff, "6\nbb/B\ncb/B\nbeta/E\nőő/B\naő/B\nőrs/E\n").unwrap();
+        assert!(dict.check("bbeta"));
+        assert!(!dict.check("cbeta"));
+        assert!(dict.check("őőrs"));
+        assert!(!dict.check("aőrs"));
+    }
 
     #[test]
     fn are_three_chars_equal_test() {
@@ -2400,32 +2433,32 @@ mod test {
 
     #[test]
     fn huge_word_is_rejected() {
-        assert!(!EN_US.check(&"hello".repeat(MAX_WORD_LEN)));
+        assert!(!TEST_DICT.check(&"hello".repeat(MAX_WORD_LEN)));
     }
 
     #[test]
     fn empty_word_is_accepted() {
-        assert!(EN_US.check(""));
+        assert!(TEST_DICT.check(""));
     }
 
     #[test]
     fn check_number_test() {
-        assert!(EN_US.check("123456789"));
+        assert!(TEST_DICT.check("123456789"));
     }
 
     #[test]
     fn check_exact_word_in_the_wordlist_test() {
         // adventure/DRSMZG (en_US.dic line 11021)
-        assert!(EN_US.check("adventure"));
+        assert!(TEST_DICT.check("adventure"));
     }
 
     #[test]
     fn check_exact_words_in_the_wordlist_with_break_patterns_test() {
         // en_US uses the default break patterns: `^-`, `-`, `-$`.
         // All of these words are stems in the dictionary.
-        assert!(EN_US.check("-any"));
-        assert!(EN_US.check("anyway-anywhere"));
-        assert!(EN_US.check("ace-"));
+        assert!(TEST_DICT.check("-any"));
+        assert!(TEST_DICT.check("anyway-anywhere"));
+        assert!(TEST_DICT.check("ace-"));
     }
 
     #[test]
@@ -2436,9 +2469,9 @@ mod test {
         // SFX V   0     ive        [^e]
 
         // concuss/V (en_US.dic line 17451)
-        assert!(EN_US.check("concussive"));
+        assert!(TEST_DICT.check("concussive"));
         // regenerate/V (en_US.dic line 38722)
-        assert!(EN_US.check("regenerative"));
+        assert!(TEST_DICT.check("regenerative"));
     }
 
     #[test]
@@ -2448,24 +2481,24 @@ mod test {
         // PFX A   0     re         .
 
         // route/ADSG (en_US.dic line 39619)
-        assert!(EN_US.check("reroute"));
+        assert!(TEST_DICT.check("reroute"));
     }
 
     #[test]
     fn check_other_casings() {
         // "drink" is a stem and should be recognized in any case.
-        assert!(EN_US.check("drink"));
-        assert!(EN_US.check("Drink"));
-        assert!(EN_US.check("DRINK"));
+        assert!(TEST_DICT.check("drink"));
+        assert!(TEST_DICT.check("Drink"));
+        assert!(TEST_DICT.check("DRINK"));
         // Achilles/M from en_US.dic line 116, should be recognized in titlecase and uppercase but
         // not lowercase.
-        assert!(!EN_US.check("achilles"));
-        assert!(EN_US.check("Achilles"));
-        assert!(EN_US.check("ACHILLES"));
+        assert!(!TEST_DICT.check("achilles"));
+        assert!(TEST_DICT.check("Achilles"));
+        assert!(TEST_DICT.check("ACHILLES"));
         // BBQ from en_US.dic line 810, should only be recognized in uppercase.
-        assert!(!EN_US.check("bbq"));
-        assert!(!EN_US.check("Bbq"));
-        assert!(EN_US.check("BBQ"));
+        assert!(!TEST_DICT.check("bbq"));
+        assert!(!TEST_DICT.check("Bbq"));
+        assert!(TEST_DICT.check("BBQ"));
     }
 
     #[test]
@@ -2532,7 +2565,7 @@ mod test {
     #[test]
     fn iconv_test() {
         // Magic quotes are converted by en_US.
-        assert!(EN_US.check("can’t"));
+        assert!(TEST_DICT.check("can’t"));
 
         // Both from en_ZA
         let aff = r#"
@@ -2555,8 +2588,8 @@ mod test {
     fn false_prefix_test() {
         // "un" is a prefix in en_US and "drink" is a stem. "drink"'s flags don't allow you to use
         // the "un" prefix though, so this word isn't correct.
-        assert!(!EN_US.check("undrink"));
-        assert!(!EN_US.check("undrinks"));
+        assert!(!TEST_DICT.check("undrink"));
+        assert!(!TEST_DICT.check("undrinks"));
     }
 
     #[test]
@@ -2573,7 +2606,7 @@ mod test {
         // SFX D   0     ed         [aeiou]y
 
         // earth/UDYG (en_US.dic line 20997)
-        assert!(EN_US.check("unearthed"));
+        assert!(TEST_DICT.check("unearthed"));
     }
 
     #[test]
@@ -2710,23 +2743,26 @@ mod test {
     fn en_us_compounding() {
         // Examples given alongside the definitions of the compound rules in en_US.aff.
         // `n*1t`
-        assert!(EN_US.check("10th"));
-        assert!(EN_US.check("11th"));
-        assert!(EN_US.check("12th"));
-        assert!(EN_US.check("57614th"));
+        assert!(TEST_DICT.check("10th"));
+        assert!(TEST_DICT.check("11th"));
+        assert!(TEST_DICT.check("12th"));
+        assert!(TEST_DICT.check("57614th"));
         // `n*mp`
-        assert!(EN_US.check("21st"));
-        assert!(EN_US.check("22nd"));
-        assert!(EN_US.check("123rd"));
-        assert!(EN_US.check("1234th"));
+        assert!(TEST_DICT.check("21st"));
+        assert!(TEST_DICT.check("22nd"));
+        assert!(TEST_DICT.check("123rd"));
+        assert!(TEST_DICT.check("1234th"));
     }
 
     #[test]
     fn check_lower_as_other_casings() {
-        assert!(!EN_US.check("alice"));
-        assert!(!EN_US.check("rsvp"));
-        assert!(EN_US.checker().check_lower_as_title(true).check("alice"));
-        assert!(EN_US.checker().check_lower_as_upper(true).check("rsvp"));
+        assert!(!TEST_DICT.check("alice"));
+        assert!(!TEST_DICT.check("rsvp"));
+        assert!(TEST_DICT
+            .checker()
+            .check_lower_as_title(true)
+            .check("alice"));
+        assert!(TEST_DICT.checker().check_lower_as_upper(true).check("rsvp"));
     }
 
     #[test]

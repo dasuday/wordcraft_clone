@@ -85,3 +85,6 @@ Generated-in-code art is original and has no file to list: the UI icon set (`cra
 | `crates/ui-egui/src/i18n/hr.tsv` | Andrej Škvorc (@andrejskvorc) with Claude Code (Sonnet 5.5); proofread with Gemini | Original translation from the English interface labels in this repository; no other product localisation copied | MIT OR Apache-2.0 | Croatian interface catalog; reviewed and corrected in the running interface, menu by menu, by the native-speaker author, who also checked the Gemini suggestions |
 
 Spellbook 0.4.2 source in `vendor/spellbook/` is by Michael Davis and contributors, from [helix-editor/spellbook](https://github.com/helix-editor/spellbook), under MPL-2.0. Local changes and source-availability requirements are recorded in `vendor/spellbook/WORDCRAFT-NOTICE.txt` and `NOTICE`.
+
+`vendor/spellbook/src/test_fixture.rs` contains original WordCraft synthetic test data
+under MPL-2.0, solely for the vendored unit tests. No upstream English dictionary is bundled.

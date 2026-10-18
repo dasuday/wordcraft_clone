@@ -383,7 +383,7 @@ impl<S: BuildHasher> Suggester<'_, S> {
                     continue;
                 }
 
-                let expanded = prefix.to_derived(stem);
+                let expanded = prefix.to_derived(suffixed_stem);
                 expanded_list.push(expanded);
             }
         }
@@ -732,6 +732,29 @@ fn count_eq_at_same_pos(left: CharsStr, right: CharsStr) -> (usize, bool) {
 #[cfg(test)]
 mod test {
     use super::*;
+
+    #[test]
+    fn ngram_candidates_keep_both_cross_product_affixes() {
+        let dict = crate::Dictionary::new(
+            "PFX P Y 1\nPFX P 0 pre .\nSFX S Y 1\nSFX S 0 suf .\n",
+            "1\nstem/PS\n",
+        )
+        .unwrap();
+        let (_, flags) = dict.words.get("stem").next().unwrap();
+        let mut expanded = Vec::new();
+        let mut cross = Vec::new();
+        dict.suggester().expand_stem_for_ngram(
+            "stem",
+            flags,
+            "prestemsuf",
+            &mut expanded,
+            &mut cross,
+        );
+        assert!(
+            expanded.iter().any(|word| word == "prestemsuf"),
+            "{expanded:?}"
+        );
+    }
 
     #[test]
     fn index_of_mismatch_test() {

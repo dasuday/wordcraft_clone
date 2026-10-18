@@ -4,7 +4,7 @@ Source release: https://crates.io/crates/spellbook/0.4.2
 Upstream .crate SHA-256: 0d204abcbdf8e88729306a8d0ca01a79d8a49969fe1f84696909d6dbc4321c1a
 License: Mozilla Public License 2.0 (LICENSE).
 
-WordCraft changes (2026-10-18):
+WordCraft changes (2026-10-18 and 2026-10-19):
 - src/checker.rs: apply a signed Hungarian syllable-count modifier with
   saturating_add_signed instead of casting a negative i16 to usize. The original
   addition overflowed in debug builds for e.g. "árvíztűrő"; release overflow also
@@ -15,6 +15,16 @@ WordCraft changes (2026-10-18):
 - Cargo.toml: retain only the library's runtime dependencies; constrain hashbrown
   to 0.16 and foldhash to 0.2, already present in WordCraft's lockfile. The
   upstream dev tooling, examples and test dictionaries are not redistributed.
+- src/checker.rs: evaluate chained-affix conditions after removing each affix;
+  compare distinct preceding code points for SIMPLIFIEDTRIPLE compounds.
+- src/suggester/ngram.rs: preserve the suffix when expanding cross-product
+  suggestions. Targeted synthetic regression tests cover these fixes.
+- src/test_fixture.rs: original, small MPL-2.0 WordCraft test data replaces the
+  absent, separately GPL-licensed upstream English test dictionary. It tests
+  mechanisms, not general English dictionary coverage. Test-only LazyLock uses
+  the Rust standard library rather than once_cell; doctests use inline data.
+  The complete vendored unit-test and doctest targets can run independently
+  and are included in cargo xtask ci.
 
 The modified source files remain MPL-2.0. This directory contains the source
 corresponding to WordCraft's bundled copy. Distributors of compiled WordCraft
