@@ -224,7 +224,7 @@ Imported text fields use the first nonempty cached result run's formatting on th
 
 | Date | Change | Summary |
 |---|---|---|
-| 2026-10-15 | trivial | New row: tracked table-row insertions and deletions (`w:trPr/w:ins|del`) are in the model (Compare, #1317) but not yet read or written by DOCX, ODT, RTF or HTML |
+| 2026-10-15 | trivial | New row: tracked table-row insertions and deletions (`w:trPr/w:ins`, `w:trPr/w:del`) are in the model (Compare, #1317) but not yet read or written by DOCX, ODT, RTF or HTML |
 | 2026-10-17 | trivial | Paste: an HTML `<blockquote>` (LibreOffice's both-sides indent) pastes as a Normal paragraph with its margins as indents, not the centred italic Quote style; opening .html unchanged (#1270) |
 | 2026-10-15 | trivial | `wordcraft-cli convert --update-fields` explicitly refreshes unlocked fields before conversion; ordinary conversion keeps cached results. Field refresh can change pagination |
 | 2026-10-16 | trivial | Cached textual `REF` results with `\h` export links to their bookmarks. Code view and existing enclosing hyperlinks remain unchanged; unresolved bookmarks emit no PDF link. |
