@@ -812,6 +812,11 @@ impl SectionProps {
     pub fn text_height(&self) -> f32 {
         (self.page_h - self.margin_top - self.margin_bottom).max(18.0)
     }
+    /// The area inside the margins (after the gutter), points: what Word places a shape
+    /// "relative to margin" in, such as a watermark.
+    pub fn margin_area(&self) -> wordcraft_geom::Rect {
+        wordcraft_geom::Rect::new(self.margin_left + self.gutter, self.margin_top, self.text_width(), self.text_height())
+    }
     /// Swap to landscape/portrait (keeps margins relative to the paper as Word does: rotates them).
     pub fn set_landscape(&mut self, on: bool) {
         if on == self.landscape {

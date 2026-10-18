@@ -2738,3 +2738,13 @@ template	Letter	Thư
 	Type a size in any unit, such as 5 cm or 300 px. The other side follows, so the picture keeps its proportions.	Nhập kích thước theo đơn vị bất kỳ, ví dụ 5 cm hoặc 300 px. Cạnh còn lại thay đổi theo, nên ảnh giữ nguyên tỷ lệ.
 
 	Import…	Nhập…
+	No watermark	Không có hình mờ
+	Picture watermark	Hình mờ dạng ảnh
+	Text watermark	Hình mờ dạng văn bản
+	Select Picture…	Chọn ảnh…
+	Scale:	Tỉ lệ:
+	Washout	Làm nhạt
+	Semitransparent	Bán trong suốt
+	Transparency:	Độ trong suốt:
+	Layout:	Bố trí:
+	Select a picture first.	Hãy chọn ảnh trước.

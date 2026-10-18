@@ -184,6 +184,13 @@ pub fn decode_pixmap(bytes: &[u8]) -> Option<Pixmap> {
 
 /// [`decode_pixmap`] with an explicit RGBA byte budget (a small one in tests).
 fn decode_pixmap_within(bytes: &[u8], budget: u64) -> Option<Pixmap> {
+    let img = decode_image_within(bytes, budget)?.into_rgba8();
+    let (w, h) = img.dimensions();
+    premul_pixmap(w, h, img.as_raw())
+}
+
+/// Decode an encoded image within an RGBA byte budget and the side limit.
+fn decode_image_within(bytes: &[u8], budget: u64) -> Option<image::DynamicImage> {
     // The header gives the size; refuse before the decoder (and the RGBA copy) allocate anything.
     let (hw, hh) = image_size(bytes)?;
     if !wordcraft_geom::decode_fits(hw, hh, budget) {
@@ -194,9 +201,7 @@ fn decode_pixmap_within(bytes: &[u8], budget: u64) -> Option<Pixmap> {
     limits.max_image_width = Some(MAX_DECODE_SIDE);
     limits.max_image_height = Some(MAX_DECODE_SIDE);
     reader.limits(limits);
-    let img = reader.decode().ok()?.into_rgba8();
-    let (w, h) = img.dimensions();
-    premul_pixmap(w, h, img.as_raw())
+    reader.decode().ok()
 }
 
 /// A premultiplied pixmap from straight RGBA8 rows. None for empty, oversized or mis-sized input
@@ -387,6 +392,64 @@ fn draw_page_picture(ctx: &mut RenderContext, doc: &Document, page: &Page, view:
     ctx.reset_paint_transform();
 }
 
+/// A picture watermark, centred in its section's margins behind the text at its scale, washed
+/// out as Word does when it is.
+fn draw_watermark_picture(ctx: &mut RenderContext, doc: &Document, view: Affine, page: &Page, pic: &wordcraft_doc::WatermarkPicture) {
+    let Some((nw, nh)) = doc.media.get(&pic.media).and_then(|b| image_size(b)).filter(|(w, h)| *w > 0 && *h > 0) else { return };
+    let area = doc.sections().get(page.section).map_or(page.body, |(_, s)| s.margin_area());
+    // Pixels at 96 ppi, as for an inserted picture.
+    let Some(r) = pic.place(nw as f32 * 0.75, nh as f32 * 0.75, area) else { return };
+    let Some(pm) = watermark_pixmap(doc, pic) else { return };
+    let (pw, ph) = (pm.width().max(1) as f64, pm.height().max(1) as f64);
+    let rect = kurbo::Rect::new(r.x as f64, r.y as f64, r.x as f64 + r.w as f64, r.y as f64 + r.h as f64);
+    ctx.set_transform(view);
+    ctx.set_paint(vello_cpu::Image {
+        image: vello_cpu::ImageSource::Pixmap(pm),
+        sampler: peniko::ImageSampler::default().with_quality(peniko::ImageQuality::Medium),
+    });
+    ctx.set_paint_transform(Affine::translate((rect.x0, rect.y0)) * Affine::scale_non_uniform(rect.width() / pw, rect.height() / ph));
+    ctx.fill_rect(&rect);
+    ctx.reset_paint_transform();
+}
+
+/// The watermark's picture: the picture itself, or with Washout only its washed copy, cached on
+/// its own. Holding the original as well would let two large copies push each other (and every
+/// other picture) out of the cache on each render.
+fn watermark_pixmap(doc: &Document, pic: &wordcraft_doc::WatermarkPicture) -> Option<Arc<Pixmap>> {
+    if !pic.washout {
+        return pixmap_for(doc, &pic.media);
+    }
+    let bytes = doc.media.get(&pic.media)?;
+    let key = format!("{}\u{0}washout", pic.media);
+    if let Some(v) = lock(images()).get(&key, bytes) {
+        return v;
+    }
+    let washed = washed_pixmap(bytes, wordcraft_geom::MAX_DECODED_BYTES).map(Arc::new);
+    let size = washed.as_ref().map_or(0, |p| p.width() as usize * p.height() as usize * 4);
+    lock(images()).insert(&key, bytes, washed.clone(), size);
+    washed
+}
+
+/// The picture decoded within an RGBA byte `budget`, scaled down to
+/// [`wordcraft_doc::watermark::MAX_WASHED_PX`] on its longer side, with Word's Washout on each
+/// pixel's colour ([`wordcraft_doc::watermark::washout`]).
+fn washed_pixmap(bytes: &[u8], budget: u64) -> Option<Pixmap> {
+    use wordcraft_doc::watermark::{MAX_WASHED_PX, washout};
+    let img = decode_image_within(bytes, budget)?;
+    let img = if img.width().max(img.height()) > MAX_WASHED_PX {
+        img.resize(MAX_WASHED_PX, MAX_WASHED_PX, image::imageops::FilterType::Triangle)
+    } else {
+        img
+    };
+    let mut rgba = img.into_rgba8();
+    for p in rgba.pixels_mut() {
+        let [r, g, b, a] = p.0;
+        p.0 = [washout(r), washout(g), washout(b), a];
+    }
+    let (w, h) = rgba.dimensions();
+    premul_pixmap(w, h, rgba.as_raw())
+}
+
 fn pixmap_for(doc: &Document, key: &str) -> Option<Arc<Pixmap>> {
     let bytes = doc.media.get(key)?;
     if let Some(v) = lock(images()).get(key, bytes) {
@@ -526,8 +589,10 @@ fn render_region_capped(doc: &Document, page: &Page, w: u32, h: u32, view: Affin
     draw_page_picture(&mut ctx, doc, page, view);
     let items = page_display(doc, page, &opts.display);
     let visible = view.inverse().transform_rect_bbox(kurbo::Rect::new(0.0, 0.0, w16 as f64, h16 as f64)).inflate(40.0, 40.0);
-    if let Some(wm) = &doc.settings.watermark {
-        draw_watermark(&mut ctx, view, page, wm, opts);
+    match doc.settings.watermark.as_ref() {
+        Some(wordcraft_doc::Watermark { picture: Some(pic), .. }) => draw_watermark_picture(&mut ctx, doc, view, page, pic),
+        Some(wm) => draw_watermark(&mut ctx, view, page, wm, opts),
+        None => {}
     }
     for it in &items {
         draw(&mut ctx, doc, it, view, &visible, opts);
@@ -657,7 +722,7 @@ fn draw_watermark(ctx: &mut RenderContext, view: Affine, page: &Page, wm: &wordc
     let base = Affine::translate((pw / 2.0, page.h.min(2000.0) as f64 / 2.0))
         * Affine::rotate(angle)
         * Affine::translate((-raw_w * size / 2.0, size * 0.35));
-    ctx.set_paint(color(opts.ink(wm.color), if wm.semitransparent { 0.35 } else { 0.8 }));
+    ctx.set_paint(color(opts.ink(wm.color), wm.opacity()));
     let db = FontDb::global();
     let mut x = 0.0;
     for g in &glyphs {
@@ -1437,6 +1502,116 @@ mod tests {
         let l = layout(&d, &mut LayoutCache::new(), &LayoutOptions::default());
         let img = render_page(&d, &l.pages[0], 1.0, &RenderOptions::default());
         assert_eq!(&img.pixels[0..3], &[255, 255, 255]);
+    }
+
+    /// A solid `w`×`h` PNG.
+    fn solid_png(w: u32, h: u32, c: [u8; 4]) -> Vec<u8> {
+        let mut png = Vec::new();
+        image::RgbaImage::from_pixel(w, h, image::Rgba(c)).write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png).unwrap();
+        png
+    }
+
+    /// The RGB of pixel (`x`, `y`).
+    fn px(img: &Rendered, x: f32, y: f32) -> [u8; 3] {
+        let i = (y as usize * img.width as usize + x as usize) * 4;
+        [img.pixels[i], img.pixels[i + 1], img.pixels[i + 2]]
+    }
+
+    fn near(a: [u8; 3], b: [u8; 3]) -> bool {
+        a.iter().zip(b).all(|(x, y)| x.abs_diff(y) <= 2)
+    }
+
+    /// #2954: a picture watermark is drawn centred in the margins behind the text: at Auto as
+    /// wide as the margins allow, at a scale as a percentage of its own size, and washed out
+    /// lighter than the picture.
+    #[test]
+    fn picture_watermark_in_the_margins_washed_out() {
+        use wordcraft_doc::watermark::washout;
+        let blue = [20, 60, 140];
+        let mut d = Document::new();
+        d.media.insert("wm.png".into(), Arc::new(solid_png(40, 20, [20, 60, 140, 255])));
+        let mut pic = wordcraft_doc::WatermarkPicture { media: "wm.png".into(), scale: None, washout: false };
+        let shot = |d: &Document| {
+            let l = layout(d, &mut LayoutCache::new(), &LayoutOptions::default());
+            let page = l.pages[0].clone();
+            (render_page(d, &page, 1.0, &RenderOptions::default()), d.last_section.margin_area())
+        };
+        d.settings.watermark = Some(wordcraft_doc::Watermark { picture: Some(pic.clone()), ..Default::default() });
+        let (img, body) = shot(&d);
+        let (cx, cy) = (body.x + body.w / 2.0, body.y + body.h / 2.0);
+        assert!(near(px(&img, cx, cy), blue), "{:?}", px(&img, cx, cy));
+        // Auto: the margins' width, half as tall, centred.
+        assert!(near(px(&img, body.x + 3.0, cy), blue) && near(px(&img, body.right() - 3.0, cy), blue));
+        assert_eq!(px(&img, body.x - 3.0, cy), [255, 255, 255]);
+        assert!(near(px(&img, cx, cy - body.w / 4.0 + 3.0), blue));
+        assert_eq!(px(&img, cx, cy - body.w / 4.0 - 3.0), [255, 255, 255]);
+        // Washout: every channel lighter, as Word's curve has it.
+        pic.washout = true;
+        d.settings.watermark = Some(wordcraft_doc::Watermark { picture: Some(pic.clone()), ..Default::default() });
+        let washed = px(&shot(&d).0, cx, cy);
+        assert!(near(washed, blue.map(washout)), "{washed:?}");
+        assert!(washed.iter().zip(blue).all(|(w, b)| *w > b));
+        // 100 %: the picture's own size (40 × 20 px at 96 ppi = 30 × 15 pt).
+        pic.scale = Some(100.0);
+        d.settings.watermark = Some(wordcraft_doc::Watermark { picture: Some(pic.clone()), ..Default::default() });
+        let (img, _) = shot(&d);
+        assert!(near(px(&img, cx + 13.0, cy), blue.map(washout)));
+        assert_eq!(px(&img, cx + 17.0, cy), [255, 255, 255]);
+        // A picture that can't be read draws nothing.
+        d.media.insert("wm.png".into(), Arc::new(b"junk".to_vec()));
+        assert_eq!(px(&shot(&d).0, cx, cy), [255, 255, 255]);
+    }
+
+    /// #2954 review: a washed-out watermark is drawn from a copy at most 4096 px on its longer
+    /// side, and only that copy is cached, so a large photo is decoded and washed once and leaves
+    /// room in the cache for the other pictures.
+    #[test]
+    fn washed_watermark_is_capped_and_cached_alone() {
+        let big = solid_png(5000, 40, [20, 60, 140, 255]);
+        let pm = washed_pixmap(&big, wordcraft_geom::MAX_DECODED_BYTES).unwrap();
+        assert!(pm.width() == 4096 && (32..=33).contains(&pm.height()), "{} × {}", pm.width(), pm.height());
+        let p = pm.data()[0];
+        assert_eq!([p.r, p.g, p.b], [20u8, 60, 140].map(wordcraft_doc::watermark::washout));
+        // A small one keeps its pixels.
+        assert_eq!(washed_pixmap(&solid_png(30, 20, [0, 0, 0, 255]), wordcraft_geom::MAX_DECODED_BYTES).map(|p| p.width()), Some(30));
+        assert!(washed_pixmap(b"junk", wordcraft_geom::MAX_DECODED_BYTES).is_none());
+
+        let mut d = Document::new();
+        d.media.insert("wm-cache-2954.png".into(), Arc::new(big));
+        let pic = wordcraft_doc::WatermarkPicture { media: "wm-cache-2954.png".into(), scale: None, washout: true };
+        let first = watermark_pixmap(&d, &pic).unwrap();
+        let again = watermark_pixmap(&d, &pic).unwrap();
+        assert!(Arc::ptr_eq(&first, &again), "the second render takes the cached copy");
+        let bytes = d.media.get("wm-cache-2954.png").unwrap();
+        assert!(lock(images()).get("wm-cache-2954.png", bytes).is_none(), "the original isn't cached");
+        // Drawn at its size on the page, from the smaller copy.
+        d.settings.watermark = Some(wordcraft_doc::Watermark { picture: Some(pic), ..Default::default() });
+        let l = layout(&d, &mut LayoutCache::new(), &LayoutOptions::default());
+        let img = render_page(&d, &l.pages[0], 1.0, &RenderOptions::default());
+        let area = d.last_section.margin_area();
+        let washed = [20u8, 60, 140].map(wordcraft_doc::watermark::washout);
+        assert!(near(px(&img, area.x + area.w / 2.0, area.y + area.h / 2.0), washed));
+    }
+
+    /// #2954: a text watermark at 80 % transparency is lighter than at 0 %, and invisible at 100 %.
+    #[test]
+    fn text_watermark_transparency() {
+        let mut d = Document::new();
+        let darkest = |d: &Document| {
+            let l = layout(d, &mut LayoutCache::new(), &LayoutOptions::default());
+            let img = render_page(d, &l.pages[0], 1.0, &RenderOptions::default());
+            img.pixels.chunks(4).map(|p| p[0] as u32 + p[1] as u32 + p[2] as u32).min().unwrap()
+        };
+        let mut wm = wordcraft_doc::Watermark { text: "WWW".into(), color: Rgb::BLACK, diagonal: false, ..Default::default() };
+        let mut at = |t: u8| {
+            wm.set_transparency(t);
+            d.settings.watermark = Some(wm.clone());
+            darkest(&d)
+        };
+        let (opaque, half, light, gone) = (at(0), at(50), at(80), at(100));
+        assert!(opaque < 30, "{opaque}");
+        assert!(half > opaque + 300 && light > half + 150, "{opaque} {half} {light}");
+        assert_eq!(gone, 765);
     }
 
     /// A PNG signature, an IHDR declaring `w`×`h` 8-bit RGBA and a short IDAT (all CRCs valid, so

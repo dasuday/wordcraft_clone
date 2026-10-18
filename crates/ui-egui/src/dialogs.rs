@@ -301,9 +301,9 @@ pub enum Dialog {
     Zoom {
         percent: f32,
     },
+    /// Design › Watermark › Custom Watermark (#2954).
     Watermark {
-        text: String,
-        diagonal: bool,
+        form: Box<crate::dialogs_watermark::WatermarkForm>,
     },
     /// Home › Font › Phonetic Guide: ruby text over the selected text (`format.phonetic`).
     Phonetic {
@@ -1185,7 +1185,7 @@ impl Dialog {
             "bookmark" => Dialog::Bookmark { name: bookmark_at_caret(&app.session), by_location: false, hidden: false, deleted: false },
             "wordCount" => Dialog::WordCount { stats: app.session.run("review.wordCount", &json!({})).unwrap_or_default() },
             "zoom" => Dialog::Zoom { percent: (app.session.view.zoom * 100.0).round() },
-            "watermark" => Dialog::Watermark { text: "CONFIDENTIAL".into(), diagonal: true },
+            "watermark" => Dialog::Watermark { form: Box::new(crate::dialogs_watermark::WatermarkForm::read(app)) },
             "phonetic" => {
                 let v = wordcraft_engine::cmd::phonetic::state(&app.session);
                 let f = |k: &str| v.get(k).and_then(Value::as_f64).unwrap_or(0.0) as f32;
@@ -2451,21 +2451,7 @@ fn body(app: &mut WordApp, ui: &mut Ui, d: &mut Dialog) -> bool {
             }
             ok || cancel
         }
-        Dialog::Watermark { text, diagonal } => {
-            ui.horizontal(|ui| {
-                ui.label(tl!("Text:"));
-                ui.text_edit_singleline(text);
-            });
-            ui.horizontal(|ui| {
-                ui.radio_value(diagonal, true, tl!("Diagonal"));
-                ui.radio_value(diagonal, false, tl!("Horizontal"));
-            });
-            let (ok, cancel) = buttons(ui, tl!("OK"));
-            if ok {
-                let _ = app.run("design.watermark", json!({"text": text, "diagonal": *diagonal}));
-            }
-            ok || cancel
-        }
+        Dialog::Watermark { form } => crate::dialogs_watermark::watermark(app, ui, form),
         Dialog::Phonetic { base, ruby, align, size, offset, existing } => {
             // Base and ruby text are usually Chinese or Japanese: fonts for them load from the next frame.
             app.want_system_cjk = true;
