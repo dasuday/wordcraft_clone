@@ -904,7 +904,12 @@ impl SplitCellsForm {
         } else {
             return None;
         };
-        (self.rows > limit).then(|| crate::i18n::fmt(tl!("The number must be between 1 and {max}."), &[("max", &limit.to_string())]))
+        if self.rows > limit {
+            return Some(crate::i18n::fmt(tl!("The number must be between 1 and {max}."), &[("max", &limit.to_string())]));
+        }
+        // A merged cell splits into a divisor of its height, as in Word (the engine refuses the rest).
+        let divides = self.cells <= 1 && self.height > 1 && self.rows > 1 && self.height % self.rows != 0;
+        divides.then(|| crate::i18n::fmt(tl!("The number must be a divisor of {max}."), &[("max", &self.height.to_string())]))
     }
 
     /// `table.split` parameters for OK.

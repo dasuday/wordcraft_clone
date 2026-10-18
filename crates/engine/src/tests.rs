@@ -5936,7 +5936,8 @@ fn convert_text_to_table_initial_column_width() {
 }
 
 /// #2592, as Word does: a vertically merged cell splits into 1 to its height rows; its height
-/// (or 1 × 1) cuts it back into one cell per row, more is refused with Word's message and
+/// cuts it into one cell per row, 1 × 1 cuts the top row off (2 rows: 1 + 1, 3 rows: 1 + 2),
+/// a number that doesn't divide the height or more than it is refused with Word's messages and
 /// nothing changes, also when neighbours are merged with it first.
 #[test]
 fn split_cells_of_a_merged_cell_follow_word() {
