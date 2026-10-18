@@ -76,6 +76,17 @@ Outline view shows collapsed headings expanded, as in Word.
 | type, select some of it, type over it | two undo steps: the first ⌘Z brings the selected text back (still selected), the second removes the typing. Uninterrupted typing stays one step | `typing_then_selecting_then_typing_are_two_undo_steps` |
 | ⌘B with nothing selected, ⌘Z, type | the text isn't bold (Undo takes the waiting caret formatting back too); ⌘Y brings it back | `undoing_bold_at_the_caret_turns_bold_typing_off_again` |
 
+## Paste
+
+| Keys | Word's result | Test |
+|---|---|---|
+| Paste (⌘V) of plain text with several lines from another program, in the middle of a right-to-left paragraph | pasted as Keep Text Only pastes it: every line becomes a paragraph formatted like the paragraph it lands in (direction, style, alignment, indents, list), and so does the text after the caret. One ⌘Z takes the whole paste out ² | `plain_text_paste_gives_every_line_the_formatting_of_its_paragraph` |
+| … with empty lines, or a line break at the end | each empty line is an empty paragraph with that formatting too, in a list an empty item. The text takes the formatting before the caret (bold there makes it bold) ² | `plain_text_paste_keeps_empty_lines_as_paragraphs`, `plain_text_paste_keeps_an_empty_paragraph_in_a_list` |
+
+² From Microsoft's description of the paste options: Word offers no options for text without
+formatting, and Keep Text Only gives text the style of the paragraph where it is pasted and the
+formatting of the text before the cursor. Not yet compared side by side in Word.
+
 ## Track Changes
 
 | Keys | Word's result | Test |
@@ -316,6 +327,7 @@ Word.
 | 2026-10-15 | trivial | Input methods: `DeleteSurrounding` erases around the caret, so web typing in non-Latin text no longer repeats; Chrome's caret jump in the hidden field is listed as a known gap (#1480) |
 | 2026-10-15 | minor | Backspace with a whole table, whole rows or whole columns selected deletes them; Delete clears them; a selection covering a table and the text beside it removes the table (#1844) |
 | 2026-10-16 | trivial | Smart quotes in Hebrew follow logical order; ” (not gershayim) in acronyms, as Word does (#1670) |
+| 2026-10-15 | trivial | Paste: plain text from another program pastes as Keep Text Only does. Every line takes the formatting of the paragraph it lands in (a right-to-left paragraph stays right-to-left), and empty lines stay empty paragraphs |
 | 2026-10-16 | minor | Collapsed headings Word-checked (#1745 fix round 1): Enter, Delete and Backspace next to a fold only expand it first; Find (and Go To, `select.text`, `caret.set`, paste) opens the fold |
 | 2026-10-16 | minor | Collapsed headings (#1745): Right from the end of a collapsed heading goes to the next heading shown (Word for Mac); the arrows skip the hidden text both ways; typing at the heading's end doesn't expand it; Enter in it expands it (WordCraft's choice) |
 | 2026-10-14 | trivial | Shift+Delete cuts the selection, and does nothing without one, on macOS and Linux too, as in Word for Windows (#1669); Shift+Backspace already erased (#707) |
