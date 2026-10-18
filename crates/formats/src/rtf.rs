@@ -3090,6 +3090,26 @@ mod tests {
     }
 
     #[test]
+    fn numbered_item_made_bulleted_gets_its_numbered_list_back_on_reject() {
+        use model::{FmtChange, ListInfo};
+        let mark = RevMark { author: "Alice".into(), date: "2024-03-15T10:30:00Z".into(), id: None };
+        let old = Para { list: Some(ListInfo { ordered: true, level: 0 }), ..Default::default() };
+        let mut item = Para {
+            list: Some(ListInfo { ordered: false, level: 0 }),
+            fmt_change: Some(Box::new(FmtChange { mark, old })),
+            ..Default::default()
+        };
+        item.push_text("Item", &Fmt::default());
+        let flow = Flow { blocks: vec![FBlock::Para(item)], meta: Meta::default() };
+        let doc = model::to_doc(&flow);
+        let paras = doc_paras(&doc);
+        let p = paras.first().unwrap();
+        let change = p.props.fmt_change.as_deref().expect("change kept");
+        let (now, was) = (p.props.numbering.unwrap(), change.old.formatting().numbering.unwrap());
+        assert_ne!(now.num, was.num, "the old list is a list of its own");
+    }
+
+    #[test]
     fn heading_formatting_change_has_no_style_formatting_in_the_old_formatting() {
         // A heading's runs repeat its style's bold and size; the old formatting does too.
         let rtf = br"{\rtf1{\stylesheet{\s0 Normal;}{\s1 heading 1;}}{\*\revtbl {Unknown;}{Alice;}}

@@ -508,9 +508,10 @@ impl<'a> Builder<'a> {
         if let Some(c) = &p.fmt_change {
             // A list item stays in its list instance (only its level may differ); an old list on a
             // paragraph that is no list now gets an instance of its own, so Reject can restore it.
-            let old_num = match (c.old.list, list_num) {
-                (Some(_), Some(num)) => Some(num),
-                (Some(li), None) => Some(self.new_list(&[li])),
+            // The same goes for an item whose list kind changed (numbered to bulleted or back).
+            let old_num = match (c.old.list, p.list, list_num) {
+                (Some(old), Some(now), Some(num)) if old.ordered == now.ordered => Some(num),
+                (Some(old), _, _) => Some(self.new_list(&[old])),
                 _ => None,
             };
             let old = para_props(&c.old, old_num);
