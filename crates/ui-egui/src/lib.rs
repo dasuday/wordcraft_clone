@@ -882,7 +882,8 @@ impl WordApp {
         }
         let applied = applied_font(id, &params);
         let r = self.execute_user(id, params);
-        if let Some(e) = refused {
+        // A save error already on the status line is the reason to see; the refusal shows otherwise.
+        if let (Some(e), true) = (refused, r.is_ok()) {
             self.status(e);
         }
         if let (Ok(_), Some(name)) = (&r, applied) {
@@ -2077,7 +2078,7 @@ impl WordApp {
     /// Tell the host whether the document has unsaved changes ([`Services::on_dirty`]).
     fn report_dirty(&self) {
         if let Some(f) = &self.services.on_dirty {
-            f(self.session.dirty);
+            f(self.session.dirty || panes::has_comment_drafts(self));
         }
     }
 
