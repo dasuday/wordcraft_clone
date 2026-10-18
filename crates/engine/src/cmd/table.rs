@@ -772,7 +772,7 @@ fn split(s: &mut Session, v: &Value) -> CmdResult {
             continue;
         }
         let rows = if !merge_first && height > 1 && rows == 1 && cols == 1 { height } else { rows };
-        if height > 1 && rows > 1 && height % rows != 0 {
+        if height > 1 && rows > 1 && !height.is_multiple_of(rows) {
             return Err(CmdError::Params(format!("The number must be a divisor of {height}.")));
         }
         if !t.split_cell_grid(top, ci, cols, rows) {
