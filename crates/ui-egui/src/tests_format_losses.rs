@@ -337,3 +337,39 @@ fn the_warning_answers_from_the_keyboard() {
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
+
+/// The warning takes the keyboard from the page, as "Save changes?" does (#1597): the canvas,
+/// focused while typing, keeps Tab and the arrows for itself, yet Continue has focus when the
+/// warning opens over it and the arrows move between the warning's buttons.
+#[test]
+fn the_warning_takes_focus_from_the_page() {
+    use egui_kittest::kittest::Queryable;
+    let dir = scratch("over-page");
+    let file = dir.join("draft.rtf");
+    let mut a = draft(true);
+    pick(&mut a, vec![file.clone()]);
+    a.canvas.want_focus = true;
+    let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(1440.0, 900.0)).build_ui_state(
+        |ui, app: &mut WordApp| {
+            let ctx = ui.ctx().clone();
+            app.logic(&ctx);
+            app.ui(ui);
+        },
+        a,
+    );
+    for _ in 0..6 {
+        h.step();
+    }
+    assert!(h.state().canvas.focused, "the page has keyboard focus");
+    h.state_mut().run("file.saveAs", json!({})).unwrap();
+    for _ in 0..3 {
+        h.step();
+    }
+    assert_eq!(prompt(h.state()), Some("formatLosses"));
+    let focused = |h: &egui_kittest::Harness<WordApp>, label: &str| h.query_all_by_label(label).any(|n| n.is_focused());
+    assert!(focused(&h, "Continue"), "Continue has focus when the warning opens");
+    h.key_press(egui::Key::ArrowRight);
+    h.step();
+    assert!(focused(&h, "Save as Word Document"), "the arrow moved to the next button");
+    let _ = std::fs::remove_dir_all(&dir);
+}

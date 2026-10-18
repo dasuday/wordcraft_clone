@@ -2546,8 +2546,10 @@ fn body(app: &mut WordApp, ui: &mut Ui, d: &mut Dialog) -> bool {
             });
             let buttons = buttons.inner;
             // As in "Save changes?", the keyboard alone answers: Continue has focus when the
-            // warning opens, the arrow keys or Tab move between the buttons, Escape cancels.
-            if ui.memory(|m| m.focused().is_none())
+            // warning opens, the arrow keys or Tab move between the buttons, Escape cancels. The
+            // focus is taken from whatever held it, not only from nothing: the page keeps it while
+            // typing and claims Tab and the arrows (#1597).
+            if !buttons.iter().any(|(b, _)| b.has_focus())
                 && let Some((go, _)) = buttons.get(2)
             {
                 go.request_focus();
