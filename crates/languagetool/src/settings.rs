@@ -89,7 +89,7 @@ impl Settings {
     pub fn endpoint(&self) -> Result<String, LtError> {
         let server = self.server.trim();
         let server = if server.is_empty() { DEFAULT_SERVER } else { server };
-        if server.len() > MAX_SERVER_LEN || server.chars().any(|c| c.is_whitespace() || c.is_control()) {
+        if server.len() > MAX_SERVER_LEN || server.chars().any(|c| c.is_whitespace() || c.is_control() || c == '\\') {
             return Err(LtError::BadServer(clip(server)));
         }
         let lower = server.to_ascii_lowercase();

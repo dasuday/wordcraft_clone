@@ -2508,6 +2508,7 @@ pub(crate) fn works_without_document(id: &str) -> bool {
             | "ui.discord"
             | "ui.caretAnimation"
             | "ui.startScreen"
+            | "ui.languageTool"
     ) || id.starts_with("help.")
 }
 
@@ -2828,6 +2829,7 @@ mod tests {
         }
         let refused = a.run("ui.zotero.status", json!({})).unwrap_err();
         assert!(refused.contains("No document is open"), "refused before it runs: {refused}");
+        assert!(works_without_document("ui.languageTool"), "LanguageTool Options work from the Start screen");
         assert!(works_without_document("font.add"), "a font file dropped on the empty window is added");
         // Neither keys nor commands reach the hidden placeholder.
         assert!(a.run("text.insert", json!({"text": "Hello"})).is_err());

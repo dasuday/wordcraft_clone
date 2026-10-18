@@ -334,6 +334,11 @@ fn credentials_are_refused_over_plain_http_to_other_computers() {
         let r = request::build(&with(good), "text", "auto").unwrap();
         assert!(form(&r.body).contains(&("apiKey".into(), "SECRET".into())), "{good}");
     }
+    // A backslash can make a URL parser read a different host than our check did.
+    for bad in [r"http://127.0.0.1\@evil.example", r"http://localhost\.evil.example"] {
+        assert!(matches!(with(bad).endpoint(), Err(LtError::BadServer(_))), "{bad}");
+        assert!(request::build(&with(bad), "text", "auto").is_err(), "{bad}");
+    }
     // Without an account, http:// to anywhere is the user's choice.
     let s = Settings { server: "http://lt.example.org".into(), ..on() };
     assert!(request::build(&s, "text", "auto").is_ok());
