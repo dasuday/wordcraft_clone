@@ -200,16 +200,17 @@ pub fn cursor(app: &WordApp, ui: &Ui, resp: &egui::Response) {
         ui.ctx().set_cursor_icon(egui::CursorIcon::None);
         if let Some(p) = ui.input(|i| i.pointer.hover_pos()) {
             match tool {
-                TableTool::Draw => pencil_pointer(ui.painter(), p),
+                TableTool::Draw => pencil_pointer(ui.painter(), p, Tokens::get(ui.ctx()).accent),
                 TableTool::Erase => eraser_pointer(ui.painter(), p),
             }
         }
     }
 }
 
-/// The pen's pointer, our own drawing in the eraser's style: a white pencil with a grey side,
-/// ferrule and end, tilted up and to the right from its lead's tip, the point it draws at.
-fn pencil_pointer(painter: &egui::Painter, at: Pos2) {
+/// The pen's pointer, our own drawing in the eraser's style: a white pencil with a grey side and
+/// ferrule and an `end` in the theme's accent, as on the Draw Table button, tilted up and to the
+/// right from its lead's tip, the point it draws at.
+fn pencil_pointer(painter: &egui::Painter, at: Pos2, end: egui::Color32) {
     let (sin, cos) = 55f32.to_radians().sin_cos();
     let (along, across) = (vec2(cos, -sin), vec2(sin, cos));
     let p = |s: f32, w: f32| at + along * s + across * w;
@@ -225,7 +226,11 @@ fn pencil_pointer(painter: &egui::Painter, at: Pos2) {
     let lead = 2.6 / 7.0;
     painter.add(egui::Shape::convex_polygon(vec![p(0.0, 0.0), p(2.6, -w * lead), p(2.6, side * lead)], egui::Color32::from_gray(0x3C), Stroke::NONE));
     painter.add(egui::Shape::convex_polygon(part(19.0, 21.0, -w, side), egui::Color32::from_gray(0xCD), Stroke::NONE));
-    painter.add(egui::Shape::convex_polygon(part(21.0, 24.0, -w, side), egui::Color32::from_gray(0xE8), Stroke::NONE));
+    // The end's side is a quarter darker.
+    let [r, g, b, _] = end.to_array();
+    let shade = |c: u8| u8::try_from(u16::from(c) * 3 / 4).unwrap_or(c);
+    painter.add(egui::Shape::convex_polygon(part(21.0, 24.0, -w, w), end, Stroke::NONE));
+    painter.add(egui::Shape::convex_polygon(part(21.0, 24.0, w, side), egui::Color32::from_rgb(shade(r), shade(g), shade(b)), Stroke::NONE));
     for s in [7.0, 19.0, 21.0] {
         painter.line_segment([p(s, -w), p(s, side)], ink);
     }
@@ -479,6 +484,10 @@ mod tests {
         h.event(egui::Event::PointerMoved(over));
         steps(&mut h, 2);
         assert_eq!(h.output().platform_output.cursor_icon, egui::CursorIcon::None, "the drawn pencil");
+        // The accent at the pointer (the ribbon's accent is far from it).
+        let accent = Tokens::get(&h.ctx).accent;
+        let end = |s: &egui::epaint::ClippedShape| matches!(&s.shape, egui::Shape::Path(p) if p.fill == accent && p.points.iter().all(|q| q.distance(over) < 30.0));
+        assert!(h.output().shapes.iter().any(end), "the pencil's end is the accent, as on the Draw Table button");
         let (from, to) = (screen(&mut h, a.x + 20.0, y), screen(&mut h, a.x + 30.0, y));
         drag(&mut h, from, to);
         assert_eq!(rows(h.state()), 2, "too short to draw");
