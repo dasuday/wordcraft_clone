@@ -298,55 +298,65 @@ impl CanvasScroll {
 }
 
 /// Longest pause between the fingers lifting (`End`) and the system's momentum starting (`Start`)
-/// for the two to be one gesture. macOS sends the momentum a display frame after the lift; a new
-/// touch needs a finger to come down again, which takes far longer.
+/// for the two to be one gesture. macOS sends the momentum a display frame after the lift.
 const MOMENTUM_GAP: f64 = 0.15;
 
-/// Keeps a touchpad / Magic Mouse scroll gesture's Command state from the moment it began.
+/// Keeps a touchpad / Magic Mouse scroll gesture's ⌘ state from the moment it began.
 ///
 /// egui stamps every wheel event with the modifiers held *now*, but macOS keeps sending
 /// momentum events for a second or so after the fingers lift, so pressing ⌘ during that glide
 /// would turn the rest of a plain scroll into a zoom. winit gives only the edges of a gesture:
 /// `Start` (fingers down, or momentum begins) and `End` (fingers lift, or momentum ends); inside
-/// momentum every event is `Move`, the same as under the fingers. So a gesture is a `Start` up to
-/// its momentum's `End`, and a `Start` right after an `End` is that momentum. A gesture that
-/// began without ⌘ loses the ⌘ of its later events; one that began with it is left alone. Wheels
+/// momentum every event is `Move`, the same as under the fingers. The sequence is therefore
+/// `Start` (fingers) … `End` (lift) → `Start` (momentum) … `End` (momentum over). Only a `Start`
+/// right after the *lift* is momentum and keeps the gesture's mode; any other `Start`, including
+/// one right after the momentum's `End` (fingers landing on a gliding page), is a new gesture and
+/// reads ⌘ afresh. For the whole gesture, momentum included, the events then carry ⌘ as it was at
+/// the start: a plain scroll never zooms, and a ⌘ gesture keeps zooming if ⌘ is let go. Wheels
 /// that report no phases (every event is `Move`) never lock: ⌘ is read live.
 ///
-/// Trade-off: a deliberate new gesture that starts within [`MOMENTUM_GAP`] of the previous one's
-/// `End` is taken as that gesture's momentum and keeps its mode.
+/// Trade-off: a lift followed by a new touch within [`MOMENTUM_GAP`] (when no momentum starts) is
+/// taken as that gesture's momentum and keeps its mode.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct GestureLock {
-    /// The gesture in progress began without the zoom modifier.
-    plain: bool,
-    /// The gesture is locked at all.
-    locked: bool,
-    /// When the last `End` arrived, while a momentum `Start` may still follow.
-    ended_at: Option<f64>,
+    /// The gesture in progress began with the zoom modifier held (`None`: no gesture is locked).
+    zoom: Option<bool>,
+    /// The fingers lifted at this time and the momentum may still start.
+    lifted_at: Option<f64>,
+    /// The system's momentum is running.
+    in_momentum: bool,
 }
 
 impl GestureLock {
-    /// Rewrite the zoom modifier of the wheel events in `events` (frame time `time`).
+    /// Rewrite the ⌘ of the wheel events in `events` (frame time `time`).
     pub fn filter(&mut self, events: &mut [Event], time: f64, opts: &InputOptions) {
         for event in events {
             let Event::MouseWheel { phase, modifiers, .. } = event else { continue };
-            if self.ended_at.is_some_and(|t| time - t > MOMENTUM_GAP) && *phase != TouchPhase::Start {
-                *self = Self::default();
+            let awaiting_momentum = self.lifted_at.is_some_and(|t| time - t <= MOMENTUM_GAP);
+            if *phase != TouchPhase::Start && self.lifted_at.is_some() && !awaiting_momentum {
+                *self = Self::default(); // the lift had no momentum
             }
+            let mut momentum_over = false;
             match phase {
-                TouchPhase::Start => {
-                    if !self.ended_at.is_some_and(|t| time - t <= MOMENTUM_GAP) {
-                        self.locked = true;
-                        self.plain = !modifiers.matches_any(opts.zoom_modifier);
-                    }
-                    self.ended_at = None;
+                TouchPhase::Start if awaiting_momentum => {
+                    self.lifted_at = None;
+                    self.in_momentum = true;
                 }
-                TouchPhase::End | TouchPhase::Cancel => self.ended_at = Some(time),
+                TouchPhase::Start => {
+                    self.zoom = Some(modifiers.matches_any(opts.zoom_modifier));
+                    self.lifted_at = None;
+                    self.in_momentum = false;
+                }
+                TouchPhase::End | TouchPhase::Cancel if self.in_momentum => momentum_over = true,
+                TouchPhase::End | TouchPhase::Cancel => self.lifted_at = Some(time),
                 TouchPhase::Move => {}
             }
-            if self.locked && self.plain {
-                modifiers.command = false;
-                modifiers.mac_cmd = false;
+            if let Some(zoom) = self.zoom {
+                modifiers.command = zoom;
+                modifiers.mac_cmd = zoom;
+            }
+            if momentum_over {
+                *self = Self::default();
             }
         }
     }
@@ -690,6 +700,41 @@ mod tests {
             (0.9, End, true),
         ]);
         assert_eq!(z, [false, false, false, false, false, true, true, true]);
+    }
+
+    /// Fingers landing on a gliding page: macOS ends the momentum and the new gesture's `Start`
+    /// follows within a few frames. It is a new gesture, not the old one's momentum.
+    #[test]
+    fn command_gesture_started_right_after_the_momentum_ended_zooms() {
+        use TouchPhase::*;
+        let z = run(&[
+            (0.0, Start, false),
+            (0.02, End, false),
+            (0.04, Start, false),
+            (0.5, Move, false),
+            (0.6, End, false),
+            (0.62, Start, true),
+            (0.63, Move, true),
+        ]);
+        assert_eq!(z, [false, false, false, false, false, true, true]);
+        // The same, with the momentum's end and the new start in one frame.
+        let z = run(&[(0.0, Start, false), (0.02, End, false), (0.04, Start, false), (0.6, End, false), (0.6, Start, true), (0.7, Move, true)]);
+        assert_eq!(z, [false, false, false, false, true, true]);
+        // And the lift and the momentum's start in one frame are still one gesture.
+        let z = run(&[(0.0, Start, false), (0.02, End, false), (0.02, Start, false), (0.1, Move, true)]);
+        assert!(z.iter().all(|z| !z), "{z:?}");
+    }
+
+    #[test]
+    fn zoom_gesture_keeps_zooming_after_command_is_released() {
+        use TouchPhase::*;
+        let z = run(&[(0.0, Start, true), (0.1, Move, false), (0.2, End, false), (0.22, Start, false), (0.4, Move, false), (0.8, End, false)]);
+        assert!(z.iter().all(|z| *z), "{z:?}");
+        // …and the next, plain gesture scrolls.
+        assert_eq!(
+            run(&[(0.0, Start, true), (0.1, End, true), (0.12, Start, true), (0.5, End, true), (1.0, Start, false), (1.1, Move, true)]),
+            [true, true, true, true, false, false]
+        );
     }
 
     #[test]
