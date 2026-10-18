@@ -75,12 +75,7 @@ impl SmartArtLayout {
         if norm.eq_ignore_ascii_case("list") {
             return Some(SmartArtLayout::BasicList);
         }
-        for l in SmartArtLayout::ALL {
-            if l.id().eq_ignore_ascii_case(&norm) || l.label().replace(' ', "").eq_ignore_ascii_case(&norm) {
-                return Some(l);
-            }
-        }
-        None
+        SmartArtLayout::ALL.into_iter().find(|l| l.id().eq_ignore_ascii_case(&norm) || l.label().replace(' ', "").eq_ignore_ascii_case(&norm))
     }
 
     /// The name shown for it.
@@ -166,12 +161,7 @@ impl SmartArtColors {
 
     pub fn from_id(id: &str) -> Option<SmartArtColors> {
         let norm = id.chars().filter(|c| !c.is_whitespace() && *c != '-' && *c != '_').collect::<String>();
-        for c in SmartArtColors::ALL {
-            if c.id().eq_ignore_ascii_case(&norm) || c.label().replace(' ', "").eq_ignore_ascii_case(&norm) {
-                return Some(c);
-            }
-        }
-        None
+        SmartArtColors::ALL.into_iter().find(|c| c.id().eq_ignore_ascii_case(&norm) || c.label().replace(' ', "").eq_ignore_ascii_case(&norm))
     }
 
     /// The name shown for it.
