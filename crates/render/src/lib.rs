@@ -1986,14 +1986,52 @@ mod tests {
     #[test]
     fn rules_have_flat_ends_on_screen() {
         let d = Document::new();
-        for stroke in [Stroke::Solid, Stroke::Double] {
+        // A 60 pt rule holds whole dot (6 on, 12 off) and dash (24 on, 12 off) patterns that
+        // start and end on ink, so the first dot or dash starts at `x0` and the last ends at `x1`.
+        for stroke in [Stroke::Solid, Stroke::Double, Stroke::Dotted, Stroke::Dashed] {
             let line = Draw::Line { x0: 20.0, y0: 50.0, x1: 80.0, y1: 50.0, width: 6.0, color: Rgb(0, 0, 0), stroke, alpha: 1.0, text_bg: None };
             let r = render_items(&d, &[line], 0.0, 0.0, 100.0, 100.0, 4.0, &RenderOptions::default());
             let ink = |x: f32, y: f32| r.pixel((x * 4.0) as u32, (y * 4.0) as u32)[3] > 0;
             let y = if stroke == Stroke::Double { 50.0 - 6.0 * 0.9 } else { 50.0 };
-            assert!(ink(79.0, y), "{stroke:?}: the rule is drawn up to its end");
+            assert!(ink(21.0, y) && ink(79.0, y), "{stroke:?}: the rule is drawn from its start to its end");
             assert!(!ink(81.5, y) && !ink(18.5, y), "{stroke:?}: nothing is drawn past the ends");
         }
+    }
+
+    /// Flat ends still close a thick table border's corner square: layout runs each horizontal
+    /// edge on over half of the vertical edge it meets (#1461), so the corner is neither notched
+    /// nor rounded. Two bare rules meeting on their centre lines would leave a notch, as in the PDF.
+    #[test]
+    fn thick_table_borders_meet_in_a_square_corner() {
+        use wordcraft_doc::props::{Border, Borders};
+        let mut d = Document::from_text("before\nafter");
+        let mut t = wordcraft_doc::Table::new(2, 2, 468.0);
+        let thick = Some(Border::single(3.0));
+        for c in t.rows.iter_mut().flat_map(|r| r.cells.iter_mut()) {
+            c.props.borders = Some(Borders { top: thick, left: thick, bottom: thick, right: thick, ..Borders::default() });
+        }
+        d.insert_block(wordcraft_doc::StoryRef::Body, &wordcraft_doc::Path::top(1), wordcraft_doc::Block::Table(t)).unwrap();
+        let l = layout(&d, &mut LayoutCache::new(), &LayoutOptions::default());
+        let rules: Vec<Draw> = page_display(&d, &l.pages[0], &DisplayOptions::default())
+            .into_iter()
+            .filter(|it| matches!(it, Draw::Line { width, .. } if *width == 3.0))
+            .collect();
+        // The table's outer top-left corner: the leftmost vertical edge's and the top edge's centre lines.
+        let (mut vx, mut hy) = (f32::MAX, f32::MAX);
+        for it in &rules {
+            if let Draw::Line { x0, y0, x1, y1, .. } = it {
+                if x0 == x1 {
+                    vx = vx.min(*x0);
+                } else if y0 == y1 {
+                    hy = hy.min(*y0);
+                }
+            }
+        }
+        let (x, y) = (vx - 10.0, hy - 10.0);
+        let r = render_items(&d, &rules, x, y, 20.0, 20.0, 10.0, &RenderOptions::default());
+        let ink = |px: f32, py: f32| r.pixel(((px - x) * 10.0) as u32, ((py - y) * 10.0) as u32)[3] > 0;
+        assert!(ink(vx - 1.2, hy - 1.2), "the outer corner square is inked, not notched");
+        assert!(!ink(vx - 1.8, hy - 1.2) && !ink(vx - 1.2, hy - 1.8), "nothing is drawn past the corner square");
     }
 }
 
