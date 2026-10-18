@@ -2253,6 +2253,16 @@
 # Reading Mode column widths (#1040)
 	Narrow	窄
 	Medium	中等
+	More Tabs	更多选项卡
+	Picture transparency	图片透明度
+	Previous Styles	上一组样式
+	Next Styles	下一组样式
+	Style set: {name}	样式集：{name}
+	Basic	基本
+	Lined	线条
+	Shaded	底纹
+	Casual	休闲
+	Minimalist	极简
 # Split Cells and Convert Text to Table (#2592)
 	Merge cells before split	拆分前合并单元格
 	Table size	表格尺寸

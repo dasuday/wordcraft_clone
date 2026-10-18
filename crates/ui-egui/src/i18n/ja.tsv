@@ -2241,6 +2241,16 @@
 # Reading Mode column widths (#1040)
 	Narrow	狭い
 	Medium	中
+	More Tabs	その他のタブ
+	Picture transparency	画像の透明度
+	Previous Styles	前のスタイル
+	Next Styles	次のスタイル
+	Style set: {name}	スタイル セット: {name}
+	Basic	ベーシック
+	Lined	罫線付き
+	Shaded	網かけ
+	Casual	カジュアル
+	Minimalist	ミニマル
 # Split Cells and Convert Text to Table (#2592)
 	Merge cells before split	分割する前にセルを結合する
 	Table size	表のサイズ

@@ -2275,6 +2275,16 @@
 # Reading Mode column widths (#1040)
 	Narrow	Kitsas
 	Medium	Keskmine
+	More Tabs	Rohkem vahekaarte
+	Picture transparency	Pildi läbipaistvus
+	Previous Styles	Eelmised stiilid
+	Next Styles	Järgmised stiilid
+	Style set: {name}	Stiilikomplekt: {name}
+	Basic	Põhiline
+	Lined	Joontega
+	Shaded	Varjustatud
+	Casual	Vaba
+	Minimalist	Minimalistlik
 # Split Cells and Convert Text to Table (#2592)
 	Merge cells before split	Ühenda lahtrid enne tükeldamist
 	Table size	Tabeli suurus

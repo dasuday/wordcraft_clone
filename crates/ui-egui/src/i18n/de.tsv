@@ -2240,6 +2240,16 @@
 # Reading Mode column widths (#1040)
 	Narrow	Schmal
 	Medium	Mittel
+	More Tabs	Weitere Registerkarten
+	Picture transparency	Bildtransparenz
+	Previous Styles	Vorherige Formatvorlagen
+	Next Styles	Nächste Formatvorlagen
+	Style set: {name}	Formatvorlagensatz: {name}
+	Basic	Einfach
+	Lined	Mit Linien
+	Shaded	Schattiert
+	Casual	Locker
+	Minimalist	Minimalistisch
 # Split Cells and Convert Text to Table (#2592)
 	Merge cells before split	Zellen vor dem Teilen verbinden
 	Table size	Tabellengröße

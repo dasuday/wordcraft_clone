@@ -2607,6 +2607,16 @@ preview	Title	Título
 # Reading Mode column widths (#1040)
 	Narrow	Estrecha
 	Medium	Media
+	More Tabs	Más pestañas
+	Picture transparency	Transparencia de la imagen
+	Previous Styles	Estilos anteriores
+	Next Styles	Estilos siguientes
+	Style set: {name}	Conjunto de estilos: {name}
+	Basic	Básico
+	Lined	Con líneas
+	Shaded	Sombreado
+	Casual	Informal
+	Minimalist	Minimalista
 # Split Cells and Convert Text to Table (#2592)
 	Merge cells before split	Combinar celdas antes de dividir
 	Table size	Tamaño de la tabla

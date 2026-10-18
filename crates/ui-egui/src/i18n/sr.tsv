@@ -2255,6 +2255,16 @@
 # Reading Mode column widths (#1040)
 	Narrow	Уска
 	Medium	Средња
+	More Tabs	Још картица
+	Picture transparency	Провидност слике
+	Previous Styles	Претходни стилови
+	Next Styles	Следећи стилови
+	Style set: {name}	Скуп стилова: {name}
+	Basic	Основни
+	Lined	Са линијама
+	Shaded	Осенчени
+	Casual	Опуштени
+	Minimalist	Минималистички
 # Split Cells and Convert Text to Table (#2592)
 	Merge cells before split	Споји ћелије пре дељења
 	Table size	Величина табеле
