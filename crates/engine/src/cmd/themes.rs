@@ -381,15 +381,19 @@ fn directly_in(dir: &Path, path: &Path) -> Result<bool, CmdError> {
         }
         Some(out)
     }
+    // The filesystem's answer first: it follows links before `..`, which spelling alone can't.
+    let real = |p: &Path| std::fs::canonicalize(p).ok();
+    if let (Some(a), Some(b)) = (path.parent().and_then(real), real(dir)) {
+        return Ok(a == b);
+    }
+    // Not there yet (or no filesystem): compare the spelling, but never guess about a `..`.
     let (Some(d), Some(f)) = (tidy(dir), tidy(path)) else {
         return Err(CmdError::Params("`path` climbs out of its folder".into()));
     };
-    if f.parent() == Some(d.as_path()) {
-        return Ok(true);
+    if path.components().any(|c| c == Component::ParentDir) {
+        return Err(CmdError::Params("can't tell which folder `path` is in".into()));
     }
-    // Links: the same folder reached another way.
-    let real = |p: &Path| std::fs::canonicalize(p).ok();
-    Ok(matches!((f.parent().and_then(real), real(&d)), (Some(a), Some(b)) if a == b))
+    Ok(f.parent() == Some(d.as_path()))
 }
 
 fn save_theme(s: &mut Session, v: &Value) -> CmdResult {

@@ -397,3 +397,22 @@ fn the_themes_folder_is_recognised_however_the_path_is_spelled() {
     assert!(!wrong_ext.exists());
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[cfg(unix)]
+#[test]
+fn a_link_followed_by_dotdot_still_finds_the_themes_folder() {
+    let dir = temp_dir("linkdots");
+    let sub = dir.join("sub");
+    std::fs::create_dir_all(&sub).unwrap();
+    let link = std::env::temp_dir().join(format!("wordcraft-themes-link-{}", std::process::id()));
+    let _ = std::fs::remove_file(&link);
+    std::os::unix::fs::symlink(&sub, &link).unwrap();
+    let mut t = s();
+    t.load_custom_themes(&dir);
+    // `link/..` is the themes folder itself, because `link` points into it.
+    let sneaky = link.join("..").join("Craft.thmx");
+    assert!(t.run("design.saveTheme", &json!({"path": sneaky.to_string_lossy()})).is_err());
+    assert!(!dir.join("Craft.thmx").exists());
+    let _ = std::fs::remove_file(&link);
+    let _ = std::fs::remove_dir_all(&dir);
+}
