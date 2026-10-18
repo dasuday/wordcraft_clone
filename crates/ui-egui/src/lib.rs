@@ -1975,6 +1975,8 @@ impl WordApp {
                 };
                 if let Err(e) = opened {
                     self.report_open_failure(&path, &e);
+                    // Backstage hides the status bar; leave it so the error shows.
+                    self.ui.backstage = false;
                 }
             }
         }
