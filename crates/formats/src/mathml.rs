@@ -450,8 +450,8 @@ pub fn local(name: &str) -> &str {
 /// The linear format of a `<math>` element, and whether it's a display equation. `None` when it
 /// holds nothing.
 pub fn read(math: &El) -> Option<(String, bool)> {
-    let display = math.attr("display").is_some_and(|d| d.eq_ignore_ascii_case("block"))
-        || math.attr("mode").is_some_and(|d| d.eq_ignore_ascii_case("display"));
+    let display =
+        math.attr("display").is_some_and(|d| d.eq_ignore_ascii_case("block")) || math.attr("mode").is_some_and(|d| d.eq_ignore_ascii_case("display"));
     let linear = linear_of(math);
     let linear: String = linear.chars().filter(|c| !c.is_control()).collect();
     let linear = linear.trim().to_string();
@@ -682,10 +682,8 @@ fn elem(e: &El, depth: usize, budget: &mut usize) -> Arg {
         }
         "mtable" => {
             let mtr_list: Vec<&El> = e.els().filter(|r| matches!(local(&r.name), "mtr" | "mlabeledtr")).take(256).collect();
-            let rows: Vec<Vec<Arg>> = mtr_list
-                .iter()
-                .map(|r| r.els().filter(|c| local(&c.name) == "mtd").take(256).map(|c| children(c, d, budget)).collect())
-                .collect();
+            let rows: Vec<Vec<Arg>> =
+                mtr_list.iter().map(|r| r.els().filter(|c| local(&c.name) == "mtd").take(256).map(|c| children(c, d, budget)).collect()).collect();
             if rows.is_empty() {
                 return Vec::new();
             }
@@ -756,12 +754,7 @@ fn elem(e: &El, depth: usize, budget: &mut usize) -> Arg {
                 } else {
                     [true; 4]
                 };
-                let strike = [
-                    has("horizontalstrike"),
-                    has("verticalstrike"),
-                    has("updiagonalstrike"),
-                    has("downdiagonalstrike"),
-                ];
+                let strike = [has("horizontalstrike"), has("verticalstrike"), has("updiagonalstrike"), has("downdiagonalstrike")];
                 return vec![MNode::BorderBox { hide, strike, e: children(e, d, budget) }];
             }
             children(e, d, budget)
