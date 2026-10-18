@@ -13,7 +13,7 @@ use wordcraft_doc::{Block, Blocks, InlineObject, Paragraph, PartKind, RevisionKi
 
 use super::Reader;
 use super::props::{sectpr, tcpr, trpr};
-use super::shape_style::{preset_kind, shape_paint, vml_color};
+use super::shape_style::{preset_kind, shape_paint, vml_color, vml_preset_kind};
 use crate::package::{ContentTypes, Rels, rt};
 use crate::units::{int, measure, u32_of};
 use crate::xml::{El, Node};
@@ -30,8 +30,12 @@ const MAX_TABLE_DEPTH: usize = 24;
 const MAX_FIELD_DEPTH: usize = 32;
 /// Deepest text-box-in-text-box nesting.
 const MAX_STORY_DEPTH: usize = 4;
+/// Deepest `v:group` nesting followed (hostile files).
+const MAX_VML_GROUP_DEPTH: usize = 8;
 /// Longest field code we keep (Zotero's citation codes embed item data as JSON).
 const MAX_INSTR: usize = 2 * 1024 * 1024;
+/// Longest legacy form field definition (`w:ffData`) we keep.
+const MAX_FORM: usize = 64 * 1024;
 
 /// Inherited run context (from `w:hyperlink`, `w:ins`, `w:del` wrappers).
 #[derive(Clone, Default)]
@@ -61,12 +65,16 @@ struct FieldState {
     buf: Vec<(Item, CharProps)>,
     props: CharProps,
     locked: bool,
+    /// `w:dirty` from the begin marker: the result is stale, Word refreshes it on open.
+    dirty: bool,
     /// Kept as a range field: its result flows into the document as ordinary content between
     /// `FieldStart` and `FieldEnd` markers instead of being buffered.
     range: bool,
     /// The font size of each piece of the code (where it starts in `instr`): an enclosure's
     /// style is the size of its symbol and text (see [`wordcraft_doc::eq`]).
     sizes: Vec<(usize, Option<f32>)>,
+    /// A legacy form field's `w:ffData`, as raw XML.
+    form: String,
 }
 
 /// Enclosed characters (`eq \o\ac(○,字)`), with their style from the code's font sizes: Word
@@ -121,6 +129,8 @@ pub struct StoryCtx {
     pending: Vec<InlineObject>,
     /// Text-box nesting depth.
     pub story_depth: usize,
+    /// Reading a header or footer (not a text box inside one): where Word keeps its watermark.
+    pub in_hf: bool,
 }
 
 /// Paragraph content under construction.
@@ -287,17 +297,25 @@ impl Reader<'_> {
     }
 
     fn marker(&mut self, e: &El) -> Option<InlineObject> {
-        let id = e.attr("w:id").unwrap_or("").to_string();
+        let id = e.attr("w:id").map(str::trim).unwrap_or("").to_string();
         match e.name.as_str() {
             "w:bookmarkStart" => {
-                let name = e.attr("w:name").unwrap_or("").to_string();
+                if self.bookmarks.len() >= 100_000 {
+                    return None;
+                }
+                let name = e.attr("w:name").map(str::trim).unwrap_or("").to_string();
                 if name.is_empty() || name.len() > 256 {
                     return None;
                 }
                 self.bookmarks.insert(id, name.clone());
                 Some(InlineObject::BookmarkStart { name })
             }
-            "w:bookmarkEnd" => self.bookmarks.get(&id).map(|n| InlineObject::BookmarkEnd { name: n.clone() }),
+            "w:bookmarkEnd" => self
+                .bookmarks
+                .get(&id)
+                .cloned()
+                .or_else(|| e.attr("w:name").map(str::trim).filter(|n| !n.is_empty() && n.len() <= 256).map(str::to_string))
+                .map(|name| InlineObject::BookmarkEnd { name }),
             "w:commentRangeStart" => self.comment_id(&id).map(|id| InlineObject::CommentStart { id }),
             "w:permStart" => {
                 // Bounded: a hostile file can't grow the map without end.
@@ -391,6 +409,11 @@ impl Reader<'_> {
         para.text = pb.text;
         para.runs = pb.runs;
         para.objects = pb.objects;
+        // Paragraph boundaries inside an instruction are hidden with the field code.
+        // The result paragraph still takes a line, even when its cached text is empty.
+        if sc.fields.iter().any(|f| f.phase == Phase::Instr) && para.plain_text().is_empty() {
+            para.mark.hidden = Some(true);
+        }
         para.normalize();
         para
     }
@@ -465,7 +488,7 @@ impl Reader<'_> {
             "w:fldSimple" => {
                 let instr = k.attr("w:instr").unwrap_or("").to_string();
                 let props = k.child("w:r").and_then(|r| r.child("w:rPr")).map(|p| self.run_props(p, ctx)).unwrap_or_else(|| self.run_props_none(ctx));
-                self.begin_field(sc, props, instr, on_off_attr(k, "w:fldLock"));
+                self.begin_field(sc, props, instr, on_off_attr(k, "w:fldLock"), on_off_attr(k, "w:dirty"), String::new());
                 self.separate_field(sc, pb);
                 self.read_inline_children(sc, pb, k, rels, ctx, depth + 1);
                 self.end_field(sc, pb);
@@ -607,6 +630,9 @@ impl Reader<'_> {
             }
             "w:tab" | "w:ptab" => self.emit_text(sc, pb, "\t", props),
             "w:br" => {
+                if sc.fields.iter().any(|f| f.phase == Phase::Instr) {
+                    return;
+                }
                 let c = match k.attr("w:type") {
                     Some("page") => "\u{000C}",
                     Some("column") => "\u{000E}",
@@ -614,7 +640,11 @@ impl Reader<'_> {
                 };
                 self.emit_text(sc, pb, c, props);
             }
-            "w:cr" => self.emit_text(sc, pb, "\n", props),
+            "w:cr" => {
+                if !sc.fields.iter().any(|f| f.phase == Phase::Instr) {
+                    self.emit_text(sc, pb, "\n", props);
+                }
+            }
             "w:noBreakHyphen" => self.emit_text(sc, pb, "\u{2011}", props),
             "w:softHyphen" => self.emit_text(sc, pb, "\u{00AD}", props),
             "w:sym" => {
@@ -628,7 +658,10 @@ impl Reader<'_> {
                 }
             }
             "w:fldChar" => match k.attr("w:fldCharType") {
-                Some("begin") => self.begin_field(sc, props.clone(), String::new(), on_off_attr(k, "w:fldLock")),
+                Some("begin") => {
+                    let form = k.child("w:ffData").map(|f| f.to_xml()).filter(|x| x.len() <= MAX_FORM).unwrap_or_default();
+                    self.begin_field(sc, props.clone(), String::new(), on_off_attr(k, "w:fldLock"), on_off_attr(k, "w:dirty"), form)
+                }
                 Some("separate") => self.separate_field(sc, pb),
                 Some("end") => self.end_field(sc, pb),
                 _ => {}
@@ -639,7 +672,7 @@ impl Reader<'_> {
                 }
             }
             "w:pict" => {
-                if let Some(o) = self.read_vml(sc, k, rels) {
+                for o in self.read_vml_all(sc, k, rels) {
                     self.emit_obj(sc, pb, o, props);
                 }
             }
@@ -684,9 +717,12 @@ impl Reader<'_> {
                     pb.push_obj(InlineObject::CommentEnd { id: cid }, props);
                 }
             }
-            "w:pgNum" => {
-                self.emit_obj(sc, pb, InlineObject::Field { instr: "PAGE".into(), result: String::new(), locked: false, code: false }, props)
-            }
+            "w:pgNum" => self.emit_obj(
+                sc,
+                pb,
+                InlineObject::Field { instr: "PAGE".into(), result: String::new(), locked: false, dirty: false, code: false, form: String::new() },
+                props,
+            ),
             "w:ruby" => self.read_ruby(sc, pb, k, props),
             "mc:AlternateContent" => {
                 if let Some(o) = self.read_ink_alternate(sc, k, rels).or_else(|| self.read_chartex_alternate(sc, k, rels)) {
@@ -758,13 +794,24 @@ impl Reader<'_> {
 
     // ---- fields ----
 
-    fn begin_field(&mut self, sc: &mut StoryCtx, props: CharProps, instr: String, locked: bool) {
+    fn begin_field(&mut self, sc: &mut StoryCtx, props: CharProps, instr: String, locked: bool, dirty: bool, form: String) {
         if sc.fields.len() >= MAX_FIELD_DEPTH || sc.ignored_begins > 0 {
             sc.ignored_begins += 1;
             return;
         }
         // Fields nested deeper than the cap are ignored (their content flows to the enclosing field).
-        sc.fields.push(FieldState { instr, phase: Phase::Instr, spilled: false, buf: Vec::new(), props, locked, range: false, sizes: Vec::new() });
+        sc.fields.push(FieldState {
+            instr,
+            phase: Phase::Instr,
+            spilled: false,
+            buf: Vec::new(),
+            props,
+            locked,
+            dirty,
+            range: false,
+            sizes: Vec::new(),
+            form,
+        });
     }
 
     /// Whether the field below the innermost one is still collecting its code (a field nested
@@ -787,7 +834,7 @@ impl Reader<'_> {
         f.phase = Phase::Result;
         if !f.spilled && !nested_in_instr && is_range_instr(&f.instr) {
             f.range = true;
-            let (obj, props) = (InlineObject::FieldStart { instr: f.instr.trim().to_string(), locked: f.locked }, f.props.clone());
+            let (obj, props) = (InlineObject::FieldStart { instr: f.instr.trim().to_string(), locked: f.locked, dirty: f.dirty }, f.props.clone());
             self.emit_obj(sc, pb, obj, &props);
         }
     }
@@ -808,7 +855,7 @@ impl Reader<'_> {
         }
         if f.phase == Phase::Instr && !nested_in_instr && is_range_instr(&f.instr) {
             // A range field with no result yet.
-            self.emit_obj(sc, pb, InlineObject::FieldStart { instr: f.instr.trim().to_string(), locked: f.locked }, &f.props);
+            self.emit_obj(sc, pb, InlineObject::FieldStart { instr: f.instr.trim().to_string(), locked: f.locked, dirty: f.dirty }, &f.props);
             self.emit_obj(sc, pb, InlineObject::FieldEnd, &f.props);
             return;
         }
@@ -820,7 +867,7 @@ impl Reader<'_> {
         // each piece stays an ordinary run with its own `w:ins` / `w:del` (#1037).
         let tracked_inside = f.buf.iter().any(|(_, p)| (p.ins, p.del) != (f.props.ins, f.props.del));
         if !nested_in_instr && (tracked_inside || f.buf.iter().any(|(it, _)| matches!(it, Item::Obj(o) if o.frame().is_some()))) {
-            self.emit_obj(sc, pb, InlineObject::FieldStart { instr: f.instr.trim().to_string(), locked: f.locked }, &f.props);
+            self.emit_obj(sc, pb, InlineObject::FieldStart { instr: f.instr.trim().to_string(), locked: f.locked, dirty: f.dirty }, &f.props);
             for (it, p) in f.buf {
                 match it {
                     Item::Text(t) => self.emit_text(sc, pb, &t, &p),
@@ -842,7 +889,18 @@ impl Reader<'_> {
             Some(e) => (e.instr(), if result.is_empty() { e.text } else { result }),
             None => (f.instr.trim().to_string(), result),
         };
-        let obj = InlineObject::Field { instr, result, locked: f.locked, code: false };
+        // The visible result owns the field's formatting; empty results keep the begin's.
+        let props = f
+            .buf
+            .iter()
+            .find_map(|(it, p)| match it {
+                Item::Text(t) if !t.is_empty() => Some(p),
+                Item::Obj(o) if !o.plain_text().is_empty() => Some(p),
+                _ => None,
+            })
+            .unwrap_or(&f.props)
+            .clone();
+        let obj = InlineObject::Field { instr, result, locked: f.locked, dirty: f.dirty, code: false, form: f.form };
         if let Some(parent) = sc.fields.last_mut()
             && !parent.spilled
             && parent.phase == Phase::Instr
@@ -850,7 +908,7 @@ impl Reader<'_> {
             parent.instr.push_str(obj.plain_text());
             return;
         }
-        self.emit_obj(sc, pb, obj, &f.props);
+        self.emit_obj(sc, pb, obj, &props);
     }
 
     /// At a paragraph end, open fields can't keep buffering: emit them (empty result) and
@@ -861,7 +919,11 @@ impl Reader<'_> {
                 continue;
             }
             f.spilled = true;
-            pb.push_obj(InlineObject::Field { instr: f.instr.trim().to_string(), result: String::new(), locked: f.locked, code: false }, &f.props);
+            let form = std::mem::take(&mut f.form);
+            pb.push_obj(
+                InlineObject::Field { instr: f.instr.trim().to_string(), result: String::new(), locked: f.locked, dirty: f.dirty, code: false, form },
+                &f.props,
+            );
             for (it, p) in f.buf.drain(..) {
                 match it {
                     Item::Text(t) => pb.push_text(&t, &p),
@@ -1286,7 +1348,15 @@ impl Reader<'_> {
             part.body.inset = (inset != wordcraft_doc::TEXT_BOX_INSET).then_some(inset);
             part.body.auto_fit = bp.child("a:spAutoFit").is_some();
         }
-        let mut extra = ShapeExtra::default();
+        // The shape style's text colour (`a:fontRef`, often `lt1`: white on the accent fill).
+        if let Some(id) = story
+            && let Some(c) = wsp.child("wps:style").and_then(|s| s.child("a:fontRef"))
+            && let Some(rgb) = super::drawing_color::color(c, &self.doc.settings.theme_colors)
+            && let Some(part) = self.doc.parts.get_mut(&id)
+        {
+            part.body.auto_color = Some(rgb);
+        }
+        let mut extra = ShapeExtra { dash: super::shape_style::line_dash(ln), ..Default::default() };
         // A rounded rectangle's own corner (`adj`, ECMA-376 §20.1.10.56); other presets drawn as
         // rounded rectangles keep the default.
         if prst == "roundRect" {
@@ -1339,23 +1409,151 @@ impl Reader<'_> {
         self.doc.add_part(PartKind::TextBox, blocks)
     }
 
-    /// Legacy VML pictures, text boxes, lines, rectangles and ovals (best effort).
+    /// Every legacy VML drawing in one `w:pict`, in document order: a `w:pict` may hold any
+    /// number of shapes (ECMA-376 Part 4, VML), and each one is its own object. A `v:group`
+    /// becomes an [`InlineObject::Group`].
+    fn read_vml_all(&mut self, sc: &mut StoryCtx, pict: &El, rels: &Rels) -> Vec<InlineObject> {
+        let mut out = Vec::new();
+        for e in pict.els().filter(|e| e.name.starts_with("v:") && e.local() != "shapetype") {
+            if out.len() >= wordcraft_doc::para::MAX_GROUP_CHILDREN {
+                break;
+            }
+            if sc.in_hf
+                && let Some(wm) = vml_watermark(e)
+            {
+                // The document's watermark (the first one found); drawn on every page, not as
+                // a shape, so it is not one of the objects this picture contributes.
+                self.doc.settings.watermark.get_or_insert(wm);
+                continue;
+            }
+            let o = if e.local() == "group" { self.read_vml_group(sc, pict, e, rels) } else { self.read_vml_shape(sc, pict, e, rels, None) };
+            out.extend(o);
+        }
+        out
+    }
+
+    /// The first VML drawing in `pict`, for the places that show a single one: an OLE object's
+    /// picture and a `mc:Fallback` preview.
     fn read_vml(&mut self, sc: &mut StoryCtx, pict: &El, rels: &Rels) -> Option<InlineObject> {
-        let shape = pict.els().find(|e| e.name.starts_with("v:") && e.local() != "shapetype")?;
+        self.read_vml_all(sc, pict, rels).into_iter().next()
+    }
+
+    /// A `v:group`: its own box from its `style`, its members in the space `coordsize` and
+    /// `coordorigin` give it, nested groups flattened into it as [`Self::group_members`] does for
+    /// DrawingML. `None` when it has no member we can show. `pict` is the picture the group sits
+    /// in, where a member's `v:shapetype` is written.
+    fn read_vml_group(&mut self, sc: &mut StoryCtx, pict: &El, grp: &El, rels: &Rels) -> Option<InlineObject> {
+        let style = grp.attr("style").unwrap_or("");
+        let len = |k: &str| vml_style(style, k).and_then(|v| measure(v, 1.0)).unwrap_or(0.0).clamp(0.0, crate::units::MAX_LEN_PT);
+        let (w, h) = (len("width"), len("height"));
+        let float = vml_float(grp, style);
+        // The members' space; without a usable `coordsize` it is the group's own box.
+        let (ch_w, ch_h) = vml_coordpair(grp, "coordsize").filter(|(cw, ch)| *cw > 0.0 && *ch > 0.0).unwrap_or((w.max(1.0), h.max(1.0)));
+        let (cx, cy) = vml_coordpair(grp, "coordorigin").unwrap_or((0.0, 0.0));
+        let mut children = Vec::new();
+        self.vml_group_members(sc, pict, grp, rels, (-cx, -cy, 1.0, 1.0), 0, &mut children);
+        if children.is_empty() {
+            return None;
+        }
+        Some(InlineObject::Group { w, h, float, ch_w, ch_h, children, canvas: None })
+    }
+
+    /// The members of VML group `g` into `out`, mapped into the outermost group's space by `t`
+    /// (x0, y0, sx, sy: outer = x0 + inner × sx). A member is placed by `left`/`top` in that
+    /// space, except a `v:line`, which carries its own offset in `from`.
+    fn vml_group_members(
+        &mut self,
+        sc: &mut StoryCtx,
+        pict: &El,
+        g: &El,
+        rels: &Rels,
+        t: (f32, f32, f32, f32),
+        depth: usize,
+        out: &mut Vec<wordcraft_doc::para::GroupChild>,
+    ) {
+        let (x0, y0, sx, sy) = t;
+        let max = crate::units::MAX_LEN_PT;
+        let fit = |v: f32, lo: f32| wordcraft_geom::finite(v).clamp(lo, max);
+        for e in g.els() {
+            if out.len() >= wordcraft_doc::para::MAX_GROUP_CHILDREN {
+                return;
+            }
+            if !e.name.starts_with("v:") || e.local() == "shapetype" {
+                continue;
+            }
+            let style = e.attr("style").unwrap_or("");
+            let num = |k: &str| vml_style(style, k).and_then(|v| measure(v, 1.0)).map_or(0.0, wordcraft_geom::finite);
+            let ((ox, oy), (ew, eh)) = ((num("left"), num("top")), (num("width"), num("height")));
+            if e.local() == "group" {
+                if depth >= MAX_VML_GROUP_DEPTH {
+                    continue;
+                }
+                // Its members' space maps onto its own box.
+                let (cw, ch) = vml_coordpair(e, "coordsize").filter(|(cw, ch)| *cw > 0.0 && *ch > 0.0).unwrap_or((ew.max(1.0), eh.max(1.0)));
+                let (cox, coy) = vml_coordpair(e, "coordorigin").unwrap_or((0.0, 0.0));
+                let (kx, ky) = (ew / cw, eh / ch);
+                let nt = (x0 + (ox - cox * kx) * sx, y0 + (oy - coy * ky) * sy, sx * kx, sy * ky);
+                self.vml_group_members(sc, pict, e, rels, nt, depth + 1, out);
+                continue;
+            }
+            let Some(mut obj) = self.read_vml_shape(sc, pict, e, rels, Some((sx, sy))) else { continue };
+            // A member is placed by `x`/`y`, so a line's own offset comes off the member itself.
+            let (dx, dy) = match obj.float_mut() {
+                Some(f) => {
+                    let d = (f.x, f.y);
+                    (f.x, f.y) = (0.0, 0.0);
+                    d
+                }
+                None => (0.0, 0.0),
+            };
+            out.push(wordcraft_doc::para::GroupChild { x: fit(x0 + (ox + dx) * sx, -max), y: fit(y0 + (oy + dy) * sy, -max), obj });
+        }
+    }
+
+    /// One legacy VML picture, text box, line, rectangle, oval or preset shape (best effort).
+    /// `pict` is the picture it sits in, where its `v:shapetype` is written -- for a group's
+    /// member too, since Word writes each shapetype once, beside the group rather than inside
+    /// it. `grp` scales a member from its group's space, and leaves placing it to the caller.
+    fn read_vml_shape(&mut self, sc: &mut StoryCtx, pict: &El, shape: &El, rels: &Rels, grp: Option<(f32, f32)>) -> Option<InlineObject> {
         let style = shape.attr("style").unwrap_or("");
         let len = |k: &str| vml_style(style, k).and_then(|v| measure(v, 1.0)).unwrap_or(0.0).clamp(0.0, crate::units::MAX_LEN_PT);
-        let (mut w, mut h) = (len("width"), len("height"));
-        let mut float = vml_float(shape, style);
+        let (sx, sy) = grp.unwrap_or((1.0, 1.0));
+        let (mut w, mut h) = ((len("width") * sx).min(crate::units::MAX_LEN_PT), (len("height") * sy).min(crate::units::MAX_LEN_PT));
+        // A member of a group never floats: the group does, and places it.
+        let mut float = match grp {
+            Some(_) => {
+                let mut f = Float { hidden: vml_style(style, "visibility").is_some_and(|v| v.eq_ignore_ascii_case("hidden")), ..Float::default() };
+                f.set_spin(vml_spin(style));
+                f
+            }
+            None => vml_float(shape, style),
+        };
         if let Some(img) = shape.find("v:imagedata") {
             let id = img.attr("r:id").or_else(|| img.attr("r:pict"))?;
             let media = self.media_for(rels, id)?;
             let alt = shape.attr("alt").or_else(|| img.attr("o:title")).unwrap_or("").to_string();
             return Some(InlineObject::Image { media, w, h, alt, float, crop: [0.0; 4], ole: None });
         }
-        let on = |name: &str| shape.attr(name).is_none_or(|v| !matches!(v, "f" | "false" | "0"));
-        let stroke = on("stroked").then(|| shape.attr("strokecolor").map_or(Some(Rgb::BLACK), vml_color)).flatten();
-        let stroke_width = shape.attr("strokeweight").and_then(|v| measure(v, 1.0)).unwrap_or(0.75).clamp(0.0, 100.0);
-        let fill = on("filled").then(|| shape.attr("fillcolor").map_or(Some(Rgb::WHITE), vml_color)).flatten();
+        // The shapetype the shape is drawn from (its `type`, ECMA-376 Part 4 VML), when written in
+        // the same picture: what the shape leaves out, it takes from there.
+        let type_id = shape.attr("type").map(|t| t.trim().trim_start_matches('#'));
+        let shapetype = type_id.and_then(|id| pict.els().find(|e| e.name == "v:shapetype" && e.attr("id") == Some(id)));
+        let attr = |name: &str| shape.attr(name).or_else(|| shapetype.and_then(|t| t.attr(name)));
+        let on = |name: &str| attr(name).is_none_or(|v| !matches!(v, "f" | "false" | "0"));
+        let stroke = on("stroked").then(|| attr("strokecolor").map_or(Some(Rgb::BLACK), vml_color)).flatten();
+        let stroke_width = attr("strokeweight").and_then(|v| measure(v, 1.0)).unwrap_or(0.75).clamp(0.0, 100.0);
+        let fill = on("filled").then(|| attr("fillcolor").map_or(Some(Rgb::WHITE), vml_color)).flatten();
+        let kind = match shape.local() {
+            "line" => Some(ShapeKind::Line),
+            "rect" => Some(ShapeKind::Rectangle),
+            "roundrect" => Some(ShapeKind::RoundedRectangle),
+            "oval" => Some(ShapeKind::Ellipse),
+            // A preset, unless the shape's own path replaces its shapetype's geometry.
+            "shape" if shape.attr("path").is_none() && shape.child("v:path").and_then(|p| p.attr("v")).is_none() => {
+                vml_spt(shape, shapetype, type_id).and_then(vml_preset_kind)
+            }
+            _ => None,
+        };
         if let Some((tb, t)) = vml_textbox(shape, 0)
             && sc.story_depth < MAX_STORY_DEPTH
         {
@@ -1385,8 +1583,10 @@ impl Reader<'_> {
                 }
             }
             let story = Some(id);
+            // Text in a preset shape keeps the shape around it; otherwise it is a text box.
+            let kind = kind.filter(|k| *k != ShapeKind::Rectangle && !k.is_open()).unwrap_or(ShapeKind::TextBox);
             return Some(InlineObject::Shape {
-                kind: ShapeKind::TextBox,
+                kind,
                 w,
                 h,
                 fill,
@@ -1399,16 +1599,46 @@ impl Reader<'_> {
                 extra: Default::default(),
             });
         }
-        let kind = match shape.local() {
-            "line" => ShapeKind::Line,
-            "rect" => ShapeKind::Rectangle,
-            "roundrect" => ShapeKind::RoundedRectangle,
-            "oval" => ShapeKind::Ellipse,
-            _ => return None,
-        };
+        // A freeform: its `path`, in its `coordsize` space; a `v:fill` with no opacity
+        // or `nf` in the path leaves it unfilled. Not WordArt (`v:textpath`).
+        if shape.local() == "shape"
+            && shape.child("v:textpath").is_none()
+            && let Some(path) = shape.attr("path")
+            && let Some(vp) = super::freeform::vml_path(path, shape.attr("coordsize"), shape.attr("coordorigin"), w, h)
+        {
+            let opacity = |el: &str| shape.child(el).and_then(|e| e.attr("opacity")).and_then(vml_fraction).unwrap_or(1.0);
+            let fill = fill.filter(|_| !vp.no_fill && opacity("v:fill") > 0.0);
+            let stroke = stroke.filter(|_| !vp.no_stroke);
+            if stroke.is_none() && fill.is_none() {
+                return None;
+            }
+            let mut f = vp.freeform;
+            f.alpha = opacity("v:stroke");
+            return Some(InlineObject::Shape {
+                kind: ShapeKind::Freeform,
+                w,
+                h,
+                fill,
+                stroke,
+                stroke_width,
+                float,
+                story: None,
+                freeform: Some(Arc::new(f)),
+                effects: Default::default(),
+                extra: Default::default(),
+            });
+        }
+        let kind = kind?;
         let mut extra = ShapeExtra::default();
         if kind == ShapeKind::Line {
-            // A line runs `from` → `to` (points, offsets from where its style places it).
+            // Arrowheads (`v:stroke` startarrow / endarrow): any but `none` is drawn.
+            let arrow = |name: &str| shape.child("v:stroke").and_then(|s| s.attr(name)).is_some_and(|v| v != "none");
+            extra.arrow_start = arrow("startarrow");
+            extra.arrow_end = arrow("endarrow");
+        }
+        if shape.local() == "line" {
+            // A line runs `from` → `to` (points, offsets from where its style places it). A preset
+            // line (`v:shape`) runs corner to corner of the box its style gives it.
             let pt = |name: &str| -> (f32, f32) {
                 let v = shape.attr(name).unwrap_or("0,0");
                 let (x, y) = v.split_once(',').unwrap_or((v, "0"));
@@ -1417,16 +1647,12 @@ impl Reader<'_> {
             };
             let ((x0, y0), (x1, y1)) = (pt("from"), pt("to"));
             let max = crate::units::MAX_LEN_PT;
-            (w, h) = ((x1 - x0).abs().min(max), (y1 - y0).abs().min(max));
+            (w, h) = (((x1 - x0).abs() * sx).min(max), ((y1 - y0).abs() * sy).min(max));
             float.x = (float.x + x0.min(x1)).clamp(-max, max);
             float.y = (float.y + y0.min(y1)).clamp(-max, max);
             // Drawn top-left to bottom-right; flipped for the other directions.
             float.flip_h ^= x1 < x0;
             float.flip_v ^= y1 < y0;
-            // Arrowheads (`v:stroke` startarrow / endarrow): any but `none` is drawn.
-            let arrow = |name: &str| shape.child("v:stroke").and_then(|s| s.attr(name)).is_some_and(|v| v != "none");
-            extra.arrow_start = arrow("startarrow");
-            extra.arrow_end = arrow("endarrow");
         }
         if stroke.is_none() && (fill.is_none() || kind == ShapeKind::Line) {
             return None;
@@ -1484,6 +1710,7 @@ impl Reader<'_> {
         collect(t, "w:tr", &mut rows, &mut Vec::new(), 0);
         for (tr, row_controls) in rows.into_iter().take(MAX_ROWS) {
             let mut row = Row { props: tr.child("w:trPr").map(trpr).unwrap_or_default(), cells: Vec::new(), controls: row_controls };
+            row.props.exceptions = tr.child("w:tblPrEx").map(|e| Box::new(self.pc.tblpr(e)));
             if let Some(ch) = tr.child("w:trPr").and_then(|p| p.child("w:trPrChange")) {
                 let old = ch.child("w:trPr").map(trpr).unwrap_or_default();
                 row.props.fmt_change = PropChange::boxed(self.revision(RevisionKind::Format, ch), old);
@@ -1666,9 +1893,29 @@ fn wrap_polygon(e: &El) -> Option<wordcraft_doc::wrap::WrapPolygon> {
     wordcraft_doc::wrap::WrapPolygon::new(edited, pts)
 }
 
+/// A VML shape's preset type (`o:spt`): its own, its shapetype's, or the number in Word's
+/// shapetype id `_x0000_tNN` (`type_id`), Word writing each shapetype only at its first use.
+fn vml_spt(shape: &El, shapetype: Option<&El>, type_id: Option<&str>) -> Option<u32> {
+    let num = |v: &str| v.trim().parse::<u32>().ok();
+    shape
+        .attr("o:spt")
+        .and_then(num)
+        .or_else(|| shapetype.and_then(|t| t.attr("o:spt")).and_then(num))
+        .or_else(|| type_id?.strip_prefix("_x0000_t").and_then(num))
+}
+
 /// The value of property `key` in a VML `style` attribute (CSS declarations; the last one wins).
 /// The first `v:textbox` under `e` holding text, with its `w:txbxContent` (depth-first, bounded
 /// like `El::find`): in a group, a member's margins go with that member's text.
+/// A VML `coordsize="w,h"` or `coordorigin="x,y"` pair (ECMA-376 Part 4 §14.1.2): the member
+/// space of a group, in its own unitless coordinates.
+fn vml_coordpair(e: &El, name: &str) -> Option<(f32, f32)> {
+    let v = e.attr(name)?;
+    let (x, y) = v.split_once(',')?;
+    let n = |s: &str| measure(s.trim(), 1.0).map(wordcraft_geom::finite);
+    Some((n(x)?, n(y)?))
+}
+
 fn vml_textbox(e: &El, depth: usize) -> Option<(&El, &El)> {
     if depth > crate::xml::MAX_DEPTH {
         return None;
@@ -1746,6 +1993,54 @@ fn vml_float(shape: &El, style: &str) -> Float {
     };
     f.set_spin(vml_spin(style));
     f
+}
+
+/// Word's text watermark (Design › Watermark): a VML shape in a header whose `v:textpath` draws
+/// its `string` as text (ECMA-376 Part 4, VML `textpath`), in the textpath's `font-family`, filled
+/// with the shape's `fillcolor`, semitransparent when its `v:fill` has an `opacity` below 1, and
+/// diagonal when the shape is turned. Only Word's watermark shape counts (its `id`), or text
+/// placed absolutely and centred both ways; other header WordArt (a logo or a title) is None.
+fn vml_watermark(shape: &El) -> Option<wordcraft_doc::Watermark> {
+    let tp = shape.child("v:textpath")?;
+    if tp.attr("on").is_some_and(|v| matches!(v, "f" | "false" | "0")) {
+        return None;
+    }
+    let style = shape.attr("style").unwrap_or("");
+    let centred = |k: &str| vml_style(style, k).is_some_and(|v| v.eq_ignore_ascii_case("center"));
+    let word = shape.attr("id").is_some_and(|id| id.starts_with("PowerPlusWaterMarkObject"));
+    let placed = vml_style(style, "position").is_some_and(|p| p.eq_ignore_ascii_case("absolute"))
+        && centred("mso-position-horizontal")
+        && centred("mso-position-vertical");
+    if !word && !placed {
+        return None;
+    }
+    let text: String = tp.attr("string")?.chars().take(200).collect();
+    if text.trim().is_empty() {
+        return None;
+    }
+    let default = wordcraft_doc::Watermark::default();
+    let font = tp
+        .attr("style")
+        .and_then(|s| vml_style(s, "font-family"))
+        .map(|f| f.trim_matches(|c: char| c == '"' || c == '\'' || c.is_whitespace()).chars().take(100).collect::<String>())
+        .filter(|f| !f.is_empty())
+        .unwrap_or(default.font);
+    let color = shape.attr("fillcolor").and_then(vml_color).unwrap_or(default.color);
+    let opacity = shape.child("v:fill").and_then(|f| f.attr("opacity")).and_then(vml_fraction).unwrap_or(1.0);
+    Some(wordcraft_doc::Watermark { text, font, color, diagonal: vml_spin(style).deg != 0.0, semitransparent: opacity < 1.0 })
+}
+
+/// A VML fraction (`opacity`): a number, a percentage, or 65536ths with an `f` suffix; 0..=1.
+fn vml_fraction(v: &str) -> Option<f32> {
+    let v = v.trim();
+    let f = if let Some(n) = v.strip_suffix('f') {
+        n.trim().parse::<f32>().ok()? / 65_536.0
+    } else if let Some(n) = v.strip_suffix('%') {
+        n.trim().parse::<f32>().ok()? / 100.0
+    } else {
+        v.parse::<f32>().ok()?
+    };
+    f.is_finite().then(|| f.clamp(0.0, 1.0))
 }
 
 /// A VML shape's turn: `rotation` in degrees, or 65536ths of one with an `fd` suffix; `flip`: `x`

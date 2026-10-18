@@ -143,6 +143,9 @@ pub struct ViewState {
     pub single_column: bool,
     /// Zoom to fit: "pageWidth", "onePage", "multiplePages", or empty.
     pub fit: String,
+    /// Web Layout's text width, which the UI keeps at the window's width (#1876); never saved.
+    /// Draft and Outline don't use it: they keep a fixed 800 pt column.
+    #[serde(skip, default = "default_web_width")]
     pub web_width: f32,
     /// Transient viewport metrics for reading pagination; never saved in a document or preferences.
     #[serde(skip, default = "default_read_width")]
@@ -195,6 +198,13 @@ fn on() -> bool {
     true
 }
 
+/// The text column of Draft and Outline, and of Web Layout in a headless session.
+const DRAFT_WIDTH: f32 = 800.0;
+
+fn default_web_width() -> f32 {
+    DRAFT_WIDTH
+}
+
 fn default_read_width() -> f32 {
     300.0
 }
@@ -229,7 +239,7 @@ impl Default for ViewState {
             multi_page: false,
             single_column: false,
             fit: String::new(),
-            web_width: 800.0,
+            web_width: default_web_width(),
             read_width: default_read_width(),
             read_height: default_read_height(),
             read_column_width: None,
@@ -351,8 +361,8 @@ pub struct Session {
     pub pending_move: Option<crate::cmd::moves::PendingMove>,
     /// Plain text mirror of the clipboard (for the system clipboard).
     pub clipboard_text: String,
-    /// HTML for the system clipboard beside [`Self::clipboard_text`] when the copy holds an
-    /// equation (as MathML, #816), for programs that read MathML; empty otherwise.
+    /// HTML for the system clipboard beside [`Self::clipboard_text`]: the copy's formatting for
+    /// programs that read HTML, equations as MathML (#816); empty when nothing was copied.
     pub clipboard_html: String,
     /// Items collected by Copy and Cut this session, for the Clipboard pane.
     pub clip_history: crate::cmd::edit::ClipHistory,
@@ -384,13 +394,15 @@ pub struct Session {
     typing_open: bool,
     /// The next mutating command joins the previous undo step (later frames of a drag).
     join_next: bool,
+    /// The newest automatic capitalisation, for Word's "Automatically add words to list" (#1857).
+    pub(crate) autocap: Option<crate::cmd::tools::AutoCap>,
     rev: u64,
     /// Which document this is: changes when [`Session::set_document`] replaces it (open, new,
     /// mail merge, recover), never on an edit.
     document_id: u64,
     cache: LayoutCache,
     /// (revision, width, read height, view, read line spacing, layout, proofing, outline,
-    /// (deletions left out, body deletions in balloons), numeral display).
+    /// (deletions left out, deletions marked Hidden, body deletions in balloons), numeral display).
     #[allow(clippy::type_complexity)]
     layout: Option<(
         u64,
@@ -401,7 +413,7 @@ pub struct Session {
         Arc<DocLayout>,
         bool,
         Option<wordcraft_layout::outline::OutlineView>,
-        (bool, bool),
+        (bool, wordcraft_layout::HideDeleted, bool),
         NumeralMode,
     )>,
     /// Picture edits: edited media key → original media key (Reset Picture).
@@ -449,6 +461,8 @@ pub struct Session {
     /// Password, `file.encrypt`); `None` saves them unencrypted. Kept from a password-protected
     /// file that was opened, cleared when the document is replaced.
     pub password: Option<crate::io::Password>,
+    #[cfg(not(target_arch = "wasm32"))]
+    pub(crate) recovery: Option<crate::recovery::Recovery>,
     /// More pictures and shapes selected along with the one the selection holds (Shift+click),
     /// for Group. Cleared by any edit or selection change other than adding to it.
     pub also_selected: Vec<Pos>,
@@ -616,6 +630,7 @@ impl Session {
             redo: Vec::new(),
             typing_open: false,
             join_next: false,
+            autocap: None,
             rev: 1,
             document_id: 1,
             cache: LayoutCache::new(),
@@ -641,6 +656,8 @@ impl Session {
             editing_lang: None,
             read_aloud: Default::default(),
             password: None,
+            #[cfg(not(target_arch = "wasm32"))]
+            recovery: None,
             column: None,
             column_mode: false,
             widened: None,
@@ -761,13 +778,17 @@ impl Session {
     /// The current layout (recomputed when the document or view changed).
     pub fn layout(&mut self) -> Arc<DocLayout> {
         let mode = if self.view.read_mode { ViewMode::Read } else { self.view.mode };
-        let width = if self.view.read_mode { self.view.read_width } else { self.view.web_width };
+        let width = match mode {
+            ViewMode::Read => self.view.read_width,
+            ViewMode::Web => self.view.web_width,
+            _ => DRAFT_WIDTH,
+        };
         let height = if self.view.read_mode { self.view.read_height } else { 0.0 };
         let spacing = if self.view.read_mode { self.view.read_line_spacing.map(f32::to_bits) } else { None };
         // Deletions in balloons depend on the view (the Comments pane, Read Mode, side by side), so
         // a view change that moves them in or out of the text lays it out again.
-        let hide_deleted = !self.view.show_markup || self.prefs.markup.hides_deletions();
-        let deleted = (hide_deleted, self.revisions_in_balloons());
+        let hide_deleted = !self.view.show_markup;
+        let deleted = (hide_deleted, self.prefs.markup.hidden_deletions(), self.revisions_in_balloons());
         let outline = (mode == ViewMode::Outline).then(|| self.view.outline.view());
         if let Some((r, w, h, m, sp, l, pf, o, hd, n)) = &self.layout
             && *r == self.rev
@@ -789,7 +810,8 @@ impl Session {
             read_line_spacing: spacing.map(f32::from_bits),
             show_hidden: self.view.marks || self.prefs.marks.hidden,
             hide_deleted,
-            deletions_in_balloons: deleted.1,
+            hide_marked: deleted.1,
+            deletions_in_balloons: deleted.2,
             proofing: self.view.proofing,
             numeral: self.view.numeral.resolve(SYSTEM_LOCALE.get().map(String::as_str)),
             comment_balloons: false,
@@ -902,6 +924,10 @@ impl Session {
     pub fn redo_label(&self) -> Option<&str> {
         self.redo.last().map(|u| u.label.as_str())
     }
+    /// Undo steps pushed so far, evicted ones included: only grows while steps are added.
+    pub(crate) fn undo_steps_so_far(&self) -> u64 {
+        self.history.len() as u64 + self.undo_evicted
+    }
     /// The number of undo steps.
     pub fn undo_depth(&self) -> usize {
         self.history.len()
@@ -926,6 +952,12 @@ impl Session {
     }
     pub fn undo(&mut self) -> bool {
         self.typing_open = false;
+        // Undoing the automatic capitalisation's own step makes its word an exception; any
+        // other Undo forgets the capital.
+        let steps = self.history.len() as u64 + self.undo_evicted;
+        if let Some(c) = self.autocap.take().filter(|c| c.depth == steps) {
+            c.add_exceptions(&mut self.prefs.autocorrect);
+        }
         let Some(u) = self.history.pop().map(Arc::unwrap_or_clone) else { return false };
         let cur = Undo {
             label: u.label.clone(),
@@ -959,6 +991,7 @@ impl Session {
     }
     /// Drop history (after open / new).
     pub fn reset_history(&mut self) {
+        self.autocap = None;
         self.history.clear();
         self.redo.clear();
         self.typing_open = false;
@@ -991,6 +1024,7 @@ impl Session {
 
     /// Replace the document (open/new).
     pub fn set_document(&mut self, doc: Document) {
+        self.autocap = None;
         self.document_id = self.document_id.wrapping_add(1);
         self.bib_style = doc_bib_style(&doc);
         self.doc = doc;
@@ -1061,6 +1095,7 @@ impl Session {
             redo,
             typing_open,
             join_next,
+            autocap: _,
             rev: _,
             cache: _,
             layout: _,
@@ -1088,6 +1123,8 @@ impl Session {
             math_normal_text: _,
             // The save password, like the file path: not an edit to the document.
             password: _,
+            #[cfg(not(target_arch = "wasm32"))]
+                recovery: _,
             also_selected: _,
             // Column selection and a widened selection's ends, like `sel`'s shape: valid only while
             // `sel` matches them.
@@ -1123,6 +1160,7 @@ impl Session {
             self.history.splice(0..0, head.into_iter().take(back));
         }
         self.undo_evicted = evicted;
+        self.autocap = None;
         self.doc = doc;
         self.sel = sel;
         self.also_selected.clear();
@@ -1280,6 +1318,7 @@ impl Session {
                 }
             }
             Err(e) => {
+                self.autocap = None;
                 if let Some((d, s, h, r, t, ev, c)) = before_doc {
                     self.doc = d;
                     self.sel = s;
@@ -1315,7 +1354,12 @@ impl Session {
         // As in Word, text typed at either end of a hyperlink isn't part of it; only typing
         // inside the link extends it.
         let inside_link = props.link.is_some() && f.off > 0 && f.off < p.len() && p.props_of_char(f.off).link == props.link;
-        if props.link.is_some() && !inside_link { props.unlinked() } else { props.clone() }
+        let mut out = if props.link.is_some() && !inside_link { props.unlinked() } else { props.clone() };
+        // A footnote or endnote number is raised by its character style; text typed after it is body text.
+        if matches!(out.style.as_deref(), Some("FootnoteReference" | "EndnoteReference")) {
+            out.style = None;
+        }
+        out
     }
 
     /// Words in the document, as the status bar shows them (see [`Prefs::count_notes`]).

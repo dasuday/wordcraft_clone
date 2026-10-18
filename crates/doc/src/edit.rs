@@ -40,6 +40,26 @@ impl Fragment {
         }
         found
     }
+    /// The equation (its linear format and whether it is a display equation) when the fragment
+    /// is that one equation and nothing else but white space and empty paragraphs: a copy of it
+    /// also goes on the system clipboard in the MathML formats that equation editors read (#1297).
+    pub fn sole_equation(&self) -> Option<(&str, bool)> {
+        let mut found = None;
+        for b in &self.blocks {
+            let Block::Para(p) = b else { return None };
+            for c in p.text.chars().filter(|c| !c.is_whitespace()) {
+                if c != crate::para::OBJ || found.is_some() {
+                    return None;
+                }
+                // The paragraph's only visible character, so its first object.
+                match p.objects.first() {
+                    Some(InlineObject::Equation { linear, display, .. }) => found = Some((linear.as_str(), *display)),
+                    _ => return None,
+                }
+            }
+        }
+        found
+    }
     /// The text a copy puts on the clipboard: [`Self::plain_text`] with symbol-font characters
     /// (Wingdings…) as their Unicode equivalents.
     pub fn clipboard_text(&self) -> String {
@@ -63,37 +83,46 @@ const MAX_BOX_DEPTH: usize = 8;
 /// Most text box stories one paste may create (hostile documents can fan out).
 const MAX_PASTED_BOXES: usize = 4096;
 
-/// Call `f` on every paragraph of a block (tables descended, depth-limited).
-pub(crate) fn each_para<'a>(b: &'a Block, depth: usize, f: &mut dyn FnMut(&'a Paragraph)) {
-    match b {
-        Block::Para(p) => f(p),
-        Block::Table(t) if depth < 16 => {
-            for cell in t.rows.iter().flat_map(|r| r.cells.iter()) {
-                for cb in &cell.blocks {
-                    each_para(cb, depth + 1, f);
-                }
+/// Call `f` on every paragraph of a block, in document order, however deep its tables nest. The
+/// walk keeps its own stack instead of recursing, so it is complete: a text box it doesn't reach
+/// is shown nowhere, which pruning relies on (#1339). `_depth` is unused (callers keep passing it).
+pub(crate) fn each_para<'a>(b: &'a Block, _depth: usize, f: &mut dyn FnMut(&'a Paragraph)) {
+    // Most blocks are paragraphs, which need no stack.
+    if let Block::Para(p) = b {
+        return f(p);
+    }
+    let mut todo = vec![b];
+    while let Some(b) = todo.pop() {
+        match b {
+            Block::Para(p) => f(p),
+            Block::Table(t) => {
+                // Last first, so they come off the stack in document order.
+                let cells = t.rows.iter().rev().flat_map(|r| r.cells.iter().rev());
+                todo.extend(cells.flat_map(|c| c.blocks.iter().rev()).map(|cb| &**cb));
             }
         }
-        Block::Table(_) => {}
     }
 }
 
-pub(crate) fn each_para_mut(b: &mut Block, depth: usize, f: &mut dyn FnMut(&mut Paragraph)) {
-    match b {
-        Block::Para(p) => f(p),
-        Block::Table(t) if depth < 16 => {
-            for cell in t.rows.iter_mut().flat_map(|r| r.cells.iter_mut()) {
-                for cb in &mut cell.blocks {
-                    each_para_mut(Arc::make_mut(cb), depth + 1, f);
-                }
+/// [`each_para`], changing the paragraphs.
+pub(crate) fn each_para_mut(b: &mut Block, _depth: usize, f: &mut dyn FnMut(&mut Paragraph)) {
+    if let Block::Para(p) = b {
+        return f(p);
+    }
+    let mut todo = vec![b];
+    while let Some(b) = todo.pop() {
+        match b {
+            Block::Para(p) => f(p),
+            Block::Table(t) => {
+                let cells = t.rows.iter_mut().rev().flat_map(|r| r.cells.iter_mut().rev());
+                todo.extend(cells.flat_map(|c| c.blocks.iter_mut().rev()).map(Arc::make_mut));
             }
         }
-        Block::Table(_) => {}
     }
 }
 
 /// Whether a paragraph anywhere in `b` (also inside tables) uses paragraph or character style
-/// `id` (depth-limited like `each_para`). Table styles are the engine's `table.deleteStyle`'s job.
+/// `id` (tables to 16 levels deep). Table styles are the engine's `table.deleteStyle`'s job.
 fn uses_style(b: &Block, id: &str, depth: usize) -> bool {
     let is = |s: &Option<String>| s.as_deref() == Some(id);
     match b {
@@ -308,7 +337,8 @@ impl Document {
         self.para_paths(a.story).into_iter().filter(|p| *p >= a.path && *p <= b.path).collect()
     }
 
-    /// Delete `a..b`. Returns the position where the deletion collapsed to.
+    /// Delete `a..b`. Returns the position where the deletion collapsed to. On error the document
+    /// is unchanged: both ends are checked before anything is deleted.
     pub fn delete_range(&mut self, a: &Pos, b: &Pos) -> Result<Pos> {
         let (a, b) = order(a, b);
         if a == b {
@@ -316,6 +346,14 @@ impl Document {
         }
         if a.story != b.story {
             return Err(DocError::Invalid("range spans stories".into()));
+        }
+        // Check both ends before the first edit, so an error never leaves the document half-deleted.
+        for p in [&a, &b] {
+            match self.para(p.story, &p.path) {
+                Some(para) if para.clamp(p.off) == p.off => {}
+                Some(_) => return Err(DocError::BadOffset(p.off)),
+                None => return Err(DocError::BadPath(p.path.to_string())),
+            }
         }
         // Content control markers whose partner is outside the range stay (the control is
         // emptied, not broken).
@@ -354,14 +392,36 @@ impl Document {
                 pb.clone()
             };
             let bl = self.container_mut(a.story, &a.path)?;
+            // Section breaks on the marks in between go with their paragraphs.
+            let between: Vec<_> = bl
+                .get(ia + 1..ib)
+                .unwrap_or_default()
+                .iter()
+                .filter_map(|b| match &**b {
+                    Block::Para(p) => p.section.clone(),
+                    Block::Table(_) => None,
+                })
+                .collect();
             if ib < bl.len() && ia < ib {
                 bl.drain(ia + 1..=ib);
             }
             tail.props = ParaProps::default();
+            // The deleted marks include `a`'s, so a section break there goes too: the joined
+            // paragraph ends where `b`'s mark did, and its text takes the following section's
+            // setup, as in Word (#2127).
+            let sect = tail.section.take();
             let pa = self.para_mut(a.story, &a.path)?;
             let keep_props = pa.props.clone();
             pa.append(tail);
             pa.props = keep_props;
+            let before = std::mem::replace(&mut pa.section, sect);
+            if a.story == crate::StoryRef::Body && a.path.0.len() == 1 {
+                // Nearest first, as "link to previous" resolved them before the delete.
+                let following = self.section_mut(a.path.last());
+                for s in between.iter().rev().chain(before.iter()) {
+                    following.absorb(s);
+                }
+            }
             return Ok(a);
         }
         // Different containers (range enters or leaves a table): clear text in every paragraph
@@ -387,6 +447,27 @@ impl Document {
                 if matches!(bl.get(i).map(|b| &**b), Some(Block::Table(_))) {
                     bl.remove(i);
                 }
+            }
+        }
+        // From the very start of a top-level table to a top-level paragraph (Select All in a
+        // document that starts with a table, #1198): the tables are covered whole and go too,
+        // and the paragraphs left between join.
+        if a.path.depth() > 0 && b.path.depth() == 0 && a.off == 0 {
+            let ta = a.path.0.first().copied().unwrap_or(0) as usize;
+            let first = self.para_paths(a.story).into_iter().find(|q| q.0.first().is_some_and(|t| *t as usize == ta));
+            if first.as_ref() == Some(&a.path) {
+                let ib = b.path.last();
+                let bl = self.container_mut(a.story, &b.path)?;
+                let mut removed = 0;
+                for i in (ta..ib).rev() {
+                    if matches!(bl.get(i).map(|b| &**b), Some(Block::Table(_))) {
+                        bl.remove(i);
+                        removed += 1;
+                    }
+                }
+                let at = Pos { story: a.story, path: Path::top(ta), off: 0 };
+                let end = Pos { story: a.story, path: Path::top(ib.saturating_sub(removed)), off: 0 };
+                return self.delete_range(&at, &end);
             }
         }
         Ok(a)
@@ -554,7 +635,7 @@ impl Document {
         let body = crate::TextBody { next: None, ..src.body };
         *budget -= 1;
         self.adopt_text_boxes(&mut blocks, parts, depth + 1, budget);
-        let id = self.add_part(PartKind::TextBox, blocks.into_iter().map(Arc::new).collect());
+        let id = self.try_add_part(PartKind::TextBox, blocks.into_iter().map(Arc::new).collect()).ok()?;
         if let Some(p) = self.parts.get_mut(&id) {
             p.body = body;
         }
@@ -667,11 +748,58 @@ mod tests {
     }
 
     #[test]
+    fn delete_range_with_bad_end_leaves_document_unchanged() {
+        let mut d = doc(&["one", "two", "three"]);
+        let before = d.plain_text(StoryRef::Body);
+        // Missing paragraph as the second end.
+        assert!(d.delete_range(&Pos::body(0, 1), &Pos::body(9, 0)).is_err());
+        assert_eq!(d.plain_text(StoryRef::Body), before);
+        // Offset past the end of the second paragraph.
+        assert!(d.delete_range(&Pos::body(0, 1), &Pos::body(1, 99)).is_err());
+        assert_eq!(d.plain_text(StoryRef::Body), before);
+        // Offset inside a multi-byte character.
+        let mut d = doc(&["abc", "\u{e9}x"]);
+        assert!(d.delete_range(&Pos::body(0, 1), &Pos::body(1, 1)).is_err());
+        assert_eq!(d.plain_text(StoryRef::Body), "abc\n\u{e9}x");
+        // Range entering a table with a bad offset at its start: the cell text stays.
+        let mut d = doc(&["before", "after"]);
+        d.insert_block(StoryRef::Body, &Path::top(1), Block::Table(Table::new(2, 1, 200.0))).unwrap();
+        d.insert_text(&Pos { story: StoryRef::Body, path: Path(vec![1, 0, 0, 0]), off: 0 }, "x", &CharProps::default()).unwrap();
+        let before = d.plain_text(StoryRef::Body);
+        let cell = Pos { story: StoryRef::Body, path: Path(vec![1, 1, 0, 0]), off: 0 };
+        assert!(d.delete_range(&Pos::body(0, 99), &cell).is_err());
+        assert_eq!(d.plain_text(StoryRef::Body), before);
+    }
+
+    #[test]
     fn delete_multi() {
         let mut d = doc(&["one", "two", "three"]);
         d.delete_range(&Pos::body(2, 2), &Pos::body(0, 1)).unwrap();
         assert_eq!(d.plain_text(StoryRef::Body), "oree");
         assert_eq!(d.body.len(), 1);
+    }
+
+    /// #2127: a range over two section breaks joins three sections into the last; the headers
+    /// and footers it showed by linking to earlier ones stay, each from the nearest section that
+    /// named it, as they resolved before the delete.
+    #[test]
+    fn delete_over_two_section_breaks_keeps_the_linked_headers() {
+        let mut d = doc(&["A", "B", "C"]);
+        let set = |default| crate::section::HeaderSet { default: Some(default), ..Default::default() };
+        let s1 = crate::section::SectionProps { headers: set(1), footers: set(5), ..Default::default() };
+        let s2 = crate::section::SectionProps { headers: set(2), ..Default::default() };
+        let s3 = crate::section::SectionProps { margin_left: 99.0, ..Default::default() };
+        for (i, s) in [(0, s1), (1, s2), (2, s3.clone())] {
+            if let Some(Block::Para(p)) = d.body.get_mut(i).map(Arc::make_mut) {
+                p.section = Some(Box::new(s));
+            }
+        }
+        assert_eq!(d.sections().len(), 4);
+        d.delete_range(&Pos::body(0, 1), &Pos::body(2, 0)).unwrap();
+        assert_eq!(d.plain_text(StoryRef::Body), "AC");
+        let sections = d.sections();
+        assert_eq!(sections.len(), 2);
+        assert_eq!(*sections[0].1, crate::section::SectionProps { headers: set(2), footers: set(5), ..s3 });
     }
 
     #[test]

@@ -233,21 +233,27 @@ impl Lexer<'_> {
             return Some(Tok::Text(String::new()));
         }
         if rest.starts_with("</") {
-            let name: String =
-                rest.strip_prefix("</").unwrap_or("").chars().take_while(|c| c.is_ascii_alphanumeric() || *c == ':' || *c == '-').collect();
+            let name: String = rest
+                .strip_prefix("</")
+                .unwrap_or("")
+                .chars()
+                .take_while(|c| c.is_ascii_alphanumeric() || *c == ':' || *c == '-')
+                .map(|c| c.to_ascii_lowercase())
+                .collect();
             if name.is_empty() {
                 self.pos += 2;
                 return Some(Tok::Text("</".into()));
             }
             self.skip_past(">");
-            return Some(Tok::End(name.to_ascii_lowercase()));
+            return Some(Tok::End(name));
         }
         if !b.get(1).is_some_and(|c| c.is_ascii_alphabetic()) {
             self.pos += 1;
             return Some(Tok::Text("<".into()));
         }
         // Start tag.
-        let name: String = rest[1..].chars().take_while(|c| c.is_ascii_alphanumeric() || *c == ':' || *c == '-').collect();
+        let name: String =
+            rest[1..].chars().take_while(|c| c.is_ascii_alphanumeric() || *c == ':' || *c == '-').map(|c| c.to_ascii_lowercase()).collect();
         let mut i = 1 + name.len();
         let mut attrs = Vec::new();
         let mut self_close = false;
@@ -311,7 +317,7 @@ impl Lexer<'_> {
             }
         }
         self.pos += i.min(rest.len());
-        Some(Tok::Start { name: name.to_ascii_lowercase(), attrs, self_close })
+        Some(Tok::Start { name, attrs, self_close })
     }
 }
 
@@ -469,7 +475,8 @@ fn closes_p(n: &str) -> bool {
     )
 }
 
-fn css_len_pt(v: &str) -> Option<f32> {
+/// A CSS length (or font-size keyword) in points; `None` when it is not one.
+pub fn css_len_pt(v: &str) -> Option<f32> {
     let v = v.trim().to_ascii_lowercase();
     let num = |s: &str| s.trim().parse::<f32>().ok().filter(|x| x.is_finite());
     if let Some(x) = v.strip_suffix("pt") {
@@ -824,7 +831,10 @@ impl<'r> Builder<'r> {
                         t.rows.push(r);
                     }
                     let borderless = !t.bordered;
-                    let mut ft = FTable { rows: t.rows.into_iter().filter(|r| !r.is_empty()).collect(), widths: Vec::new(), borderless };
+                    // Keep at most MAX_ROWS rows (the model drops the rest anyway): bounds the
+                    // O(rows × rowspan) work of `insert_covered` on a table of millions of `<tr>`.
+                    let rows: Vec<_> = t.rows.into_iter().filter(|r| !r.is_empty()).take(wordcraft_doc::table::MAX_ROWS).collect();
+                    let mut ft = FTable { rows, widths: Vec::new(), borderless };
                     if !ft.rows.is_empty() {
                         ft.insert_covered();
                         self.container().push(FBlock::Table(ft));
