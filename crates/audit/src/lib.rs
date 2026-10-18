@@ -306,6 +306,19 @@ fn for_each_element(xml: &[u8], part: &str, f: &mut impl FnMut(&Element) -> Resu
             Event::End(_) => {
                 depth = depth.saturating_sub(1);
             }
+            // XML allows only whitespace, comments and processing
+            // instructions outside the root element: anything else is
+            // malformed input, not a scannable part.
+            Event::Text(ref t) => {
+                if depth == 0 && !t.as_ref().iter().all(|b| matches!(b, b' ' | b'\t' | b'\n' | b'\r')) {
+                    return Err(AuditError::Xml(part.to_string(), "text outside the root element".to_string()));
+                }
+            }
+            Event::CData(_) => {
+                if depth == 0 {
+                    return Err(AuditError::Xml(part.to_string(), "CDATA outside the root element".to_string()));
+                }
+            }
             Event::Eof => {
                 if depth != 0 {
                     return Err(AuditError::Xml(part.to_string(), "unclosed elements at end of part".to_string()));

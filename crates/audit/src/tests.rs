@@ -467,3 +467,28 @@ fn empty_part_is_an_error() {
     ]);
     assert!(matches!(audit_bytes(&bytes), Err(AuditError::Xml(_, _))));
 }
+
+#[test]
+fn trailing_text_after_root_is_an_error() {
+    let doc = format!(r#"<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="{W}"><w:body/></w:document>garbage"#);
+    let bytes = package(&[
+        ("[Content_Types].xml", &content_types()),
+        ("_rels/.rels", &root_rels()),
+        ("word/document.xml", &doc.into_bytes()),
+        ("word/_rels/document.xml.rels", &doc_rels("")),
+    ]);
+    assert!(matches!(audit_bytes(&bytes), Err(AuditError::Xml(_, _))));
+}
+
+#[test]
+fn whitespace_outside_root_is_accepted() {
+    // Comments, PIs and whitespace around the root are legal XML miscellany.
+    let doc = format!("<!-- lead --><?xml version=\"1.0\" encoding=\"UTF-8\"?><w:document xmlns:w=\"{W}\"><w:body/></w:document>\n  <!-- trail -->");
+    let bytes = package(&[
+        ("[Content_Types].xml", &content_types()),
+        ("_rels/.rels", &root_rels()),
+        ("word/document.xml", &doc.into_bytes()),
+        ("word/_rels/document.xml.rels", &doc_rels("")),
+    ]);
+    assert!(findings_of(&bytes).is_empty());
+}
