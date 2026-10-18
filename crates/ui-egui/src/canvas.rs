@@ -2471,7 +2471,7 @@ fn mouse(app: &mut WordApp, ui: &Ui, resp: &egui::Response, rects: &[Rect], layo
         // With text selected, Ctrl/⌘+drag adds a separate piece and Ctrl/⌘+double-click the word
         // (#788); a Ctrl/⌘+click without a drag still selects the sentence, on release. With no
         // text selected, Ctrl/⌘+click and drag selects by sentences (#549).
-        if mods.command && !mods.shift && !mods.alt {
+        if mods.command && !mods.shift && !mods.alt && !hf_switch {
             if clicks == 2
                 && let Some(mut m) = prev_multi
             {
@@ -3756,6 +3756,14 @@ mod tests {
         press(&mut h, at, 1, at);
         assert_eq!(pieces(&h), None);
         assert_eq!(h.state().session.sel.ordered(), (Pos::body(0, 0), Pos::body(0, 22)));
+        // A Ctrl+double-click in the top margin still opens the header, text selected or not.
+        h.state_mut().run("select.text", json!({"text": "Alpha"})).unwrap();
+        h.step();
+        // (Right of the text, clear of the mini toolbar over the selection.)
+        let at = page_to_screen(h.state_mut(), 0, 500.0, 30.0).expect("on screen");
+        press(&mut h, at, 2, at);
+        assert!(matches!(h.state().session.sel.focus.story, wordcraft_doc::StoryRef::Part(_)), "the header is not being edited");
+        assert_eq!(pieces(&h), None);
     }
 
     /// #1014: Ctrl+drag on a shape leaves it and drops a copy; a plain drag moves it.

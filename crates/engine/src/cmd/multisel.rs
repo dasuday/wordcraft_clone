@@ -64,10 +64,14 @@ fn select_add(s: &mut Session, v: &Value) -> CmdResult {
         return Err(CmdError::Params("a piece must be in one story".into()));
     }
     let (a, b) = if a <= b { (a, b) } else { (b, a) };
-    // The pieces so far: the current ones, or the selected text as the first.
-    let mut pieces = match s.selection_pieces() {
-        Some(p) => p.to_vec(),
-        None => {
+    // The pieces so far: the current ones, a column block's (or part-column cells') line
+    // pieces, or the selected text as the first.
+    let mut pieces = match (s.selection_pieces(), s.column_segments()) {
+        (Some(p), _) => p.to_vec(),
+        (None, Some(segs)) => {
+            segs.iter().filter(|(x, y)| x != y).map(|(x, y)| if x <= y { (x.clone(), y.clone()) } else { (y.clone(), x.clone()) }).collect()
+        }
+        (None, None) => {
             let (x, y) = s.sel.ordered();
             if x != y { vec![(x, y)] } else { Vec::new() }
         }
@@ -82,6 +86,8 @@ fn select_add(s: &mut Session, v: &Value) -> CmdResult {
     }
     pieces.push((a.clone(), b.clone()));
     let pieces = normalise(pieces);
+    // Split before changing anything, so a refused addition leaves the selection as it was.
+    let segments = if pieces.len() > 1 { segments(s, &pieces)? } else { Vec::new() };
     s.column_mode = false;
     s.goal_x = None;
     s.pending = None;
@@ -92,7 +98,6 @@ fn select_add(s: &mut Session, v: &Value) -> CmdResult {
             s.column = None;
         }
         _ => {
-            let segments = segments(s, &pieces);
             s.sel = Selection { anchor: a, focus: b };
             s.column = Some(ColumnBlock { sel: s.sel.clone(), anchor_x: 0.0, focus_x: 0.0, segments, cells: None, pieces: Some(pieces) });
         }
@@ -117,25 +122,27 @@ fn normalise(mut pieces: Vec<(Pos, Pos)>) -> Vec<(Pos, Pos)> {
     out
 }
 
-/// Each piece split at paragraph ends: one `(start, end)` per paragraph it covers.
-fn segments(s: &Session, pieces: &[(Pos, Pos)]) -> Vec<(Pos, Pos)> {
+/// Each piece split at paragraph ends: one `(start, end)` per paragraph it covers. More than
+/// [`MAX_SEGMENTS`] in all is a parameter error.
+fn segments(s: &Session, pieces: &[(Pos, Pos)]) -> Result<Vec<(Pos, Pos)>, CmdError> {
+    let too_many = || CmdError::Params(format!("a selection spans at most {MAX_SEGMENTS} paragraphs"));
     let mut out = Vec::new();
     for (a, b) in pieces {
         if a.path == b.path {
+            if out.len() >= MAX_SEGMENTS {
+                return Err(too_many());
+            }
             out.push((a.clone(), b.clone()));
         } else {
             for path in s.doc.para_paths_in(a, b) {
+                if out.len() >= MAX_SEGMENTS {
+                    return Err(too_many());
+                }
                 let start = if path == a.path { a.off } else { 0 };
                 let end = if path == b.path { b.off } else { s.doc.para(a.story, &path).map_or(0, |p| p.len()) };
                 out.push((Pos { story: a.story, path: path.clone(), off: start }, Pos { story: a.story, path, off: end }));
-                if out.len() >= MAX_SEGMENTS {
-                    return out;
-                }
             }
         }
-        if out.len() >= MAX_SEGMENTS {
-            break;
-        }
     }
-    out
+    Ok(out)
 }

@@ -4116,6 +4116,35 @@ fn multi_selection_ends_with_a_caret_move() {
 }
 
 #[test]
+fn multi_selection_starts_from_a_column_block() {
+    // "cd" on each line as a column block, then "f" on the first line: the block's text and "f"
+    // are the pieces, not everything between the block's corners.
+    let mut s = column_doc();
+    block(&mut s);
+    let r = add(&mut s, (0, 5), (0, 6));
+    assert_eq!(r["pieces"], json!(["cd", "f", "cd", "cd"]));
+    run(&mut s, "text.delete", json!({}));
+    assert_eq!(text(&s), "abe\nabef\nabef");
+}
+
+#[test]
+fn multi_selection_refuses_too_many_paragraphs() {
+    // 100,001 paragraphs; "x" in the first is selected.
+    let mut s = s();
+    run(&mut s, "document.setText", json!({"text": format!("{}x", "x\n".repeat(100_000))}));
+    s.sel = crate::Selection { anchor: Pos::body(0, 0), focus: Pos::body(0, 1) };
+    // A piece over 100,000 more paragraphs makes 100,001 segments: refused, nothing changes.
+    let before = s.sel.clone();
+    assert!(s.run("select.add", &json!({"anchor": {"block": 1, "off": 0}, "focus": {"block": 100_000, "off": 1}})).is_err());
+    assert_eq!(s.sel, before);
+    assert!(s.selection_pieces().is_none());
+    // One paragraph fewer is exactly the limit.
+    let r = add(&mut s, (1, 0), (99_999, 1));
+    assert_eq!(r["pieces"].as_array().map(Vec::len), Some(2));
+    assert_eq!(s.column.as_ref().map(|c| c.segments.len()), Some(100_000));
+}
+
+#[test]
 fn multi_selection_from_points_and_hostile_params() {
     let mut s = multi_doc();
     run(&mut s, "select.text", json!({"text": "one"}));
