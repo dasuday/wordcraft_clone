@@ -5159,6 +5159,7 @@ dependencies = [
  "wordcraft-fonts",
  "wordcraft-proof",
  "wordcraft-ui-egui",
+ "x11rb",
  "zbus",
 ]
 
