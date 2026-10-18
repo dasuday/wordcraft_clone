@@ -1,0 +1,23 @@
+[package]
+name = "wordcraft-collab"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "WordCraft Share Mode: live, end-to-end encrypted peer-to-peer editing of one document (no server)"
+
+[lints]
+workspace = true
+
+[dependencies]
+wordcraft-doc = { workspace = true }
+wordcraft-engine = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+# Must stay 1.x: `simple-sync` hands us the bincode-1 encoding of what peers broadcast.
+bincode = "1.3"
+
+# Sockets and threads: never part of the wasm build (the web build gets a stub that says so).
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+# TODO(owner): a local path, as asked. Swap for a git/vendored dependency before CI or other
+# contributors build this (simple-sync's own playbook forbids machine-specific paths).
+simple-sync = { path = "/Users/dominic/.gemini/antigravity/scratch/simple-sync" }

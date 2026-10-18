@@ -342,6 +342,8 @@ pub fn title_bar(app: &mut WordApp, ui: &mut Ui) {
                         }
                         ui.add_space(8.0);
                     }
+                    crate::share::title_control(ui, app, control_h);
+                    ui.add_space(8.0);
                     // Search ("Tell me").
                     let (r, resp) = ui.allocate_exact_size(vec2(260.0, control_h), Sense::click());
                     ui.painter().rect(r, 6.0, if resp.hovered() { t.input } else { t.ribbon }, Stroke::new(1.0, t.border), egui::StrokeKind::Inside);
