@@ -401,7 +401,7 @@ fn manual_ui(app: &mut WordApp, ui: &mut Ui, f: &mut ManualForm) -> bool {
 // Language
 
 /// Proofing languages offered, by BCP 47 tag, with their English names (translated for display).
-pub const LANGUAGES: [(&str, &str); 30] = [
+pub const LANGUAGES: [(&str, &str); 31] = [
     ("en-US", "English (United States)"),
     ("en-GB", "English (United Kingdom)"),
     ("de-DE", "German (Germany)"),
@@ -419,6 +419,7 @@ pub const LANGUAGES: [(&str, &str); 30] = [
     ("et-EE", "Estonian"),
     ("pl-PL", "Polish"),
     ("cs-CZ", "Czech"),
+    ("hu-HU", "Hungarian"),
     ("uk-UA", "Ukrainian"),
     ("ru-RU", "Russian"),
     ("sr-Cyrl-RS", "Serbian (Cyrillic)"),
@@ -1469,6 +1470,34 @@ mod tests {
         assert_eq!(state["noProof"], true);
         h.state_mut().run("edit.undo", json!({})).unwrap();
         assert_eq!(h.state().session.doc, before, "one undo restores the inherited formatting");
+    }
+
+    /// #735: Hungarian chosen in the Language dialog's list marks the selection `hu-HU` on OK.
+    #[test]
+    fn language_dialog_selects_hungarian() {
+        use egui_kittest::kittest::Queryable;
+        let mut a = app();
+        a.run("ui.language", json!({"value": "en"})).unwrap();
+        a.run("select.all", json!({})).unwrap();
+        a.run("review.language", json!({})).unwrap();
+        let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(1440.0, 900.0)).build_ui_state(
+            |ui, app: &mut WordApp| {
+                let ctx = ui.ctx().clone();
+                app.logic(&ctx);
+                app.ui(ui);
+            },
+            a,
+        );
+        h.run_steps(3);
+        h.get_by_label("Hungarian").scroll_to_me();
+        h.run_steps(3);
+        h.get_by_label("Hungarian").click();
+        h.run_steps(3);
+        h.get_by_label("OK").click();
+        h.run_steps(3);
+        assert!(h.state().dialog.is_none());
+        let state = h.state_mut().run("format.state", json!({})).unwrap();
+        assert_eq!(state["lang"], "hu-HU");
     }
 
     /// #407: Envelopes starts from the selected address; Add to Document puts an envelope
