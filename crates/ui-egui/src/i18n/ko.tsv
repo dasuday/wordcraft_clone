@@ -2542,3 +2542,31 @@ preview	Title	제목
 	Type a size in any unit, such as 5 cm or 300 px. The other side follows, so the picture keeps its proportions.	5 cm 또는 300 px처럼 원하는 단위로 크기를 입력하세요. 다른 쪽도 함께 바뀌어 그림의 비율이 유지됩니다.
 
 	Import…	가져오기…
+	Format Selection	선택 형식
+	Current Selection	현재 선택
+	Axis	축
+	Axis Titles	축 제목
+	Axis Labels	축 이름
+	Tick labels	눈금 이름
+	Axis line	축 선
+	Format Axis	축 형식
+	Format Axis…	축 형식…
+	Format Series	계열 형식
+	Format Series…	계열 형식…
+	No fill	채우기 없음
+	Markers	마커
+	Smooth lines	매끄러운 선
+	Series	계열
+	Data labels	데이터 이름
+	Fill:	채우기:
+	Major gridlines	주요 눈금선
+	Maximum:	최댓값:
+	Minimum:	최솟값:
+	Number format:	번호 형식:
+	Width (pt):	두께(pt):
+	accent	강조
+	auto	자동
+	linked	연결됨
+	“{text}” isn't a colour (RRGGBB).	“{text}”은 색상(RRGGBB)이 아닙니다.
+	“{text}” isn't a number.	“{text}”는 숫자가 아닙니다.
+	“{text}” isn't a width in points.	“{text}”는 pt 단위 폭이 아닙니다.

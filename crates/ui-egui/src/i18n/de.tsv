@@ -2287,3 +2287,33 @@
 	Type a size in any unit, such as 5 cm or 300 px. The other side follows, so the picture keeps its proportions.	Geben Sie eine Größe in einer beliebigen Einheit ein, z. B. 5 cm oder 300 px. Die andere Seite passt sich an, sodass das Bild seine Proportionen behält.
 
 	Import…	Importieren…
+	Format Selection	Auswahl formatieren
+	Current Selection	Aktuelle Auswahl
+	Axis	Achse
+	Axis Titles	Achsentitel
+	Axis Labels	Achsenbeschriftungen
+	Tick labels	Skalenbeschriftungen
+	Axis line	Achsenlinie
+	Format Axis	Achse formatieren
+	Format Axis…	Achse formatieren…
+	Format Series	Datenreihe formatieren
+	Format Series…	Datenreihe formatieren…
+	Minimum	Minimum
+	Maximum	Maximum
+	No fill	Keine Füllung
+	Markers	Markierungen
+	Smooth lines	Ausgeglichene Linien
+	Series	Datenreihe
+	Data labels	Datenbeschriftungen
+	Fill:	Füllung:
+	Major gridlines	Hauptnetzlinien
+	Maximum:	Maximum:
+	Minimum:	Minimum:
+	Number format:	Zahlenformat:
+	Width (pt):	Breite (Pkt.):
+	accent	Akzent
+	auto	Auto
+	linked	verknüpft
+	“{text}” isn't a colour (RRGGBB).	„{text}“ ist keine Farbe (RRGGBB).
+	“{text}” isn't a number.	„{text}“ ist keine Zahl.
+	“{text}” isn't a width in points.	„{text}“ ist keine Breite in Punkt.
