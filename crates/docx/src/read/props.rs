@@ -4,9 +4,9 @@ use std::collections::HashMap;
 
 use wordcraft_doc::para::cap_alt;
 use wordcraft_doc::props::{
-    Align, Border, BorderStyle, Borders, CellProps, CharProps, HeightRule, Highlight, Ligatures, LineSpacing, NumRef, NumberForm, NumberSpacing,
-    ParaProps, Rgb, RowProps, TabAlign, TabLeader, TabStop, TableFloat, TableLook, TableProps, TextColor, TextDirection, Underline, VAlign, VMerge,
-    VertAlign,
+    Align, Border, BorderStyle, Borders, CellProps, CharProps, CombineBrackets, EastAsianLayout, HeightRule, Highlight, Ligatures, LineSpacing,
+    NumRef, NumberForm, NumberSpacing, ParaProps, Rgb, RowProps, TabAlign, TabLeader, TabStop, TableFloat, TableLook, TableProps, TextColor,
+    TextDirection, Underline, VAlign, VMerge, VertAlign,
 };
 use wordcraft_doc::section::{
     Columns, DocGrid, DocGridType, LineNumberRestart, LineNumbering, MAX_CHAR_SPACE, MAX_GRID_PITCH, NotePos, NoteProps, NoteRestart, NumFormat,
@@ -14,7 +14,7 @@ use wordcraft_doc::section::{
 };
 
 use super::drawing_color::adjust_lum;
-use crate::units::{int, measure, on_off, tw, u32_of};
+use crate::units::{int, line_multiple, measure, on_off, tw, u32_of};
 
 /// A text frame (`w:framePr` without a drop cap, ECMA-376 §17.3.1.11), sizes and offsets in
 /// points (clamped), names kept as OOXML writes them.
@@ -213,11 +213,8 @@ impl PropCtx {
                 "w:szCs" => c.size_cs = k.attr("w:val").and_then(|v| measure(v, 2.0)).filter(|v| *v > 0.0).map(|v| v.clamp(1.0, 1638.0)),
                 "w:highlight" => c.highlight = k.attr("w:val").map(Highlight::from_ooxml),
                 "w:u" => {
-                    if let Some(v) = k.attr("w:val") {
-                        c.underline = Some(Underline::from_ooxml(v));
-                    } else {
-                        c.underline = Some(Underline::Single);
-                    }
+                    // w:val has no default in the schema: without it Word draws no underline
+                    c.underline = k.attr("w:val").map(Underline::from_ooxml);
                     c.underline_auto = k.attr("w:color").map(|v| v == "auto" && k.attr("w:themeColor").is_none());
                     c.underline_color =
                         self.theme_color(k, "w:themeColor", "w:themeTint", "w:themeShade").or_else(|| k.attr("w:color").and_then(Rgb::parse));
@@ -230,6 +227,10 @@ impl PropCtx {
                         "subscript" => VertAlign::Subscript,
                         _ => VertAlign::Baseline,
                     })
+                }
+                "w:eastAsianLayout" => {
+                    let l = east_asian_layout(k);
+                    c.east_asian_layout = (l != EastAsianLayout::default()).then_some(l);
                 }
                 "w:lang" => {
                     c.lang = k.attr("w:val").filter(|v| !v.is_empty() && v.len() < 64).map(str::to_string);
@@ -305,8 +306,11 @@ impl PropCtx {
                 "w:autoSpaceDN" => p.auto_space_dn = Some(on_off(k)),
                 "w:snapToGrid" => p.snap_to_grid = Some(on_off(k)),
                 "w:framePr" => {
-                    if matches!(k.attr("w:dropCap"), Some("drop") | Some("margin")) {
+                    if let Some(kind @ ("drop" | "margin")) = k.attr("w:dropCap") {
                         p.drop_cap = Some(k.attr("w:lines").and_then(u32_of).unwrap_or(3).clamp(1, 10) as u8);
+                        p.drop_cap_margin = (kind == "margin").then_some(true);
+                        p.drop_cap_distance =
+                            tw(k, "w:hSpace").filter(|d| d.is_finite() && *d > 0.0).map(|d| d.min(wordcraft_doc::resolve::MAX_DROP_CAP_DISTANCE));
                     } else {
                         p.frame = Some(text_frame(k));
                     }
@@ -351,7 +355,8 @@ impl PropCtx {
                         p.line_spacing = match rule.as_str() {
                             "exact" => measure(line, 20.0).map(|v| LineSpacing::Exactly(v.abs())),
                             "atleast" => measure(line, 20.0).map(|v| LineSpacing::AtLeast(v.abs())),
-                            _ => measure(line, 240.0).map(|v| LineSpacing::Multiple(v.abs().clamp(0.06, 132.0))),
+                            // Strict OOXML writes the height with a unit (`13.90pt`, #2329).
+                            _ => line_multiple(line).map(|v| LineSpacing::Multiple(v.abs().clamp(0.06, 132.0))),
                         };
                     }
                 }
@@ -411,14 +416,18 @@ fn tab_stop(t: &El) -> Option<TabStop> {
         "clear" => TabAlign::Clear,
         _ => TabAlign::Left,
     };
-    let leader = match t.attr("w:leader").unwrap_or("none") {
+    Some(TabStop { pos, align, leader: tab_leader(t.attr("w:leader").unwrap_or("none")) })
+}
+
+/// A tab stop's or positional tab's `w:leader` (`ST_TabTlc`, `ST_PTabLeader`).
+pub(crate) fn tab_leader(v: &str) -> TabLeader {
+    match v {
         "dot" => TabLeader::Dot,
         "hyphen" => TabLeader::Hyphen,
         "underscore" | "heavy" => TabLeader::Underscore,
         "middleDot" => TabLeader::MiddleDot,
         _ => TabLeader::None,
-    };
-    Some(TabStop { pos, align, leader })
+    }
 }
 
 /// `w:shd/@w:fill` (a solid fill colour; `auto` = none), ignoring theme fills ([`PropCtx::shd_fill`]).
@@ -461,7 +470,11 @@ pub fn borders(e: &El) -> Borders {
 
 /// Margins element (`w:tblCellMar`, `w:tcMar`) → [top, left, bottom, right].
 pub fn margins(e: &El) -> [f32; 4] {
-    let get = |names: &[&str]| names.iter().find_map(|n| e.child(n)).and_then(|c| tw(c, "w:w")).unwrap_or(0.0).clamp(0.0, 1584.0);
+    margin_sides(e).map(|side| side.unwrap_or(0.0))
+}
+
+fn margin_sides(e: &El) -> [Option<f32>; 4] {
+    let get = |names: &[&str]| names.iter().find_map(|n| e.child(n)).and_then(|c| tw(c, "w:w")).map(|v| v.clamp(0.0, 1584.0));
     [get(&["w:top"]), get(&["w:left", "w:start"]), get(&["w:bottom"]), get(&["w:right", "w:end"])]
 }
 
@@ -596,7 +609,14 @@ pub fn tcpr(pc: &PropCtx, e: &El) -> (CellProps, bool) {
             "w:shd" => c.shading = pc.shd_fill(k),
             "w:noWrap" => c.no_wrap = on_off(k),
             "w:hideMark" => c.hide_mark = on_off(k),
-            "w:tcMar" => c.margins = Some(margins(k)),
+            "w:tcMar" => {
+                let sides = margin_sides(k);
+                if sides.iter().all(Option::is_some) {
+                    c.margins = Some(sides.map(|side| side.unwrap_or(0.0)));
+                } else {
+                    c.partial_margins = Some(sides);
+                }
+            }
             "w:textDirection" => {
                 c.text_direction = TextDirection::from_ooxml(k.attr("w:val").unwrap_or(""));
                 c.text_direction_set = k.attr("w:val") == Some("lrTb");
@@ -779,5 +799,24 @@ fn table_float(e: &El) -> TableFloat {
         v_align: align("w:tblpYSpec"),
         dist: [dist("w:leftFromText"), dist("w:topFromText"), dist("w:rightFromText"), dist("w:bottomFromText")],
         overlap: true,
+    }
+}
+
+/// `w:eastAsianLayout` (ISO/IEC 29500-1 §17.3.2.10). Attributes the schema doesn't allow (an id
+/// out of `xsd:int`, an unknown bracket, an on/off that isn't one) are left unset.
+fn east_asian_layout(e: &El) -> EastAsianLayout {
+    let flag = |name: &str| {
+        e.attr(name).and_then(|v| match v.trim() {
+            "1" | "true" | "on" => Some(true),
+            "0" | "false" | "off" => Some(false),
+            _ => None,
+        })
+    };
+    EastAsianLayout {
+        id: e.attr("w:id").and_then(int).and_then(|v| i32::try_from(v).ok()),
+        combine: flag("w:combine"),
+        combine_brackets: e.attr("w:combineBrackets").and_then(|v| CombineBrackets::from_ooxml(v.trim())),
+        vert: flag("w:vert"),
+        vert_compress: flag("w:vertCompress"),
     }
 }

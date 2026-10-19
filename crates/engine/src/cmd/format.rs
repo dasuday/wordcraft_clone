@@ -766,7 +766,6 @@ pub fn state(s: &Session) -> Value {
         "underlineColor": same(&|r| json!(r.underline_color.map(|c| c.hex()).unwrap_or_else(|| "auto".into()))),
         "scale": same(&|r| json!(r.scale)),
         "position": same(&|r| json!(r.position)),
-        "kern": same(&|r| json!(r.kern)),
         "ligatures": same(&|r| json!(r.ligatures)),
         "numberSpacing": same(&|r| json!(r.number_spacing)),
         "numberForm": same(&|r| json!(r.number_form)),
@@ -779,6 +778,8 @@ pub fn state(s: &Session) -> Value {
         "caps": all.iter().all(|r| r.caps),
         "hidden": all.iter().all(|r| r.hidden),
         "spacing": same(&|r| json!(r.spacing)),
+        // Kerning for fonts: the smallest kerned size, points; 0 = off.
+        "kern": same(&|r| json!(r.kern)),
         "color": same(&|r| json!(match r.color { TextColor::Auto => "auto".to_string(), TextColor::Rgb(c) => c.hex() })),
         "highlight": same(&|r| json!(r.highlight.map(|c| c.hex()))),
         "style": style,

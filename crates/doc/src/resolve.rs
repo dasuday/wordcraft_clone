@@ -11,6 +11,8 @@ use crate::styles::{StyleKind, StyleSheet};
 /// Automatic (HTML-style) paragraph spacing, points: what Word for Windows gives `w:beforeAutospacing`
 /// and `w:afterAutospacing` at any font size (measured).
 pub const AUTO_SPACING: f32 = 14.0;
+/// The largest drop cap distance from the text, in points (22", as Word's dialog allows).
+pub const MAX_DROP_CAP_DISTANCE: f32 = 1584.0;
 
 /// Concrete character formatting.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -85,7 +87,8 @@ pub struct ResolvedChar {
 impl ResolvedChar {
     fn from(c: &CharProps) -> ResolvedChar {
         ResolvedChar {
-            font: c.font.clone().unwrap_or_else(|| crate::styles::BODY_FONT.to_string()),
+            // A symbol character is shown in its own font (`w:sym`), whatever the run's font.
+            font: c.shown_font().map(str::to_string).unwrap_or_else(|| crate::styles::BODY_FONT.to_string()),
             font_theme: c.font_theme,
             size: c.size.unwrap_or(11.0).clamp(1.0, 1638.0),
             bold: c.bold.unwrap_or(false),
@@ -194,6 +197,15 @@ pub struct ResolvedPara {
     pub borders: Option<Borders>,
     pub bidi: bool,
     pub drop_cap: u8,
+    /// The drop cap hangs in the margin (see `ParaProps::drop_cap_margin`).
+    #[serde(default)]
+    pub drop_cap_margin: bool,
+    /// The drop cap's distance from the text, in points.
+    #[serde(default)]
+    pub drop_cap_distance: f32,
+    /// The drop cap letter's font family; `None` = the text's.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub drop_cap_font: Option<String>,
     /// A text frame the paragraph sits in (see `ParaProps::frame`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub frame: Option<crate::props::TextFrame>,
@@ -272,6 +284,9 @@ impl ResolvedPara {
             borders: p.borders.filter(Borders::any_visible),
             bidi: p.bidi.unwrap_or(false),
             drop_cap: p.drop_cap.unwrap_or(0).min(10),
+            drop_cap_margin: p.drop_cap_margin.unwrap_or(false),
+            drop_cap_distance: p.drop_cap_distance.filter(|d| d.is_finite()).unwrap_or(0.0).clamp(0.0, MAX_DROP_CAP_DISTANCE),
+            drop_cap_font: p.drop_cap_font.clone().filter(|f| !f.trim().is_empty()),
             frame: p.frame.clone().filter(|_| p.drop_cap.unwrap_or(0) == 0),
             suppress_hyphens: p.suppress_hyphens.unwrap_or(false),
             suppress_line_numbers: p.suppress_line_numbers.unwrap_or(false),
@@ -371,6 +386,8 @@ impl StyleSheet {
                 }
             }
         }
+        // Only a character itself has a symbol font of its own (`w:sym`); a style never gives one.
+        cp.sym_font = None;
         let mut direct = c.clone();
         direct.style = None;
         cp.overlay(&direct);
@@ -391,7 +408,7 @@ impl crate::Document {
             Some(crate::props::ThemeFont::Headings) => Some(&self.settings.major_font),
             _ => None,
         };
-        if let Some(family) = family.filter(|f| !f.is_empty()) {
+        if let Some(family) = family.filter(|f| !f.is_empty() && props.sym_font.is_none()) {
             if rc.font_cs_inherited {
                 rc.font_cs = family.clone();
             }
@@ -404,6 +421,19 @@ impl crate::Document {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// #2036: only a character itself (direct formatting) has a symbol font of its own; a
+    /// style never gives one to its text.
+    #[test]
+    fn a_style_never_gives_text_a_symbol_font() {
+        let mut s = StyleSheet::builtin();
+        if let Some(n) = s.get_mut("Normal") {
+            n.chr.sym_font = Some("Wingdings".into());
+        }
+        assert_ne!(s.resolve_char(None, &CharProps::default()).font, "Wingdings");
+        let direct = CharProps { sym_font: Some("Wingdings".into()), ..Default::default() };
+        assert_eq!(s.resolve_char(None, &direct).font, "Wingdings");
+    }
 
     #[test]
     fn font_dialog_theme_links_and_automatic_underline_resolve_through_styles() {
@@ -425,6 +455,8 @@ mod tests {
             let explicit_cs = doc.resolve_char(None, &CharProps { font_cs: Some("Complex script family".into()), ..props.clone() });
             assert_eq!(explicit_cs.font, family);
             assert_eq!(explicit_cs.font_cs, "Complex script family");
+            let symbol = doc.resolve_char(None, &CharProps { sym_font: Some("Symbol family".into()), ..props.clone() });
+            assert_eq!(symbol.font, "Symbol family", "theme changes never replace a symbol's own font");
             let explicit = doc.resolve_char(None, &CharProps { font: Some("Explicit family".into()), ..props });
             assert_eq!(explicit.font, "Explicit family");
             assert_eq!(explicit.font_theme, None, "choosing a family removes the inherited theme link");

@@ -165,3 +165,27 @@ fn font_effect_removal_suppresses_inherited_decorations_after_docx_roundtrip() {
     run(&mut cleared, "select.all", json!({}));
     assert!(super::cmd::format::state(&cleared)["textEffects"].is_null());
 }
+
+#[test]
+fn wordart_reflection_and_outline_none_options() {
+    let mut s = Session::new(Document::new());
+    let r = run(&mut s, "insert.wordArt", json!({"text": "Reflect", "style": "solid"}));
+    let id = r["story"].as_u64().unwrap() as u32;
+
+    // Setting reflection
+    run(&mut s, "format.textEffects", json!({"reflection": true}));
+    let props = s.doc.para_at(&s.doc.start_of(StoryRef::Part(id))).unwrap().props_at(0).clone();
+    assert!(props.text_effects.as_ref().unwrap().reflection.is_some());
+
+    // Clearing reflection using "none"
+    run(&mut s, "format.textEffects", json!({"reflection": "none"}));
+    let props = s.doc.para_at(&s.doc.start_of(StoryRef::Part(id))).unwrap().props_at(0).clone();
+    assert!(props.text_effects.as_ref().and_then(|fx| fx.visible().reflection).is_none());
+
+    // Setting outline with color "none"
+    run(&mut s, "wordArt.textOutline", json!({"color": "none", "width": 1.5}));
+    let props = s.doc.para_at(&s.doc.start_of(StoryRef::Part(id))).unwrap().props_at(0).clone();
+    let outline = props.text_effects.as_ref().unwrap().outline.unwrap();
+    assert_eq!(outline.color, None);
+    assert_eq!(outline.width, 1.5);
+}
