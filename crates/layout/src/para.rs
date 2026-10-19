@@ -1419,6 +1419,11 @@ pub(crate) fn left_out(doc: &Document, rc: &ResolvedChar, show_hidden: bool, hid
 
 /// Lay out one paragraph.
 pub fn layout_para(p: &Paragraph, env: &ParaEnv) -> ParaLayout {
+    layout_para_with_wrap(p, env, &[])
+}
+
+/// Internal replay policy; public callers always let long words wait for wider rows.
+pub(super) fn layout_para_with_wrap(p: &Paragraph, env: &ParaEnv, split: &[usize]) -> ParaLayout {
     let doc = env.doc;
     let mut rp = doc.styles.resolve_para_in(&p.props, env.table.map(|t| &t.para));
     if let Some(spacing) = env.read_line_spacing.filter(|s| s.is_finite() && (1.0..=2.0).contains(s)) {
@@ -1884,7 +1889,7 @@ pub fn layout_para(p: &Paragraph, env: &ParaEnv) -> ParaLayout {
             c.break_after = true;
         }
     }
-    break_lines(&mut pl, env, mark_style, env.label.as_ref().map(|(_, l)| l));
+    break_lines(&mut pl, env, mark_style, env.label.as_ref().map(|(_, l)| l), split);
     if gone {
         collapse(&mut pl);
     }
@@ -1945,7 +1950,7 @@ fn ptab_stop(align: PTabAlign, base: PTabBase, leader: TabLeader, width: f32, in
     TabStop { pos, align, leader }
 }
 
-fn break_lines(pl: &mut ParaLayout, env: &ParaEnv, mark_style: u32, level: Option<&Level>) {
+fn break_lines(pl: &mut ParaLayout, env: &ParaEnv, mark_style: u32, level: Option<&Level>, split: &[usize]) {
     // Narrow cells and float spans must retain their usable width.
     const MIN_LINE_WIDTH: f32 = 1.0;
     let suffix = level.map(|l| l.suffix);
@@ -2199,7 +2204,11 @@ fn break_lines(pl: &mut ParaLayout, env: &ParaEnv, mark_style: u32, level: Optio
                         .map(|c| c.adv)
                         .sum();
                     let full = base_right - row_lo;
-                    skip = narrowed && skipped < 50 && word <= full + 0.01;
+                    let must_split = split
+                        .iter()
+                        .filter_map(|&index| exclusions.get(index))
+                        .any(|e| e.bottom > top && e.top < top + est_h && e.right > row_lo && e.left < base_right);
+                    skip = narrowed && skipped < 50 && word <= full + 0.01 && !must_split;
                     // Never split a ligature's letters across lines: the glyph sits on the first
                     // letter, so back up to it (unless it starts the line).
                     let glyphless = |k: usize| pl.clusters.get(k).is_some_and(|c| c.kind == ClKind::Text && c.g1 <= c.g0);
@@ -3160,7 +3169,7 @@ mod label_spacing_tests {
             (st.ascent, st.descent) = if i == label_style as usize { label_metrics } else { text_metrics };
         }
         let mark_style = pl.clusters[0].style;
-        break_lines(&mut pl, &env, mark_style, Some(&level));
+        break_lines(&mut pl, &env, mark_style, Some(&level), &[]);
         pl.lines
     }
 
