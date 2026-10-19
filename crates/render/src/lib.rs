@@ -8,7 +8,6 @@ use vello_cpu::kurbo::{self, Affine, BezPath, Shape};
 use vello_cpu::peniko;
 use vello_cpu::{Pixmap, RenderContext, Resources};
 use wordcraft_doc::Document;
-#[cfg(test)]
 use wordcraft_doc::para::ShapeKind;
 use wordcraft_doc::props::Rgb;
 use wordcraft_fonts::FontDb;

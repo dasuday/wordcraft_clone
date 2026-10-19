@@ -1,6 +1,6 @@
 //! Path geometry for Office shapes exported to PDF (krilla).
 
-use krilla::geom::{Path, PathBuilder};
+use craft_pdf::write::backend::geom::{Path, PathBuilder};
 use wordcraft_doc::para::ShapeKind;
 use wordcraft_geom::Rect;
 
