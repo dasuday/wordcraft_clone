@@ -22,6 +22,7 @@ establish cross-platform reliability.
 
 Document renaming: desktop renaming requires a filesystem that supports hard links (exFAT/FAT drives and some network shares refuse it). Behaviour: [UI parity](ui-parity.md).
 
+Justified text in compatibility mode 15 now permits 25% inner-space compression, confirmed with synthetic Word exports across five fonts. Modes 12 and 14 retain their existing behavior. The 0.01 pt fit tolerance remains a separate subpoint difference.
 Font-menu reliability: clearing a query with no matches now shows the recent section from its first row, including its heading, in a scrollable list. Fixed synthetic-family widget and full-ribbon tests cover this case and matching-query controls (#2068).
 Additive paragraph spacing retains the full before-space after a section page break; ordinary overlapping spacing is unchanged. Other pagination gaps remain open.
 
@@ -132,6 +133,8 @@ Footer page-table height and body wrapping are corrected. Other pagination gaps 
 | 2026-10-15 | trivial | Numbered headings (#1793): heading-linked Multilevel List presets; numbering keeps heading styles. Not a ranked gap; style gallery previews without numbers remain |
 | 2026-10-16 | trivial | Hint-reliant CJK fonts execute TrueType contour assembly; Windows DFKai-SB no longer loses strokes. Synthetic local-font regression; no font binaries bundled. |
 | 2026-10-16 | trivial | #17: automatic space between Asian text and Latin text or digits laid out (#2358) |
+| 2026-10-16 | trivial | Mode 15 justified lines may shrink inner spaces by 25%; earlier compatibility modes do not. The existing fit tolerance remains. |
+| 2026-10-19 | trivial | Documented quarter-space compression in the evidence column; retained the threshold and 0.01 pt fit tolerance. Runtime behavior is unchanged. |
 | 2026-10-14 | trivial | Gap 19: RTF export writes sections (ODT export landed too) |
 | 2026-10-14 | trivial | #19 narrowed: ODT export done (master page and page layout per section, columned `text:section`s) |
 | 2026-10-15 | trivial | Additive paragraph spacing retains the full before-space after a section page break; ordinary overlapping spacing is unchanged. |

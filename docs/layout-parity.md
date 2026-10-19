@@ -28,7 +28,7 @@ Exact line spacing keeps the run font baseline around tall equations; automatic 
 | Line breaking (UAX #14 with Word's exceptions: no break after `/`) | ✅ | `layout::tests::no_line_break_right_after_a_slash` | — |
 | A break before a slash that starts a word (" /word" wraps whole; not after a no-break space) | 🟡 | `layout::tests::a_word_after_a_slash_wraps_whole`, `layout::tests::a_no_break_space_before_a_slash_still_holds`; behaviour from the #2963 report, not compared with Word yet | — |
 | Narrow table cells | ✅ | `layout::tests::narrow_cells_keep_their_width`: usable widths below 12 pt wrap without expansion; oversized glyphs still make progress | 0 |
-| Justification, Word 2013+ space shrinking (compat mode 15) | ✅ | #109 | — |
+| Justification, Word 2013+ space shrinking (compat mode 15) | ✅ | #109; `layout::tests::space_shrink_quarter`: inner spaces shrink by up to 25%; existing 0.01 pt fit tolerance remains | 0 |
 | Spaces at the end of a line hang past the right margin instead of wrapping; the caret after them stays at the margin, in the body and in headers and footers | ✅ | `layout::tests::caret_after_hanging_spaces_stays_at_the_margin` (#2146): a letter typed after them wraps to the next line | — |
 | Complex scripts (Myanmar, Khmer, Indic): shaped per script run with OpenType fallback fonts, one cluster per syllable, Myanmar wraps between syllables | 🟡 | `layout::tests_complex` (#604). Khmer, Thai and Lao still wrap only at spaces (need a dictionary) | 4–8 |
 | Kashida justification (Arabic) | ❌ | no kashida in `crates/layout` | 3–5 |
@@ -231,6 +231,8 @@ Page-relative footer tables keep their physical wrap bounds without adding to fo
 | 2026-10-16 | trivial | Hint-reliant CJK fonts execute TrueType contour assembly; Windows DFKai-SB no longer loses strokes. Synthetic local-font regression; no font binaries bundled. |
 | 2026-10-16 | trivial | `w:autoSpaceDE` and `w:autoSpaceDN` are laid out: a quarter em between Asian text and Latin text or digits (#2358) |
 | 2026-10-16 | trivial | AutoFit donors lose equal widths, bounded by content minima |
+| 2026-10-16 | trivial | Mode 15 justified lines may shrink inner spaces by 25%; earlier compatibility modes do not. Synthetic Word exports confirm the limit across five fonts, with kerning on and off. The existing 0.01 pt fit tolerance remains. |
+| 2026-10-19 | trivial | Documented quarter-space compression in the evidence column; retained the threshold and 0.01 pt fit tolerance. Runtime behavior is unchanged. |
 | 2026-10-16 | trivial | Behind-text pictures in table cells participate in centre and bottom vertical alignment without increasing row flow height. |
 | 2026-10-15 | trivial | Absent or zero DrawingML effect extents remain zero on rotated pictures; contracted axes no longer reserve invented effects room. Synthetic quarter-turn import regression (`zero_effects_stay_zero_rotated`). |
 | 2026-10-15 | trivial | Additive paragraph spacing retains the full before-space after a section page break; ordinary overlapping spacing is unchanged. |
