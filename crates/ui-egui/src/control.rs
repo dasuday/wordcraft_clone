@@ -65,6 +65,7 @@ pub fn inspect(app: &mut WordApp, ctx: &egui::Context) -> Value {
         "perf": {
             "frameMs": app.frame_ms,
             "renderMs": app.canvas.render_ms,
+            "rasterMs": app.canvas.raster_ms,
             "layoutMs": app.session.layout().ms,
             "pageRenders": app.canvas.full_renders,
             "bandRenders": app.canvas.partial_renders,
@@ -114,10 +115,17 @@ fn click_events(app: &mut WordApp, pos: egui::Pos2, button: egui::PointerButton,
 
 /// Programmatic calls never open the Save prompt, so closing unsaved work must be explicit:
 /// save first, or pass `"force": true` (only a real boolean true counts) to discard it (#1268).
-fn close_refused(app: &WordApp, id: &str, params: &Value) -> Option<&'static str> {
+pub(crate) fn close_refused(app: &WordApp, id: &str, params: &Value) -> Option<&'static str> {
     let force = params.get("force").and_then(Value::as_bool) == Some(true);
-    (id == "file.close" && app.session.dirty && !force)
-        .then_some("the document has unsaved changes: save it first, or pass {\"force\": true} to discard them and close")
+    if force {
+        return None;
+    }
+    if id == "file.close" && app.session.dirty {
+        return Some("the document has unsaved changes: save it first, or pass {\"force\": true} to discard them and close");
+    }
+    // Comment text still being typed is unsaved work too (#1348): replacing the document would drop it.
+    (crate::discards_document(id, params) && crate::panes::has_comment_drafts(app))
+        .then_some("a comment is still being edited: finish it first, or pass {\"force\": true} to discard it")
 }
 
 /// The reply to a request that needs a document while none is open (#1129).
@@ -326,4 +334,19 @@ pub fn save_screenshot(image: &egui::ColorImage, path: Option<&str>) -> Value {
         }
     }
     json!({"ok": true, "result": {"path": path, "width": w, "height": h}})
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// `docs/control-protocol.md` promises `perf.rasterMs`; a control client reads it to tell a
+    /// keystroke's page raster from the rest of the canvas work.
+    #[test]
+    fn inspect_reports_the_documented_raster_time() {
+        let mut app = WordApp::new(wordcraft_engine::Session::new(wordcraft_doc::Document::new()), Default::default());
+        app.canvas.raster_ms = 1.25;
+        let seen = inspect(&mut app, &egui::Context::default());
+        assert_eq!(seen["perf"]["rasterMs"].as_f64(), Some(1.25));
+    }
 }

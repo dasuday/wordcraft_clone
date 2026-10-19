@@ -154,16 +154,25 @@ fn main() {
     // Zoom, ribbon tabs, resize: the frame after the change.
     let mut zoom = Vec::new();
     for z in [50, 75, 100, 150, 200, 100] {
+        let (full0, band0) = (h.state().canvas.full_renders, h.state().canvas.partial_renders);
         h.state_mut().session.run("view.zoom", &json!({"value": z})).ok();
         let a = step(&mut h);
+        let raster_a = h.state().canvas.raster_ms;
+        let render_a = h.state().canvas.render_ms;
         let b = step(&mut h);
+        let raster_b = h.state().canvas.raster_ms;
+        let render_b = h.state().canvas.render_ms;
+        let (full, band) = (h.state().canvas.full_renders, h.state().canvas.partial_renders);
         zoom.push(json!({
             "zoom": z,
             "frame_ms": (a * 10.0).round() / 10.0,
             "next_ms": (b * 10.0).round() / 10.0,
-            "raster_ms": (h.state().canvas.raster_ms * 10.0).round() / 10.0,
-            "render_ms": (h.state().canvas.render_ms * 10.0).round() / 10.0,
-            "rasters": h.state().canvas.full_renders + h.state().canvas.partial_renders,
+            // The zoom's rasterising and canvas work spread over both frames.
+            "raster_ms": ((raster_a + raster_b) * 10.0).round() / 10.0,
+            "render_ms": ((render_a + render_b) * 10.0).round() / 10.0,
+            "rasters": full + band - full0 - band0,
+            "page_rasters": full - full0,
+            "band_rasters": band - band0,
         }));
     }
     out["zoom"] = json!(zoom);
