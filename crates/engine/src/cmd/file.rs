@@ -375,13 +375,19 @@ fn properties(s: &mut Session, v: &Value) -> CmdResult {
         let Some(m) = custom.as_object() else {
             return Err(CmdError::Params("`custom` must be an object of name → string or null".into()));
         };
+        // Removals first: a case-only rename sends the old spelling as null and the new one
+        // with its value, and `set_custom_prop` matches names case-insensitively, so setting
+        // first would keep the old spelling (object keys are sorted, either spelling may lead).
+        for (name, val) in m {
+            if val.is_null() {
+                s.doc.remove_custom_prop(name);
+            }
+        }
         for (name, val) in m {
             match val {
-                // A removal takes the name as stored: a file opened from an older Word may hold
-                // one longer than today's limit, and it must still be deletable (#2982).
-                Value::Null => {
-                    s.doc.remove_custom_prop(name);
-                }
+                // Removals took the name as stored above: a file opened from an older Word may
+                // hold one longer than today's limit, and it must still be deletable (#2982).
+                Value::Null => {}
                 Value::String(x) if x.len() <= MAX_CUSTOM_VALUE => {
                     if name.trim().is_empty() || name.chars().count() > MAX_CUSTOM_NAME {
                         return Err(CmdError::Params(format!("custom property names are 1–{MAX_CUSTOM_NAME} characters")));

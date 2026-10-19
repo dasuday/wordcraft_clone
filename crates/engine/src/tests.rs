@@ -3646,6 +3646,18 @@ fn custom_properties_set_read_remove_and_undo() {
     assert_eq!(s.doc.custom_prop("Status"), Some("draft"));
 }
 
+/// #2982: a case-only rename arrives as the old spelling with null and the new one with its
+/// value. The removal must run first: object keys are sorted, so `Status` sorts before
+/// `status`, and setting before removing would let the removal take the new spelling too.
+#[test]
+fn custom_properties_case_only_rename_keeps_the_new_spelling() {
+    let mut s = s();
+    run(&mut s, "file.properties", json!({"custom": {"status": "draft"}}));
+    run(&mut s, "file.properties", json!({"custom": {"Status": "draft", "status": null}}));
+    let props: Vec<(&str, &str)> = s.doc.custom_props.iter().map(|p| (p.name.as_str(), p.value.as_str())).collect();
+    assert_eq!(props, [("Status", "draft")], "the property keeps the new spelling and its value");
+}
+
 /// #2982: what the Custom Properties dialog saves (through `file.properties`) survives a .docx
 /// save and reopen.
 #[test]

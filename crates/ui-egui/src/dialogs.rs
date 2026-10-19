@@ -683,16 +683,21 @@ impl CustomPropertiesForm {
 
     /// The one `file.properties` call OK makes: a property gone since the dialog opened is
     /// null, one added or changed is its value. Untouched properties aren't sent, so one of
-    /// another type (Zotero's raw XML, a number) keeps its stored form.
+    /// another type (Zotero's raw XML, a number) keeps its stored form. A rename that only
+    /// changes case sends the old spelling as null too, so the stored spelling follows it.
     pub(crate) fn params(&self) -> Value {
         let mut custom = serde_json::Map::new();
         for p in &self.start {
-            if !self.props.iter().any(|q| q.name.eq_ignore_ascii_case(&p.name)) {
-                custom.insert(p.name.clone(), Value::Null);
+            match self.props.iter().find(|q| q.name.eq_ignore_ascii_case(&p.name)) {
+                Some(q) if q.name == p.name => {}
+                _ => {
+                    custom.insert(p.name.clone(), Value::Null);
+                }
             }
         }
         for p in &self.props {
-            let changed = self.start.iter().find(|q| q.name.eq_ignore_ascii_case(&p.name)).is_none_or(|was| was.value != p.value);
+            let changed =
+                self.start.iter().find(|q| q.name.eq_ignore_ascii_case(&p.name)).is_none_or(|was| was.name != p.name || was.value != p.value);
             if changed {
                 custom.insert(p.name.clone(), json!(p.value));
             }
@@ -5358,6 +5363,41 @@ mod tests {
         assert_eq!(h.state().session.doc.custom_prop("Status"), Some("draft"), "one undo step");
         assert_eq!(h.state().session.doc.custom_prop("Owner"), Some("Mira"));
         assert_eq!(h.state().session.doc.custom_prop("Reviewer"), None);
+    }
+
+    /// #2982: a rename that changes only the case of the name is still a rename. Modify and OK
+    /// must send the old spelling as a removal and the new one as a value, or the stored
+    /// spelling never changes.
+    #[test]
+    fn the_custom_properties_dialog_keeps_a_case_only_rename() {
+        use egui_kittest::kittest::Queryable;
+        let mut app = app_with("Report body");
+        let _ = app.run("file.properties", json!({"custom": {"Status": "draft"}}));
+        let _ = app.run("ui.backstage", json!({"value": true, "page": "info"}));
+        let mut h = egui_kittest::Harness::builder().with_size(vec2(1440.0, 900.0)).build_ui_state(
+            |ui, app: &mut WordApp| {
+                let ctx = ui.ctx().clone();
+                app.logic(&ctx);
+                app.ui(ui);
+            },
+            app,
+        );
+        h.run_steps(4);
+        h.get_by_label("Advanced Properties…").click();
+        h.run_steps(4);
+        // Select the property and change only the case of its name, keeping the value.
+        h.get_by_label("Status = draft").click();
+        h.run_steps(2);
+        set_text_field(&mut h, "Name:", "status");
+        assert_eq!(h.get_by_role_and_label(egui::accesskit::Role::TextInput, "Value:").value().as_deref(), Some("draft"));
+        h.get_by_role_and_label(egui::accesskit::Role::Button, "Modify").click();
+        h.run_steps(2);
+        assert!(h.query_by_label("status = draft").is_some(), "the list shows the new spelling");
+        h.get_by_role_and_label(egui::accesskit::Role::Button, "OK").click();
+        h.run_steps(4);
+        assert!(h.state().dialog.is_none(), "OK closes the dialog");
+        let props: Vec<(String, String)> = h.state().session.doc.custom_props.iter().map(|p| (p.name.clone(), p.value.clone())).collect();
+        assert_eq!(props, [("status".to_string(), "draft".to_string())], "the stored spelling follows the rename");
     }
 
     /// #2982: Cancel leaves the document as it was; empty names are refused with a message in
