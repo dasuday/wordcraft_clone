@@ -15,7 +15,14 @@
 //!
 //! **Bulgarian**: the Bulgarian syllable rules ([`crate::bg`]); no pattern file or word list.
 //!
-//! Then the paragraph's limits ([`Limits`]) are applied.
+//! **Latin**: hyph-utf8's liturgical Latin TeX patterns ([`Patterns::la`]), never the English
+//! ones. A letter outside the pattern alphabet is read without its accent when that makes it
+//! known; a word still outside it falls back to the generic syllable heuristic, each part separately around an apostrophe the
+//! patterns don't know. The language's own minimum letters before and after a hyphen
+//! ([`lang_mins`], TeX's `\lefthyphenmin`/`\righthyphenmin`) apply within each part of an
+//! elided word.
+//!
+//! Then the paragraph's limits ([`Limits`]) are applied, with the language's minimums when larger.
 
 pub use crate::dict;
 
@@ -36,6 +43,8 @@ static PT_PAT: &str = include_str!("../../../assets/hyphenation/pt.pat");
 /// hyph-utf8's `hyph-it.tex`, unmodified (offered under MIT or LPPL; WordCraft uses MIT, whose
 /// notice is in the file's header).
 static IT_PAT: &str = include_str!("../../../assets/hyphenation/it.pat");
+/// hyph-utf8's `hyph-la-x-liturgic.tex`, unmodified (MIT; notice in the header).
+static LA_PAT: &str = include_str!("../../../assets/hyphenation/la-x-liturgic.pat");
 
 impl Dictionary {
     /// The bundled US English dictionary (decoded on first use).
@@ -76,6 +85,30 @@ impl Patterns {
     pub fn it() -> &'static Patterns {
         static P: OnceLock<Patterns> = OnceLock::new();
         P.get_or_init(|| Patterns::parse(IT_PAT))
+    }
+
+    /// The bundled liturgical Latin patterns (parsed on first use; no exception words).
+    pub fn la() -> &'static Patterns {
+        static P: OnceLock<Patterns> = OnceLock::new();
+        P.get_or_init(|| Patterns::parse(LA_PAT))
+    }
+}
+
+/// The fewest letters `lang`'s typesetting leaves before and after a hyphen (TeX's
+/// `\lefthyphenmin`, `\righthyphenmin`); `(1, 1)`, no constraint of its own, for the others.
+/// hyph-utf8's metadata gives 2/2 for Latin.
+pub fn lang_mins(lang: ProofLang) -> (usize, usize) {
+    match lang {
+        ProofLang::La => (2, 2),
+        _ => (1, 1),
+    }
+}
+
+/// The TeX patterns `lang` is hyphenated with by [`core_breaks_tex`], if it is one of those.
+fn tex_patterns(lang: ProofLang) -> Option<&'static Patterns> {
+    match lang {
+        ProofLang::La => Some(Patterns::la()),
+        _ => None,
     }
 }
 
@@ -135,6 +168,9 @@ fn core_breaks(core: &[char], lang: ProofLang) -> (Vec<usize>, Source) {
     }
     if lang == ProofLang::It {
         return core_breaks_it(core);
+    }
+    if let Some(pats) = tex_patterns(lang) {
+        return core_breaks_tex(core, pats, lang_mins(lang));
     }
     if lang == ProofLang::Ru && core.iter().all(|&c| crate::ru::is_cyrillic(c)) {
         return (crate::ru::hyphen::points(core), Source::Heuristic);
@@ -209,13 +245,84 @@ fn core_breaks_it(core: &[char]) -> (Vec<usize>, Source) {
     (heuristic_points(core), Source::Heuristic)
 }
 
+/// `c` without its accent (`ü` → `u`, `ë` → `e`), for a letter the patterns don't know.
+fn fold_accent(c: char) -> char {
+    match c {
+        'à' | 'á' | 'â' | 'ã' | 'ä' | 'å' => 'a',
+        'ç' => 'c',
+        'è' | 'é' | 'ê' | 'ë' => 'e',
+        'ì' | 'í' | 'î' | 'ï' => 'i',
+        'ñ' => 'n',
+        'ò' | 'ó' | 'ô' | 'õ' | 'ö' => 'o',
+        'ù' | 'ú' | 'û' | 'ü' => 'u',
+        'ý' | 'ÿ' => 'y',
+        _ => c,
+    }
+}
+
+/// Break points of a lowercase `word` by `pats`, reading a letter they don't know without its
+/// accent; None if a letter stays outside their alphabet.
+fn tex_points(word: &[char], pats: &Patterns) -> Option<Vec<usize>> {
+    if pats.is_empty() {
+        return None;
+    }
+    pats.points(word).or_else(|| {
+        let folded: Vec<char> = word.iter().map(|&c| if pats.knows(c) { c } else { fold_accent(c) }).collect();
+        pats.points(&folded)
+    })
+}
+
+/// Latin (and further hyph-utf8 languages): the exception words, then the language's TeX patterns,
+/// else the generic heuristic, each part separately around an apostrophe the patterns don't know.
+/// The language's minimum letters before (`left`) and after (`right`) a break apply within each
+/// part of an elided word, never next to the apostrophe.
+fn core_breaks_tex(core: &[char], pats: &Patterns, (left, right): (usize, usize)) -> (Vec<usize>, Source) {
+    let s: String = core.iter().collect();
+    if let Some(p) = pats.exception(&s) {
+        return (p.to_vec(), Source::Dictionary);
+    }
+    let (pts, src) = match tex_points(core, pats) {
+        Some(p) => (p, Source::Patterns),
+        None => {
+            let (mut out, mut src, mut start) = (Vec::new(), Source::Patterns, 0usize);
+            for part in core.split(|&c| c == '\'') {
+                let pts = tex_points(part, pats).unwrap_or_else(|| {
+                    src = Source::Heuristic;
+                    heuristic_points(part)
+                });
+                out.extend(pts.into_iter().map(|p| start + p));
+                start += part.len() + 1;
+            }
+            (out, src)
+        }
+    };
+    // The part (between apostrophes) each char belongs to, computed once: O(n) for any word.
+    let n = core.len();
+    let mut part_start = vec![0usize; n + 1];
+    let mut part_end = vec![n; n + 1];
+    for i in 1..=n {
+        part_start[i] = if core.get(i - 1) == Some(&'\'') { i } else { part_start[i - 1] };
+    }
+    for i in (0..n).rev() {
+        part_end[i] = if core.get(i) == Some(&'\'') { i } else { part_end[i + 1] };
+    }
+    let pts = pts
+        .into_iter()
+        .filter(|&p| match (part_start.get(p), part_end.get(p)) {
+            (Some(&a), Some(&b)) => p.saturating_sub(a) >= left && b.saturating_sub(p) >= right,
+            _ => false,
+        })
+        .collect();
+    (pts, src)
+}
+
 /// Unrestricted break points of an English `word` ([`word_breaks_in`] with [`ProofLang::En`]).
 pub fn word_breaks(word: &str) -> (Vec<usize>, Source) {
     word_breaks_in(word, ProofLang::En)
 }
 
-/// Unrestricted break points of `word` in `lang` (char indices; a hyphen goes before that char),
-/// handling case, apostrophes (`don't`, `’s`), surrounding punctuation and compounds (each letter
+/// Break points of `word` in `lang` before the paragraph's limits (char indices; a hyphen goes
+/// before that char; a language's own minimums, [`lang_mins`], already apply within Latin words), handling case, apostrophes (`don't`, `’s`), surrounding punctuation and compounds (each letter
 /// run is hyphenated separately). No break is ever placed next to an apostrophe or non-letter.
 pub fn word_breaks_in(word: &str, lang: ProofLang) -> (Vec<usize>, Source) {
     let chars: Vec<char> = word.chars().collect();
@@ -255,15 +362,17 @@ pub fn hyphen_points(word: &str, lim: &Limits) -> Vec<usize> {
 }
 
 /// Allowed hyphenation points in `word`, a word in `lang`, as char indices (a hyphen goes before
-/// that char), with the paragraph limits applied to each letter run.
+/// that char), with the paragraph limits applied to each letter run — or the language's own
+/// minimums ([`lang_mins`]) where they are larger.
 pub fn hyphen_points_in(word: &str, lim: &Limits, lang: ProofLang) -> Vec<usize> {
     let chars: Vec<char> = word.chars().collect();
     let (pts, _) = word_breaks_in(word, lang);
     if pts.is_empty() {
         return pts;
     }
-    let min_before = lim.after_first.max(1);
-    let min_after = lim.before_last.max(1);
+    let (left, right) = lang_mins(lang);
+    let min_before = lim.after_first.max(left).max(1);
+    let min_after = lim.before_last.max(right).max(1);
     // Counted once, so each point's checks take constant time however long the word: letters and
     // uppercase letters before each char, and the letter run (trimmed of apostrophes) of each char.
     let (mut letters, mut upper) = (Vec::with_capacity(chars.len() + 1), Vec::with_capacity(chars.len() + 1));
@@ -874,6 +983,75 @@ mod tests {
         // Latin words in a Bulgarian run are hyphenated as English.
         for w in ["publication", "WordCraft"] {
             assert_eq!(hyphen_points_in(w, &Limits::default(), ProofLang::Bg), hyphen_points(w, &Limits::default()), "{w}");
+        }
+    }
+
+    fn la(w: &str) -> String {
+        hyphenate_word_in(w, &Limits::default(), ProofLang::La)
+    }
+
+    #[test]
+    fn latin_patterns_load() {
+        // Counts of the bundled hyph-utf8 file; it has no exception words.
+        let p = Patterns::la();
+        assert_eq!(p.len(), 1955);
+        assert_eq!(p.exception_count(), 0);
+        assert!("abcdefghijklmnopqrstuvwxyzáæéëíóúýœǽ".chars().all(|c| p.knows(c)));
+        assert!(!p.knows('G') && !p.knows('(') && !p.knows('.'), "no stray letters");
+        assert_eq!(lang_mins(ProofLang::La), (2, 2));
+        assert_eq!(lang_mins(ProofLang::En), (1, 1));
+    }
+
+    #[test]
+    fn latin_words_hyphenate_by_liturgical_latin_patterns() {
+        for (w, want) in [
+            ("sanctificetur", "sanc-ti-fi-ce-tur"),
+            ("Dominus", "Do-mi-nus"),
+            ("gloria", "glo-ria"),
+            ("saeculorum", "sa-e-cu-lo-rum"),
+            ("magnificat", "ma-gni-fi-cat"),
+            // A single letter is never left before or after a hyphen (lefthyphenmin 2).
+            ("agnus", "agnus"),
+            ("spiritui", "spi-ri-tui"),
+            ("misericordia", "mi-se-ri-cor-dia"),
+        ] {
+            assert_eq!(la(w), want, "{w}");
+        }
+    }
+
+    #[test]
+    fn latin_never_uses_the_english_patterns() {
+        // English text is unchanged.
+        for w in ["hyphenation", "typography", "misericordia"] {
+            assert_eq!(hyphen_points_in(w, &Limits::default(), ProofLang::En), hyphen_points_in(w, &Limits::default(), ProofLang::Other), "{w}");
+        }
+        assert_eq!(h("hyphenation"), "hy-phen-a-tion");
+        assert_eq!(word_breaks_in("zzyzx", ProofLang::La).1, Source::Patterns, "no English dictionary");
+        // Outside the pattern alphabet: the generic heuristic, not the English patterns.
+        assert_eq!(word_breaks_in("smørrebrød", ProofLang::La).1, Source::Heuristic);
+    }
+
+    /// Before (the English patterns Latin used to get) and after, for the record:
+    /// `cargo test -p wordcraft-proof latin_before_and_after -- --nocapture`.
+    #[test]
+    fn latin_before_and_after() {
+        let lim = Limits::default();
+        let la_words = [
+            "sanctificetur",
+            "spiritui",
+            "misericordia",
+            "benedictus",
+            "resurrectionem",
+            "omnipotentem",
+            "saeculorum",
+            "ecclesiam",
+            "magnificat",
+            "agnus",
+        ];
+        for w in &la_words {
+            let (before, after) = (hyphenate_word_in(w, &lim, ProofLang::Other), hyphenate_word_in(w, &lim, ProofLang::La));
+            eprintln!("| la | {w} | {before} | {after} |");
+            assert_eq!(after.replace('-', ""), *w);
         }
     }
 }

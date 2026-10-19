@@ -39,6 +39,10 @@ pub enum ProofLang {
     /// `id_ID` dictionary, dictionary-driven suggestions and generic checks with Indonesian
     /// messages. Hyphenation keeps the fallback English patterns.
     Id,
+    /// Latin (`la`, `lat`): the hyph-utf8 liturgical Latin patterns (Solesmes conventions, the
+    /// Latin of liturgical books). There is no Latin dictionary or grammar, so, as for
+    /// [`ProofLang::Other`], no spelling or grammar marks.
+    La,
     /// A language without proofing tools here (`fr-FR`, `ja-JP`, `x-none`…). Like Word without
     /// the language's proofing tools: no spelling or grammar marks, so its words are never
     /// flagged as English misspellings. Hyphenation keeps using the English patterns, as before
@@ -76,12 +80,14 @@ impl ProofLang {
             ProofLang::Cs
         } else if primary.eq_ignore_ascii_case("id") || primary.eq_ignore_ascii_case("ind") || primary.eq_ignore_ascii_case("in") {
             ProofLang::Id
+        } else if primary.eq_ignore_ascii_case("la") || primary.eq_ignore_ascii_case("lat") {
+            ProofLang::La
         } else {
             ProofLang::Other
         }
     }
 
-    /// The primary language subtag (`en`, `pl`, `bg`, `tr`, `ru`, `cs`, `id`); empty for [`ProofLang::Other`].
+    /// The primary language subtag (`en`, `pl`, `bg`, `tr`, `ru`, `cs`, `id`, `la`); empty for [`ProofLang::Other`].
     pub fn code(self) -> &'static str {
         match self {
             ProofLang::En => "en",
@@ -94,6 +100,7 @@ impl ProofLang {
             ProofLang::Ru => "ru",
             ProofLang::Cs => "cs",
             ProofLang::Id => "id",
+            ProofLang::La => "la",
             ProofLang::Other => "",
         }
     }
@@ -192,9 +199,15 @@ mod tests {
         for t in ["tr", "tr-TR", "tr-CY", "TR_tr", "tur"] {
             assert_eq!(ProofLang::from_tag(Some(t)), ProofLang::Tr, "{t}");
         }
-        for t in ["fr-FR", "de", "x-none", "ja-JP", "plx", "bgx", "trx", "csx", "idx", "inx", "e", "-"] {
+        for t in ["fr-FR", "de", "x-none", "ja-JP", "plx", "bgx", "trx", "csx", "idx", "inx", "lax", "e", "-"] {
             assert_eq!(ProofLang::from_tag(Some(t)), ProofLang::Other, "{t}");
         }
+        // Latin, hyphenation only: any region, the ISO 639-2 code too; no spelling or grammar.
+        for t in ["la", "la-VA", "LA", "lat"] {
+            assert_eq!(ProofLang::from_tag(Some(t)), ProofLang::La, "{t}");
+        }
+        assert!(!ProofLang::La.is_proofed() && !ProofLang::PROOFED.contains(&ProofLang::La));
+        assert_eq!(ProofLang::La.code(), "la");
         assert_eq!(ProofLang::from_tag(None), ProofLang::En);
         assert_eq!(ProofLang::from_tag(Some("")), ProofLang::En);
         assert_eq!(ProofLang::from_tag(Some("  ")), ProofLang::En);

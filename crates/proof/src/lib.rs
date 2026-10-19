@@ -34,9 +34,12 @@
 //! - **Indonesian** ([`ProofLang::Id`], module [`id`]): the installed Hunspell `id_ID`
 //!   dictionary (not bundled), dictionary-driven suggestions and generic checks with Indonesian
 //!   messages. Hyphenation uses the existing English fallback.
+//! - **Latin** ([`ProofLang::La`]): `hyph-utf8`'s liturgical Latin hyphenation patterns (MIT);
+//!   no spelling or grammar marks, as for other languages.
 //! - **Other languages** ([`ProofLang::Other`]): no spelling or grammar marks, like Word without
 //!   the language's proofing tools.
-//! - **Hyphenation** ([`hyphen`]): dictionary, Liang patterns (English, Polish, Portuguese),
+//! - **Hyphenation** ([`hyphen`]): dictionary, Liang patterns (English, Polish, Portuguese,
+//!   Italian, Latin),
 //!   Bulgarian syllable rules, Russian word-division rules, heuristic.
 //!
 //! [`check_text`] checks a paragraph whose runs are in different languages.
@@ -665,7 +668,7 @@ pub fn is_correct_in_with(word: &str, lang: ProofLang, opts: &Options) -> bool {
         ProofLang::Ru => accepted_by_options(word, opts) || ru::is_correct(word),
         ProofLang::Cs => accepted_by_options(word, opts) || cs::is_correct(word),
         ProofLang::Id => accepted_by_options(word, opts) || id::is_correct(word),
-        ProofLang::Bg | ProofLang::Other => true,
+        ProofLang::Bg | ProofLang::La | ProofLang::Other => true,
     }
 }
 
@@ -681,7 +684,7 @@ pub fn suggest_in(word: &str, max: usize, lang: ProofLang) -> Vec<String> {
         ProofLang::Ru => ru::suggest(word, max),
         ProofLang::Cs => cs::suggest(word, max),
         ProofLang::Id => id::suggest(word, max),
-        ProofLang::Bg | ProofLang::Other => Vec::new(),
+        ProofLang::Bg | ProofLang::La | ProofLang::Other => Vec::new(),
     }
 }
 
@@ -706,7 +709,7 @@ fn grammar_in(text: &str, lang: ProofLang, capital_first: bool) -> Vec<Issue> {
         // Czech has no sentence-capital rule, so a list item needs no exception.
         ProofLang::Cs => cs::grammar::check(text),
         ProofLang::Id => id::grammar::check(text),
-        ProofLang::Bg | ProofLang::Other => Vec::new(),
+        ProofLang::Bg | ProofLang::La | ProofLang::Other => Vec::new(),
     }
 }
 

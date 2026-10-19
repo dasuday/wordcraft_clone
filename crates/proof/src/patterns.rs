@@ -228,6 +228,11 @@ impl Patterns {
         self.map.is_empty()
     }
 
+    /// Is `c` in the pattern alphabet (a letter some pattern mentions)?
+    pub fn knows(&self, c: char) -> bool {
+        c != DOT && self.alpha.code(c) != 0
+    }
+
     /// Inter-letter values for a lowercase word: `out[i]` is the value *before* char `i`
     /// (`out.len() == word.len() + 1`). None if a char is outside the pattern alphabet.
     pub fn values(&self, word: &[char]) -> Option<Vec<u8>> {

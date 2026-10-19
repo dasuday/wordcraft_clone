@@ -9423,3 +9423,26 @@ fn caret_height_ignores_line_spacing() {
         assert!((single - wide).abs() < 0.01, "{spacing:?}: single {single}, wide {wide}");
     }
 }
+
+/// A Latin run is hyphenated by the liturgical Latin TeX patterns, not the English ones
+/// (`mi-se-ri-cor-dia`), and still gets no spelling marks; the English run keeps its English
+/// breaks.
+#[test]
+fn latin_runs_are_hyphenated_by_their_patterns() {
+    let text = "misericordia typography";
+    let mut d = Document::from_text(text);
+    d.settings.auto_hyphenation = true;
+    let en = text.find("typography").unwrap();
+    d.format_range(&Pos::body(0, 0), &Pos::body(0, en), &|c| c.lang = Some("la".into())).unwrap();
+    d.format_range(&Pos::body(0, en), &Pos::body(0, text.len()), &|c| c.lang = Some("en-US".into())).unwrap();
+    let l = layout(&d, &mut LayoutCache::new(), &LayoutOptions { proofing: true, ..LayoutOptions::default() });
+    let para = l.pages[0].items.iter().find_map(|i| if let Placed::Lines { para, .. } = i { Some(para.clone()) } else { None }).expect("a paragraph");
+    let ends: Vec<usize> = para.hyph_after.iter().filter_map(|&k| para.clusters.get(k as usize).map(|c| c.end)).collect();
+    for prefix in ["mi", "mise", "miseri", "misericor"] {
+        assert!(ends.contains(&prefix.len()), "Latin mi-se-ri-cor-dia: no break after {prefix:?} in {ends:?}");
+    }
+    for prefix in ["ty", "typog", "typogra"] {
+        assert!(ends.contains(&(en + prefix.len())), "English ty-pog-ra-phy: no break after {prefix:?} in {ends:?}");
+    }
+    assert!(para.issues.is_empty(), "no Latin dictionary: no marks, {:?}", para.issues);
+}
