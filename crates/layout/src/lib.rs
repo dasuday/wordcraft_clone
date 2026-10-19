@@ -3927,9 +3927,12 @@ fn space_after_kept(ctx: &Ctx, block: usize, rp: &wordcraft_doc::resolve::Resolv
 /// doesn't leave a single line at the bottom of a page; it moves over whole instead), or all
 /// of it under keep lines together — or all of it and what it keeps with in turn when it is
 /// kept with the next too (a chain moves together in Word). Word carries a kept heading over
-/// when the paragraph after it cannot start on the page (#966).
+/// when the paragraph after it cannot start on the page (#966). A table in the text needs its
+/// first row whole, under its header rows: Word carries the heading over, onto the next page
+/// or column, when that row cannot start there with it, even a row it could split.
 fn next_first_line(ctx: &mut Ctx, block: usize, width: f32, depth: usize) -> f32 {
-    match ctx.doc.body.get(block + 1).map(|b| &**b) {
+    let doc = ctx.doc;
+    match doc.body.get(block + 1).map(|b| &**b) {
         Some(Block::Para(p)) => {
             // Don't advance list counters for a lookahead: lay out without the label.
             let rp = ctx.doc.styles.resolve_para(&p.props);
@@ -3972,6 +3975,14 @@ fn next_first_line(ctx: &mut Ctx, block: usize, width: f32, depth: usize) -> f32
                         to(0)
                     }
             }
+        }
+        Some(Block::Table(t)) if t.props.float.is_none() && !t.rows.is_empty() => {
+            // Measuring lays the table out once more; it mustn't count its equations twice.
+            let eq_count = ctx.eq_count;
+            let tl = table::layout_table(ctx, StoryRef::Body, t, &[(block + 1) as u32], width, 1);
+            ctx.eq_count = eq_count;
+            let headers = t.rows.iter().take_while(|r| r.props.header).count();
+            tl.rows.iter().take(headers + 1).map(|r| r.height).filter(|h| h.is_finite()).sum()
         }
         Some(Block::Table(_)) => 24.0,
         None => 0.0,

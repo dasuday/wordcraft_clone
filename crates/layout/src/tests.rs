@@ -9423,3 +9423,69 @@ fn caret_height_ignores_line_spacing() {
         assert!((single - wide).abs() < 0.01, "{spacing:?}: single {single}, wide {wide}");
     }
 }
+
+/// C15, measured in Word: a heading kept with the next (`keepNext`) stays with a table's first
+/// row, whole, across a column or page break: when that row (three lines here) cannot start
+/// under the heading, the heading goes over with the table; when it can, both stay. WordCraft
+/// reserved 24 pt for any table: a heading stayed alone at the foot of a column above a taller
+/// first row, and went over needlessly above a shorter one.
+#[test]
+fn a_heading_kept_with_the_next_stays_with_the_tables_first_row() {
+    use wordcraft_doc::props::ParaProps;
+    // Pages and column x of the heading and of the table's first row, with `fillers` paragraphs
+    // above, in `cols` columns; the first row's first cell holds `first` lines.
+    let spots = |fillers: usize, cols: u32, first: usize| {
+        let mut d = Document::new();
+        d.last_section.columns.count = cols;
+        let plain = ParaProps {
+            space_before: Some(0.0),
+            space_after: Some(0.0),
+            line_spacing: Some(wordcraft_doc::props::LineSpacing::Multiple(1.0)),
+            widow_control: Some(false),
+            ..Default::default()
+        };
+        let para = |text: &str, p: &ParaProps| {
+            let mut x = wordcraft_doc::Paragraph::with_text(text, Default::default());
+            x.props = p.clone();
+            wordcraft_doc::para_block(x)
+        };
+        d.body = (0..fillers).map(|i| para(&format!("F{i}"), &plain)).collect();
+        d.body.push(para("HEADING", &ParaProps { keep_next: Some(true), ..plain.clone() }));
+        let mut t = Table::new(3, 2, 100.0);
+        for (ri, row) in t.rows.iter_mut().enumerate() {
+            for c in row.cells.iter_mut() {
+                let lines = if ri == 0 { first } else { 1 };
+                let text: Vec<String> = (0..lines).map(|k| format!("R{ri}L{k}")).collect();
+                c.blocks = vec![para(&text.join("\n"), &plain)];
+            }
+        }
+        d.body.push(Arc::new(Block::Table(t)));
+        d.body.push(para("End", &plain));
+        let l = lay(&d);
+        let mut heading = None;
+        let mut row0 = None;
+        for (pi, page) in l.pages.iter().enumerate() {
+            for it in &page.items {
+                match it {
+                    Placed::Lines { path, x, .. } if path.0 == [fillers as u32] => heading = heading.or(Some((pi, x.round() as i32))),
+                    Placed::Cell { rect, row: 0, cell: 0, .. } => row0 = row0.or(Some((pi, rect.x.round() as i32))),
+                    _ => {}
+                }
+            }
+        }
+        (heading.expect("heading"), row0.expect("first row"))
+    };
+    for cols in [1, 2] {
+        let mut moved = 0;
+        for fillers in 30..90 {
+            let (h, r) = spots(fillers, cols, 3);
+            assert_eq!(h.0, r.0, "{cols} column(s), {fillers} fillers: the heading is on its table's page");
+            if cols == 2 {
+                assert!((h.1 - r.1).abs() < 20, "{fillers} fillers: the heading is in its table's column ({h:?} {r:?})");
+            }
+            moved += usize::from(h != spots(fillers, cols, 1).0);
+        }
+        // Somewhere the three-line row carries the heading over where a one-line row does not.
+        assert!(moved > 0, "{cols} column(s)");
+    }
+}
