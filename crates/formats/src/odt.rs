@@ -1260,7 +1260,12 @@ impl Styles {
                         cur = Some((name.to_string(), info));
                     }
                 }
-                "default-style" if q.starts_with("style:") => in_default = get(&a, "style:family") == Some("paragraph"),
+                "default-style" if q.starts_with("style:") => {
+                    in_default = get(&a, "style:family") == Some("paragraph");
+                    if get(&a, "style:family") == Some("graphic") {
+                        cur = Some((drawing::DEFAULT_GRAPHIC.to_string(), StyleInfo::default()));
+                    }
+                }
                 "text-properties" if in_default && cur.is_none() => {
                     if let Some(fam) = get(&a, "fo:font-family").or_else(|| get(&a, "style:font-name")) {
                         let fam = fam.split(',').next().unwrap_or("").trim().trim_matches(['\'', '"']);
@@ -1323,9 +1328,6 @@ impl Styles {
                     {
                         tabs.push(t);
                     }
-                }
-                "default-style" if get(&a, "style:family") == Some("graphic") => {
-                    cur = Some((drawing::DEFAULT_GRAPHIC.to_string(), StyleInfo::default()));
                 }
                 "graphic-properties" if q.starts_with("style:") => {
                     if let Some((_, s)) = &mut cur {
@@ -1397,7 +1399,12 @@ impl Styles {
             },
             Ev::End(q) => match local(&q) {
                 "automatic-styles" => in_auto = false,
-                "default-style" if q.starts_with("style:") => in_default = false,
+                "default-style" if q.starts_with("style:") => {
+                    in_default = false;
+                    if let Some((n, s)) = cur.take_if(|(n, _)| n == drawing::DEFAULT_GRAPHIC) {
+                        self.map.insert(n, s);
+                    }
+                }
                 "style" if q.starts_with("style:") => {
                     if let Some((n, s)) = cur.take()
                         && self.map.len() < 100_000
@@ -1643,6 +1650,8 @@ struct Body<'a> {
 }
 
 impl<'a> Body<'a> {
+    /// A reader starting on the first master page, resolving styles from `styles` and pictures
+    /// through `zip`.
     fn new(styles: &'a Styles, pages: &'a Pages, zip: &'a mut dyn FnMut(&str) -> Option<Vec<u8>>) -> Self {
         let page = pages.first.clone().unwrap_or_default();
         Body {
@@ -1685,6 +1694,7 @@ impl<'a> Body<'a> {
         }
     }
 
+    /// Take the next XML event, ignoring what lies deeper than `MAX_XML_DEPTH`.
     fn feed(&mut self, ev: Ev) {
         match ev {
             Ev::Start(q, a) => {
@@ -2877,6 +2887,18 @@ mod tests {
     }
 
     #[test]
+    fn default_graphic_style_reaches_shapes() {
+        // The graphic default style was shadowed by the paragraph default-style arm and never kept.
+        let xml = format!(
+            r##"<office:document-styles {NS_T} xmlns:draw="urn:oasis:names:tc:opendocument:xmlns:drawing:1.0"><office:styles><style:default-style style:family="graphic"><style:graphic-properties draw:fill-color="#729fcf"/></style:default-style></office:styles></office:document-styles>"##
+        );
+        let mut styles = Styles::default();
+        styles.read(xml.as_bytes(), false);
+        assert_eq!(styles.graphic(None, "draw:fill-color", true), Some("#729fcf"));
+        assert_eq!(styles.graphic(None, "draw:fill-color", false), None);
+    }
+
+    #[test]
     fn rejects_garbage() {
         assert!(parse(b"not a zip").is_err());
     }
@@ -3127,6 +3149,7 @@ mod tests {
         package(&content, Some(&styles))
     }
 
+    /// The plain text of header or footer part `id`.
     fn part_text(d: &Document, id: Option<u32>) -> String {
         d.plain_text(wordcraft_doc::StoryRef::Part(id.expect("part")))
     }

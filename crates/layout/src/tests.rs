@@ -3584,6 +3584,51 @@ fn keep_with_next_counts_the_next_paragraphs_float() {
 }
 
 #[test]
+fn a_rotated_float_moves_its_paragraph_by_its_rotated_bounds() {
+    // Unrotated, a wide flat box fits; turned upright it runs past the bottom margin.
+    let n = 60;
+    let mut d = Document::from_text(&"Body paragraph.\n".repeat(n));
+    let at = first_para_below(&lay(&d), n, 600.0);
+    let id = text_box_at(&mut d, &Pos::body(at, 0), "Picture", 200.0, 20.0, wordcraft_doc::para::Float { rot: 90.0, ..para_float(0.0) });
+    let l = lay(&d);
+    assert_eq!(l.caret(&Pos::body(at, 0)).map(|c| c.page), Some(1));
+    assert_eq!(l.text_box(id, 0).map(|b| b.page), Some(1));
+}
+
+#[test]
+fn keep_with_next_chains_count_each_kept_paragraphs_float() {
+    // A heading kept with a kept paragraph whose picture moves it goes along with it.
+    let n = 60;
+    let mut d = Document::from_text(&"Body paragraph.\n".repeat(n));
+    let at = first_para_below(&lay(&d), n, 600.0);
+    text_box_at(&mut d, &Pos::body(at, 0), "Picture", 200.0, 200.0, para_float(0.0));
+    for i in [at - 1, at] {
+        if let Some(Block::Para(p)) = d.body.get_mut(i).map(Arc::make_mut) {
+            p.props.keep_next = Some(true);
+        }
+    }
+    let l = lay(&d);
+    assert_eq!(l.caret(&Pos::body(at, 0)).map(|c| c.page), Some(1));
+    assert_eq!(l.caret(&Pos::body(at - 1, 0)).map(|c| c.page), Some(1));
+}
+
+#[test]
+fn keep_with_next_ignores_a_float_left_out_of_the_layout() {
+    // A float in hidden text is not placed, so a kept heading doesn't move for it.
+    let n = 60;
+    let mut d = Document::from_text(&"Body paragraph.\n".repeat(n));
+    let at = first_para_below(&lay(&d), n, 600.0);
+    let hidden = wordcraft_doc::CharProps { hidden: Some(true), ..Default::default() };
+    d.insert_object(&Pos::body(at, 0), rect_shape(200.0, 200.0, para_float(0.0)), &hidden).unwrap();
+    if let Some(Block::Para(p)) = d.body.get_mut(at - 1).map(Arc::make_mut) {
+        p.props.keep_next = Some(true);
+    }
+    let l = lay(&d);
+    assert_eq!(l.caret(&Pos::body(at - 1, 0)).map(|c| c.page), Some(0));
+    assert_eq!(l.caret(&Pos::body(at, 0)).map(|c| c.page), Some(0));
+}
+
+#[test]
 fn footnotes_inside_text_boxes_are_numbered_and_placed() {
     let mut d = Document::from_text(&"Body text line.\n".repeat(30));
     let id = text_box_at(&mut d, &Pos::body(2, 0), "Box text", 144.0, 40.0, Default::default());

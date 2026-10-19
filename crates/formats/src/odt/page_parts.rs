@@ -9,6 +9,7 @@ use super::*;
 /// Most XML events kept for all headers and footers together; a slot past it is left out.
 const MAX_EVENTS: usize = 1 << 20;
 
+/// Where on a master page a header or footer goes.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Slot {
     Header,
@@ -20,6 +21,7 @@ enum Slot {
 }
 
 impl Slot {
+    /// The slot of element `q`, if it is a header or footer.
     fn of(q: &str) -> Option<Self> {
         Some(match q {
             "style:header" => Self::Header,
@@ -32,10 +34,12 @@ impl Slot {
         })
     }
 
+    /// Whether it is a footer.
     fn footer(self) -> bool {
         matches!(self, Self::Footer | Self::FooterLeft | Self::FooterFirst)
     }
 
+    /// Name part `id` in this slot of `sec` (a first-page one turns on a different first page).
     fn set(self, sec: &mut SectionProps, id: u32) {
         let set = if self.footer() { &mut sec.footers } else { &mut sec.headers };
         match self {
