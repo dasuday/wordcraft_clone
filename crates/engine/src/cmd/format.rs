@@ -722,18 +722,22 @@ fn set(s: &mut Session, v: &Value) -> CmdResult {
         c.overlay(&props);
         effects(c);
     })?;
-    if let Some(mut defaults) = defaults {
-        effects(&mut defaults);
-        s.doc.styles.default_chr.overlay(&defaults);
-        s.doc.styles.default_chr.text_effects.clone_from(&defaults.text_effects);
+    if let Some(defaults) = defaults {
+        let replace_effects = v.get("defaultProps").is_some_and(|p| p.get("textEffects").is_some());
+        let apply_defaults = |target: &mut CharProps| {
+            target.overlay(&defaults);
+            if replace_effects {
+                target.text_effects.clone_from(&defaults.text_effects);
+            }
+            effects(target);
+        };
+        apply_defaults(&mut s.doc.styles.default_chr);
         if let Some(normal) = s.doc.styles.get_mut("Normal") {
-            normal.chr.overlay(&defaults);
-            normal.chr.text_effects.clone_from(&defaults.text_effects);
+            apply_defaults(&mut normal.chr);
         }
         if scope == Some("future") {
             let mut saved = s.prefs.font_defaults.clone().unwrap_or_default();
-            saved.overlay(&defaults);
-            saved.text_effects.clone_from(&defaults.text_effects);
+            apply_defaults(&mut saved);
             s.prefs.font_defaults = Some(saved);
         }
     }

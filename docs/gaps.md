@@ -22,7 +22,7 @@ establish cross-platform reliability.
 
 Document renaming: desktop renaming requires a filesystem that supports hard links (exFAT/FAT drives and some network shares refuse it). Behaviour: [UI parity](ui-parity.md).
 
-Font dialog depth: Set As Default and Text Effects now use pending drafts alongside the Font/Advanced tabs and document-rendered preview. The new controls are translated in all 22 non-English catalogs, and explicit decoration removals persist through DOCX saves. Twelve focused regression tests now cover the principal dialog, preview and persistence risks. Fresh live Word comparison remains open; overall gap estimates are unchanged.
+Font dialog depth: Set As Default and Text Effects now use pending drafts alongside the Font/Advanced tabs and document-rendered preview. The new controls are translated in all 22 non-English catalogs, and explicit decoration removals persist through DOCX saves. Focused regression tests now cover the principal dialog, preview and persistence risks. Fresh live Word comparison remains open; overall gap estimates are unchanged.
 
 Font-menu reliability: clearing a query with no matches now shows the recent section from its first row, including its heading, in a scrollable list. Fixed synthetic-family widget and full-ribbon tests cover this case and matching-query controls (#2068).
 Additive paragraph spacing retains the full before-space after a section page break; ordinary overlapping spacing is unchanged. Other pagination gaps remain open.
@@ -108,6 +108,7 @@ Footer page-table height and body wrapping are corrected. Other pagination gaps 
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-18 | minor | Set As Default preserves stored text effects when selection effects are absent or mixed; explicit effects patches merge into each defaults store, and an explicit API null still clears its effects. Covered by engine and dialog regressions. |
 | 2026-10-18 | minor | Reconciled Font dialog parity with current main: reuse upstream ligature flags and mixed kerning controls, retain saved ligature-name compatibility, preserve symbol fonts and colour-only underlines, and keep nested Cancel with native close controls. Proofing-language persistence remains separate (#2882). Full CI passes with four test workers: 3,430 passed, three ignored. |
 | 2026-10-15 | minor | Reconciled Font dialog work with current main, preserving installed-font loading, localized family names, the strikethrough shortcut and new renderer background metadata. Font labels cover all 22 catalogs; the emoji fixture explicitly requests its color font on Windows. Full CI passes with four test workers: 2,770 passed, two ignored. |
 | 2026-10-15 | minor | Added twelve focused Font dialog regressions for cancellation, exclusivity, defaults/undo, raster preview size and scripts, DOCX theme/OpenType fields, opacity and inherited effect removal. `cargo xtask ci` passes all six gates; fresh live Word qualification remains pending. |

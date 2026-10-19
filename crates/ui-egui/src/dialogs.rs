@@ -1840,7 +1840,9 @@ fn apply_font(app: &mut WordApp, d: &Dialog) -> bool {
         params["defaultScope"] = json!(scope);
         params["defaultProps"] = json!(font_changes(app, &full));
         let state = wordcraft_engine::cmd::format::state(&app.session);
-        params["defaultProps"]["textEffects"] = state.get("textEffects").cloned().unwrap_or(Value::Null);
+        if let Some(effects) = state.get("textEffects").filter(|v| !v.is_null()) {
+            params["defaultProps"]["textEffects"] = effects.clone();
+        }
     }
     app.run("format.set", params).is_ok()
 }
@@ -5230,6 +5232,30 @@ mod tests {
         assert_eq!((state["strike"].clone(), state["doubleStrike"].clone()), (json!(false), json!(true)));
         assert_eq!((state["superscript"].clone(), state["subscript"].clone()), (json!(false), json!(true)));
         assert_eq!(state["hidden"], true);
+    }
+
+    #[test]
+    fn font_dialog_defaults_keep_effects_when_selection_has_none_or_mixed_effects() {
+        use wordcraft_doc::{CharProps, Pos, wordart::TextEffects};
+        for mixed in [false, true] {
+            let mut app = app_with("AB");
+            let fx = Some(Box::new(TextEffects { glow: Some(Default::default()), ..Default::default() }));
+            app.session.doc.styles.default_chr.text_effects = fx.clone();
+            app.session.doc.styles.get_mut("Normal").unwrap().chr.text_effects = fx.clone();
+            app.session.prefs.font_defaults = Some(CharProps { text_effects: fx.clone(), ..Default::default() });
+            app.run("select.range", json!({"anchor":Pos::body(0,0),"focus":Pos::body(0,if mixed {1} else {2})})).unwrap();
+            app.run("format.textEffects", json!({"clear":true})).unwrap();
+            app.run("select.all", json!({})).unwrap();
+            assert!(wordcraft_engine::cmd::format::state(&app.session)["textEffects"].is_null());
+            let mut d = Dialog::open("font", &mut app).unwrap();
+            let Dialog::Font { size, default_scope, .. } = &mut d else { panic!() };
+            *size = "18".into();
+            *default_scope = Some("future".into());
+            assert!(apply_font(&mut app, &d));
+            assert_eq!(app.session.doc.styles.default_chr.text_effects, fx);
+            assert_eq!(app.session.doc.styles.get("Normal").unwrap().chr.text_effects, fx);
+            assert_eq!(app.session.prefs.font_defaults.as_ref().unwrap().text_effects, fx);
+        }
     }
 
     #[test]

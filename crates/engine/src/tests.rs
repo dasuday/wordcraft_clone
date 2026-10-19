@@ -77,6 +77,32 @@ fn font_dialog_document_defaults_and_effects_undo_together_without_changing_futu
 }
 
 #[test]
+fn font_defaults_preserve_omitted_effects_and_merge_explicit_patches() {
+    use wordcraft_doc::wordart::TextEffects;
+    let mut s = s();
+    let fx = Some(Box::new(TextEffects { shadow: Some(Default::default()), ..Default::default() }));
+    s.doc.styles.default_chr.text_effects = fx.clone();
+    s.doc.styles.get_mut("Normal").unwrap().chr.text_effects = fx.clone();
+    s.prefs.font_defaults = Some(wordcraft_doc::CharProps { text_effects: fx.clone(), ..Default::default() });
+    for default_props in [json!({"size":18}), json!({"size":18,"textEffects":null})] {
+        run(&mut s, "format.set", json!({"props":{},"defaultScope":"future","defaultProps":default_props}));
+        let expected = if default_props.get("textEffects").is_some() { None } else { fx.clone() };
+        assert_eq!(s.doc.styles.default_chr.text_effects, expected);
+        assert_eq!(s.doc.styles.get("Normal").unwrap().chr.text_effects, expected);
+        assert_eq!(s.prefs.font_defaults.as_ref().unwrap().text_effects, expected);
+    }
+    s.doc.styles.default_chr.text_effects = fx.clone();
+    s.doc.styles.get_mut("Normal").unwrap().chr.text_effects = fx.clone();
+    s.prefs.font_defaults.as_mut().unwrap().text_effects = fx;
+    run(&mut s, "format.set", json!({"props":{},"defaultScope":"future","defaultProps":{"size":20},"effects":{"glow":3}}));
+    for props in [&s.doc.styles.default_chr, &s.doc.styles.get("Normal").unwrap().chr, s.prefs.font_defaults.as_ref().unwrap()] {
+        let effects = props.text_effects.as_ref().unwrap();
+        assert!(effects.shadow.is_some(), "a glow patch preserves the existing shadow");
+        assert_eq!(effects.glow.unwrap().size, 3.0);
+    }
+}
+
+#[test]
 fn doc_extension_dispatches_to_docbin() {
     // Garbage bytes with a .doc name must produce an error through the Word 97-2003
     // reader — never a panic and never a silently empty document.
