@@ -90,13 +90,16 @@ pub struct Opening {
     /// The document that was open when the prompt went up. A different one means the prompt was
     /// answered and the bytes are now a document.
     was: u64,
-    /// The entry, when it was already known: a reload reads the document's own origin, and that
-    /// origin is dropped as soon as the read is answered.
+    /// The entry, when it was already known: a reload reads the document's own origin, and
+    /// [`finish_open`] attaches it once a deferred open completes.
     entry: Option<Entry>,
 }
 
 /// Opens a listed entry. The provider id is kept through [`CloudApp::open_bytes`].
 pub fn open_entry(app: &mut WordApp, entry: Entry, into: Option<u64>) {
+    if !available(app) || app.cloud().busy.is_some() {
+        return;
+    }
     app.cloud_open_entry = Some(entry.clone());
     craft_open_entry(app, entry, into);
 }
@@ -110,9 +113,15 @@ pub fn reload_active(app: &mut WordApp) -> Result<Json, String> {
     let Some(origin) = app.cloud().origins.get(&uid).cloned() else {
         return Err(format!("this {noun} did not come from the cloud"));
     };
+    if app.cloud().busy.is_some() {
+        return Err("a cloud transfer is already running".to_owned());
+    }
     app.cloud_mut().conflict = None;
     let name = origin.entry.name.clone();
-    open_entry(app, origin.entry, Some(uid));
+    // `into` is left unset so a password prompt (`open_bytes` → `Ok(None)`) does not drop the
+    // origin keyed on the document still in the window. Replacement is handled once the bytes
+    // actually open.
+    open_entry(app, origin.entry, None);
     Ok(json!({"reloading": name}))
 }
 
@@ -174,7 +183,16 @@ fn service_host() -> String {
 /// Answers from the cloud worker, and anything still in flight. Called once a frame.
 pub fn poll(app: &mut WordApp, ctx: &egui::Context) {
     pump(app, ctx);
+    clear_stale_open_entry(app);
     finish_open(app);
+}
+
+/// Drops an entry pinned for a read that never reached [`CloudApp::open_bytes`].
+fn clear_stale_open_entry(app: &mut WordApp) {
+    if app.cloud_open_entry.is_none() || app.cloud_opening.is_some() || app.cloud().busy.is_some() {
+        return;
+    }
+    app.cloud_open_entry = None;
 }
 
 /// The document in the window came from the cloud.
@@ -214,6 +232,11 @@ fn finish_open(app: &mut WordApp) {
         // Still waiting. A prompt answered Cancel, or a password nobody typed, ends it: the bytes
         // are gone and nothing is going to open.
         if app.dialog.is_none() && !app.file_dialog_open() {
+            if !app.cloud().origins.contains_key(&opening.was) {
+                if let Some(entry) = opening.entry.clone() {
+                    app.cloud.origins.insert(opening.was, Origin { entry });
+                }
+            }
             app.cloud_opening = None;
         }
         return;

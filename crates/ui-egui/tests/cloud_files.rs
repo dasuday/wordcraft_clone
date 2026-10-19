@@ -174,6 +174,11 @@ fn document_bytes(name: &str, text: &str) -> Vec<u8> {
     wordcraft_engine::io::save_bytes(name, &Document::from_text(text)).unwrap()
 }
 
+fn locked_bytes(name: &str, text: &str) -> Vec<u8> {
+    use wordcraft_engine::cmd::file::ExportOptions;
+    wordcraft_engine::io::save_bytes_with(name, &Document::from_text(text), Some("sesame"), &ExportOptions::default()).unwrap()
+}
+
 struct Fake {
     state: Arc<Mutex<State>>,
     opened_urls: Arc<Mutex<Vec<String>>>,
@@ -597,6 +602,41 @@ fn a_provider_with_nowhere_to_talk_never_offers_it() {
 }
 
 // ---------------------------------------------------------------- WordCraft's own answers
+
+#[test]
+fn reload_while_a_transfer_runs_does_not_pin_a_stale_entry() {
+    let (mut h, fake) = harness(furnished());
+    open_page(&mut h);
+    click(&mut h, "Report.docx");
+    h.state_mut().run("text.insert", json!({"text": "Mine. "})).unwrap();
+    h.run_steps(2);
+    h.state_mut().cloud.busy = Some(cloud::Busy::Saving { name: "Report.docx".to_owned(), bytes: 100 });
+    assert!(h.state_mut().run("cloud.reload", json!({})).is_err(), "a reload does not start beside another transfer");
+    h.state_mut().cloud.busy = None;
+    open_page(&mut h);
+    click(&mut h, "Reports");
+    click(&mut h, "Q3.docx");
+    assert!(body(&h).starts_with("Mine. "), "unsaved changes are still asked about before another cloud file opens");
+    assert_eq!(fake.state.lock().unwrap().reads.last().map(|r| r.as_str()), Some("/Reports/Q3.docx"));
+}
+
+#[test]
+fn cancelling_a_reload_password_prompt_keeps_the_cloud_origin() {
+    let (mut h, fake) = harness(furnished());
+    open_page(&mut h);
+    click(&mut h, "Report.docx");
+    h.state_mut().run("text.insert", json!({"text": "Local. "})).unwrap();
+    h.run_steps(2);
+    assert_eq!(status(&mut h)["origin"]["id"], "/Report.docx");
+    fake.state.lock().unwrap().overwrite("/Report.docx", locked_bytes("Report.docx", "Remote"));
+    h.state_mut().run("cloud.reload", json!({})).unwrap();
+    h.run_steps(4);
+    assert!(h.query_by_label("Password:").is_some(), "the stored copy is password-protected");
+    click(&mut h, "Cancel");
+    h.run_steps(4);
+    assert_eq!(status(&mut h)["origin"]["id"], "/Report.docx", "Save still knows where this document belongs");
+    assert!(body(&h).starts_with("Local. "), "the reload never replaced local edits");
+}
 
 /// A window holds one document, so opening a cloud file replaces the one in it. Unsaved changes
 /// are asked about first, and the document then opens frames later, after the pages have already
