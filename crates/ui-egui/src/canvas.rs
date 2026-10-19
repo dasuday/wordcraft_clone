@@ -3325,10 +3325,17 @@ fn caret_color_at(app: &mut WordApp, layout: &std::sync::Arc<DocLayout>, page: u
     c
 }
 
-/// Render options for page rasters shown on screen: on macOS, text is darkened the way the system
-/// draws it, so a page looks as it does in other Mac apps (exports never are).
+/// Render options for page rasters shown on screen, so a page looks as text does in the
+/// platform's other apps (exports never change): on macOS, text is darkened the way the system
+/// draws it; on Linux and the BSDs it is hinted lightly, as FreeType's `hintslight` draws it
+/// there (not darkened: hinted text already has FreeType's weight, and darkening made it
+/// look semi-bold).
 pub(crate) fn screen_render_options() -> wordcraft_render::RenderOptions {
-    wordcraft_render::RenderOptions { text_darkening: cfg!(target_os = "macos"), ..Default::default() }
+    wordcraft_render::RenderOptions {
+        text_darkening: cfg!(target_os = "macos"),
+        hinting: cfg!(all(unix, not(target_os = "macos"))),
+        ..Default::default()
+    }
 }
 
 /// The hyperlink under the pointer at (x, y) on `page`, where `pos` is the caret position the
