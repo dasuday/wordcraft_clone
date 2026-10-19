@@ -2,8 +2,9 @@
 //! is one opaque widget to assistive technology. This module describes the document under it as
 //! an AccessKit tree, the way a browser describes a page:
 //!
-//! - the canvas widget is the **document** node (named after the document), holding the caret
-//!   and selection as an AccessKit text selection;
+//! - the canvas widget is the **text area** node (named after the document), editable text with
+//!   the caret and selection as an AccessKit text selection, so magnifiers that follow the caret
+//!   in editable text follow it here too;
 //! - each body paragraph is a **paragraph**, a **heading** (with its outline level) or a **list
 //!   item** (with its list level, grouped into lists), holding one **text run** per laid-out line
 //!   with its characters' screen positions, so a reader can follow the caret by character, word
@@ -55,7 +56,7 @@ impl Key {
     }
 }
 
-/// The described document: its nodes (in creation order), the document node's children and the
+/// The described document: its nodes (in creation order), the text area node's children and the
 /// selection inside it.
 #[derive(Default, Clone)]
 pub struct Tree {
@@ -74,7 +75,10 @@ pub fn page_window(rects: &[Rect], view: Rect) -> Option<(usize, usize)> {
 /// Describe the document under the canvas widget `doc_id` to AccessKit for this frame.
 /// `rects` are the pages' screen rectangles, `view` the visible part of the canvas.
 pub fn expose(app: &mut crate::WordApp, ctx: &egui::Context, doc_id: Id, layout: &Arc<DocLayout>, rects: &[Rect], view: Rect) {
-    if ctx.accesskit_node_builder(doc_id, |n| n.set_role(Role::Document)).is_none() {
+    // An editable text area (AXTextArea on macOS), not a document group: screen readers treat a
+    // document as read-only, and magnifiers such as macOS Zoom follow only editable text, so they
+    // ignored the caret (#2970). Don't set it read-only: that would undo this.
+    if ctx.accesskit_node_builder(doc_id, |n| n.set_role(Role::MultilineTextInput)).is_none() {
         // No screen reader: describe nothing, keep nothing.
         app.canvas.a11y = A11yCache::default();
         return;
@@ -99,6 +103,8 @@ pub fn expose(app: &mut crate::WordApp, ctx: &egui::Context, doc_id: Id, layout:
     });
     ctx.accesskit_node_builder(doc_id, |n| {
         n.set_label(title);
+        // SetValue and ReplaceSelectedText are deliberately not handled: edits go through the
+        // command registry, so an accessibility action must never replace the document wholesale.
         for c in &tree.top {
             n.push_child(*c);
         }
@@ -528,12 +534,18 @@ mod tests {
 
     /// What AccessKit is told about `app` after a few frames in `ctx`, with AccessKit on.
     fn described(app: &mut crate::WordApp, ctx: &egui::Context) -> accesskit::TreeUpdate {
+        described_with(app, ctx, Vec::new())
+    }
+
+    /// `described`, with `events` delivered to the first frame.
+    fn described_with(app: &mut crate::WordApp, ctx: &egui::Context, mut events: Vec<egui::Event>) -> accesskit::TreeUpdate {
         ctx.enable_accesskit();
         let mut update = None;
         for _ in 0..4 {
             let input = egui::RawInput {
                 screen_rect: Some(Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1440.0, 900.0))),
                 time: Some(ctx.input(|i| i.time) + 0.1),
+                events: std::mem::take(&mut events),
                 ..Default::default()
             };
             let mut out = ctx.run_ui(input, |ui| {
@@ -587,7 +599,10 @@ mod tests {
         }
         assert!(parents.values().all(|n| *n == 1), "a node with two parents");
 
-        let (doc_id, doc) = nodes.iter().find(|(_, n)| n.role() == Role::Document).expect("a document node");
+        let doc_id = Id::new("wordcraft_canvas").accesskit_id();
+        let doc = nodes.get(&doc_id).expect("the canvas node");
+        assert_eq!(doc.role(), Role::MultilineTextInput);
+        assert!(!doc.is_read_only());
         // Text of a node's runs, depth first.
         fn text(nodes: &HashMap<NodeId, &Node>, id: NodeId, out: &mut String) {
             let Some(n) = nodes.get(&id) else { return };
@@ -606,7 +621,7 @@ mod tests {
                 walk(nodes, *c, depth + 1, out);
             }
         }
-        walk(&nodes, *doc_id, 0, &mut all);
+        walk(&nodes, doc_id, 0, &mut all);
         let of = |role: Role| all.iter().filter(|(_, r, _)| *r == role).map(|(id, _, _)| *id).collect::<Vec<_>>();
         let texts = |role: Role| {
             of(role)
@@ -646,13 +661,30 @@ mod tests {
             assert!(n.bounds().is_some());
         }
 
-        // The caret: the selection is on the document node, in "Read this "'s run, after "Read".
+        // The caret: the selection is on the text area node, in "Read this "'s run, after "Read".
         let s = doc.text_selection().expect("the caret");
         assert_eq!(s.anchor, s.focus);
         assert_eq!(s.focus.character_index, 4);
         let run = nodes[&s.focus.node];
         assert_eq!(run.role(), Role::TextRun);
         assert_eq!(run.value(), Some("Read this "));
+    }
+
+    /// #2970: the canvas is an editable text area (so macOS Zoom follows the caret). A SetValue
+    /// request, which a text area may receive, changes nothing — edits go through the commands —
+    /// and doesn't panic.
+    #[test]
+    fn a_set_value_request_leaves_the_document_alone() {
+        let mut app = crate::WordApp::new(wordcraft_engine::Session::new(wordcraft_doc::Document::new()), Default::default());
+        app.run("text.insert", json!({"text": "Keep this"})).unwrap();
+        let request = accesskit::ActionRequest {
+            action: accesskit::Action::SetValue,
+            target_tree: accesskit::TreeId::ROOT,
+            target_node: Id::new("wordcraft_canvas").accesskit_id(),
+            data: Some(accesskit::ActionData::Value("Replaced".into())),
+        };
+        described_with(&mut app, &egui::Context::default(), vec![egui::Event::AccessKitActionRequest(request)]);
+        assert_eq!(app.session.doc.plain_text(StoryRef::Body), "Keep this");
     }
 
     /// #1119: a magnifier keeps the caret in view by the box of the character after it (Windows
@@ -677,7 +709,10 @@ mod tests {
     fn assert_end_mark_at_caret(app: &mut crate::WordApp, ctx: &egui::Context, step: &str) {
         let update = described(app, ctx);
         let nodes: HashMap<NodeId, &Node> = update.nodes.iter().map(|(id, n)| (*id, n)).collect();
-        let doc = nodes.values().find(|n| n.role() == Role::Document).expect("a document node");
+        let doc_id = Id::new("wordcraft_canvas").accesskit_id();
+        let doc = nodes.get(&doc_id).expect("the canvas node");
+        assert_eq!(doc.role(), Role::MultilineTextInput);
+        assert!(!doc.is_read_only());
         let at = doc.text_selection().expect("the caret").focus;
         let run = nodes[&at.node];
         assert_eq!(run.value(), Some("\n"), "{step}: the caret is on an empty line");
