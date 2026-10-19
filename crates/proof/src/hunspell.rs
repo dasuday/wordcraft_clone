@@ -1,7 +1,7 @@
 //! Hunspell dictionaries installed on the system, read at runtime.
 //!
 //! WordCraft doesn't bundle large spelling dictionaries. For languages with an affix dictionary
-//! (Polish, Russian), it reads the standard Hunspell `.aff`/`.dic` pair installed by the operating system,
+//! (Polish, German and Russian), it reads the standard Hunspell `.aff`/`.dic` pair installed by the operating system,
 //! a package manager or LibreOffice, with [`crate::affix::AffixDict::from_hunspell`]. When none is
 //! installed the language has no spelling check (no marks, no errors), like Word without the
 //! language's proofing tools.
@@ -183,8 +183,8 @@ fn decode_high(bytes: &[u8], high: &str) -> String {
 }
 
 /// Decode an `.aff`/`.dic` pair to UTF-8 from the encoding the `.aff`'s `SET` line names
-/// (UTF-8 when there is none; ISO 8859-2 is the other one Polish dictionaries use, ISO 8859-1 the
-/// one the original Portuguese VERO uses, KOI8-R and Windows-1251 the ones older Russian dictionaries use).
+/// (UTF-8 when there is none; ISO 8859-1 for German and the original Portuguese VERO, ISO 8859-2 for
+/// Polish, and KOI8-R or Windows-1251 for older Russian dictionaries).
 pub fn decode(aff: &[u8], dic: &[u8]) -> Result<(String, String), String> {
     let head = String::from_utf8_lossy(aff.get(..aff.len().min(8192)).unwrap_or_default()).to_string();
     let set = head.lines().find_map(|l| l.trim_start_matches('\u{feff}').strip_prefix("SET ")).map(str::trim).unwrap_or("UTF-8").to_ascii_uppercase();
@@ -193,7 +193,7 @@ pub fn decode(aff: &[u8], dic: &[u8]) -> Result<(String, String), String> {
             let text = |b: &[u8], what: &str| String::from_utf8(b.to_vec()).map_err(|e| format!("{what}: not UTF-8: {e}"));
             Ok((text(aff, ".aff")?, text(dic, ".dic")?))
         }
-        "ISO8859-1" | "ISO-8859-1" => Ok((decode_latin1(aff), decode_latin1(dic))),
+        "ISO8859-1" | "ISO-8859-1" | "LATIN1" => Ok((decode_latin1(aff), decode_latin1(dic))),
         "ISO8859-2" | "ISO-8859-2" => Ok((decode_latin2(aff), decode_latin2(dic))),
         "KOI8-R" | "KOI8R" => Ok((decode_high(aff, KOI8_R_HIGH), decode_high(dic, KOI8_R_HIGH))),
         "CP1251" | "WINDOWS-1251" | "MICROSOFT-CP1251" => Ok((decode_high(aff, CP1251_HIGH), decode_high(dic, CP1251_HIGH))),
@@ -242,6 +242,13 @@ mod tests {
         assert!(a.contains("TRY ç"), "{a}");
         assert_eq!(d, "1\norçamento/A\nesperávamos\n");
         assert!(decode(b"SET ISO-8859-1\n", b"\xe7").is_ok());
+    }
+
+    #[test]
+    fn decodes_german_latin1_without_replacing_umlauts_or_sharp_s() {
+        let (aff, dic) = decode(b"SET ISO8859-1\nTRY \xe4\xf6\xfc\xdf\n", b"3\nStra\xdfe\nT\xfcr\nR\xfcebli\n").unwrap();
+        assert!(aff.contains("äöüß"));
+        assert_eq!(dic, "3\nStraße\nTür\nRüebli\n");
     }
 
     #[test]

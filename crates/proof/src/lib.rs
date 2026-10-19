@@ -23,6 +23,10 @@
 //!   suggestions tuned for Italian (missing accents, `REP` confusions, missing spaces),
 //!   conservative grammar rules with Italian messages, and `hyph-utf8`'s Italian patterns
 //!   (Beccari, MIT option).
+//! - **German** ([`ProofLang::De`], [`ProofLang::DeAt`], [`ProofLang::DeCh`], module [`de`]):
+//!   installed regional Hunspell dictionaries, compound nouns and spelling suggestions.
+//!   Swiss German rejects `ß`; dictionaries never fall back across German regions.
+//!   German grammar and dedicated hyphenation patterns are not included yet.
 //! - **Russian** ([`ProofLang::Ru`], module [`ru`]): spelling against the Hunspell `ru_RU`
 //!   dictionary installed on the system (not bundled either), with `ё` optional and hyphenated
 //!   words (`кто-то`, `по-русски`, `северо-западный`) understood, suggestions tuned for Russian
@@ -45,6 +49,7 @@
 pub mod affix;
 pub mod bg;
 pub mod cs;
+pub mod de;
 pub mod dict;
 pub mod hr;
 pub mod hunspell;
@@ -151,6 +156,9 @@ pub fn set_dictionaries_folder(dir: Option<std::path::PathBuf>) {
     hr::reload_dictionary();
     tr::reload_dictionary();
     id::reload_dictionary();
+    for lang in [ProofLang::De, ProofLang::DeAt, ProofLang::DeCh] {
+        de::reload_dictionary(lang);
+    }
     DICTIONARY_GENERATION.fetch_add(1, Ordering::Relaxed);
 }
 
@@ -164,6 +172,9 @@ pub fn installed_dictionaries() -> Vec<(ProofLang, Option<std::path::PathBuf>)> 
         (ProofLang::Hr, hr::installed_path()),
         (ProofLang::Tr, tr::installed_path()),
         (ProofLang::Id, id::installed_path()),
+        (ProofLang::De, de::installed_path(ProofLang::De)),
+        (ProofLang::DeAt, de::installed_path(ProofLang::DeAt)),
+        (ProofLang::DeCh, de::installed_path(ProofLang::DeCh)),
     ]
 }
 
@@ -193,6 +204,13 @@ pub fn dictionary_generation() -> u64 {
 pub(crate) fn in_user_dictionary(lower: &str) -> bool {
     user_words().read().unwrap_or_else(|e| e.into_inner()).contains(lower)
         || ignored_words().read().unwrap_or_else(|e| e.into_inner()).contains(lower)
+}
+
+/// Is `word` in the session's Ignore All list? Unlike the user dictionary, Ignore All is an
+/// explicit choice and wins even for a Swiss word containing `ß`.
+fn in_ignored_words(word: &str) -> bool {
+    let w = word.trim_matches(|c: char| !c.is_alphanumeric()).to_lowercase();
+    ignored_words().read().unwrap_or_else(|e| e.into_inner()).contains(&w)
 }
 
 /// Words in the user dictionary.
@@ -639,6 +657,7 @@ fn spelling_issue(text: &str, a: usize, b: usize, lang: ProofLang, opts: &Option
         ProofLang::Hr => "Moguća pravopisna pogreška",
         ProofLang::Pt => "Possível erro de ortografia",
         ProofLang::It => "Possibile errore di ortografia",
+        ProofLang::De | ProofLang::DeAt | ProofLang::DeCh => "Möglicher Rechtschreibfehler",
         ProofLang::Tr => "Olası yazım hatası",
         ProofLang::Ru => "Возможна орфографическая ошибка",
         ProofLang::Cs => "Možná pravopisná chyba",
@@ -661,6 +680,10 @@ pub fn is_correct_in_with(word: &str, lang: ProofLang, opts: &Options) -> bool {
         ProofLang::Hr => accepted_by_options(word, opts) || hr::is_correct(word),
         ProofLang::Pt => accepted_by_options(word, opts) || pt::is_correct(word),
         ProofLang::It => accepted_by_options(word, opts) || it::is_correct(word),
+        // Swiss spelling rejects `ß` even in uppercase text or a user-dictionary word. An
+        // explicit Ignore All still wins, and a missing dictionary leaves the word unmarked.
+        ProofLang::DeCh if !in_ignored_words(word) && de::has_dictionary(ProofLang::DeCh) && de::rejects_swiss_sharp_s(word) => false,
+        ProofLang::De | ProofLang::DeAt | ProofLang::DeCh => accepted_by_options(word, opts) || de::is_correct(word, lang),
         ProofLang::Tr => accepted_by_options(word, opts) || tr::is_correct(word),
         ProofLang::Ru => accepted_by_options(word, opts) || ru::is_correct(word),
         ProofLang::Cs => accepted_by_options(word, opts) || cs::is_correct(word),
@@ -677,6 +700,7 @@ pub fn suggest_in(word: &str, max: usize, lang: ProofLang) -> Vec<String> {
         ProofLang::Hr => hr::suggest(word, max),
         ProofLang::Pt => pt::suggest(word, max),
         ProofLang::It => it::suggest(word, max),
+        ProofLang::De | ProofLang::DeAt | ProofLang::DeCh => de::suggest(word, max, lang),
         ProofLang::Tr => tr::suggest(word, max),
         ProofLang::Ru => ru::suggest(word, max),
         ProofLang::Cs => cs::suggest(word, max),
@@ -706,6 +730,8 @@ fn grammar_in(text: &str, lang: ProofLang, capital_first: bool) -> Vec<Issue> {
         // Czech has no sentence-capital rule, so a list item needs no exception.
         ProofLang::Cs => cs::grammar::check(text),
         ProofLang::Id => id::grammar::check(text),
+        // German grammar checks are not implemented yet.
+        ProofLang::De | ProofLang::DeAt | ProofLang::DeCh => Vec::new(),
         ProofLang::Bg | ProofLang::Other => Vec::new(),
     }
 }
@@ -916,12 +942,19 @@ mod tests {
     fn dictionaries_folder_is_searched_first() {
         let dir = std::env::temp_dir().join(format!("wc-proof-dictionaries-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
+        // Each language's own test dictionary, so checks running meanwhile see the same words.
+        let de = de::test_dict::dic(ProofLang::De);
+        let de_at = de::test_dict::dic(ProofLang::DeAt);
+        let de_ch = de::test_dict::dic(ProofLang::DeCh);
         for (name, aff, dic) in [
             ("pl_PL", pl::test_dict::AFF, pl::test_dict::DIC),
             ("pt_BR", pt::test_dict::AFF, pt::test_dict::DIC),
             ("it_IT", it::test_dict::AFF, it::test_dict::DIC),
             ("hr_HR", hr::test_dict::AFF, hr::test_dict::DIC),
             ("id_ID", id::test_dict::AFF, id::test_dict::DIC),
+            ("de_DE", de::test_dict::AFF, de.as_str()),
+            ("de_AT", de::test_dict::AFF, de_at.as_str()),
+            ("de_CH", de::test_dict::AFF, de_ch.as_str()),
         ] {
             std::fs::write(dir.join(format!("{name}.aff")), aff).unwrap();
             std::fs::write(dir.join(format!("{name}.dic")), dic).unwrap();
@@ -929,20 +962,24 @@ mod tests {
         let before = dictionary_generation();
         set_dictionaries_folder(Some(dir.clone()));
         assert!(dictionary_generation() > before, "cached checks are dropped");
-        // Turkish has no test dictionary to put in the folder; Indonesian is listed after it.
+        // Turkish has no test dictionary to put in the folder.
         let found = installed_dictionaries();
-        assert_eq!(found.get(4).map(|(lang, _)| *lang), Some(ProofLang::Tr));
-        assert_eq!(found.last(), Some(&(ProofLang::Id, Some(dir.join("id_ID.dic")))));
-        assert_eq!(
-            found[..4],
-            [
-                (ProofLang::Pl, Some(dir.join("pl_PL.dic"))),
-                (ProofLang::Pt, Some(dir.join("pt_BR.dic"))),
-                (ProofLang::It, Some(dir.join("it_IT.dic"))),
-                (ProofLang::Hr, Some(dir.join("hr_HR.dic"))),
-            ]
-        );
+        let path = |lang| found.iter().find(|(l, _)| *l == lang).and_then(|(_, p)| p.clone());
+        assert_eq!(path(ProofLang::Pl), Some(dir.join("pl_PL.dic")));
+        assert_eq!(path(ProofLang::Pt), Some(dir.join("pt_BR.dic")));
+        assert_eq!(path(ProofLang::It), Some(dir.join("it_IT.dic")));
+        assert_eq!(path(ProofLang::Hr), Some(dir.join("hr_HR.dic")));
+        assert_eq!(path(ProofLang::Tr), None);
+        assert_eq!(path(ProofLang::Id), Some(dir.join("id_ID.dic")));
+        assert_eq!(path(ProofLang::De), Some(dir.join("de_DE.dic")));
+        assert_eq!(path(ProofLang::DeAt), Some(dir.join("de_AT.dic")));
+        assert_eq!(path(ProofLang::DeCh), Some(dir.join("de_CH.dic")));
         assert!(is_correct_in("chrząszcz", ProofLang::Pl) && !is_correct_in("chrzonszcz", ProofLang::Pl));
+        // The German regions reload from the new folder, each against its own file.
+        assert!(is_correct_in("Straße", ProofLang::De));
+        assert!(is_correct_in("Jänner", ProofLang::DeAt));
+        assert!(is_correct_in("Strasse", ProofLang::DeCh));
+        assert!(!is_correct_in("Straße", ProofLang::DeCh), "Swiss spelling still rejects ß");
     }
 
     /// #1741: a list item may be a fragment, so its first word needs no capital in any language
@@ -1295,7 +1332,7 @@ mod tests {
         for l in [None, Some(""), Some("  "), Some("en"), Some("en-US"), Some("en-GB"), Some("EN-us"), Some("en_US")] {
             assert!(has_dictionary(l), "{l:?}");
         }
-        for l in [Some("lt-LT"), Some("fr-FR"), Some("de"), Some("uk"), Some("es"), Some("-US"), Some("e")] {
+        for l in [Some("lt-LT"), Some("fr-FR"), Some("uk"), Some("es"), Some("-US"), Some("e")] {
             assert!(!has_dictionary(l), "{l:?}");
         }
         // The gate follows the dictionaries, not English: every proofed language is proofed.
@@ -1303,6 +1340,42 @@ mod tests {
             assert!(has_dictionary(Some(d)), "{d}");
             assert!(has_dictionary(Some(&format!("{}-XX", d.to_ascii_uppercase()))), "{d}");
         }
+    }
+
+    #[test]
+    fn german_regions_route_spelling_suggestions_and_mixed_runs() {
+        de::test_dict::install();
+        let text = "Straße groß Strasse gross";
+        let cut = "Straße groß ".len();
+        let spans = [(0..cut, ProofLang::DeCh), (cut..text.len(), ProofLang::De)];
+        let issues = check_text(text, &spans);
+        assert_eq!(issues.iter().map(|i| text.get(i.start..i.end).unwrap()).collect::<Vec<_>>(), ["Straße", "groß", "Strasse", "gross"]);
+        assert!(issues.iter().all(|i| i.kind == IssueKind::Spelling && i.message == "Möglicher Rechtschreibfehler"));
+        assert_eq!(issues[0].lang, ProofLang::DeCh);
+        assert_eq!(issues[2].lang, ProofLang::De);
+        assert_eq!(suggest_in("Straße", 1, ProofLang::DeCh), ["Strasse"]);
+        assert!(is_correct_for("Jänner", Some("de-AT")));
+        assert!(!is_correct_for("Jänner", Some("de-DE")));
+        assert!(check_grammar_in("dies ist ist ein test", ProofLang::DeCh).is_empty());
+        assert!(check_text("Strasse gross Straße groß", &[(0..14, ProofLang::DeCh), (14..27, ProofLang::De)]).is_empty());
+    }
+
+    #[test]
+    fn swiss_sharp_s_beats_ignore_options_but_not_ignore_all() {
+        de::test_dict::install();
+        // A user-dictionary word cannot make `ß` Swiss; the German region still accepts it.
+        let user = "Zqxstraße";
+        add_word(user);
+        assert!(!is_correct_in(user, ProofLang::DeCh), "the user dictionary cannot make ß Swiss");
+        assert!(is_correct_in(user, ProofLang::De));
+        remove_word(user);
+        // Ignore words in UPPERCASE is language-independent, but not for Swiss `ß`.
+        assert!(!is_correct_in("ZQXSTRAẞE", ProofLang::DeCh), "uppercase text cannot make ß Swiss");
+        // Ignore All is explicit and wins even over the Swiss rule.
+        ignore_word("Zqxstraßeignored");
+        assert!(is_correct_in("Zqxstraßeignored", ProofLang::DeCh), "Ignore All still wins");
+        // A missing dictionary leaves Swiss text unmarked, as before.
+        assert!(de::is_correct_with(&crate::affix::AffixDict::default(), "Straße", ProofLang::DeCh));
     }
 
     /// #100: runs in a language without a dictionary are never flagged; English still is.
