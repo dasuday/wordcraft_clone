@@ -2694,6 +2694,8 @@ template	Letter	Thư
 	View Side by Side	Xem song song
 	Synchronous Scrolling	Cuộn đồng bộ
 	No other WordCraft windows are open.	Không có cửa sổ WordCraft nào khác đang mở.
+	only the desktop app has several windows	chỉ ứng dụng máy tính mới có nhiều cửa sổ
+	turn on View Side by Side first	hãy bật Xem song song trước
 # Split Cells and Convert Text to Table (#2592)
 	Merge cells before split	Gộp ô trước khi tách
 	Table size	Kích thước bảng

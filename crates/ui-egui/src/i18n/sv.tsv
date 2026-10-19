@@ -2667,6 +2667,8 @@ preview	Title	Titel
 	View Side by Side	Visa sida vid sida
 	Synchronous Scrolling	Synkron rullning
 	No other WordCraft windows are open.	Inga andra WordCraft-fönster är öppna.
+	only the desktop app has several windows	bara skrivbordsappen har flera fönster
+	turn on View Side by Side first	aktivera Visa sida vid sida först
 # Split Cells and Convert Text to Table (#2592)
 	Merge cells before split	Sammanfoga celler före delning
 	Table size	Tabellstorlek
