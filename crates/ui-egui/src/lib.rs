@@ -524,6 +524,9 @@ pub struct WordApp {
     pub(crate) dialog_pick: Option<String>,
     /// macOS: the window has no title bar; leave room for the traffic lights.
     pub integrated_titlebar: bool,
+    /// Linux/BSD: the window has no system frame; the title bar draws minimize, maximize and
+    /// close, and the window resizes from its edges (`chrome::window_frame`).
+    pub window_controls: bool,
     /// macOS: the title bar's height and where its content starts, around the traffic lights.
     pub mac_titlebar: chrome::MacTitleBar,
     control_rx: Option<std::sync::mpsc::Receiver<ControlRequest>>,
@@ -664,6 +667,7 @@ impl WordApp {
             status_msg: None,
             previews: previews::Previews::default(),
             integrated_titlebar: false,
+            window_controls: false,
             mac_titlebar: chrome::MacTitleBar::default(),
             control_rx: None,
             shot_token: 0,
@@ -2239,6 +2243,7 @@ impl WordApp {
         zotero::show_alert(self, &ctx);
         read_aloud::show(self, &ctx);
         crate::keytips::show(self, &ctx, ui);
+        chrome::window_frame(self, &ctx);
         keys::global_shortcuts(self, &ctx);
         self.refocus_after_chrome_click(&ctx);
         if let Some(url) = self.canvas.open_url.take() {

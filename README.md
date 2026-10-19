@@ -291,6 +291,10 @@ to the AUR itself. Install one of them:
 | [`wordcraft-git`](https://aur.archlinux.org/packages/wordcraft-git) | The current `main` branch, built from source | You want unreleased changes and accept an occasional broken build |
 For example `yay -S wordcraft-bin` or `paru -S wordcraft-bin`.
 
+On Linux and FreeBSD, WordCraft's own title bar carries minimize, maximize and close, as in Word,
+and the window manager draws no second title bar above it. Set `WORDCRAFT_SYSTEM_TITLEBAR=1` to
+keep the window manager's title bar instead.
+
 #### Community packages
 
 These packages are maintained by community members, not by the WordCraft team.

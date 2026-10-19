@@ -132,6 +132,9 @@
 	Clear	Очистить
 	Clear All Formatting	Очистить всё форматирование
 	Clipboard	Буфер обмена
+	Minimize	Свернуть
+	Maximize	Развернуть
+	Restore Down	Восстановить
 	Close	Закрыть
 	Close Header and Footer	Закрыть колонтитулы
 	Collapse Selection	Свернуть выделение
