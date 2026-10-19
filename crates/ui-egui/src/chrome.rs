@@ -5,7 +5,7 @@ use serde_json::json;
 use wordcraft_doc::StoryRef;
 
 use crate::theme::{Tokens, TypeRung, medium, paint_text, regular, semibold, text_width};
-use crate::{WordApp, icons};
+use crate::{StatusCharacters, WordApp, icons};
 
 /// The Quick Access Toolbar's button for command `id`.
 pub(crate) fn qat_button_id(id: &str) -> egui::Id {
@@ -467,15 +467,47 @@ pub fn status_bar(app: &mut WordApp, ui: &mut Ui) {
                 }
                 let words = app.cached_word_count();
                 // A selected picture/shape/text box isn't a text selection: show the total.
-                let wtxt = if app.session.sel.is_collapsed() || crate::objects::selected(app).is_some() {
-                    crate::i18n::fmt(tl!("{words} words"), &[("words", &words.to_string())])
+                let selected = if app.session.sel.is_collapsed() || crate::objects::selected(app).is_some() {
+                    None
                 } else {
-                    let sw = wordcraft_doc::count_words(&app.session.selected_text());
-                    crate::i18n::fmt(tl!("{selected} of {words} words"), &[("selected", &sw.to_string()), ("words", &words.to_string())])
+                    Some(app.session.selected_text())
                 };
-                if st(ui, &wtxt).clicked() {
+                let wtxt = match &selected {
+                    Some(sel) => {
+                        let sw = wordcraft_doc::count_words(sel);
+                        crate::i18n::fmt(tl!("{selected} of {words} words"), &[("selected", &sw.to_string()), ("words", &words.to_string())])
+                    }
+                    None => crate::i18n::fmt(tl!("{words} words"), &[("words", &words.to_string())]),
+                };
+                let wresp = st(ui, &wtxt);
+                if wresp.clicked() {
                     let _ = app.run("ui.dialog", json!({"name": "wordCount"}));
                 }
+                // #2797: the character count, when the status bar is set to keep one. Both counts
+                // carry the menu that chooses it.
+                let count = app.ui.status_characters;
+                if count != StatusCharacters::Off {
+                    let with_spaces = count == StatusCharacters::WithSpaces;
+                    let n = app.cached_character_count(with_spaces);
+                    let ctxt = match &selected {
+                        Some(sel) => {
+                            let sc = wordcraft_doc::count_characters(sel, with_spaces);
+                            crate::i18n::fmt(
+                                tl!("{selected} of {characters} characters"),
+                                &[("selected", &sc.to_string()), ("characters", &n.to_string())],
+                            )
+                        }
+                        None => crate::i18n::fmt(tl!("{characters} characters"), &[("characters", &n.to_string())]),
+                    };
+                    let cresp = st(ui, &ctxt).on_hover_text(tl!(count.label()));
+                    if cresp.clicked() {
+                        let _ = app.run("ui.dialog", json!({"name": "wordCount"}));
+                    }
+                    // A right-click on either count opens the menu that chooses it; a click on
+                    // the count itself opens Word Count, as it always has.
+                    egui::Popup::context_menu(&cresp).show(|ui| status_characters_menu(ui, app));
+                }
+                egui::Popup::context_menu(&wresp).show(|ui| status_characters_menu(ui, app));
                 if app.session.sel.focus.story != StoryRef::Body && !crate::canvas::in_text_box(app) {
                     st(ui, tl!("Editing header/footer"));
                 }
@@ -626,6 +658,28 @@ impl WordApp {
         }
         self.word_count.1
     }
+
+    /// Character count (#2797), recomputed only when the document changes, the count option
+    /// changes or the with/without spaces choice does.
+    pub fn cached_character_count(&mut self, with_spaces: bool) -> usize {
+        let key = self.session.rev().wrapping_mul(4) | (u64::from(self.session.prefs.count_notes) << 1) | u64::from(with_spaces);
+        if self.character_count.0 != key {
+            self.character_count = (key, self.session.character_count(with_spaces));
+        }
+        self.character_count.1
+    }
+}
+
+/// The status bar's character-count menu (#2797), on a right-click on either count: which one
+/// stays visible next to the word count, or none.
+fn status_characters_menu(ui: &mut Ui, app: &mut WordApp) {
+    for count in StatusCharacters::ALL {
+        let on = app.ui.status_characters == count;
+        if ui.selectable_label(on, tl!(count.label())).clicked() {
+            let _ = app.run("ui.statusCharacters", json!({"value": count.code()}));
+            ui.close();
+        }
+    }
 }
 
 #[cfg(test)]
@@ -650,6 +704,34 @@ mod tests {
         let button = |pressed| egui::Event::PointerButton { pos, button: egui::PointerButton::Primary, pressed, modifiers: Default::default() };
         frame(ctx, n, vec![egui::Event::PointerMoved(pos), button(true)], a);
         frame(ctx, n, vec![button(false)], a);
+    }
+
+    /// One status-bar frame, returning the accesskit labels and bounds it drew.
+    fn sbar_frame(ctx: &egui::Context, n: &mut u32, events: Vec<egui::Event>, a: &mut WordApp) -> Vec<(String, egui::Rect)> {
+        *n += 1;
+        let input = egui::RawInput {
+            time: Some(f64::from(*n) / 60.0),
+            screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, vec2(1200.0, 800.0))),
+            events,
+            ..Default::default()
+        };
+        let mut out = ctx.run_ui(input, |ui| status_bar(a, ui));
+        out.textures_delta.clear();
+        let update = out.platform_output.accesskit_update.take().unwrap();
+        update
+            .nodes
+            .iter()
+            .filter_map(|(_, node)| {
+                let b = node.bounds()?;
+                Some((node.label()?.to_string(), Rect::from_min_max(pos2(b.x0 as f32, b.y0 as f32), pos2(b.x1 as f32, b.y1 as f32))))
+            })
+            .collect()
+    }
+
+    fn sbar_click(ctx: &egui::Context, n: &mut u32, at: egui::Pos2, button: egui::PointerButton, a: &mut WordApp) {
+        let ev = |pressed| egui::Event::PointerButton { pos: at, button, pressed, modifiers: Default::default() };
+        sbar_frame(ctx, n, vec![egui::Event::PointerMoved(at), ev(true)], a);
+        sbar_frame(ctx, n, vec![ev(false)], a);
     }
 
     /// #701: the arrow beside Undo lists the session's undo steps, newest first; clicking the third
@@ -722,6 +804,43 @@ mod tests {
         for (zoom, xs) in &seen {
             assert_eq!(xs, first, "status bar controls moved at {zoom}% zoom");
         }
+    }
+
+    /// #2797: the status bar's character count follows its setting, counts a selection like the
+    /// word count beside it, opens Word Count on a click and offers the setting on a right-click.
+    #[test]
+    fn the_status_bar_character_count_is_shown_chosen_and_clicked() {
+        let mut a = WordApp::new(wordcraft_engine::Session::new(wordcraft_doc::Document::new()), crate::Services::default());
+        a.run("text.insert", json!({"text": "Hello there"})).unwrap();
+        let ctx = ctx();
+        ctx.enable_accesskit();
+        let mut n = 0;
+        let labels = |drawn: &[(String, egui::Rect)]| drawn.iter().map(|(l, _)| l.clone()).collect::<Vec<_>>();
+        // Off unless set: no character count beside the word count.
+        let drawn = sbar_frame(&ctx, &mut n, vec![], &mut a);
+        assert!(!labels(&drawn).iter().any(|l| l.contains("characters")), "{:?}", labels(&drawn));
+        a.run("ui.statusCharacters", json!({"value": "withSpaces"})).unwrap();
+        let drawn = sbar_frame(&ctx, &mut n, vec![], &mut a);
+        assert!(drawn.iter().any(|(l, _)| l == "11 characters"), "{:?}", labels(&drawn));
+        // A text selection counts as "x of y", like the word count beside it.
+        a.run("select.text", json!({"text": "Hello"})).unwrap();
+        let drawn = sbar_frame(&ctx, &mut n, vec![], &mut a);
+        assert!(drawn.iter().any(|(l, _)| l == "5 of 11 characters"), "{:?}", labels(&drawn));
+        a.run("ui.statusCharacters", json!({"value": "noSpaces"})).unwrap();
+        let drawn = sbar_frame(&ctx, &mut n, vec![], &mut a);
+        let at = drawn.iter().find(|(l, _)| l == "5 of 10 characters").expect("the count without spaces is drawn").1.center();
+        // A click opens Word Count, like the word count beside it.
+        sbar_click(&ctx, &mut n, at, egui::PointerButton::Primary, &mut a);
+        assert!(matches!(a.dialog, Some(crate::dialogs::Dialog::WordCount { .. })), "a click opens Word Count");
+        a.run("ui.closeDialog", json!({})).unwrap();
+        // A right-click offers the choice; picking Off hides the count again.
+        sbar_click(&ctx, &mut n, at, egui::PointerButton::Secondary, &mut a);
+        let drawn = sbar_frame(&ctx, &mut n, vec![], &mut a);
+        let off = drawn.iter().find(|(l, _)| l == "Off").expect("the menu offers Off").1.center();
+        sbar_click(&ctx, &mut n, off, egui::PointerButton::Primary, &mut a);
+        assert_eq!(a.ui.status_characters, StatusCharacters::Off);
+        let drawn = sbar_frame(&ctx, &mut n, vec![], &mut a);
+        assert!(!labels(&drawn).iter().any(|l| l.contains("characters")), "{:?}", labels(&drawn));
     }
 
     /// #1903: the footer's Cancel row closes the Undo list without undoing anything.

@@ -225,6 +225,60 @@ fn paste_target(canvas_focused: bool, backstage: bool, dialog: bool) -> bool {
     canvas_focused && !backstage && !dialog
 }
 
+/// Which character count the status bar keeps visible next to its word count, if any (#2797).
+/// The status bar's right-click menu sets it (`ui.statusCharacters`); the value is saved in
+/// `ui.json` as `off`, `noSpaces` or `withSpaces`.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(from = "String", into = "String")]
+pub enum StatusCharacters {
+    /// No character count in the status bar.
+    #[default]
+    Off,
+    /// "Characters (no spaces)": whitespace is left out, as in Word's Word Count.
+    NoSpaces,
+    /// "Characters (with spaces)": every character but line breaks, Word's plain character count.
+    WithSpaces,
+}
+
+impl StatusCharacters {
+    /// In menu order: the two counts, then turning the count off.
+    pub const ALL: [StatusCharacters; 3] = [StatusCharacters::WithSpaces, StatusCharacters::NoSpaces, StatusCharacters::Off];
+
+    /// The value used in `ui.json` and by the `ui.statusCharacters` command.
+    pub fn code(self) -> &'static str {
+        match self {
+            StatusCharacters::Off => "off",
+            StatusCharacters::NoSpaces => "noSpaces",
+            StatusCharacters::WithSpaces => "withSpaces",
+        }
+    }
+
+    pub fn from_code(code: &str) -> Option<StatusCharacters> {
+        StatusCharacters::ALL.into_iter().find(|c| c.code().eq_ignore_ascii_case(code.trim()))
+    }
+
+    /// The English label (translated with `tl!` where shown).
+    pub fn label(self) -> &'static str {
+        match self {
+            StatusCharacters::Off => "Off",
+            StatusCharacters::NoSpaces => "Characters (no spaces)",
+            StatusCharacters::WithSpaces => "Characters (with spaces)",
+        }
+    }
+}
+
+impl From<String> for StatusCharacters {
+    fn from(s: String) -> Self {
+        StatusCharacters::from_code(&s).unwrap_or_default()
+    }
+}
+
+impl From<StatusCharacters> for String {
+    fn from(c: StatusCharacters) -> Self {
+        c.code().to_string()
+    }
+}
+
 /// UI state that persists between runs (and that agents can read and set).
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
@@ -305,6 +359,9 @@ pub struct UiState {
     /// fades, as Word's does on Windows (on, the default), or it jumps and blinks on and off
     /// (off).
     pub caret_animation: bool,
+    /// The status bar's character count (#2797): which count stays visible next to the word
+    /// count, or none.
+    pub status_characters: StatusCharacters,
     /// Custom keyboard shortcuts (Customize Keyboard, #368); the session owns them while running.
     pub keyboard: wordcraft_engine::KeyMap,
     /// Custom ribbon tabs and groups, hidden tabs and the Quick Access Toolbar (Customize Ribbon,
@@ -387,6 +444,7 @@ impl Default for UiState {
             alt_chord_used: false,
             dark_page: false,
             caret_animation: true,
+            status_characters: StatusCharacters::default(),
             keyboard: wordcraft_engine::KeyMap::default(),
             ribbon: wordcraft_engine::RibbonLayout::default(),
             caption_labels: Vec::new(),
@@ -582,6 +640,8 @@ pub struct WordApp {
     pub quit_requested: bool,
     pub autosave: bool,
     pub word_count: (u64, usize),
+    /// The status bar's character count, recomputed only when the document changes (#2797).
+    pub character_count: (u64, usize),
     last_autosave: f64,
     /// The tab shown before the Equation tab came up (restored when editing ends).
     pub(crate) equation_prev_tab: Option<String>,
@@ -697,6 +757,7 @@ impl WordApp {
             quit_requested: false,
             autosave: true,
             word_count: (0, 0),
+            character_count: (0, 0),
             last_autosave: 0.0,
             equation_prev_tab: None,
             smart_art_item: None,
@@ -1704,6 +1765,19 @@ impl WordApp {
                 }
                 json!({"alignmentGuides": self.ui.alignment_guides})
             }
+            "ui.statusCharacters" => {
+                // The status bar's character count (#2797), set from its right-click menu:
+                // `value` is "withSpaces", "noSpaces" or "off"; no value reads it.
+                match p.get("value") {
+                    None => {}
+                    Some(Value::String(mode)) => match StatusCharacters::from_code(mode) {
+                        Some(c) => self.ui.status_characters = c,
+                        None => return Some(Err(format!("unknown character count {mode:?}; use withSpaces, noSpaces or off"))),
+                    },
+                    Some(_) => return Some(Err("`value` must be a string".into())),
+                }
+                json!({"statusCharacters": self.ui.status_characters.code()})
+            }
             "ui.startScreen" => {
                 // File › Options › General › Start-up (#766): `value` true or false turns showing
                 // File › Home at start-up on or off; no value reads it.
@@ -2617,6 +2691,7 @@ pub(crate) fn works_without_document(id: &str) -> bool {
             | "ui.makeDefaultApp"
             | "ui.discord"
             | "ui.caretAnimation"
+            | "ui.statusCharacters"
             | "ui.startScreen"
     ) || id.starts_with("help.")
 }
@@ -2905,6 +2980,33 @@ mod tests {
         let old: UiState = serde_json::from_str(r#"{"tab":"Insert"}"#).unwrap();
         assert!(old.caret_animation && old.tab == "Insert");
         assert_eq!(a.run("ui.caretAnimation", json!({"value": true})).unwrap()["caretAnimation"], true);
+    }
+
+    /// #2797: the status bar's character count is a UI command, kept between runs.
+    #[test]
+    fn status_characters_is_a_ui_command_and_survives_a_restart() {
+        let mut a = app();
+        assert_eq!(a.run("ui.statusCharacters", json!({})).unwrap(), json!({"statusCharacters": "off"}), "off by default; no value reads it");
+        for (value, code) in [("withSpaces", "withSpaces"), ("noSpaces", "noSpaces"), ("Off", "off")] {
+            assert_eq!(a.run("ui.statusCharacters", json!({"value": value})).unwrap(), json!({"statusCharacters": code}));
+        }
+        for junk in [json!({"value": "words"}), json!({"value": true}), json!({"value": 1}), json!({"value": null})] {
+            assert!(a.run("ui.statusCharacters", junk).is_err());
+        }
+        assert_eq!(a.ui.status_characters, StatusCharacters::Off, "a rejected value keeps the setting");
+        a.run("ui.statusCharacters", json!({"value": "noSpaces"})).unwrap();
+        let saved = serde_json::to_string(&a.prefs()).unwrap();
+        assert!(saved.contains(r#""statusCharacters":"noSpaces""#), "{saved}");
+        let mut b = app();
+        b.apply_prefs(serde_json::from_str(&saved).unwrap());
+        assert_eq!(b.ui.status_characters, StatusCharacters::NoSpaces);
+        // Settings saved before the option existed leave it off, and an unknown value (a file
+        // from a newer version) doesn't lose the rest of the settings.
+        let old: UiState = serde_json::from_str(r#"{"tab":"Insert"}"#).unwrap();
+        assert_eq!(old.status_characters, StatusCharacters::Off);
+        let newer: UiState = serde_json::from_str(r#"{"statusCharacters":"sentences"}"#).unwrap();
+        assert_eq!(newer.status_characters, StatusCharacters::Off);
+        assert_eq!(newer.tab, "Home", "the other settings survive");
     }
 
     /// #1945: showing or hiding the Quick Access Toolbar is a UI command (no value toggles it),

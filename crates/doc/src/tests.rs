@@ -457,3 +457,16 @@ fn custom_props_set_get_remove() {
     assert!(!d.remove_custom_prop("other"));
     assert_eq!(d.custom_props.len(), 1);
 }
+
+#[test]
+fn characters_are_counted_with_or_without_spaces() {
+    assert_eq!(count_characters("Hello there", true), 11);
+    assert_eq!(count_characters("Hello there", false), 10);
+    // Line breaks are never characters; other whitespace only counts with spaces.
+    assert_eq!(count_characters("a\nb\r\nc", true), 3);
+    assert_eq!(count_characters("a\nb\r\nc", false), 3);
+    assert_eq!(count_characters("a b\tc\n", true), 5);
+    assert_eq!(count_characters("a b\tc\n", false), 3);
+    assert_eq!(count_characters("", true), 0);
+    assert_eq!(count_characters(" \n ", false), 0);
+}

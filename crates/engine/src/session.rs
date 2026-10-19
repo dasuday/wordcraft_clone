@@ -1484,6 +1484,15 @@ impl Session {
         if self.prefs.count_notes { self.doc.word_count_including_notes() } else { self.doc.word_count() }
     }
 
+    /// Characters in the document, as the status bar shows them: [`Prefs::count_notes`] picks the
+    /// stories, as it does for [`Session::word_count`], and `with_spaces` false leaves whitespace
+    /// out (Word Count's "Characters (no spaces)").
+    pub fn character_count(&self, with_spaces: bool) -> usize {
+        let stories = if self.prefs.count_notes { self.doc.counted_stories() } else { vec![StoryRef::Body] };
+        let text = stories.iter().map(|st| self.doc.plain_text(*st)).collect::<Vec<_>>().join("\n");
+        wordcraft_doc::count_characters(&text, with_spaces)
+    }
+
     /// Selected plain text.
     pub fn selected_text(&self) -> String {
         // A column block or whole cells that aren't one run of the text: each piece's own text,

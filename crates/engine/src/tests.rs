@@ -3397,6 +3397,27 @@ fn word_count_excludes_carriage_returns_from_character_counts() {
     assert_eq!(v["charactersWithSpaces"].as_u64(), Some(10));
 }
 
+/// #2797: the status bar's character count is Word Count's figure for the whole document, with
+/// and without spaces, and it follows the same "count text boxes and notes" option.
+#[test]
+fn the_status_bars_character_count_matches_word_count() {
+    let mut s = s();
+    run(&mut s, "text.insert", json!({"text": "one two three"}));
+    run(&mut s, "insert.textBox", json!({"text": "box text"}));
+    run(&mut s, "caret.set", json!({"pos": Pos::body(0, 0)}));
+    let v = run(&mut s, "review.wordCount", json!({}));
+    assert_eq!(Some(s.character_count(true)), v["charactersWithSpaces"].as_u64().map(|n| n as usize));
+    assert_eq!(Some(s.character_count(false)), v["characters"].as_u64().map(|n| n as usize));
+    // The box's text counts, and the line break between the stories doesn't.
+    assert_eq!(s.character_count(true), 21);
+    assert_eq!(s.character_count(false), 18);
+    // The option the dialog's checkbox sets: the body only.
+    let v = run(&mut s, "review.wordCount", json!({"includeTextBoxes": false}));
+    assert_eq!(Some(s.character_count(true)), v["charactersWithSpaces"].as_u64().map(|n| n as usize));
+    assert_eq!(s.character_count(true), 13);
+    assert_eq!(s.character_count(false), 11);
+}
+
 /// The laid-out area of the only text box.
 fn box_area(s: &mut Session) -> wordcraft_layout::hit::ObjectHit {
     let l = s.layout();

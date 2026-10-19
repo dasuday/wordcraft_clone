@@ -1449,6 +1449,13 @@ pub fn count_words(s: &str) -> usize {
     s.split(|c: char| c.is_whitespace() || c == para::OBJ).filter(|w| w.chars().any(char::is_alphanumeric)).count()
 }
 
+/// Characters in `s`, as Word counts them: line breaks and carriage returns are not characters,
+/// and with `with_spaces` false every other whitespace is left out too (Word Count's "Characters
+/// (no spaces)").
+pub fn count_characters(s: &str, with_spaces: bool) -> usize {
+    s.chars().filter(|c| *c != '\n' && *c != '\r' && (with_spaces || !c.is_whitespace())).count()
+}
+
 /// How deep in nested tables [`Document::para_paths`] goes: cells below this are skipped.
 pub(crate) const PARA_WALK_DEPTH: usize = 16;
 
