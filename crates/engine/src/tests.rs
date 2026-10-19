@@ -7672,6 +7672,31 @@ fn rename_document_preserves_saved_contents_and_rejects_collisions() {
     std::fs::remove_dir_all(dir).unwrap();
 }
 
+/// #2983: a name that already ends in the file's extension (any case) doesn't get it twice.
+#[test]
+fn rename_with_full_file_name_keeps_one_extension() {
+    let dir = std::env::temp_dir().join(format!("wordcraft-rename-ext-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let mut s = Session::new(wordcraft_doc::Document::new());
+    s.path = Some(dir.join("in.docx"));
+    std::fs::write(dir.join("in.docx"), b"bytes").unwrap();
+    for (name, file) in [
+        ("renamed.docx", "renamed.docx"),
+        ("Shout.DOCX", "Shout.docx"),
+        ("plain", "plain.docx"),
+        ("v1.2.docx", "v1.2.docx"),
+        ("notes.docm", "notes.docm.docx"),
+        (".docx", ".docx.docx"),
+        ("Résumé.docx", "Résumé.docx"),
+    ] {
+        let out = s.run("file.rename", &json!({"name": name})).unwrap();
+        assert_eq!(s.path.as_ref(), Some(&dir.join(file)), "{name:?}");
+        assert_eq!(out["name"].as_str(), file.strip_suffix(".docx"), "{name:?}");
+        assert_eq!(std::fs::read(dir.join(file)).unwrap(), b"bytes", "{name:?}");
+    }
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
 #[test]
 fn rename_unsaved_document_names_the_file_not_the_document() {
     let mut s = Session::new(wordcraft_doc::Document::new());
