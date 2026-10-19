@@ -221,16 +221,22 @@ impl FontFace {
     /// A light hinting instance for `ppem` device pixels per em, with the engine FreeType's light
     /// hinting picks: the autohinter for TrueType outlines (their own instructions are ignored;
     /// measured against Firefox on Linux, the autohinter matches its rows of pixels and the
-    /// TrueType instructions don't), the font's own hints for PostScript (CFF) outlines and for
-    /// fonts whose glyphs need their instructions to be assembled at all.
+    /// TrueType instructions don't), the font's own hints for PostScript (CFF) outlines, and for
+    /// fonts whose glyphs need their instructions to be assembled at all their instructions with
+    /// the monochrome target, as skrifa requires for them.
     fn screen_hinter(&self, ppem: f32) -> Option<HintingInstance> {
         let f = self.skrifa()?;
         let outlines = f.outline_glyphs();
-        let target = Target::Smooth { mode: SmoothMode::Light, symmetric_rendering: true, preserve_linear_metrics: true };
-        let engine = if outlines.format() == Some(OutlineGlyphFormat::Glyf) && !outlines.require_interpreter() {
-            Engine::Auto(Some(self.glyph_styles.get_or_init(|| GlyphStyles::new(&outlines)).clone()))
+        let light = Target::Smooth { mode: SmoothMode::Light, symmetric_rendering: true, preserve_linear_metrics: true };
+        let (engine, target) = if outlines.require_interpreter() {
+            // FreeType's "tricky" fonts (old CJK fonts that assemble glyphs with their
+            // instructions): skrifa asks for the interpreter with the monochrome target, under
+            // which the instructions may move points sideways, or glyphs come apart.
+            (Engine::Interpreter, Target::Mono)
+        } else if outlines.format() == Some(OutlineGlyphFormat::Glyf) {
+            (Engine::Auto(Some(self.glyph_styles.get_or_init(|| GlyphStyles::new(&outlines)).clone())), light)
         } else {
-            Engine::Interpreter
+            (Engine::Interpreter, light)
         };
         HintingInstance::new(&outlines, Size::new(ppem), self.location(), HintingOptions { engine, target })
             .map_err(|e| log::warn!("Cannot hint {} at {ppem} px: {e}", self.family))
