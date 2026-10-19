@@ -104,3 +104,8 @@ debug = 0
 # Required by craft-pdf: the backend rejects writers that failed during unwinding.
 [patch.crates-io]
 krilla = { git = "https://github.com/storytold/craft-libs", rev = "c3487320b2d1de657b860b3c8abb44e1f2b32bd8" }
+# wgpu-hal 30.0.1 plus one change (vendor/wgpu-hal/src/metal/adapter.rs, `supported_msl_version`):
+# use the newest Metal language version the device's shader compiler accepts, not the OS's. Without
+# it Macs running a newer macOS than their GPU's compiler supports can't compile any shader.
+# Drop this when upstream wgpu does the same.
+wgpu-hal = { path = "vendor/wgpu-hal" }
