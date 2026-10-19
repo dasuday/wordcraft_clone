@@ -577,7 +577,10 @@ pub struct CustomPropertiesForm {
 impl CustomPropertiesForm {
     pub(crate) fn read(app: &WordApp) -> Self {
         let props = app.session.doc.custom_props.clone();
-        Self { props: props.clone(), start: props, selected: 0, name: String::new(), value: String::new(), message: String::new() }
+        let mut form = Self { props: props.clone(), start: props, selected: 0, name: String::new(), value: String::new(), message: String::new() };
+        // The first row is highlighted, so its fields are ready to modify, as in Word.
+        form.select(0);
+        form
     }
 
     /// Clicking a row: it fills the name and value boxes, as in Word.
@@ -5365,6 +5368,33 @@ mod tests {
         assert_eq!(h.state().session.doc.custom_prop("Reviewer"), None);
     }
 
+    /// #2982: the highlighted first row is ready to modify: its name and value fill the boxes,
+    /// so clicking Modify straight away is not refused for an empty name.
+    #[test]
+    fn the_custom_properties_dialog_starts_ready_to_modify_the_first_property() {
+        use egui_kittest::kittest::Queryable;
+        let mut app = app_with("Report body");
+        let _ = app.run("file.properties", json!({"custom": {"Status": "draft"}}));
+        let _ = app.run("ui.backstage", json!({"value": true, "page": "info"}));
+        let mut h = egui_kittest::Harness::builder().with_size(vec2(1440.0, 900.0)).build_ui_state(
+            |ui, app: &mut WordApp| {
+                let ctx = ui.ctx().clone();
+                app.logic(&ctx);
+                app.ui(ui);
+            },
+            app,
+        );
+        h.run_steps(4);
+        h.get_by_label("Advanced Properties…").click();
+        h.run_steps(4);
+        let role = egui::accesskit::Role::TextInput;
+        assert_eq!(h.get_by_role_and_label(role, "Name:").value().as_deref(), Some("Status"));
+        assert_eq!(h.get_by_role_and_label(role, "Value:").value().as_deref(), Some("draft"));
+        h.get_by_role_and_label(egui::accesskit::Role::Button, "Modify").click();
+        h.run_steps(2);
+        assert!(h.query_by_label("Status = draft").is_some(), "Modify with no edits keeps the property");
+    }
+
     /// #2982: a rename that changes only the case of the name is still a rename. Modify and OK
     /// must send the old spelling as a removal and the new one as a value, or the stored
     /// spelling never changes.
@@ -5422,6 +5452,7 @@ mod tests {
         h.run_steps(4);
         let depth = h.state().session.undo_depth();
         // Empty and blank names are refused, with the message shown, keeping the list as it was.
+        set_text_field(&mut h, "Name:", "");
         h.get_by_role_and_label(egui::accesskit::Role::Button, "Add").click();
         h.run_steps(2);
         assert!(h.query_by_label("Property names are 1–255 characters.").is_some(), "an empty name shows the message");
