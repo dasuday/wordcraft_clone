@@ -557,7 +557,7 @@ pub enum Dialog {
 /// dialog opened with as one undoable `file.properties` step (marking the document changed and
 /// refreshing File › Info); Cancel sends nothing. Text properties only for now: Word's
 /// number/date/yes-no types aren't offered, and a property of another type keeps its stored
-/// form — only a value the user changes is saved as text.
+/// form — the dialog lists it but refuses to change it (Delete still removes one outright).
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CustomPropertiesForm {
@@ -618,6 +618,9 @@ impl CustomPropertiesForm {
             Ok((name, value)) => {
                 self.message.clear();
                 match self.props.iter().position(|p| p.name.eq_ignore_ascii_case(&name)) {
+                    Some(i) if self.props[i].kind != "lpwstr" => {
+                        self.message = tl!("Only text properties can be changed.").to_string();
+                    }
                     Some(i) => {
                         self.props[i].value = value;
                         self.selected = i;
@@ -640,6 +643,10 @@ impl CustomPropertiesForm {
             self.message = tl!("Select a property to change.").to_string();
             return;
         };
+        if old.kind != "lpwstr" {
+            self.message = tl!("Only text properties can be changed.").to_string();
+            return;
+        }
         let (name, value) = match self.form() {
             Ok(f) => f,
             Err(m) => {
@@ -647,6 +654,10 @@ impl CustomPropertiesForm {
                 return;
             }
         };
+        if self.props.iter().enumerate().any(|(i, p)| i != self.selected && p.kind != "lpwstr" && p.name.eq_ignore_ascii_case(&name)) {
+            self.message = tl!("Only text properties can be changed.").to_string();
+            return;
+        }
         self.message.clear();
         self.props.remove(self.selected);
         match self.props.iter().position(|p| p.name.eq_ignore_ascii_case(&name)) {
@@ -3854,19 +3865,33 @@ fn close_button(ui: &mut Ui) -> bool {
     close
 }
 
+/// A custom property's one-line list preview: its first line, at most 80 characters, with an
+/// ellipsis when either is cut. The Value box keeps the whole value.
+fn custom_value_preview(value: &str) -> String {
+    const MAX: usize = 80;
+    let first = value.lines().next().unwrap_or("");
+    let mut chars = first.chars();
+    let mut shown: String = chars.by_ref().take(MAX).collect();
+    if chars.next().is_some() || first.len() < value.len() {
+        shown.push('…');
+    }
+    shown
+}
+
 /// The Custom tab of File › Info › Properties › Advanced Properties (#2982): the document's
 /// custom properties with Add, Modify and Delete over a name/value form. OK is one undo step
 /// (one `file.properties` call), Cancel leaves the document as it was.
 fn custom_properties(app: &mut WordApp, ui: &mut Ui, f: &mut CustomPropertiesForm) -> bool {
     let t = Tokens::get(ui.ctx());
     let mut clicked = None;
-    let rows = f.props.len().min(8);
-    egui::ScrollArea::vertical().id_salt("custom_props").max_height(rows as f32 * 18.0 + 4.0).auto_shrink([false, true]).show(ui, |ui| {
+    let rows = f.props.len().clamp(1, 8);
+    let row_h = ui.spacing().interact_size.y + ui.spacing().item_spacing.y;
+    egui::ScrollArea::vertical().id_salt("custom_props").max_height(rows as f32 * row_h + 4.0).auto_shrink([false, true]).show(ui, |ui| {
         if f.props.is_empty() {
             ui.label(egui::RichText::new(tl!("This document has no custom properties.")).color(t.text_dim));
         }
         for (i, p) in f.props.iter().enumerate() {
-            let row = ui.selectable_label(f.selected == i, format!("{} = {}", p.name, p.value));
+            let row = ui.selectable_label(f.selected == i, format!("{} = {}", p.name, custom_value_preview(&p.value)));
             if row.clicked() {
                 clicked = Some(i);
             }
@@ -3888,11 +3913,12 @@ fn custom_properties(app: &mut WordApp, ui: &mut Ui, f: &mut CustomPropertiesFor
     });
     ui.separator();
     egui::Grid::new("custom_props_form").num_columns(2).spacing(vec2(10.0, 6.0)).show(ui, |ui| {
-        ui.label(tl!("Name:"));
-        ui.add(egui::TextEdit::singleline(&mut f.name).desired_width(300.0).char_limit(wordcraft_engine::cmd::file::MAX_CUSTOM_NAME));
+        let name = ui.label(tl!("Name:"));
+        ui.add(egui::TextEdit::singleline(&mut f.name).desired_width(300.0).char_limit(wordcraft_engine::cmd::file::MAX_CUSTOM_NAME))
+            .labelled_by(name.id);
         ui.end_row();
-        ui.label(tl!("Value:"));
-        ui.add(egui::TextEdit::singleline(&mut f.value).desired_width(300.0));
+        let value = ui.label(tl!("Value:"));
+        ui.add(egui::TextEdit::singleline(&mut f.value).desired_width(300.0)).labelled_by(value.id);
         ui.end_row();
     });
     if !f.message.is_empty() {
@@ -5235,17 +5261,43 @@ mod tests {
         assert!(pages[1].footer_story.is_some(), "the next page keeps its number");
     }
 
+    /// Type into a dialog text field, replacing what is there (as a user would: click, select
+    /// all, type over).
+    fn set_text_field(h: &mut egui_kittest::Harness<'_, WordApp>, label: &str, text: &str) {
+        use egui_kittest::kittest::Queryable;
+        h.get_by_role_and_label(egui::accesskit::Role::TextInput, label).click();
+        h.run_steps(2);
+        h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::A);
+        h.key_press(egui::Key::Backspace);
+        h.run_steps(1);
+        h.get_by_role_and_label(egui::accesskit::Role::TextInput, label).type_text(text);
+        h.run_steps(2);
+    }
+
+    /// #2982: the list keeps its full values but previews only the first line, at most 80
+    /// characters, with an ellipsis when either is cut.
+    #[test]
+    fn custom_property_previews_stay_on_one_bounded_line() {
+        assert_eq!(custom_value_preview("short"), "short");
+        assert_eq!(custom_value_preview(&"x".repeat(80)), "x".repeat(80), "exactly the limit is not cut");
+        assert_eq!(custom_value_preview(&"x".repeat(81)), format!("{}…", "x".repeat(80)));
+        assert_eq!(custom_value_preview("first\nsecond"), "first…", "a later line is cut");
+        let wide = "é".repeat(80);
+        assert_eq!(custom_value_preview(&wide), wide, "80 characters, not 80 bytes");
+        let wide = "é".repeat(81);
+        assert_eq!(custom_value_preview(&wide).chars().count(), 81, "80 characters plus the ellipsis");
+        assert!(custom_value_preview(&wide).ends_with('…'));
+    }
+
     /// #2982: File › Info's Advanced Properties… opens the Custom Properties dialog; it lists
     /// the document's custom properties, and Add / Modify / Delete edit a working copy that OK
     /// applies as one undoable `file.properties` step, Cancel discarding it.
     #[test]
     fn the_custom_properties_dialog_adds_edits_and_deletes_in_one_step() {
-        use egui_kittest::kittest::Queryable;
+        use egui_kittest::kittest::{NodeT, Queryable};
         let mut app = app_with("Report body");
         let _ = app.run("file.properties", json!({"custom": {"Status": "draft", "Owner": "Mira"}}));
-        let _ = app.run("ui.dialog", json!({"name": "customProperties"}));
-        assert!(matches!(&app.dialog, Some(Dialog::CustomProperties(_))), "opens via the command");
-        assert_eq!(app.dialog.as_ref().map(|d| d.name()), Some("customProperties"));
+        let _ = app.run("ui.backstage", json!({"value": true, "page": "info"}));
         let mut h = egui_kittest::Harness::builder().with_size(vec2(1440.0, 900.0)).build_ui_state(
             |ui, app: &mut WordApp| {
                 let ctx = ui.ctx().clone();
@@ -5254,65 +5306,69 @@ mod tests {
             },
             app,
         );
-        for _ in 0..4 {
-            h.step();
-        }
-        let texts: Vec<String> = h
-            .output()
-            .shapes
-            .iter()
-            .filter_map(|s| match &s.shape {
-                egui::Shape::Text(t) => Some(t.galley.text().to_string()),
-                _ => None,
-            })
-            .collect();
-        assert!(texts.iter().any(|t| t == "Status = draft"), "the list shows the properties: {texts:?}");
-        // Add one, and replace a duplicate name's value (names compare case-insensitively).
-        let Some(Dialog::CustomProperties(f)) = h.state_mut().dialog.as_mut() else { panic!("the dialog is open") };
-        f.name = "Reviewer".into();
-        f.value = "Ada".into();
-        f.add();
-        f.name = "status".into();
-        f.value = "final".into();
-        f.add();
-        assert_eq!(f.props.len(), 3, "the duplicate replaced the value");
-        // The seeded names arrived in the object's order: Owner, Status.
-        assert_eq!(f.props.iter().find(|p| p.name.eq_ignore_ascii_case("status")).map(|p| p.value.as_str()), Some("final"));
-        // Edit the selected one through the form.
-        f.select(2);
-        assert_eq!((f.name.as_str(), f.value.as_str()), ("Reviewer", "Ada"));
-        f.value = "Ada L.".into();
-        f.modify();
-        // Delete the selected one.
-        f.delete();
-        assert_eq!(f.props.len(), 2);
+        h.run_steps(4);
+        h.get_by_label("Advanced Properties…").click();
+        h.run_steps(4);
+        assert!(matches!(&h.state().dialog, Some(Dialog::CustomProperties(_))), "opens from File › Info");
+        assert_eq!(h.state().dialog.as_ref().map(|d| d.name()), Some("customProperties"));
+        assert!(h.query_by_label("Status = draft").is_some(), "the list shows the properties");
+        // A row is selected, so the buttons act on it.
+        assert!(!h.get_by_role_and_label(egui::accesskit::Role::Button, "Modify").accesskit_node().is_disabled());
+        assert!(!h.get_by_role_and_label(egui::accesskit::Role::Button, "Delete").accesskit_node().is_disabled());
+        // Add one through the form.
+        set_text_field(&mut h, "Name:", "Reviewer");
+        set_text_field(&mut h, "Value:", "Ada");
+        h.get_by_role_and_label(egui::accesskit::Role::Button, "Add").click();
+        h.run_steps(2);
+        assert!(h.query_by_label("Reviewer = Ada").is_some(), "Add appends the typed property");
+        // A duplicate name in another case replaces its value.
+        set_text_field(&mut h, "Name:", "status");
+        set_text_field(&mut h, "Value:", "final");
+        h.get_by_role_and_label(egui::accesskit::Role::Button, "Add").click();
+        h.run_steps(2);
+        assert!(h.query_by_label("Status = final").is_some(), "the duplicate replaced the value");
+        // Selecting a row fills the boxes; Modify changes its value.
+        h.get_by_label("Reviewer = Ada").click();
+        h.run_steps(2);
+        assert_eq!(h.get_by_role_and_label(egui::accesskit::Role::TextInput, "Name:").value().as_deref(), Some("Reviewer"));
+        assert_eq!(h.get_by_role_and_label(egui::accesskit::Role::TextInput, "Value:").value().as_deref(), Some("Ada"));
+        set_text_field(&mut h, "Value:", "Ada L.");
+        h.get_by_role_and_label(egui::accesskit::Role::Button, "Modify").click();
+        h.run_steps(2);
+        assert!(h.query_by_label("Reviewer = Ada L.").is_some(), "Modify keeps the edited value");
+        // Delete another property, so the modified value is saved before that one goes.
+        h.get_by_label("Owner = Mira").click();
+        h.run_steps(2);
+        h.get_by_role_and_label(egui::accesskit::Role::Button, "Delete").click();
+        h.run_steps(2);
+        assert!(h.query_by_label("Owner = Mira").is_none(), "Delete removes the selected property");
         // OK: one call, so one undo step, marking the document changed.
         let depth = h.state().session.undo_depth();
         h.state_mut().session.dirty = false;
         h.step();
         h.get_by_role_and_label(egui::accesskit::Role::Button, "OK").click();
-        for _ in 0..4 {
-            h.step();
-        }
+        h.run_steps(4);
         assert!(h.state().dialog.is_none(), "OK closes the dialog");
         let props: Vec<(String, String)> = h.state().session.doc.custom_props.iter().map(|p| (p.name.clone(), p.value.clone())).collect();
-        // The seeded names arrive in the object's order: Owner, Status.
-        assert_eq!(props, [("Owner".to_string(), "Mira".to_string()), ("Status".to_string(), "final".to_string())]);
+        assert_eq!(props, [("Status".to_string(), "final".to_string()), ("Reviewer".to_string(), "Ada L.".to_string())]);
         assert!(h.state().session.dirty, "the document is marked changed");
         assert_eq!(h.state().session.undo_depth(), depth + 1, "one undo step");
         // One undo brings the old values back.
         let _ = h.state_mut().run("edit.undo", json!({}));
         assert_eq!(h.state().session.doc.custom_prop("Status"), Some("draft"), "one undo step");
+        assert_eq!(h.state().session.doc.custom_prop("Owner"), Some("Mira"));
+        assert_eq!(h.state().session.doc.custom_prop("Reviewer"), None);
     }
 
-    /// #2982: Cancel leaves the document as it was, and empty or oversized names are refused
-    /// with a message in the dialog instead of a panic or a half-applied edit.
+    /// #2982: Cancel leaves the document as it was; empty names are refused with a message in
+    /// the dialog; the Name box stops at Word's limit; and the last deletion shows the empty
+    /// state with Modify and Delete disabled.
     #[test]
     fn the_custom_properties_dialog_cancel_changes_nothing_and_refuses_bad_names() {
-        use egui_kittest::kittest::Queryable;
+        use egui_kittest::kittest::{NodeT, Queryable};
         let mut app = app_with("Report body");
         let _ = app.run("file.properties", json!({"custom": {"Status": "draft"}}));
-        let _ = app.run("ui.dialog", json!({"name": "customProperties"}));
+        let _ = app.run("ui.backstage", json!({"value": true, "page": "info"}));
         let mut h = egui_kittest::Harness::builder().with_size(vec2(1440.0, 900.0)).build_ui_state(
             |ui, app: &mut WordApp| {
                 let ctx = ui.ctx().clone();
@@ -5321,46 +5377,102 @@ mod tests {
             },
             app,
         );
-        for _ in 0..4 {
-            h.step();
-        }
+        h.run_steps(4);
+        h.get_by_label("Advanced Properties…").click();
+        h.run_steps(4);
         let depth = h.state().session.undo_depth();
-        {
-            let Some(Dialog::CustomProperties(f)) = h.state_mut().dialog.as_mut() else { panic!("the dialog is open") };
-            // Empty and blank names are refused, keeping the list as it was.
-            f.name = String::new();
-            f.value = "v".into();
-            f.add();
-            assert!(!f.message.is_empty(), "a blank name is refused");
-            f.name = "   ".into();
-            f.add();
-            assert!(!f.message.is_empty(), "a whitespace name is refused");
-            // A name over Word's limit is refused (the box caps typing; paste is checked too).
-            f.name = "x".repeat(wordcraft_engine::cmd::file::MAX_CUSTOM_NAME + 1);
-            f.add();
-            assert!(!f.message.is_empty(), "an oversized name is refused");
-            // An oversized value likewise.
-            f.name = "Big".into();
-            f.value = "v".repeat(wordcraft_engine::cmd::file::MAX_CUSTOM_VALUE + 1);
-            f.add();
-            assert!(!f.message.is_empty(), "an oversized value is refused");
-            assert_eq!(f.props.len(), 1, "nothing was added");
-            // A valid entry, so Cancel has something to discard.
-            f.name = "Reviewer".into();
-            f.value = "Ada".into();
-            f.add();
-            assert_eq!(f.props.len(), 2);
-        }
-        // The edits changed the dialog's layout; let it settle so the buttons sit where the
-        // click looks for them.
-        h.step();
+        // Empty and blank names are refused, with the message shown, keeping the list as it was.
+        h.get_by_role_and_label(egui::accesskit::Role::Button, "Add").click();
+        h.run_steps(2);
+        assert!(h.query_by_label("Property names are 1–255 characters.").is_some(), "an empty name shows the message");
+        set_text_field(&mut h, "Name:", "   ");
+        h.get_by_role_and_label(egui::accesskit::Role::Button, "Add").click();
+        h.run_steps(2);
+        assert!(h.query_by_label("Property names are 1–255 characters.").is_some(), "a whitespace name shows the message");
+        assert!(h.query_by_label("Status = draft").is_some(), "nothing was added");
+        // The Name box caps typing at Word's limit.
+        set_text_field(&mut h, "Name:", &"x".repeat(wordcraft_engine::cmd::file::MAX_CUSTOM_NAME + 20));
+        let typed = h.get_by_role_and_label(egui::accesskit::Role::TextInput, "Name:").value().unwrap_or_default();
+        assert_eq!(typed.chars().count(), wordcraft_engine::cmd::file::MAX_CUSTOM_NAME, "the Name box stops at the limit");
+        // A valid entry, so Cancel has something to discard.
+        set_text_field(&mut h, "Name:", "Reviewer");
+        set_text_field(&mut h, "Value:", "Ada");
+        h.get_by_role_and_label(egui::accesskit::Role::Button, "Add").click();
+        h.run_steps(2);
+        assert!(h.query_by_label("Reviewer = Ada").is_some());
+        // Deleting every row shows the empty state and disables Modify and Delete.
+        h.get_by_label("Reviewer = Ada").click();
+        h.run_steps(2);
+        h.get_by_role_and_label(egui::accesskit::Role::Button, "Delete").click();
+        h.run_steps(2);
+        h.get_by_label("Status = draft").click();
+        h.run_steps(2);
+        h.get_by_role_and_label(egui::accesskit::Role::Button, "Delete").click();
+        h.run_steps(2);
+        assert!(h.query_by_label("This document has no custom properties.").is_some(), "the empty list says so");
+        assert!(h.get_by_role_and_label(egui::accesskit::Role::Button, "Modify").accesskit_node().is_disabled());
+        assert!(h.get_by_role_and_label(egui::accesskit::Role::Button, "Delete").accesskit_node().is_disabled());
         h.get_by_role_and_label(egui::accesskit::Role::Button, "Cancel").click();
-        for _ in 0..4 {
-            h.step();
-        }
+        h.run_steps(4);
         assert!(h.state().dialog.is_none(), "Cancel closes the dialog");
         let names: Vec<&str> = h.state().session.doc.custom_props.iter().map(|p| p.name.as_str()).collect();
         assert_eq!(names, ["Status"], "the document is untouched");
         assert_eq!(h.state().session.undo_depth(), depth, "no step was recorded");
+    }
+
+    /// #2982: imported non-text properties (a number, Zotero's raw XML) stay as they are: Add
+    /// and Modify refuse to turn one into text, while Delete still removes it.
+    #[test]
+    fn the_custom_properties_dialog_leaves_imported_non_text_properties_alone() {
+        use egui_kittest::kittest::Queryable;
+        let mut app = app_with("Report body");
+        let _ = app.run("file.properties", json!({"custom": {"Status": "draft"}}));
+        app.session.doc.custom_props.push(wordcraft_doc::CustomProp { name: "Count".into(), kind: "i4".into(), value: "7".into() });
+        let _ = app.run("ui.backstage", json!({"value": true, "page": "info"}));
+        let mut h = egui_kittest::Harness::builder().with_size(vec2(1440.0, 900.0)).build_ui_state(
+            |ui, app: &mut WordApp| {
+                let ctx = ui.ctx().clone();
+                app.logic(&ctx);
+                app.ui(ui);
+            },
+            app,
+        );
+        h.run_steps(4);
+        h.get_by_label("Advanced Properties…").click();
+        h.run_steps(4);
+        assert!(h.query_by_label("Count = 7").is_some(), "the imported property is listed");
+        // Add with its name is refused rather than replacing it with text.
+        set_text_field(&mut h, "Name:", "count");
+        set_text_field(&mut h, "Value:", "8");
+        h.get_by_role_and_label(egui::accesskit::Role::Button, "Add").click();
+        h.run_steps(2);
+        assert!(h.query_by_label("Only text properties can be changed.").is_some(), "Add refuses the non-text name");
+        assert!(h.query_by_label("Count = 7").is_some(), "it keeps its value");
+        // Modify of the non-text property itself is refused.
+        h.get_by_label("Count = 7").click();
+        h.run_steps(2);
+        set_text_field(&mut h, "Value:", "8");
+        h.get_by_role_and_label(egui::accesskit::Role::Button, "Modify").click();
+        h.run_steps(2);
+        assert!(h.query_by_label("Only text properties can be changed.").is_some(), "Modify refuses the non-text property");
+        assert!(h.query_by_label("Count = 7").is_some(), "its value is unchanged");
+        // Renaming a text property onto a non-text one is refused too.
+        h.get_by_label("Status = draft").click();
+        h.run_steps(2);
+        set_text_field(&mut h, "Name:", "Count");
+        h.get_by_role_and_label(egui::accesskit::Role::Button, "Modify").click();
+        h.run_steps(2);
+        assert!(h.query_by_label("Only text properties can be changed.").is_some(), "a rename onto it is refused");
+        assert!(h.query_by_label("Status = draft").is_some(), "the text property keeps its name");
+        // Delete still removes it outright.
+        h.get_by_label("Count = 7").click();
+        h.run_steps(2);
+        h.get_by_role_and_label(egui::accesskit::Role::Button, "Delete").click();
+        h.run_steps(2);
+        assert!(h.query_by_label("Count = 7").is_none(), "Delete removes a non-text property");
+        h.get_by_role_and_label(egui::accesskit::Role::Button, "Cancel").click();
+        h.run_steps(4);
+        let kinds: Vec<(&str, &str)> = h.state().session.doc.custom_props.iter().map(|p| (p.name.as_str(), p.kind.as_str())).collect();
+        assert_eq!(kinds, [("Status", "lpwstr"), ("Count", "i4")], "Cancel leaves the imported property as it was");
     }
 }

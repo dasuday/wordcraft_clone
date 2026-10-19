@@ -3614,6 +3614,21 @@ fn word_count_with_an_object_selected_counts_the_document() {
     assert_eq!(run(&mut s, "review.wordCount", json!({}))["words"].as_u64(), Some(1));
 }
 
+/// #2982: a property imported from a file made by an older Word may have a name longer than
+/// today's limit. Such a name is still deletable (the dialog sends `null`), while setting or
+/// renaming a property to it stays refused.
+#[test]
+fn custom_properties_delete_legacy_names_but_new_names_keep_the_limit() {
+    let mut s = s();
+    let long = "x".repeat(crate::cmd::file::MAX_CUSTOM_NAME + 1);
+    s.doc.custom_props.push(wordcraft_doc::CustomProp { name: long.clone(), kind: "raw".into(), value: "<data/>".into() });
+    let mut custom = serde_json::Map::new();
+    custom.insert(long.clone(), serde_json::Value::Null);
+    run(&mut s, "file.properties", json!({"custom": custom}));
+    assert!(s.doc.custom_props.is_empty(), "the legacy name could be deleted");
+    assert!(s.run("file.properties", &json!({"custom": { (long): "x" }})).is_err(), "a new or updated name keeps the limit");
+}
+
 #[test]
 fn custom_properties_set_read_remove_and_undo() {
     let mut s = s();

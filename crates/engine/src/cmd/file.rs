@@ -376,14 +376,18 @@ fn properties(s: &mut Session, v: &Value) -> CmdResult {
             return Err(CmdError::Params("`custom` must be an object of name → string or null".into()));
         };
         for (name, val) in m {
-            if name.trim().is_empty() || name.chars().count() > MAX_CUSTOM_NAME {
-                return Err(CmdError::Params(format!("custom property names are 1–{MAX_CUSTOM_NAME} characters")));
-            }
             match val {
+                // A removal takes the name as stored: a file opened from an older Word may hold
+                // one longer than today's limit, and it must still be deletable (#2982).
                 Value::Null => {
                     s.doc.remove_custom_prop(name);
                 }
-                Value::String(x) if x.len() <= MAX_CUSTOM_VALUE => s.doc.set_custom_prop(name, x),
+                Value::String(x) if x.len() <= MAX_CUSTOM_VALUE => {
+                    if name.trim().is_empty() || name.chars().count() > MAX_CUSTOM_NAME {
+                        return Err(CmdError::Params(format!("custom property names are 1–{MAX_CUSTOM_NAME} characters")));
+                    }
+                    s.doc.set_custom_prop(name, x);
+                }
                 _ => return Err(CmdError::Params(format!("custom property `{name}` must be a string (≤ {MAX_CUSTOM_VALUE} bytes) or null"))),
             }
         }
