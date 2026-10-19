@@ -1420,6 +1420,10 @@ impl Session {
                 // the sink can be called without holding a borrow of `self`.
                 if spec.mutates
                     && !self.applying_remote
+                    // Undo, Redo and Repeat act on this peer's own history, which no other peer shares.
+                    && !matches!(id, "edit.undo" | "edit.undoTo" | "edit.redo" | "edit.repeat")
+                    // A command that only opened a dialog changed nothing another peer needs.
+                    && before_doc.as_ref().is_some_and(|(d, ..)| d != &self.doc)
                     && let Some(sink) = self.collab.clone()
                 {
                     // `kept()`, which is also what a recorded macro and Repeat get: a password
@@ -1467,6 +1471,12 @@ impl Session {
     /// stack, and an Undo one of them shares undoes the same step on each.
     pub fn apply_remote(&mut self, id: &str, params: &Value, at: Option<Selection>) -> Result<Value, CmdError> {
         let was = std::mem::replace(&mut self.applying_remote, true);
+        // The reader's own state: a remote edit is not theirs to repeat, record or go back to,
+        // and never joins their typing.
+        let last_command = self.last_command.clone();
+        let recording_len = self.recording.as_ref().map(|(_, s)| s.len());
+        let (marks, step) = (self.edit_marks.clone(), self.go_back_step);
+        self.typing_open = false;
         let mine = self.sel.clone();
         let there = at.unwrap_or_else(|| mine.clone());
         let edit = there.ordered().0;
@@ -1477,6 +1487,13 @@ impl Session {
         self.sel = there;
         self.clamp_selection();
         let out = self.run(id, params);
+        self.typing_open = false;
+        self.last_command = last_command;
+        if let (Some((_, steps)), Some(n)) = (self.recording.as_mut(), recording_len) {
+            steps.truncate(n);
+        }
+        self.edit_marks = marks;
+        self.go_back_step = step;
         let grew = match (before, self.para_len(&mine.focus)) {
             (Some(before), Some(after)) => (after as isize) - (before as isize),
             _ => 0,

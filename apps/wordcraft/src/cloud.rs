@@ -111,7 +111,13 @@ impl Worker {
                 self.post(Event::Account(answer));
             }
             Job::LinkStart => match self.call(|client| client.link_start()) {
-                Ok(start) => self.post(Event::Browser { url: start.login_url, handle: Some(start.handle) }),
+                Ok(start) => match https_browser_url(&start.login_url) {
+                    Some(url) => self.post(Event::Browser { url, handle: Some(start.handle) }),
+                    None => {
+                        log::warn!("cloud link URL is not https");
+                        self.post(Event::Linked(Err(Fault::Refused("the cloud service gave an unsafe link URL".to_owned()))))
+                    }
+                },
                 Err(fault) => self.post(Event::Linked(Err(fault))),
             },
             Job::Conversation(id) => {
@@ -186,12 +192,15 @@ impl Worker {
             return Ok(());
         }
         let start = self.client.sign_in_start().map_err(fault)?;
-        if let Err(e) = open_browser(&start.verify_url) {
+        let verify = https_browser_url(&start.verify_url).ok_or_else(|| {
+            Fault::Refused("the cloud service gave an unsafe sign-in URL".to_owned())
+        })?;
+        if let Err(e) = open_browser(&verify) {
             // Not fatal. The interface shows the URL as a link, so the user can still follow it by
             // hand.
             log::warn!("could not open a browser: {e}");
         }
-        self.post(Event::Browser { url: start.verify_url.clone(), handle: None });
+        self.post(Event::Browser { url: verify, handle: None });
         let interval = Duration::from_secs(start.interval.clamp(1, 10));
         let deadline = Instant::now() + SIGN_IN_WAIT.min(Duration::from_secs(start.expires_in));
         while Instant::now() < deadline {
@@ -290,11 +299,29 @@ fn remember_account(subject: &str, display: &str) {
 fn write_session(value: serde_json::Value) {
     let Some(path) = token_path() else { return };
     let Ok(text) = serde_json::to_vec(&value) else { return };
-    if let Err(e) = std::fs::write(&path, text) {
-        log::warn!("could not save the cloud session: {e}");
-        return;
+    #[cfg(unix)]
+    {
+        use std::io::Write as _;
+        use std::os::unix::fs::OpenOptionsExt as _;
+        let tmp = path.with_extension(format!("session.{}", std::process::id()));
+        match std::fs::OpenOptions::new().write(true).create_new(true).mode(0o600).open(&tmp) {
+            Ok(mut file) => {
+                if file.write_all(&text).is_ok() && std::fs::rename(&tmp, &path).is_ok() {
+                    return;
+                }
+                let _ = std::fs::remove_file(&tmp);
+            }
+            Err(e) => log::warn!("could not save the cloud session: {e}"),
+        }
     }
-    restrict(&path);
+    #[cfg(not(unix))]
+    {
+        if let Err(e) = std::fs::write(&path, text) {
+            log::warn!("could not save the cloud session: {e}");
+            return;
+        }
+        restrict(&path);
+    }
 }
 
 fn forget_token() {
@@ -313,6 +340,12 @@ fn restrict(path: &Path) {
 /// need a Win32 call this application makes nowhere else.
 #[cfg(not(unix))]
 fn restrict(_path: &Path) {}
+
+/// Service-provided URLs must be `https` before the OS opens them.
+fn https_browser_url(url: &str) -> Option<String> {
+    let url = url.trim();
+    (url.starts_with("https://") && url.len() > "https://".len()).then(|| url.to_owned())
+}
 
 fn open_browser(url: &str) -> std::io::Result<()> {
     #[cfg(target_os = "windows")]
@@ -384,10 +417,14 @@ impl TokenSource for CloudToken {
             Some(token) => client = client.with_token(token),
             None => {
                 if let Err(e) = client.sign_in(|url| {
-                    if let Err(e) = open_browser(url) {
-                        log::warn!("could not open a browser: {e}");
+                    if let Some(url) = https_browser_url(url) {
+                        if let Err(e) = open_browser(&url) {
+                            log::warn!("could not open a browser: {e}");
+                        }
+                        log::info!("waiting for a cloud sign-in at {url}");
+                    } else {
+                        log::warn!("cloud sign-in URL is not https");
                     }
-                    log::info!("waiting for a cloud sign-in at {url}");
                 }) {
                     log::warn!("cloud sign-in failed: {e}");
                     return None;
@@ -397,7 +434,30 @@ impl TokenSource for CloudToken {
                 }
             }
         }
-        match client.join(&self.id) {
+        let joined = match client.join(&self.id) {
+            Err(Error::Unauthenticated) => {
+                forget_token();
+                let mut fresh = Client::new(&self.base);
+                if let Err(e) = fresh.sign_in(|url| {
+                    if let Some(url) = https_browser_url(url) {
+                        if let Err(e) = open_browser(&url) {
+                            log::warn!("could not open a browser: {e}");
+                        }
+                    } else {
+                        log::warn!("cloud sign-in URL is not https");
+                    }
+                }) {
+                    log::warn!("cloud sign-in failed: {e}");
+                    return None;
+                }
+                if let Some(token) = fresh.token() {
+                    save_token(token);
+                }
+                fresh.join(&self.id)
+            }
+            other => other,
+        };
+        match joined {
             Ok(join) => {
                 log::info!("collab: joining {} through {}", join.room, join.relay);
                 Some((join.relay, join.token))

@@ -524,6 +524,8 @@ pub struct WordApp {
     pub(crate) cloud_sent: cloud::Sent,
     /// A cloud open a prompt stood in the way of (see [`cloud`]).
     pub(crate) cloud_opening: Option<cloud::Opening>,
+    /// The cloud entry a read is opening, until [`CloudApp::open_bytes`] runs.
+    pub(crate) cloud_open_entry: Option<cloud::Entry>,
     /// Giving other people access to this document. The dialog is `craft_ui`'s, so every Craft app
     /// offers the same one. Inert until the host connects a backend, and unavailable until that
     /// service says sharing exists.
@@ -687,6 +689,7 @@ impl WordApp {
             cloud: cloud::CloudFiles::new(),
             cloud_sent: cloud::Sent::new(),
             cloud_opening: None,
+            cloud_open_entry: None,
             share: craft_ui::share::ShareDialog::new(),
             presence: craft_ui::presence::PresenceBar::new().badges_only(),
             colors: None,
@@ -1820,7 +1823,10 @@ impl WordApp {
                     .entries
                     .iter()
                     .chain(self.cloud.shared.entries.iter())
-                    .find(|e| id.is_some_and(|id| e.id == id) || (!name.is_empty() && e.name == name))
+                    .find(|e| match id {
+                        Some(id) => e.id == id,
+                        None => !name.is_empty() && e.name == name,
+                    })
                     .cloned();
                 match found {
                     Some(entry) if cloud::opens(&entry) => {
@@ -2787,6 +2793,12 @@ pub(crate) fn works_without_document(id: &str) -> bool {
             | "ui.discord"
             | "ui.caretAnimation"
             | "ui.startScreen"
+            | "cloud.status"
+            | "cloud.open"
+            | "cloud.browse"
+            | "cloud.shared"
+            | "cloud.link"
+            | "cloud.openFile"
     ) || id.starts_with("help.")
 }
 

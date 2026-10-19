@@ -107,8 +107,10 @@ A refused save is the case worth scripting against. `cloud.status` reports `conf
 stored copy moved on while the document was being edited, and nothing has been written at that
 point. `cloud.reload` takes the stored copy and discards the local edits. Nothing else does.
 
-Without a configured service (`WORDCRAFT_CLOUD_URL`) these commands answer `no cloud service is
-configured`, and the interface offers nothing cloud-shaped.
+Without a configured service (`WORDCRAFT_CLOUD_URL`), `cloud.open`, `cloud.browse`, `cloud.shared`,
+`cloud.link` and `cloud.saveAs` answer `no cloud service is configured`. `cloud.openFile` finds
+nothing in the (empty) listing, and `cloud.status` reports an empty state. The interface offers
+nothing cloud-shaped.
 
 ### Keyboard and text input
 

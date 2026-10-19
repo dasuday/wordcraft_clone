@@ -24,9 +24,10 @@ pub use craft_cloud::{Capability, Entry, EntryKind};
 pub use craft_ui::cloud::{
     Account, Busy, CloudApp, CloudBackend, CloudFiles, Conflict, CopyFormat, Destination, DocumentKind, Event, Fault, Folder, Job, Link, Origin,
     Post, Source, UNAVAILABLE, available, browse, can_converse, conflict_modal, destination_name, has_target, link, load_shared, open_entry,
-    open_page, origin, parent_of, prefers_cloud, progress, pump, reload_active, save, save_as, save_page, share_button, shares, sign_in, sign_out,
+    open_page, origin, parent_of, prefers_cloud, progress, pump, save, save_as, save_page, share_button, shares, sign_in, sign_out,
     start, who, work_together,
 };
+use craft_ui::cloud::open_entry as craft_open_entry;
 use egui::{Color32, Painter, Rect, Ui};
 use serde_json::{Value as Json, json};
 
@@ -92,6 +93,27 @@ pub struct Opening {
     /// The entry, when it was already known: a reload reads the document's own origin, and that
     /// origin is dropped as soon as the read is answered.
     entry: Option<Entry>,
+}
+
+/// Opens a listed entry. The provider id is kept through [`CloudApp::open_bytes`].
+pub fn open_entry(app: &mut WordApp, entry: Entry, into: Option<u64>) {
+    app.cloud_open_entry = Some(entry.clone());
+    craft_open_entry(app, entry, into);
+}
+
+/// Reads the active document's stored copy again. Local edits are discarded.
+pub fn reload_active(app: &mut WordApp) -> Result<Json, String> {
+    let noun = app.kind().noun;
+    let Some(uid) = app.active() else {
+        return Err(format!("no {noun} open"));
+    };
+    let Some(origin) = app.cloud().origins.get(&uid).cloned() else {
+        return Err(format!("this {noun} did not come from the cloud"));
+    };
+    app.cloud_mut().conflict = None;
+    let name = origin.entry.name.clone();
+    open_entry(app, origin.entry, Some(uid));
+    Ok(json!({"reloading": name}))
 }
 
 /// Whether WordCraft can open this entry.
@@ -163,6 +185,17 @@ pub fn poll(app: &mut WordApp, ctx: &egui::Context) {
 ///
 /// The File view goes away too, as it does for every other way of opening something: a document
 /// that opened wants to be read.
+fn unique_cloud_name(app: &WordApp, name: &str) -> bool {
+    app.cloud
+        .mine
+        .entries
+        .iter()
+        .chain(app.cloud.shared.entries.iter())
+        .filter(|e| e.name == name)
+        .count()
+        <= 1
+}
+
 fn from_the_cloud(app: &mut WordApp) {
     app.session.path = None;
     app.ui.backstage = false;
@@ -190,8 +223,8 @@ fn finish_open(app: &mut WordApp) {
         let entries = app.cloud.mine.entries.iter().chain(app.cloud.shared.entries.iter());
         entries.filter(|e| e.name == opening.name).find(|e| opens(e)).cloned()
     });
-    let Some(entry) = found else { return };
     from_the_cloud(app);
+    let Some(entry) = found else { return };
     let uid = app.session.document_id();
     app.cloud.origins.insert(uid, Origin { entry });
 }
@@ -225,7 +258,12 @@ impl CloudApp for WordApp {
         // `cloud.reload`, say that local edits are replaced, so asking again would be asking for
         // consent already given. Picking the open document out of the Open page is the same
         // request, and it is answered the same way.
-        let reload = self.cloud.origins.get(&was).map(|o| o.entry.clone()).filter(|e| e.name == name);
+        let reading = self.cloud_open_entry.take();
+        let reload = match (&reading, self.cloud.origins.get(&was)) {
+            (Some(entry), Some(origin)) if entry.id == origin.entry.id => Some(origin.entry.clone()),
+            (None, Some(origin)) if origin.entry.name == name && unique_cloud_name(self, name) => Some(origin.entry.clone()),
+            _ => None,
+        };
         let data = wordcraft_engine::cmd::insert::base64_encode(&bytes);
         let open = json!({"path": name, "data": data});
         // Anything else replaces one document with another, so it goes through `run`: unsaved
@@ -237,7 +275,7 @@ impl CloudApp for WordApp {
             false => self.run("file.open", open)?,
         };
         if answer.get("pending").is_some() {
-            self.cloud_opening = Some(Opening { name: name.to_owned(), was, entry: reload });
+            self.cloud_opening = Some(Opening { name: name.to_owned(), was, entry: reading.or(reload) });
             return Ok(None);
         }
         from_the_cloud(self);

@@ -65,7 +65,8 @@ pub(crate) fn shifted(mut at: Pos, edit: &Pos, grew: isize) -> Pos {
     if at.story != edit.story || at.path != edit.path || at.off < edit.off {
         return at;
     }
-    at.off = at.off.saturating_add_signed(grew);
+    // A caret inside removed text lands where the removal happened, never before it.
+    at.off = at.off.saturating_add_signed(grew).max(edit.off);
     at
 }
 

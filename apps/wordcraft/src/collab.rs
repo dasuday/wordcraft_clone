@@ -184,10 +184,15 @@ impl Link {
                 return None;
             }
         };
-        let hub = match rt.block_on(NativeHub::connect(&relay, &token)) {
-            Ok(h) => h,
-            Err(e) => {
+        let connect = tokio::time::timeout(std::time::Duration::from_secs(5), NativeHub::connect(&relay, &token));
+        let hub = match rt.block_on(connect) {
+            Ok(Ok(h)) => h,
+            Ok(Err(e)) => {
                 log::warn!("collab: cannot reach the relay at {relay}: {e}");
+                return None;
+            }
+            Err(_) => {
+                log::warn!("collab: the relay at {relay} did not answer in time");
                 return None;
             }
         };
