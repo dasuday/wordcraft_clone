@@ -257,6 +257,7 @@ Imported text fields use the first nonempty cached result run's formatting on th
 | 2026-10-16 | trivial | Positional tabs (`w:ptab`) keep their alignment, base and leader through DOCX saves instead of becoming plain tabs (#2367) |
 | 2026-10-16 | trivial | PDF outline destinations point to heading text after leading page breaks, including selected-page exports |
 | 2026-10-16 | trivial | `w:eastAsianLayout` (two lines in one, horizontal in vertical) is read and written; not laid out yet |
+| 2026-10-16 | trivial | Drawing dispatch uses the direct graphic-data child so nested pictures keep their text boxes. Synthetic regressions. |
 | 2026-10-15 | trivial | A group holding Word ink can't be ungrouped (its ink would be lost on save) |
 | 2026-10-15 | trivial | Native ink nested in groups and drawing canvases kept on save, in its place, drawn from its fallback picture |
 | 2026-10-18 | trivial | DOCX: every VML shape anchored in a header table cell is placed on the page whatever `o:allowincell` says (user-checked in Word for Mac, #1775) |
