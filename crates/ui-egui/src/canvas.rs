@@ -196,6 +196,17 @@ impl CanvasState {
         self.unit_drag = None;
     }
 
+    /// The press belongs to a finger: no pointer drag it started may go on — not text
+    /// selection, an object move or crop, or a table border or selection-area drag (#1503,
+    /// #2155). A web press is cleaned here when its `Touch Start` adopts it a frame later.
+    pub(crate) fn cancel_pointer_drags(&mut self) {
+        self.cancel_text_drag();
+        self.obj_drag = None;
+        self.crop_drag = None;
+        self.table_resize = None;
+        self.table_drag = None;
+    }
+
     /// The object a drag has taken off its page: which page, and which object. `None` unless an
     /// object is being **moved** (resizing and turning show the object itself where it is).
     ///
@@ -1122,7 +1133,9 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
     if let Some(pos) = touch_start
         && app.canvas.touch.adopt(pos, ui.input(|i| i.time))
     {
-        app.canvas.cancel_text_drag();
+        // The pointerdown frame may have started a text, object or table drag: the finger owns
+        // the gesture now (#1503, #2155).
+        app.canvas.cancel_pointer_drags();
     }
     let reading = app.session.view.read_mode;
     let long_press = opts.max_click_duration;
@@ -1137,8 +1150,12 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
     let hovered = wheel_hovered(ui.rect_contains_pointer(wheel_area), ui.ctx().dragged_id().is_some(), app.canvas.drag_selecting());
     let notch = crate::scroll::notch_px(app.canvas.scale / PX_PER_PT);
     let wheel_delta = if app.session.view.read_mode {
-        // A finger's horizontal travel turns reading columns like a touchpad's.
-        if touch_delta != egui::Vec2::ZERO {
+        // A finger's horizontal travel turns reading columns like a touchpad's — but a dialog
+        // owns the pointer, and a swipe must not turn the page behind it.
+        if app.dialog.is_some() {
+            app.canvas.touch.cancel();
+            touch_delta = egui::Vec2::ZERO;
+        } else if touch_delta != egui::Vec2::ZERO {
             let turns = read_touch_turns(touch_delta.x, &mut app.canvas.read_wheel_accum);
             for _ in 0..turns.unsigned_abs() {
                 turn_read_page(app, turns.signum() as f32);
@@ -2398,18 +2415,36 @@ fn mouse(app: &mut WordApp, ui: &Ui, resp: &egui::Response, rects: &[Rect], layo
     // An object (or crop handle) drag follows the pointer anywhere until it's released.
     let dragging = app.canvas.obj_drag.is_some() || app.canvas.crop_drag.is_some();
     let object_pointer = pointer.or_else(|| dragging.then(|| ui.input(|i| i.pointer.latest_pos())).flatten());
-    if let Some(at) = object_pointer
-        && crate::objects::pointer(app, ui, resp, rects, layout, scale, at)
-    {
-        return;
+    // A finger press owns the page before any object or table handler can take the same press
+    // and start a drag from it: a swipe must pan, not move an object or resize a table (#1503,
+    // #2155). Arm first, before any branch below can return: eframe's web runner runs a frame
+    // inside pointerdown, before touchstart, and the finger's `Touch Start` next frame adopts
+    // the press and undoes the drag it started (#1503).
+    let pressed = ui.input(|i| i.pointer.primary_pressed()) && resp.contains_pointer() && pointer.is_some_and(|at| !over_balloon(app, at));
+    let finger = ui.input(|i| i.any_touches());
+    let finger_press = pressed && finger && !app.canvas.touch.down() && !app.canvas.touch.pinching();
+    if pressed && let Some(p) = pointer {
+        let now = ui.input(|i| i.time);
+        app.canvas.touch.arm(p, now, app.session.sel.clone());
+        if finger_press {
+            app.canvas.cancel_pointer_drags();
+            app.canvas.touch.press(p, app.session.sel.clone());
+        }
     }
-    // A press on a table border (or the table's resize handle) drags it instead of the caret.
-    if crate::table_resize::pointer(app, ui, resp, rects, layout, scale) {
-        return;
-    }
-    // A press on a table's selection area, insert button or move handle.
-    if crate::table_mouse::pointer(app, ui, resp, rects, layout, scale) {
-        return;
+    if !finger_press {
+        if let Some(at) = object_pointer
+            && crate::objects::pointer(app, ui, resp, rects, layout, scale, at)
+        {
+            return;
+        }
+        // A press on a table border (or the table's resize handle) drags it instead of the caret.
+        if crate::table_resize::pointer(app, ui, resp, rects, layout, scale) {
+            return;
+        }
+        // A press on a table's selection area, insert button or move handle.
+        if crate::table_mouse::pointer(app, ui, resp, rects, layout, scale) {
+            return;
+        }
     }
     let Some(p) = pointer else { return };
     // While drag-selecting, the pointer may sit past the viewport's edge (or the window's):
@@ -2510,25 +2545,12 @@ fn mouse(app: &mut WordApp, ui: &Ui, resp: &egui::Response, rects: &[Rect], layo
         let _ = app.run("select.paragraph", json!({}));
         return;
     }
-    let pressed = ui.input(|i| i.pointer.primary_pressed()) && resp.contains_pointer() && !over_balloon(app, p);
     if pressed {
         let now = ui.input(|i| i.time);
         let (delay, dist) = ui.ctx().options(|o| (o.input_options.max_double_click_delay, o.input_options.max_click_dist));
         let clicks = press_count(app.canvas.last_press, now, p, delay, dist);
         app.canvas.last_press = Some((now, p, clicks));
         app.canvas.unit_drag = None;
-        // eframe's web runner runs a frame inside pointerdown, before touchstart, so remember
-        // this press before any branch below can return: the finger's Touch Start next frame
-        // adopts it and undoes the drag it started (#1503).
-        app.canvas.touch.arm(p, now, app.session.sel.clone());
-        // A finger begins its gesture before any branch below can return early (the selection
-        // bar, an equation, Alt column selection): a swipe from there pans (#1503, #2155).
-        let finger = ui.input(|i| i.any_touches());
-        let finger_press = finger && !app.canvas.touch.down() && !app.canvas.touch.pinching();
-        if finger_press {
-            app.canvas.touch.press(p, app.session.sel.clone());
-            app.canvas.column_drag = None;
-        }
         // A double-click that enters or leaves a header/footer is handled on release.
         let hf_switch =
             (hf_zone.is_some() && story == StoryRef::Body) || (matches!(story, StoryRef::Part(_)) && !in_text_box(app) && hf_zone.is_none());
@@ -6267,6 +6289,71 @@ mod tests {
         assert!(h.state().session.sel.is_collapsed(), "a pan from the margin must not select: {:?}", h.state().session.sel);
     }
 
+    /// A long document with a floating picture over its first page, and its position.
+    fn floating_picture_document() -> (H, Pos) {
+        let mut h = long_document();
+        let mut png = Vec::new();
+        let img = image::RgbaImage::from_pixel(40, 20, image::Rgba([200, 30, 30, 255]));
+        image::DynamicImage::ImageRgba8(img).write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png).unwrap();
+        h.state_mut().run("insert.picture", json!({"data": wordcraft_engine::cmd::insert::base64_encode(&png), "width": 160})).unwrap();
+        let pos = wordcraft_engine::cmd::objects::selected(&h.state().session).unwrap().0;
+        h.state_mut().run("arrange.bounds", json!({"page": 0, "x": 120, "y": 120})).unwrap();
+        h.state_mut().run("arrange.wrap", json!({"wrap": "inFrontOfText"})).unwrap();
+        h.state_mut().run("select.collapse", json!({})).unwrap();
+        h.run_steps(6);
+        (h, pos)
+    }
+
+    /// #1503 / #2155: a finger swipe that starts on a floating picture pans the page; the
+    /// picture is not dragged, resized or selected as the same mouse press would do.
+    #[test]
+    fn a_touch_drag_from_a_floating_picture_pans_without_moving_it() {
+        let (mut h, pos) = floating_picture_document();
+        let before = h.state_mut().session.layout().object(&pos, 0).expect("the floating picture is laid out").rect;
+        let start = crate::frame::to_screen(h.state().canvas.page_rects[0], h.state().canvas.scale, before).center();
+        h.event(touch(0, egui::TouchPhase::Start, start));
+        h.event(primary(start, true));
+        h.step();
+        swipe(&mut h, start);
+        assert!(h.state().canvas.scroll_offset.y > 100.0, "the page followed the finger: {:?}", h.state().canvas.scroll_offset);
+        assert!(h.state().canvas.obj_drag.is_none(), "the picture is not being dragged");
+        let after = h.state_mut().session.layout().object(&pos, 0).expect("the picture is still laid out").rect;
+        assert_eq!(after, before, "the picture stayed where it was");
+    }
+
+    /// The web's pointerdown-first order: that frame starts an object drag, and the finger's
+    /// `Touch Start` takes it back so the swipe pans (#1503, #2155).
+    #[test]
+    fn a_web_touch_drag_from_a_floating_picture_takes_back_the_object_drag() {
+        let (mut h, pos) = floating_picture_document();
+        let before = h.state_mut().session.layout().object(&pos, 0).expect("the floating picture is laid out").rect;
+        let start = crate::frame::to_screen(h.state().canvas.page_rects[0], h.state().canvas.scale, before).center();
+        h.event(primary(start, true));
+        h.step();
+        assert!(h.state().canvas.obj_drag.is_some(), "the pointerdown frame starts an object drag");
+        h.event(touch(0, egui::TouchPhase::Start, start));
+        h.step();
+        assert!(h.state().canvas.obj_drag.is_none(), "the Touch Start takes the object drag back");
+        swipe(&mut h, start);
+        assert!(h.state().canvas.scroll_offset.y > 100.0, "the page followed the finger: {:?}", h.state().canvas.scroll_offset);
+        let after = h.state_mut().session.layout().object(&pos, 0).expect("the picture is still laid out").rect;
+        assert_eq!(after, before, "the picture stayed where it was");
+    }
+
+    /// Swipe a finger up from `start` and lift it, panning the page.
+    fn swipe(h: &mut H, start: Pos2) {
+        let mut at = start;
+        for k in 1..=10 {
+            at = start - vec2(0.0, 30.0 * k as f32);
+            h.event(egui::Event::PointerMoved(at));
+            h.event(touch(0, egui::TouchPhase::Move, at));
+            h.step();
+        }
+        h.event(primary(at, false));
+        h.event(touch(0, egui::TouchPhase::End, at));
+        h.run_steps(5);
+    }
+
     /// The same through the web's pointerdown-first order: that frame selects a line, and the
     /// finger's `Touch Start` takes the line drag back so the swipe pans.
     #[test]
@@ -6474,6 +6561,31 @@ mod tests {
         assert!(h.state().canvas.scale > scale * 1.05, "the pinch zoomed: {scale} -> {}", h.state().canvas.scale);
         assert_eq!(h.state().session.sel, before, "a pinch must not change the selection");
         assert!(!h.state().canvas.touch.panning(), "a pinch must not pan");
+    }
+
+    /// A dialog owns the pointer: a swipe in Read Mode must not turn the columns behind it.
+    #[test]
+    fn a_finger_does_not_turn_reading_columns_behind_a_dialog() {
+        let mut h = long_document();
+        h.state_mut().run("view.readMode", json!({})).unwrap();
+        h.state_mut().dialog = Some(crate::dialogs::Dialog::WordCount { stats: json!({}) });
+        h.run_steps(6);
+        assert!(h.state().session.view.read_mode, "Read Mode");
+        let before = h.state().canvas.scroll_offset;
+        // Clear of the dialog, which is centred, but still over the canvas.
+        let start = pos2(150.0, 400.0);
+        h.event(touch(0, egui::TouchPhase::Start, start));
+        h.event(primary(start, true));
+        h.step();
+        let at = start - vec2(120.0, 0.0);
+        h.event(egui::Event::PointerMoved(at));
+        h.event(touch(0, egui::TouchPhase::Move, at));
+        h.step();
+        h.event(primary(at, false));
+        h.event(touch(0, egui::TouchPhase::End, at));
+        h.run_steps(30);
+        assert_eq!(h.state().canvas.scroll_offset, before, "the columns stayed where they were");
+        assert!(h.state().canvas.read_target_page.is_none(), "no page turn was queued");
     }
 
     /// A finger's horizontal travel turns reading columns, 55 points a column.
