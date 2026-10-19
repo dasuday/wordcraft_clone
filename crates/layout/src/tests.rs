@@ -9462,4 +9462,21 @@ fn page_border_offset_measures_from_page_or_text() {
     // Mirrored: the even page's text starts at the narrower (54pt) margin.
     assert_eq!(frames(false, true)[1], page[1]);
     assert_eq!(frames(true, true)[1], (54.0 - 24.0, 72.0 - 24.0, w - 90.0 + 24.0, h - 72.0 + 24.0));
+    // A margin narrower than the spacing: each page clamps its own edge to the page, so the
+    // even page's left border is at the page edge, not pushed off it by the move.
+    let narrow = |mirror: bool| {
+        let mut d = Document::from_text(&"line\n".repeat(80));
+        d.settings.mirror_margins = mirror;
+        let s = &mut d.last_section;
+        (s.margin_left, s.margin_right) = (90.0, 10.0);
+        s.page_borders = Some(Borders::box_(Border { space: 24.0, ..Border::single(1.0) }));
+        s.page_borders_from_text = true;
+        lay(&d).pages[1]
+            .items
+            .iter()
+            .filter_map(|i| if let Placed::Rule { x0, x1, .. } = i { Some(x0.min(*x1)) } else { None })
+            .fold(f32::MAX, f32::min)
+    };
+    assert_eq!(narrow(true), 0.0);
+    assert_eq!(narrow(false), 90.0 - 24.0);
 }

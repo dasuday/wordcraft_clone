@@ -4559,7 +4559,8 @@ fn headers_footers(ctx: &mut Ctx, pages: &mut [Page], sections: &[(usize, &Secti
 
 /// Mirrored margins: even pages have the inside margin (and gutter) on the right, so their
 /// header, text, notes and footer move to start at the outside margin. Page borders measured
-/// from the page edge stay; those measured from the text move with it.
+/// from the page edge stay; those measured from the text are laid out again from the mirrored
+/// margins, so the page bounds clamp them on this page rather than before the move.
 fn mirror_even_pages(pages: &mut [Page], sections: &[(usize, &SectionProps)]) {
     for page in pages.iter_mut().filter(|p| p.number % 2 == 0) {
         let Some((_, s)) = sections.get(page.section) else { continue };
@@ -4567,7 +4568,18 @@ fn mirror_even_pages(pages: &mut [Page], sections: &[(usize, &SectionProps)]) {
         if dx.abs() < 0.001 || !dx.is_finite() {
             continue;
         }
-        let borders = if s.page_borders_from_text { 0 } else { page_border_rules(s).len() };
+        let mut borders = page_border_rules(s).len();
+        if s.page_borders_from_text {
+            let mirrored =
+                SectionProps { margin_left: s.margin_right, margin_right: s.margin_left + s.gutter, gutter: 0.0, ..SectionProps::clone(s) };
+            let rules = page_border_rules(&mirrored);
+            let placed = page.items.iter().take(borders).take_while(|it| matches!(it, Placed::Rule { .. })).count();
+            if placed == rules.len() {
+                page.items.splice(..placed, rules);
+            } else {
+                borders = 0;
+            }
+        }
         for it in page.items.iter_mut().skip(borders).chain(page.header.iter_mut()).chain(page.footer.iter_mut()) {
             it.translate(dx, 0.0);
         }
