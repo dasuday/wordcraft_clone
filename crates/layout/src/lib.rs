@@ -4609,6 +4609,8 @@ mod tests_complex;
 #[cfg(test)]
 mod tests_grid;
 #[cfg(test)]
+mod tests_ligature;
+#[cfg(test)]
 mod tests_numeral;
 #[cfg(test)]
 mod tests_pages;
