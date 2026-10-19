@@ -78,7 +78,7 @@ languages, screen-reader access, ecosystem decisions (VBA, add-ins, cloud), an i
 
 | Date | Change | Summary |
 |---|---|---|
-| 2026-10-18 | minor | Local page-by-page layout corpus harness: `cargo xtask layout-corpus` orchestrates `wordcraft-cli convert` and `cargo xtask visual-diff`, aggregates page-count deltas, same-break percentages, median |Δy|, SSIM and worst pages, ranks cases worst first, and supports a private numbers/hashes-only mode. Five original synthetic DOCX cases are committed; Word PDFs are exported by hand and stay gitignored. |
+| 2026-10-18 | minor | Local page-by-page layout corpus harness: `cargo xtask layout-corpus` orchestrates `wordcraft-cli convert` and `cargo xtask visual-diff`, aggregates page-count deltas, same-break percentages, median \|Δy\|, SSIM and worst pages, ranks cases worst first, and supports a private numbers/hashes-only mode. Five original synthetic DOCX cases are committed; Word PDFs are exported by hand and stay gitignored. |
 | 2026-10-12 | minor | Czech proofing review: short-word splits rank after deletion, NOSUGGEST excludes suggestions while accepting typed forms, affix comments apply only to headers, ratios keep spaces and repeated-word messages use Czech quotes; synthetic engine end-to-end and latency checks |
 | 2026-10-12 | minor | Czech spelling from the installed Hunspell dictionary, runtime-table suggestions and generic checks; Czech interface writes cs-CZ documents; no Czech hyphenation patterns bundled; estimates unchanged |
 | 2026-10-12 | minor | M15: Portuguese proofing (pt-BR spelling from the installed VERO dictionary, suggestions, grammar, hyphenation; Review › Language gains Português (Brasil)) |
