@@ -98,8 +98,31 @@ Copy-Item (Join-Path $Bin 'wordcraft.exe'), (Join-Path $Bin 'wordcraft-cli.exe')
 $Drawio = Join-Path $Root 'vendor\drawio'
 $HasDrawio = Test-Path (Join-Path $Drawio 'index.html')
 if ($HasDrawio) {
+  # The VERSION label only says which tag was asked for; the files are what ships. Check them
+  # against the manifest fetch-drawio.sh wrote, so an edited or stale cache can't be embedded.
+  $Manifest = Join-Path $Drawio 'MANIFEST.sha256'
+  if (-not (Test-Path $Manifest)) {
+    throw 'vendor/drawio has no MANIFEST.sha256; run packaging/fetch-drawio.sh again before packaging'
+  }
+  $Bad = @()
+  $Listed = 0
+  foreach ($Line in Get-Content $Manifest) {
+    if ($Line -notmatch '^([0-9a-fA-F]{64})\s\s(.+)$') { continue }
+    $Want = $Matches[1].ToLowerInvariant()
+    $Rel = $Matches[2]
+    $Listed++
+    $File = Join-Path $Drawio $Rel
+    if (-not (Test-Path -LiteralPath $File)) { $Bad += "$Rel is missing"; continue }
+    if ((Get-FileHash -LiteralPath $File -Algorithm SHA256).Hash.ToLowerInvariant() -ne $Want) { $Bad += "$Rel was changed" }
+  }
+  $Present = @(Get-ChildItem -Recurse -File -LiteralPath $Drawio | Where-Object { $_.Name -ne 'MANIFEST.sha256' }).Count
+  if ($Listed -eq 0) { throw 'vendor/drawio''s MANIFEST.sha256 lists no files; run packaging/fetch-drawio.sh again' }
+  if ($Bad.Count -gt 0 -or $Present -ne $Listed) {
+    $Bad | Select-Object -First 10 | ForEach-Object { Write-Output "    $_" }
+    throw "vendor/drawio doesn't match its MANIFEST.sha256 ($Present files present, $Listed listed); delete it and run packaging/fetch-drawio.sh again"
+  }
   $Mb = [math]::Round(((Get-ChildItem -Recurse -File $Drawio | Measure-Object -Property Length -Sum).Sum) / 1MB)
-  Write-Output "==> staging vendor/drawio ($Mb MB)"
+  Write-Output "==> staging vendor/drawio ($Mb MB, $Listed files verified)"
   Copy-Item -Recurse -Force $Drawio (Join-Path $Stage 'drawio')
 } else {
   Write-Warning 'vendor/drawio is missing; run packaging/fetch-drawio.sh to embed the diagram editor'

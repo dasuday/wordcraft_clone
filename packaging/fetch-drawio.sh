@@ -3,10 +3,16 @@
 # which is what the diagram editor is served from: no network, no third-party embed site.
 #
 # Usage: packaging/fetch-drawio.sh [version]        (default: v31.4.2)
+#        packaging/fetch-drawio.sh --verify [version]
 #
 # Sources: the Gitee mirror first (fast from China), GitHub second. Every version is pinned to the
 # commit its tag points at: a mirror whose checkout is anything else is thrown away rather than
 # packaged, so what ships is the code that was reviewed.
+#
+# Fetching writes MANIFEST.sha256 beside the files — the sha256 of every one of them. The VERSION
+# file only says which tag was asked for, so that is not what packaging trusts: both package
+# scripts run `--verify` first and refuse to embed a directory whose files have been edited, added
+# or removed since. `--verify` exits non-zero and names what differs.
 #
 # The app's parts don't all share its license: the web app itself is Apache-2.0, but img/,
 # stencils/ and shapes/ carry their own (restricted) notice, templates/ is CC-BY-4.0 and
@@ -16,8 +22,40 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DEST="$ROOT/vendor/drawio"
+VERIFY=0
+if [ "${1:-}" = "--verify" ]; then
+  VERIFY=1
+  shift
+fi
 VERSION="${1:-v31.4.2}"
 WORK="${TMPDIR:-/tmp}/wordcraft-drawio-$VERSION"
+
+# What the directory was when it was checked: sha256 of everything except the manifest itself.
+MANIFEST="MANIFEST.sha256"
+
+write_manifest() {
+  ( cd "$DEST" \
+    && find . -type f ! -name "$MANIFEST" -exec shasum -a 256 {} + \
+    | LC_ALL=C sort -k2 \
+    | sed 's|  \./|  |' ) > "$DEST/$MANIFEST"
+}
+
+# Does vendor/drawio still hold what was fetched — no file edited, added or removed?
+verify_manifest() {
+  if [ ! -f "$DEST/$MANIFEST" ]; then
+    echo "error: $DEST/$MANIFEST is missing — run packaging/fetch-drawio.sh $VERSION again" >&2
+    return 1
+  fi
+  bad="$( cd "$DEST" && shasum -a 256 -c "$MANIFEST" 2>&1 | grep -v ': OK$' || true )"
+  listed="$(grep -c . "$DEST/$MANIFEST" || true)"
+  present="$(cd "$DEST" && find . -type f ! -name "$MANIFEST" | wc -l | tr -d ' ')"
+  if [ -n "$bad" ] || [ "$listed" != "$present" ]; then
+    echo "error: vendor/drawio doesn't match its manifest — delete it and run packaging/fetch-drawio.sh $VERSION again" >&2
+    [ -z "$bad" ] || printf '%s\n' "$bad" >&2
+    [ "$listed" = "$present" ] || echo "  $present files in the directory, $listed in the manifest" >&2
+    return 1
+  fi
+}
 
 # The commit each tag pointed at when we pinned it. bash 3.2 (macOS's) has no associative arrays.
 expected_commit() {
@@ -38,9 +76,23 @@ MIRRORS=(
 EXPECTED="$(expected_commit "$VERSION")"
 [ -n "$EXPECTED" ] || { echo "error: no pinned commit for $VERSION — add one to expected_commit() first" >&2; exit 1; }
 
-if [ -f "$DEST/VERSION" ] && [ "$(cat "$DEST/VERSION")" = "$VERSION" ]; then
-  echo "vendor/drawio is already at $VERSION (delete it to fetch again)"
+# Packaging asks this before embedding the directory, and never fetches.
+if [ "$VERIFY" = 1 ]; then
+  [ -f "$DEST/VERSION" ] || { echo "error: vendor/drawio isn't there — run packaging/fetch-drawio.sh $VERSION" >&2; exit 1; }
+  at="$(cat "$DEST/VERSION")"
+  [ "$at" = "$VERSION" ] || { echo "error: vendor/drawio is $at, not $VERSION — fetch that version or verify $at" >&2; exit 1; }
+  verify_manifest || exit 1
+  echo "vendor/drawio is $VERSION and matches its manifest ($(grep -c . "$DEST/$MANIFEST") files)"
   exit 0
+fi
+
+if [ -f "$DEST/VERSION" ] && [ "$(cat "$DEST/VERSION")" = "$VERSION" ]; then
+  # A cache that still matches what was fetched is reused; one that doesn't is fetched again.
+  if verify_manifest; then
+    echo "vendor/drawio is already at $VERSION and matches its manifest (delete it to fetch again)"
+    exit 0
+  fi
+  echo "==> vendor/drawio is no longer what was fetched: fetching it again"
 fi
 
 echo "==> fetching draw.io $VERSION ($EXPECTED)"
@@ -93,4 +145,5 @@ printf '%s\n' "$VERSION" > "$DEST/VERSION"
 } > "$DEST/README.md"
 
 rm -rf "$WORK"
-echo "==> vendor/drawio: $(du -sh "$DEST" | cut -f1)"
+write_manifest
+echo "==> vendor/drawio: $(du -sh "$DEST" | cut -f1), $(grep -c . "$DEST/$MANIFEST") files hashed into $MANIFEST"

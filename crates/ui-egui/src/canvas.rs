@@ -4629,8 +4629,13 @@ mod tests {
             }
             let rect = h.state_mut().session.layout().object(&pos, 0).expect("the picture is laid out").rect;
             let at = crate::frame::to_screen(h.state().canvas.page_rects[0], h.state().canvas.scale, rect).center();
+            let (rev, steps) = (h.state().session.rev(), h.state().session.undo_depth());
             double_click(&mut h, at);
             let asked = h.state().diagram.pending().map(str::to_owned);
+            // Asking for the editor is not an edit: the picture, what Undo would take back, and
+            // the document's revision are all where the double-click found them.
+            assert_eq!(h.state().session.rev(), rev, "the double-click changed the document");
+            assert_eq!(h.state().session.undo_depth(), steps, "the double-click added an undo step");
             if opens {
                 assert_eq!(asked.as_deref(), Some(media.as_str()), "the double-click asked for the editor");
             } else {

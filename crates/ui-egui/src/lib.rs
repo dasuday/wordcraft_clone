@@ -1520,6 +1520,11 @@ impl WordApp {
             // Word opens a Visio object in place. Opens on the next frame, which is the first
             // one with the window (`WordApp::diagram_frame`).
             "ui.editDiagram" => {
+                // One diagram at a time: a second `open` replaces the editor's webview, and the
+                // edits in the first go with it — unsaved, and without asking.
+                if self.diagram.is_open() {
+                    return Some(Err("finish editing the diagram that is open first".into()));
+                }
                 // With `media` the caller already knows the picture (the double-click path);
                 // without it, the selected one is edited.
                 let media = match p.get("media").and_then(|v| v.as_str()) {
@@ -2242,13 +2247,25 @@ impl WordApp {
                 Event::Exported(png) => {
                     let media = self.diagram.media_key().map(str::to_owned);
                     self.diagram.close();
-                    diagram::apply(self, png, media.as_deref());
+                    // Without the key there is nothing to put the picture back into: applying it
+                    // to whatever is selected now would be an edit the user never asked for.
+                    match media {
+                        Some(media) => diagram::apply(self, png, &media),
+                        None => log::warn!("diagram: an export arrived with no picture to put it back into"),
+                    }
+                    // The editor closed with this event, so nothing else in this poll is still
+                    // addressed to one; a second export would be applied twice.
+                    break;
                 }
                 // draw.io's own Exit asked for nothing, so the picture is left as it was.
-                Event::Closed => self.diagram.close(),
+                Event::Closed => {
+                    self.diagram.close();
+                    break;
+                }
                 Event::Failed(e) => {
                     self.diagram.close();
                     self.status(e);
+                    break;
                 }
             }
         }

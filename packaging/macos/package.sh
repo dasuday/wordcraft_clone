@@ -108,6 +108,9 @@ copy_font_licences "$APP/Contents/Resources"
 # The draw.io web app (Apache-2.0), which the diagram editor serves as its UI: diagrams are edited
 # inside the app, with nothing fetched. Without it the editor falls back to draw.io's embed site.
 if [ -d "$ROOT/vendor/drawio" ]; then
+  # The VERSION file says which tag was asked for, not what the files are: check them against the
+  # manifest the fetch wrote, so an edited or stale cache can't be embedded. Non-zero = don't ship.
+  "$ROOT/packaging/fetch-drawio.sh" --verify
   echo "==> embedding vendor/drawio ($(du -sh "$ROOT/vendor/drawio" | cut -f1))"
   ditto "$ROOT/vendor/drawio" "$APP/Contents/Resources/drawio"
 else

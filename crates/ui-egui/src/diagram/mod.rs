@@ -244,11 +244,10 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
 /// An `Exported` PNG, put back where the picture is (base64, as every command carries bytes).
 ///
 /// `media` is the picture the editor was opened for: `diagram.update` works on the selection, so
-/// a selection that moved on while draw.io was open would otherwise take someone else's diagram.
-pub fn apply(app: &mut WordApp, png: Vec<u8>, media: Option<&str>) {
-    if let Some(expected) = media
-        && app.selected_picture_media().as_deref() != Some(expected)
-    {
+/// applying the export anywhere else would put it over another picture — there is no way to call
+/// this without saying which picture the edit belongs to.
+pub fn apply(app: &mut WordApp, png: Vec<u8>, media: &str) {
+    if app.selected_picture_media().as_deref() != Some(media) {
         app.status(tl!("The diagram was left as it was: the picture it belongs to isn't selected any more."));
         return;
     }
