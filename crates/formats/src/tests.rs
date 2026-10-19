@@ -1024,3 +1024,43 @@ fn epub_declares_mathml_in_the_manifest() {
     assert!(content.contains("<math "), "{content}");
     assert_xml(&content);
 }
+
+#[test]
+fn epub_rejects_malformed_language_tags() {
+    let d = sample();
+    for (input, expected) in [
+        ("-en", "en"),
+        ("en--US", "en"),
+        ("en-", "en"),
+        ("en-x", "en"),
+        ("e", "en"),
+        ("toolongprimary", "en"),
+        ("en-123456789", "en"),
+        ("en_US", "en-US"),
+        ("de-DE", "de-DE"),
+        ("zh-Hant-TW", "zh-Hant-TW"),
+        ("en-x-private", "en-x-private"),
+    ] {
+        let opts = crate::epub::EpubOptions { language: Some(input.into()), ..Default::default() };
+        let (_, parts) = epub_parts(&crate::epub::export_with(&d, &opts).unwrap());
+        let opf = epub_text(&parts, "OEBPS/content.opf");
+        assert!(opf.contains(&format!("<dc:language>{expected}</dc:language>")), "input {input:?}: {opf}");
+        assert!(opf.contains(&format!("xml:lang=\"{expected}\"")), "input {input:?}: {opf}");
+        assert_xml(&opf);
+    }
+    let mut d = Document::new();
+    d.styles.default_chr.lang = Some("en--US".into());
+    let (_, parts) = epub_parts(&crate::epub::export(&d).unwrap());
+    assert!(epub_text(&parts, "OEBPS/content.opf").contains("<dc:language>en</dc:language>"));
+}
+
+#[test]
+fn epub_writes_embedded_line_breaks_as_br() {
+    let mut d = Document::new();
+    d.body = vec![para_block(Paragraph::with_text("first line\nsecond & <third>\nfourth", CharProps::default()))];
+    let (_, parts) = epub_parts(&crate::epub::export(&d).unwrap());
+    let content = epub_text(&parts, "OEBPS/chapter1.xhtml");
+    assert!(content.contains("first line<br/>second &amp; &lt;third&gt;<br/>fourth"), "{content}");
+    assert!(!content.contains("first line\nsecond"), "{content}");
+    assert_xml(&content);
+}

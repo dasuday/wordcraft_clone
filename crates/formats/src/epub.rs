@@ -305,7 +305,27 @@ fn book_title(doc: &Document, opts: &EpubOptions, blocks: &[FBlock]) -> String {
 fn language(doc: &Document, opts: &EpubOptions) -> String {
     let raw = opts.language.as_deref().or(doc.styles.default_chr.lang.as_deref()).unwrap_or("en");
     let cleaned: String = raw.trim().replace('_', "-").chars().filter(|c| c.is_ascii_alphanumeric() || *c == '-').collect();
-    if cleaned.is_empty() { "en".to_string() } else { cleaned }
+    if valid_language_tag(&cleaned) { cleaned } else { "en".to_string() }
+}
+
+/// Whether `tag` is a well-formed BCP 47 tag: a 2–8-letter primary subtag, then 1–8-character
+/// alphanumeric subtags, with at least one subtag after every singleton.
+fn valid_language_tag(tag: &str) -> bool {
+    let mut parts = tag.split('-');
+    let Some(primary) = parts.next() else { return false };
+    if !(2..=8).contains(&primary.len()) || !primary.bytes().all(|b| b.is_ascii_alphabetic()) {
+        return false;
+    }
+    let mut parts = parts.peekable();
+    while let Some(part) = parts.next() {
+        if part.is_empty() || part.len() > 8 || !part.bytes().all(|b| b.is_ascii_alphanumeric()) {
+            return false;
+        }
+        if part.len() == 1 && parts.peek().is_none() {
+            return false;
+        }
+    }
+    true
 }
 
 fn modified(doc: &Document, opts: &EpubOptions) -> String {
@@ -720,7 +740,12 @@ fn render_text(text: &str, fmt: &Fmt, ctx: &Ctx, chapter: &str, out: &mut String
         close.push("</span>");
     }
     out.push_str(&open);
-    out.push_str(&xml_text(text));
+    for (k, line) in text.split('\n').enumerate() {
+        if k > 0 {
+            out.push_str("<br/>");
+        }
+        out.push_str(&xml_text(line));
+    }
     for c in close.iter().rev() {
         out.push_str(c);
     }
