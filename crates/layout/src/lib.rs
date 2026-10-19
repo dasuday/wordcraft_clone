@@ -1835,9 +1835,21 @@ impl NoteBox {
 
 /// Page borders, measured from the page edge (Word's default), so they surround the header,
 /// footer and line numbers. The first items of every printed page.
-fn page_border_rules(s: &SectionProps) -> Vec<Placed> {
+/// Whether a section's page borders show on one of its pages: `w:display` (ECMA-376 §17.6.10)
+/// limits them to the section's first page (`firstPage`) or to every page but that one
+/// (`notFirstPage`); anything else (`allPages`, or nothing) is every page.
+fn page_borders_on(s: &SectionProps, first_of_section: bool) -> bool {
+    match s.page_borders_display.as_deref() {
+        Some("firstPage") => first_of_section,
+        Some("notFirstPage") => !first_of_section,
+        _ => true,
+    }
+}
+
+/// The section's page borders on one of its pages (none where `w:display` leaves them out).
+fn page_border_rules(s: &SectionProps, first_of_section: bool) -> Vec<Placed> {
     let mut v = Vec::new();
-    if let Some(b) = &s.page_borders {
+    if let Some(b) = s.page_borders.as_ref().filter(|_| page_borders_on(s, first_of_section)) {
         let sp = |e: &Option<Border>| e.map(|x| x.space).unwrap_or(24.0);
         let (x0, x1, y0, y1) = (sp(&b.left), s.page_w - sp(&b.right), sp(&b.top), s.page_h - sp(&b.bottom));
         for (e, a, bb) in [(b.top, (x0, y0), (x1, y0)), (b.bottom, (x0, y1), (x1, y1)), (b.left, (x0, y0), (x0, y1)), (b.right, (x1, y0), (x1, y1))] {
@@ -2040,7 +2052,9 @@ impl PageBuilder<'_> {
         let body = Rect::new(s.margin_left + s.gutter, body_top, s.text_width(), (bottom - body_top).max(36.0));
         let mut decor = Vec::new();
         if !self.web {
-            decor = page_border_rules(s);
+            // The section's first page: the one after a page of another section (or the first).
+            let first_of_section = self.pages.last().is_none_or(|p| p.section != self.sect_idx);
+            decor = page_border_rules(s, first_of_section);
             // Lines between columns.
             if s.columns.separator && s.columns.count > 1 {
                 let cols = s.column_boxes();
@@ -4550,13 +4564,20 @@ fn headers_footers(ctx: &mut Ctx, pages: &mut [Page], sections: &[(usize, &Secti
 /// header, text, notes and footer move to start at the outside margin. Page borders, measured
 /// from the page edge, stay.
 fn mirror_even_pages(pages: &mut [Page], sections: &[(usize, &SectionProps)]) {
-    for page in pages.iter_mut().filter(|p| p.number % 2 == 0) {
+    let mut prev_section = None;
+    for page in pages.iter_mut() {
+        let first_of_section = prev_section != Some(page.section);
+        prev_section = Some(page.section);
+        if page.number % 2 != 0 {
+            continue;
+        }
         let Some((_, s)) = sections.get(page.section) else { continue };
         let dx = s.margin_right - s.margin_left - s.gutter;
         if dx.abs() < 0.001 || !dx.is_finite() {
             continue;
         }
-        let borders = page_border_rules(s).len();
+        // The page's own borders lead its items (a `firstPage` border is on the first page only).
+        let borders = page_border_rules(s, first_of_section).len();
         for it in page.items.iter_mut().skip(borders).chain(page.header.iter_mut()).chain(page.footer.iter_mut()) {
             it.translate(dx, 0.0);
         }
