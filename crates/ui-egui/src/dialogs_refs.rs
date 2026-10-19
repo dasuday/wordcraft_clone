@@ -33,6 +33,7 @@ pub enum RefsDialog {
     Index(IndexForm),
     MarkEntry(MarkForm),
     Toc(TocForm),
+    Figures(FiguresForm),
     /// Table of Contents › Options…; `was` comes back on Cancel.
     TocOptions {
         form: TocForm,
@@ -60,6 +61,7 @@ impl RefsDialog {
             RefsDialog::Index(_) => "index",
             RefsDialog::MarkEntry(_) => "markEntry",
             RefsDialog::Toc(_) => "toc",
+            RefsDialog::Figures(_) => "tableOfFigures",
             RefsDialog::TocOptions { .. } => "tocOptions",
             RefsDialog::TocStyles { .. } => "tocStyles",
             RefsDialog::Sources { .. } => "sourceManager",
@@ -78,6 +80,7 @@ impl RefsDialog {
             RefsDialog::Index(_) => "Index",
             RefsDialog::MarkEntry(_) => "Mark Index Entry",
             RefsDialog::Toc(_) => "Table of Contents",
+            RefsDialog::Figures(_) => "Table of Figures",
             RefsDialog::TocOptions { .. } => "Table of Contents Options",
             RefsDialog::TocStyles { .. } => "Table of Contents Styles",
             RefsDialog::Sources { .. } => "Source Manager",
@@ -87,7 +90,7 @@ impl RefsDialog {
     }
 }
 
-/// The dialog `ui.dialog` opens by `name`: `caption`, `crossReference`, `index`, `markEntry`, `toc`,
+/// The dialog `ui.dialog` opens by `name`: `caption`, `crossReference`, `index`, `markEntry`, `toc`, `tableOfFigures`,
 /// `sourceManager` or `createSource` (which inserts a citation of the new source).
 pub fn open(name: &str, app: &WordApp) -> Option<RefsDialog> {
     Some(match name {
@@ -96,6 +99,7 @@ pub fn open(name: &str, app: &WordApp) -> Option<RefsDialog> {
         "index" => RefsDialog::Index(IndexForm::read(app)),
         "markEntry" => RefsDialog::MarkEntry(MarkForm::read(app)),
         "toc" => RefsDialog::Toc(TocForm::read(app)),
+        "tableOfFigures" => RefsDialog::Figures(FiguresForm::read(app)),
         "sourceManager" => RefsDialog::Sources { selected: None },
         "createSource" => RefsDialog::Source(Box::new(SourceForm::new(true, false))),
         _ => return None,
@@ -112,6 +116,7 @@ pub fn body(app: &mut WordApp, ui: &mut Ui, d: &mut RefsDialog) -> bool {
         RefsDialog::Index(f) => index_ui(app, ui, f),
         RefsDialog::MarkEntry(f) => mark_ui(app, ui, f),
         RefsDialog::Toc(f) => toc_ui(app, ui, f),
+        RefsDialog::Figures(f) => figures_ui(app, ui, f),
         RefsDialog::TocOptions { form, was } => toc_options_ui(app, ui, form, was),
         RefsDialog::TocStyles { form, level } => toc_styles_ui(app, ui, form, level),
         RefsDialog::Sources { selected } => sources_ui(app, ui, selected),
@@ -518,7 +523,7 @@ pub struct IndexForm {
 fn body_field(app: &WordApp, name: &str) -> Option<FieldCode> {
     app.session.doc.body.iter().filter_map(|b| b.as_para()).flat_map(|p| p.objects.iter()).find_map(|o| match o {
         wordcraft_doc::InlineObject::Field { instr, .. } => {
-            Some(FieldCode::parse(instr)).filter(|f| f.name == name && (name != "TOC" || !f.has('c')))
+            Some(FieldCode::parse(instr)).filter(|f| f.name == name && (name != "TOC" || !(f.has('c') || f.has('a'))))
         }
         _ => None,
     })
@@ -834,6 +839,83 @@ fn toc_ui(app: &mut WordApp, ui: &mut Ui, f: &mut TocForm) -> Next {
     }
     let (ok, cancel) = buttons(ui, tl!("OK"));
     if ok && let Err(e) = app.run("references.toc", f.params()) {
+        app.status(e);
+    }
+    if ok || cancel { Next::Close } else { Next::Stay }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Table of Figures
+
+/// The Table of Figures dialog's fields (#3013).
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FiguresForm {
+    pub label: String,
+    /// Built-in caption labels, the user's own, and any others the document's captions use.
+    pub labels: Vec<String>,
+    pub include_label: bool,
+    pub page_numbers: bool,
+    pub right_align: bool,
+    pub leader: String,
+}
+
+impl FiguresForm {
+    /// The dialog as it opens: Figure picked, Word's defaults, every label on offer (a document's
+    /// own labels too, though they aren't in this user's saved list).
+    pub fn read(app: &WordApp) -> FiguresForm {
+        let mut labels = CaptionForm::read(app).labels;
+        for l in wordcraft_engine::cmd::citations::caption_labels(&app.session) {
+            if !labels.contains(&l) {
+                labels.push(l);
+            }
+        }
+        FiguresForm { label: "Figure".into(), labels, include_label: true, page_numbers: true, right_align: true, leader: "dot".into() }
+    }
+
+    /// `references.tableOfFigures` parameters.
+    pub fn params(&self) -> Value {
+        json!({
+            "label": self.label,
+            "includeLabel": self.include_label,
+            "pageNumbers": self.page_numbers,
+            "rightAlign": self.right_align,
+            "tabLeader": self.leader,
+        })
+    }
+}
+
+/// The Table of Figures dialog: a sample of the list, its page-number and label options, and OK
+/// to insert it with `references.tableOfFigures`.
+fn figures_ui(app: &mut WordApp, ui: &mut Ui, f: &mut FiguresForm) -> Next {
+    let lines: Vec<(usize, String, String)> = (1..=3u8)
+        .map(|n| {
+            let text = tl!("Text");
+            let name = if f.include_label { format!("{} {n}: {text}", f.label) } else { text.to_string() };
+            (0, name, if f.page_numbers { (n * 2 - 1).to_string() } else { String::new() })
+        })
+        .collect();
+    sample(ui, &lines, f.right_align, leader_char(&f.leader));
+    ui.add_space(6.0);
+    ui.checkbox(&mut f.page_numbers, tl!("Include page numbers"));
+    ui.add_enabled_ui(f.page_numbers, |ui| {
+        ui.checkbox(&mut f.right_align, tl!("Page numbers at the right margin"));
+        ui.horizontal(|ui| {
+            ui.label(tl!("Tab leader:"));
+            ui.add_enabled_ui(f.right_align, |ui| {
+                let opts: Vec<(String, &str)> = LEADERS.iter().map(|(v, l)| (v.to_string(), *l)).collect();
+                choice(ui, "tof_leader", &mut f.leader, &opts);
+            });
+        });
+    });
+    ui.horizontal(|ui| {
+        ui.label(tl!("Label:"));
+        let opts: Vec<(String, &str)> = f.labels.iter().map(|l| (l.clone(), l.as_str())).collect();
+        choice(ui, "tof_label", &mut f.label, &opts);
+    });
+    ui.checkbox(&mut f.include_label, tl!("Include the label and number"));
+    let (ok, cancel) = buttons(ui, tl!("OK"));
+    if ok && let Err(e) = app.run("references.tableOfFigures", f.params()) {
         app.status(e);
     }
     if ok || cancel { Next::Close } else { Next::Stay }
@@ -1219,6 +1301,47 @@ mod tests {
         // The label is offered next time and saved with the preferences.
         assert!(CaptionForm::read(&a).labels.contains(&"Plate".to_string()));
         assert_eq!(a.prefs().caption_labels, vec!["Plate".to_string()]);
+    }
+
+    /// #3013: Insert Table of Figures opens a dialog offering every caption label (the user's own,
+    /// and the document's even when they aren't saved), so a document can have a list of tables
+    /// next to its list of figures. Through the window: pick Table in the Label box, then OK.
+    #[test]
+    fn table_of_figures_dialog_lists_tables() {
+        use egui::accesskit::Role;
+        use egui_kittest::kittest::Queryable;
+        let mut a = app("Kiln\nPress\nRock\nEnd");
+        a.run("select.text", json!({"text": "Kiln"})).unwrap();
+        a.run("references.caption", json!({"label": "Figure", "text": "The kiln"})).unwrap();
+        a.run("select.text", json!({"text": "Press"})).unwrap();
+        a.run("references.caption", json!({"label": "Table", "text": "Press sizes"})).unwrap();
+        a.run("select.text", json!({"text": "Rock"})).unwrap();
+        a.run("references.caption", json!({"label": "Specimen", "text": "A rock"})).unwrap();
+        a.ui.caption_labels = vec!["Plate".into()];
+        a.run("caret.docEnd", json!({})).unwrap();
+        assert_eq!(a.run("references.tableOfFigures", json!({})).unwrap(), json!({"pending": "tableOfFigures"}));
+        let RefsDialog::Figures(f) = form(&a) else { panic!() };
+        assert_eq!(f.labels, ["Equation", "Figure", "Table", "Plate", "Specimen"]);
+        let mut h = egui_kittest::Harness::builder().with_size(vec2(1440.0, 900.0)).build_ui_state(
+            |ui, app: &mut WordApp| {
+                let ctx = ui.ctx().clone();
+                app.logic(&ctx);
+                app.ui(ui);
+            },
+            a,
+        );
+        h.run_steps(4);
+        h.get_by_role_and_label(Role::Window, "Table of Figures");
+        // The Label box shows its choice as its value.
+        h.get_by(|n| n.role() == Role::ComboBox && n.value().as_deref() == Some("Figure")).click();
+        h.run_steps(3);
+        h.get_by_label("Table").click();
+        h.run_steps(3);
+        h.get_all_by_role_and_label(Role::Button, "OK").last().expect("the dialog's OK button").click();
+        h.run_steps(3);
+        assert!(h.state().dialog.is_none(), "OK closes the dialog");
+        let t = h.state().session.doc.plain_text(StoryRef::Body);
+        assert!(t.contains("Table 1: Press sizes\t1") && !t.contains("The kiln\t") && !t.contains("A rock\t"), "{t}");
     }
 
     /// #916: Cross-reference from the ribbon opens a dialog listing the targets of each type
