@@ -2,7 +2,36 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::props::{Borders, VAlign};
+use crate::props::Borders;
+
+/// How a section's text sits on its pages, top to bottom (`w:vAlign`, ECMA-376 §17.6.23,
+/// ST_VerticalJc). Table cells and text boxes use [`crate::props::VAlign`], which has no
+/// Justified.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub enum PageVAlign {
+    #[default]
+    Top,
+    Center,
+    /// Justified (`both`): the room left on each page is shared out equally between the page's
+    /// paragraphs and tables, so the text runs from the top margin to the bottom one.
+    #[serde(alias = "both", alias = "justified")]
+    Justify,
+    Bottom,
+}
+
+impl PageVAlign {
+    /// From a command or file value: `top|center|justify|bottom` (also `both`, `justified`,
+    /// `middle`); anything else is Top.
+    pub fn parse(v: &str) -> PageVAlign {
+        match v {
+            "center" | "middle" => PageVAlign::Center,
+            "justify" | "justified" | "both" => PageVAlign::Justify,
+            "bottom" => PageVAlign::Bottom,
+            _ => PageVAlign::Top,
+        }
+    }
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
@@ -15,6 +44,9 @@ pub enum SectionStart {
     NextColumn,
 }
 
+/// A number format (ECMA-376 §17.18.59 ST_NumberFormat). Every value the format defines is
+/// kept, so a document saves back the format it was opened with even where WordCraft draws it as
+/// plain decimal (see [`NumFormat::format`]).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub enum NumFormat {
@@ -30,9 +62,127 @@ pub enum NumFormat {
     DecimalZero,
     Bullet,
     None,
+    Hex,
+    Chicago,
+    IdeographDigital,
+    JapaneseCounting,
+    Aiueo,
+    Iroha,
+    DecimalFullWidth,
+    DecimalHalfWidth,
+    JapaneseLegal,
+    JapaneseDigitalTenThousand,
+    DecimalEnclosedCircle,
+    DecimalFullWidth2,
+    AiueoFullWidth,
+    IrohaFullWidth,
+    Ganada,
+    Chosung,
+    DecimalEnclosedFullstop,
+    DecimalEnclosedParen,
+    DecimalEnclosedCircleChinese,
+    IdeographEnclosedCircle,
+    IdeographTraditional,
+    IdeographZodiac,
+    IdeographZodiacTraditional,
+    TaiwaneseCounting,
+    IdeographLegalTraditional,
+    TaiwaneseCountingThousand,
+    TaiwaneseDigital,
+    ChineseCounting,
+    ChineseLegalSimplified,
+    ChineseCountingThousand,
+    KoreanDigital,
+    KoreanCounting,
+    KoreanLegal,
+    KoreanDigital2,
+    VietnameseCounting,
+    RussianLower,
+    RussianUpper,
+    NumberInDash,
+    Hebrew1,
+    Hebrew2,
+    ArabicAlpha,
+    ArabicAbjad,
+    HindiVowels,
+    HindiConsonants,
+    HindiNumbers,
+    HindiCounting,
+    ThaiLetters,
+    ThaiNumbers,
+    ThaiCounting,
+    BahtText,
+    DollarText,
 }
 
 impl NumFormat {
+    /// Every format, in the order ST_NumberFormat lists them (which is also the order of the
+    /// binary .doc number format codes up to 0x27).
+    pub const ALL: [NumFormat; 62] = [
+        NumFormat::Decimal,
+        NumFormat::UpperRoman,
+        NumFormat::LowerRoman,
+        NumFormat::UpperLetter,
+        NumFormat::LowerLetter,
+        NumFormat::Ordinal,
+        NumFormat::CardinalText,
+        NumFormat::OrdinalText,
+        NumFormat::Hex,
+        NumFormat::Chicago,
+        NumFormat::IdeographDigital,
+        NumFormat::JapaneseCounting,
+        NumFormat::Aiueo,
+        NumFormat::Iroha,
+        NumFormat::DecimalFullWidth,
+        NumFormat::DecimalHalfWidth,
+        NumFormat::JapaneseLegal,
+        NumFormat::JapaneseDigitalTenThousand,
+        NumFormat::DecimalEnclosedCircle,
+        NumFormat::DecimalFullWidth2,
+        NumFormat::AiueoFullWidth,
+        NumFormat::IrohaFullWidth,
+        NumFormat::DecimalZero,
+        NumFormat::Bullet,
+        NumFormat::Ganada,
+        NumFormat::Chosung,
+        NumFormat::DecimalEnclosedFullstop,
+        NumFormat::DecimalEnclosedParen,
+        NumFormat::DecimalEnclosedCircleChinese,
+        NumFormat::IdeographEnclosedCircle,
+        NumFormat::IdeographTraditional,
+        NumFormat::IdeographZodiac,
+        NumFormat::IdeographZodiacTraditional,
+        NumFormat::TaiwaneseCounting,
+        NumFormat::IdeographLegalTraditional,
+        NumFormat::TaiwaneseCountingThousand,
+        NumFormat::TaiwaneseDigital,
+        NumFormat::ChineseCounting,
+        NumFormat::ChineseLegalSimplified,
+        NumFormat::ChineseCountingThousand,
+        NumFormat::KoreanDigital,
+        NumFormat::KoreanCounting,
+        NumFormat::KoreanLegal,
+        NumFormat::KoreanDigital2,
+        NumFormat::VietnameseCounting,
+        NumFormat::RussianLower,
+        NumFormat::RussianUpper,
+        NumFormat::None,
+        NumFormat::NumberInDash,
+        NumFormat::Hebrew1,
+        NumFormat::Hebrew2,
+        NumFormat::ArabicAlpha,
+        NumFormat::ArabicAbjad,
+        NumFormat::HindiVowels,
+        NumFormat::HindiConsonants,
+        NumFormat::HindiNumbers,
+        NumFormat::HindiCounting,
+        NumFormat::ThaiLetters,
+        NumFormat::ThaiNumbers,
+        NumFormat::ThaiCounting,
+        NumFormat::BahtText,
+        NumFormat::DollarText,
+    ];
+
     pub fn ooxml(self) -> &'static str {
         match self {
             NumFormat::Decimal => "decimal",
@@ -46,41 +196,142 @@ impl NumFormat {
             NumFormat::DecimalZero => "decimalZero",
             NumFormat::Bullet => "bullet",
             NumFormat::None => "none",
+            NumFormat::Hex => "hex",
+            NumFormat::Chicago => "chicago",
+            NumFormat::IdeographDigital => "ideographDigital",
+            NumFormat::JapaneseCounting => "japaneseCounting",
+            NumFormat::Aiueo => "aiueo",
+            NumFormat::Iroha => "iroha",
+            NumFormat::DecimalFullWidth => "decimalFullWidth",
+            NumFormat::DecimalHalfWidth => "decimalHalfWidth",
+            NumFormat::JapaneseLegal => "japaneseLegal",
+            NumFormat::JapaneseDigitalTenThousand => "japaneseDigitalTenThousand",
+            NumFormat::DecimalEnclosedCircle => "decimalEnclosedCircle",
+            NumFormat::DecimalFullWidth2 => "decimalFullWidth2",
+            NumFormat::AiueoFullWidth => "aiueoFullWidth",
+            NumFormat::IrohaFullWidth => "irohaFullWidth",
+            NumFormat::Ganada => "ganada",
+            NumFormat::Chosung => "chosung",
+            NumFormat::DecimalEnclosedFullstop => "decimalEnclosedFullstop",
+            NumFormat::DecimalEnclosedParen => "decimalEnclosedParen",
+            NumFormat::DecimalEnclosedCircleChinese => "decimalEnclosedCircleChinese",
+            NumFormat::IdeographEnclosedCircle => "ideographEnclosedCircle",
+            NumFormat::IdeographTraditional => "ideographTraditional",
+            NumFormat::IdeographZodiac => "ideographZodiac",
+            NumFormat::IdeographZodiacTraditional => "ideographZodiacTraditional",
+            NumFormat::TaiwaneseCounting => "taiwaneseCounting",
+            NumFormat::IdeographLegalTraditional => "ideographLegalTraditional",
+            NumFormat::TaiwaneseCountingThousand => "taiwaneseCountingThousand",
+            NumFormat::TaiwaneseDigital => "taiwaneseDigital",
+            NumFormat::ChineseCounting => "chineseCounting",
+            NumFormat::ChineseLegalSimplified => "chineseLegalSimplified",
+            NumFormat::ChineseCountingThousand => "chineseCountingThousand",
+            NumFormat::KoreanDigital => "koreanDigital",
+            NumFormat::KoreanCounting => "koreanCounting",
+            NumFormat::KoreanLegal => "koreanLegal",
+            NumFormat::KoreanDigital2 => "koreanDigital2",
+            NumFormat::VietnameseCounting => "vietnameseCounting",
+            NumFormat::RussianLower => "russianLower",
+            NumFormat::RussianUpper => "russianUpper",
+            NumFormat::NumberInDash => "numberInDash",
+            NumFormat::Hebrew1 => "hebrew1",
+            NumFormat::Hebrew2 => "hebrew2",
+            NumFormat::ArabicAlpha => "arabicAlpha",
+            NumFormat::ArabicAbjad => "arabicAbjad",
+            NumFormat::HindiVowels => "hindiVowels",
+            NumFormat::HindiConsonants => "hindiConsonants",
+            NumFormat::HindiNumbers => "hindiNumbers",
+            NumFormat::HindiCounting => "hindiCounting",
+            NumFormat::ThaiLetters => "thaiLetters",
+            NumFormat::ThaiNumbers => "thaiNumbers",
+            NumFormat::ThaiCounting => "thaiCounting",
+            NumFormat::BahtText => "bahtText",
+            NumFormat::DollarText => "dollarText",
         }
     }
+    /// The format an ST_NumberFormat value names; a value the format doesn't define is decimal
+    /// (as Word shows it). So is `custom` (a Word 2010 format string, always written with a
+    /// decimal fallback).
     pub fn from_ooxml(s: &str) -> NumFormat {
-        [
-            NumFormat::Decimal,
-            NumFormat::UpperRoman,
-            NumFormat::LowerRoman,
-            NumFormat::UpperLetter,
-            NumFormat::LowerLetter,
-            NumFormat::Ordinal,
-            NumFormat::CardinalText,
-            NumFormat::OrdinalText,
-            NumFormat::DecimalZero,
-            NumFormat::Bullet,
-            NumFormat::None,
-        ]
-        .into_iter()
-        .find(|f| f.ooxml() == s)
-        .unwrap_or(NumFormat::Decimal)
+        NumFormat::ALL.into_iter().find(|f| f.ooxml() == s).unwrap_or(NumFormat::Decimal)
     }
-    /// Format `n` (1-based).
+    /// Format `n` (1-based). Formats WordCraft doesn't draw yet (Hebrew, Arabic, Hindi, Thai,
+    /// Vietnamese, text amounts) show decimal, as do values past a sequence's end
+    /// (the 21st item of ①…⑳).
     pub fn format(self, n: u32) -> String {
+        use crate::cjk_numbers as cjk;
         match self {
-            NumFormat::Decimal => n.to_string(),
             NumFormat::DecimalZero => format!("{n:02}"),
             NumFormat::UpperRoman => roman(n).to_uppercase(),
             NumFormat::LowerRoman => roman(n),
             NumFormat::UpperLetter => letters(n).to_uppercase(),
             NumFormat::LowerLetter => letters(n),
+            NumFormat::RussianUpper => russian_letters(n).to_uppercase(),
+            NumFormat::RussianLower => russian_letters(n),
             NumFormat::Ordinal => format!("{n}{}", ordinal_suffix(n)),
             NumFormat::CardinalText => cardinal_text(n),
             NumFormat::OrdinalText => ordinal_text(n),
             NumFormat::Bullet | NumFormat::None => String::new(),
+            NumFormat::Chicago => chicago(n),
+            NumFormat::NumberInDash => format!("- {n} -"),
+            NumFormat::IdeographDigital | NumFormat::KoreanDigital2 | NumFormat::TaiwaneseDigital => cjk::ideograph_digital(n),
+            NumFormat::JapaneseCounting => cjk::japanese_counting(n),
+            NumFormat::JapaneseLegal => cjk::japanese_legal(n),
+            NumFormat::JapaneseDigitalTenThousand => cjk::japanese_digital_ten_thousand(n),
+            NumFormat::Aiueo => cjk::aiueo(n),
+            NumFormat::AiueoFullWidth => cjk::aiueo_full_width(n),
+            NumFormat::Iroha => cjk::iroha(n),
+            NumFormat::IrohaFullWidth => cjk::iroha_full_width(n),
+            NumFormat::DecimalFullWidth | NumFormat::DecimalFullWidth2 => cjk::decimal_full_width(n),
+            NumFormat::DecimalEnclosedCircle => cjk::decimal_enclosed_circle(n),
+            NumFormat::DecimalEnclosedCircleChinese => cjk::decimal_enclosed_circle_chinese(n),
+            NumFormat::DecimalEnclosedFullstop => cjk::decimal_enclosed_fullstop(n),
+            NumFormat::DecimalEnclosedParen => cjk::decimal_enclosed_paren(n),
+            NumFormat::IdeographEnclosedCircle => cjk::ideograph_enclosed_circle(n),
+            NumFormat::IdeographTraditional => cjk::ideograph_traditional(n),
+            NumFormat::IdeographZodiac => cjk::ideograph_zodiac(n),
+            NumFormat::IdeographZodiacTraditional => cjk::ideograph_zodiac_traditional(n),
+            NumFormat::IdeographLegalTraditional => cjk::ideograph_legal_traditional(n),
+            NumFormat::TaiwaneseCounting => cjk::taiwanese_counting(n),
+            NumFormat::TaiwaneseCountingThousand => cjk::taiwanese_counting_thousand(n),
+            NumFormat::ChineseCounting => cjk::chinese_counting(n),
+            NumFormat::ChineseCountingThousand => cjk::chinese_counting_thousand(n),
+            NumFormat::ChineseLegalSimplified => cjk::chinese_legal_simplified(n),
+            NumFormat::KoreanCounting => cjk::korean_counting(n),
+            NumFormat::KoreanDigital => cjk::korean_digital(n),
+            NumFormat::KoreanLegal => cjk::korean_legal(n),
+            NumFormat::Ganada => cjk::ganada(n),
+            NumFormat::Chosung => cjk::chosung(n),
+            NumFormat::Decimal
+            | NumFormat::DecimalHalfWidth
+            | NumFormat::Hex
+            | NumFormat::VietnameseCounting
+            | NumFormat::Hebrew1
+            | NumFormat::Hebrew2
+            | NumFormat::ArabicAlpha
+            | NumFormat::ArabicAbjad
+            | NumFormat::HindiVowels
+            | NumFormat::HindiConsonants
+            | NumFormat::HindiNumbers
+            | NumFormat::HindiCounting
+            | NumFormat::ThaiLetters
+            | NumFormat::ThaiNumbers
+            | NumFormat::ThaiCounting
+            | NumFormat::BahtText
+            | NumFormat::DollarText => n.to_string(),
         }
     }
+}
+
+/// Chicago Manual of Style note marks: *, †, ‡, §, then doubled (**, ††, …) and so on.
+fn chicago(n: u32) -> String {
+    const MARKS: [char; 4] = ['*', '\u{2020}', '\u{2021}', '\u{a7}'];
+    if n == 0 {
+        return String::new();
+    }
+    let i = (n - 1) as usize;
+    let k = (i / 4 + 1).min(10);
+    std::iter::repeat_n(MARKS.get(i % 4).copied().unwrap_or('*'), k).collect()
 }
 
 fn ordinal_suffix(n: u32) -> &'static str {
@@ -129,6 +380,22 @@ pub fn letters(n: u32) -> String {
     let n = n.min(780);
     let k = (n - 1) / 26 + 1;
     let c = (b'a' + ((n - 1) % 26) as u8) as char;
+    std::iter::repeat_n(c, k as usize).collect()
+}
+
+/// The 29 letters Word counts Russian lists with: а..я without ё, й, ъ and ь (ы stays).
+const RUSSIAN_LETTERS: [char; 29] =
+    ['а', 'б', 'в', 'г', 'д', 'е', 'ж', 'з', 'и', 'к', 'л', 'м', 'н', 'о', 'п', 'р', 'с', 'т', 'у', 'ф', 'х', 'ц', 'ч', 'ш', 'щ', 'ы', 'э', 'ю', 'я'];
+
+/// Word-style Russian letters: а..я, аа..яя, ааа.. (repeated letter, as [`letters`]).
+pub fn russian_letters(n: u32) -> String {
+    if n == 0 {
+        return String::new();
+    }
+    let len = RUSSIAN_LETTERS.len() as u32;
+    let n = n.min(len * 30);
+    let k = (n - 1) / len + 1;
+    let c = RUSSIAN_LETTERS.get(((n - 1) % len) as usize).copied().unwrap_or('а');
     std::iter::repeat_n(c, k as usize).collect()
 }
 
@@ -454,8 +721,16 @@ pub struct SectionProps {
     pub title_page: bool,
     pub page_num_start: Option<u32>,
     pub page_num_format: NumFormat,
+    /// The file carries a `w:pgNumType` element that sets nothing else (no start, decimal
+    /// format), so saving writes it back rather than dropping it.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub page_num_set: bool,
     pub line_numbers: Option<LineNumbering>,
-    pub valign: VAlign,
+    pub valign: PageVAlign,
+    /// Form protection of the section (`w:formProt`, ECMA-376 §17.6.6): `Some` when the file
+    /// states it. Kept so saving writes it back; editing does not act on it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub form_prot: Option<bool>,
     pub page_borders: Option<Borders>,
     /// Text direction / bidi section.
     pub rtl: bool,
@@ -463,6 +738,9 @@ pub struct SectionProps {
     /// sections turn the page's text area (headers and footers stay horizontal).
     #[serde(skip_serializing_if = "is_horizontal")]
     pub text_direction: crate::props::TextDirection,
+    /// The file states the horizontal direction (`lrTb`) outright; saving writes it back.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub text_direction_set: bool,
     /// Tracked change of the section's properties (`w:sectPrChange`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fmt_change: Option<Box<crate::props::PropChange<SectionProps>>>,
@@ -496,11 +774,14 @@ impl Default for SectionProps {
             title_page: false,
             page_num_start: None,
             page_num_format: NumFormat::Decimal,
+            page_num_set: false,
             line_numbers: None,
-            valign: VAlign::Top,
+            valign: PageVAlign::Top,
+            form_prot: None,
             page_borders: None,
             rtl: false,
             text_direction: crate::props::TextDirection::Horizontal,
+            text_direction_set: false,
             fmt_change: None,
             doc_grid: None,
             footnote_pr: NoteProps::default(),
@@ -514,6 +795,16 @@ fn is_horizontal(d: &crate::props::TextDirection) -> bool {
 }
 
 impl SectionProps {
+    /// Join the section before this one into it, as when the break between them is deleted:
+    /// this section's setup stays, as in Word, and the headers and footers it leaves out (linked
+    /// to the previous section) are taken from `before`, so its text keeps showing them.
+    pub fn absorb(&mut self, before: &SectionProps) {
+        for (own, prev) in [(&mut self.headers, &before.headers), (&mut self.footers, &before.footers)] {
+            own.default = own.default.or(prev.default);
+            own.first = own.first.or(prev.first);
+            own.even = own.even.or(prev.even);
+        }
+    }
     /// Width of the text area, points.
     pub fn text_width(&self) -> f32 {
         (self.page_w - self.margin_left - self.margin_right - self.gutter).max(18.0)
@@ -604,6 +895,29 @@ mod tests {
         assert_eq!(NumFormat::DecimalZero.format(3), "03");
         assert!(!NumFormat::UpperRoman.format(u32::MAX).is_empty());
         assert_eq!(NumFormat::LowerLetter.format(u32::MAX).len(), 30);
+        assert_eq!([NumFormat::Chicago.format(1), NumFormat::Chicago.format(6)], ["*", "\u{2020}\u{2020}"]);
+        assert_eq!(NumFormat::ChineseCounting.format(11), "十一");
+        assert_eq!(NumFormat::ChineseCountingThousand.format(101), "一百零一");
+        assert_eq!(NumFormat::DecimalEnclosedCircle.format(3), "③");
+        assert_eq!(NumFormat::Hebrew1.format(3), "3", "formats not drawn yet show decimal");
+        assert_eq!(NumFormat::RussianLower.format(0), "");
+        assert_eq!(NumFormat::RussianUpper.format(u32::MAX).chars().count(), 30);
+        for f in NumFormat::ALL {
+            assert_eq!(NumFormat::from_ooxml(f.ooxml()), f, "{f:?} round-trips");
+            assert!(f == NumFormat::Bullet || f == NumFormat::None || !f.format(u32::MAX).is_empty(), "{f:?}");
+        }
+        assert_eq!(NumFormat::from_ooxml("klingon"), NumFormat::Decimal, "unknown formats are decimal");
+    }
+
+    #[test]
+    fn russian_letters_follow_word() {
+        // Word's own labels for a russianLower list: no ё, й, ъ or ь, then doubled letters.
+        let labels: Vec<String> = (1..=31).map(|n| NumFormat::RussianLower.format(n)).collect();
+        assert_eq!(labels.join(" "), "а б в г д е ж з и к л м н о п р с т у ф х ц ч ш щ ы э ю я аа бб");
+        assert_eq!(NumFormat::RussianLower.format(59), "ааа");
+        assert_eq!(NumFormat::RussianLower.format(100), "нннн");
+        assert_eq!(NumFormat::RussianUpper.format(26), "Ы");
+        assert_eq!(NumFormat::RussianUpper.format(36), "ЖЖ");
     }
 
     #[test]

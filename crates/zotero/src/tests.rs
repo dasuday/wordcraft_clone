@@ -512,6 +512,22 @@ fn a_note_with_other_text_stays_when_its_citation_leaves() {
     assert!(z.call("Document_convert", json!([1, [999], [], [1], 1])).is_err());
 }
 
+#[test]
+fn a_note_with_a_picture_stays_when_its_citation_leaves() {
+    let mut z = Z::new("Text.", 5);
+    z.begin();
+    let a = z.cite(1, "Doe, Title.");
+    let pid = *z.s.doc.parts.keys().next().unwrap();
+    let p = z.s.doc.para_mut(StoryRef::Part(pid), &Path::top(0)).unwrap();
+    let n = p.len();
+    let image = InlineObject::Image { media: "m".into(), w: 1.0, h: 1.0, alt: String::new(), float: Default::default(), crop: [0.0; 4], ole: None };
+    p.insert_object(n, image, &Default::default()).unwrap();
+    z.ok("Field_convert", json!([1, a, "ReferenceMark", 0]));
+    assert_eq!(z.s.doc.parts.len(), 1);
+    assert!(z.s.doc.para(StoryRef::Part(pid), &Path::top(0)).unwrap().objects.iter().any(|o| matches!(o, InlineObject::Image { .. })));
+    assert!(z.text().ends_with("Doe, Title."));
+}
+
 /// Zotero reads a new bibliography field back before filling it, and unlinks it when it is
 /// empty (it takes that for a bibliography the user deleted). Seen with Zotero 10: Add/Edit
 /// Bibliography did nothing.
@@ -529,4 +545,22 @@ fn a_new_field_is_never_empty_so_zotero_keeps_a_new_bibliography() {
     z.ok("Field_setText", json!([1, id, r"{\rtf Doe, J. (2020).\par}", true]));
     z.ok("Document_complete", json!([1]));
     assert_eq!(z.text(), "Text. Doe, J. (2020).");
+}
+
+/// #898: a click just after a citation puts the caret before its hidden field end. Zotero must
+/// see that caret outside the citation (as in Word), and a citation added there goes after the
+/// first one, not inside its result.
+#[test]
+fn a_citation_added_just_after_another_is_not_nested_in_it() {
+    let mut z = Z::new("Cats purr ", 10);
+    z.begin();
+    z.cite(0, "(Doe 2020)");
+    let first = z.s.doc.field_ranges(StoryRef::Body)[0].end.clone();
+    z.s.sel = Selection::caret(first);
+    assert_eq!(z.ok("Document_cursorInField", json!([1, "ReferenceMark"])), Value::Null);
+    z.cite(0, "(Roe 2019)");
+    z.ok("Document_complete", json!([1]));
+    assert_eq!(z.text(), "Cats purr (Doe 2020)(Roe 2019)");
+    let r = z.s.doc.field_ranges(StoryRef::Body);
+    assert_eq!(r.iter().map(|f| f.depth).collect::<Vec<_>>(), [0, 0]);
 }
