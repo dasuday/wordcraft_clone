@@ -199,7 +199,8 @@ hold was dropped without a warning (on 18 real-world Word documents: compatibili
 of 18; the privacy options are modelled since #1062). Now the writer merges into the
 file's original (`crates/docx/src/write/settings_merge.rs`): the original root and every child
 the model doesn't own stay byte for byte; owned children follow the model, in CT_Settings order;
-in `w:compat` only `compatibilityMode` is replaced. Kept children that point at a relationship
+in `w:compat`, `compatibilityMode` and `suppressSpBfAfterPgBrk` follow the model; other
+unowned children remain preserved. Kept children that point at a relationship
 (a mail-merge data source) are dropped. Files WordCraft wrote itself keep nothing extra. Tests:
 `crates/docx/tests/settings_merge.rs`.
 
@@ -233,6 +234,7 @@ Imported text fields use the first nonempty cached result run's formatting on th
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-19 | trivial | Clarify that compatibilityMode and suppressSpBfAfterPgBrk are model-owned; other compatibility children remain preserved. |
 | 2026-10-19 | minor | Break-spacing toggles survive saves with unowned compatibility settings. A first paragraph does not carry suppressed before-spacing past its page break. |
 | 2026-10-19 | trivial | Retain page-break parity evidence and upstream history. Conflict repair preserves runtime behavior and assertions. |
 | 2026-10-19 | trivial | Restrict Editing: with Filling in forms enforced, inserting content controls, their Properties and Remove Content Control are refused, as in Word (it greys them out), so a form's fields stay as they are and only their content is filled in |
