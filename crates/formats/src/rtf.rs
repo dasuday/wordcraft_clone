@@ -468,7 +468,7 @@ impl Writer {
         match p.align {
             Some(Align::Center) => out.push_str("\\qc"),
             Some(Align::Right) => out.push_str("\\qr"),
-            Some(Align::Justify) | Some(Align::Distribute) => out.push_str("\\qj"),
+            Some(Align::Justify | Align::Distribute | Align::ThaiDistribute | Align::KhmerJustify) => out.push_str("\\qj"),
             _ => out.push_str("\\ql"),
         }
         if p.page_break {
