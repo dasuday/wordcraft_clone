@@ -418,16 +418,18 @@ impl Writer {
                 Some(li) => {
                     let level = li.level.min(8);
                     // Reuse the current list only if it describes the old level's kind too.
-                    // A removed list, or a switch between bullets and numbers, needs its own
-                    // definition so Reject can restore it after saving and reopening.
+                    // Otherwise reuse a compatible definition before allocating one: repeated
+                    // prior kinds must not exhaust the reader's bounded list table.
                     let current = ls
                         .as_ref()
                         .map(|(n, _)| *n)
                         .filter(|n| self.lists.get(n.saturating_sub(1)).and_then(|kinds| kinds.get(usize::from(level))) == Some(&li.ordered));
-                    let n = current.unwrap_or_else(|| {
-                        self.lists.push([li.ordered; 9]);
-                        self.lists.len()
-                    });
+                    let n = current
+                        .or_else(|| self.lists.iter().position(|kinds| kinds.get(usize::from(level)) == Some(&li.ordered)).map(|i| i + 1))
+                        .unwrap_or_else(|| {
+                            self.lists.push([li.ordered; 9]);
+                            self.lists.len()
+                        });
                     format!("\\ls{n}\\ilvl{level}")
                 }
                 None => String::new(),
