@@ -214,6 +214,8 @@ Page-relative footer tables keep their physical wrap bounds without adding to fo
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-19 | minor | Collapsed paragraphs stay after a naturally fitted line even when its full spacing box extends past the page bottom. Visible paragraphs keep their fit checks. |
+| 2026-10-16 | trivial | Page fitting excludes positive automatic line leading. Blank, visible and picture-only lines are checked against a synthetic Word Mac export, with insufficient-room and exact-height controls; grid and footnote fitting unchanged. |
 | 2026-10-18 | trivial | A word after a slash (" /word") wraps whole instead of splitting between two letters (#2963) |
 | 2026-10-15 | trivial | An at-least table row with less room than its minimum on a page that holds something starts the next page whole, as checked in Word (#1742); the taller-than-a-page case (it then splits from the top of that page) and repeated header rows (they go with it) follow the issue and synthetic tests, not a Word check |
 | 2026-10-16 | trivial | Table row keep-next uses the first paragraph of the first cell, including inherited flags. Kept row chains start on a fresh page when the following row cannot start below them. Synthetic Word export covers mixed-cell flags, multiple paragraphs and kept prefixes before oversized followers. |
