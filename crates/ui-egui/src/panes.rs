@@ -369,8 +369,15 @@ fn outline(app: &mut WordApp, ui: &mut Ui) {
     {
         ui.painter().hline(r0.min.x..=r1.max.x, *y, Stroke::new(2.0, t.accent));
     }
-    if dropped && let (Some(from), Some((at, _))) = (app.ui.nav_drag.take(), landing) {
-        let _ = app.run("nav.move", json!({"path": from, "before": at}));
+    // A release ends the drag wherever it happened — dropped over the document, on another pane,
+    // on a row that has just gone — so the row stops saying it is being dragged and the line
+    // stops reappearing when the pointer comes back. Only a release over the outline has
+    // somewhere to land.
+    if dropped {
+        let from = app.ui.nav_drag.take();
+        if let (Some(from), Some((at, _))) = (from, landing) {
+            let _ = app.run("nav.move", json!({"path": from, "before": at}));
+        }
     }
     for (edit, path) in edits {
         let _ = app.run(edit.command(), edit.params(&path));
