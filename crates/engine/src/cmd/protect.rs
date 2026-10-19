@@ -218,7 +218,8 @@ pub(crate) fn check_before(s: &Session, id: &str, params: &Value) -> Result<bool
     // Word blocks content-control property edits until Stop Protection: changing a control's
     // lock flags would reshape what forms mode lets through. The param's presence is the
     // trigger — absent, the command keeps the current lock (as `check_formatting` inspects
-    // params); other properties (title, tag, placeholder…) are unaffected.
+    // params). In other modes, other properties (title, tag, placeholder…) stay editable; forms
+    // mode refuses every property change (below).
     if id == "developer.properties" && (params.get("lockEdit").is_some() || params.get("lockDelete").is_some()) {
         return Err(CmdError::Disabled(format!("{id}: stop protection before changing a content control's locks")));
     }
