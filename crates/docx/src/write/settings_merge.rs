@@ -8,8 +8,8 @@
 //! tag (namespace declarations, `mc:Ignorable`) and every child the model doesn't own are kept
 //! byte for byte; owned children come from the generated part (or go, when the model turned
 //! them off); owned children the original lacks are inserted at their CT_Settings position; in
-//! `w:compat` only the `compatibilityMode` setting is replaced. Kept children that refer to a
-//! relationship (`r:id`, e.g. a mail merge data source) are dropped: their relationships aren't
+//! `w:compat` the compatibility mode and modeled break-spacing flag are replaced. Kept children
+//! referring to a relationship (`r:id`, e.g. a mail merge data source) are dropped: their relationships aren't
 //! carried. Anything unexpected returns `None`, and the generated part is written as before.
 
 /// Children of `w:settings` the model writes (`super::settings_xml`).
@@ -212,7 +212,39 @@ fn children(xml: &str, root: &str) -> Option<(usize, usize, Vec<Child>)> {
     Some((open_end, close, out))
 }
 
-/// The original `w:compat` with its `compatibilityMode` taken from the generated one.
+const BREAK_SPACING: &str = "w:suppressSpBfAfterPgBrk";
+const COMPAT_ROOT: &str = "w:compat";
+const COMPAT_SETTING: &str = "w:compatSetting";
+
+fn merge_break_spacing(orig: &str, generated: &str) -> Option<String> {
+    let (_, close, original) = children(orig, COMPAT_ROOT)?;
+    let (_, _, current) = children(generated, COMPAT_ROOT)?;
+    let replacement = match current.iter().find(|c| c.name == BREAK_SPACING) {
+        Some(child) => Some(generated.get(child.start..child.end)?),
+        None => None,
+    };
+    let mut out = String::with_capacity(orig.len() + replacement.map_or(0, str::len));
+    let mut cursor = 0;
+    let mut replaced = false;
+    for child in original.iter().filter(|c| c.name == BREAK_SPACING) {
+        out.push_str(orig.get(cursor..child.start)?);
+        if !replaced {
+            out.push_str(replacement.unwrap_or(""));
+            replaced = true;
+        }
+        cursor = child.end;
+    }
+    if !replaced && let Some(flag) = replacement {
+        let at = original.iter().find(|c| c.name == COMPAT_SETTING).map_or(close, |c| c.start);
+        out.push_str(orig.get(cursor..at)?);
+        out.push_str(flag);
+        cursor = at;
+    }
+    out.push_str(orig.get(cursor..)?);
+    Some(out)
+}
+
+/// The original `w:compat` with modeled values taken from the generated one.
 fn merge_compat(orig: &str, generated: &str) -> Option<String> {
     let mode = |s: &str| -> Option<(usize, usize)> {
         let at = s.find("w:name=\"compatibilityMode\"")?;
@@ -220,15 +252,22 @@ fn merge_compat(orig: &str, generated: &str) -> Option<String> {
         let tag_end = tag_start + s.get(tag_start..)?.find('>')? + 1;
         Some((tag_start, tag_end))
     };
-    match (mode(orig), mode(generated)) {
+    let merged = match (mode(orig), mode(generated)) {
         (Some((a, b)), Some((c, d))) => Some(format!("{}{}{}", orig.get(..a)?, generated.get(c..d)?, orig.get(b..)?)),
         (None, Some((c, d))) => {
-            // No mode in the original: add the generated one before `</w:compat>`.
-            let close = orig.rfind("</w:compat>")?;
-            Some(format!("{}{}{}", orig.get(..close)?, generated.get(c..d)?, orig.get(close..)?))
+            // No mode in the original: add the generated one before `</w:compat>`, or expand a self-closing `<w:compat/>`.
+            if let Some(close) = orig.rfind("</w:compat>") {
+                Some(format!("{}{}{}", orig.get(..close)?, generated.get(c..d)?, orig.get(close..)?))
+            } else if let Some(slash) = orig.rfind("/>") {
+                let open = orig.get(..slash)?.trim_end();
+                Some(format!("{open}>{}</w:compat>", generated.get(c..d)?))
+            } else {
+                None
+            }
         }
         _ => Some(orig.to_string()),
-    }
+    }?;
+    merge_break_spacing(&merged, generated)
 }
 
 /// Does `original` (a settings part) hold anything the model doesn't write? Then the reader keeps
@@ -344,5 +383,13 @@ mod tests {
         assert!(out.contains("<w:useFELayout/>") && out.contains("compatibilityMode"), "{out}");
         assert!(has_unowned(orig.as_bytes()));
         assert!(!has_unowned(GEN.as_bytes()));
+    }
+
+    #[test]
+    fn a_self_closing_compat_block_gets_the_generated_mode() {
+        let orig = r#"<w:settings xmlns:w="w" xmlns:m="m" xmlns:r="r"><w:compat/><w:rsids><w:rsidRoot w:val="00112233"/></w:rsids></w:settings>"#;
+        let out = String::from_utf8(merge(orig.as_bytes(), GEN.as_bytes()).unwrap()).unwrap();
+        assert!(out.contains("<w:compat><w:compatSetting") && out.contains("</w:compat>"), "{out}");
+        assert!(out.contains("<w:rsidRoot w:val=\"00112233\"/>"), "{out}");
     }
 }
