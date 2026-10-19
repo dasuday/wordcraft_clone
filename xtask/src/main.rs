@@ -10,6 +10,7 @@ mod parity;
 mod stats;
 mod version;
 mod visual_diff;
+mod workflows;
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};
@@ -19,9 +20,10 @@ usage: cargo xtask <command>
 
 commands:
   assets          check that every icon/image/font/asset is attributed in ATTRIBUTION.md
+  workflows       check that every external GitHub Actions `uses:` ref is immutable
   layers          enforce the crate dependency layering (plan/architecture.md §3)
   wasm            cargo check --target wasm32-unknown-unknown for the wasm-safe crates
-  ci              fmt --check, clippy -D warnings, test, assets, layers, wasm (stops at first failure)
+  ci              fmt --check, clippy -D warnings, test, assets, workflows, layers, wasm (stops at first failure)
   corpus [--download]
                   show where test corpora live; --download fetches PngSuite into corpus/pngsuite
   stats [--exact] count tests and lines per crate (--exact: ask the test harness via `-- --list`)
@@ -38,6 +40,7 @@ fn main() -> ExitCode {
     let rest: Vec<&str> = args.iter().skip(1).map(String::as_str).collect();
     let result = match args.first().map(String::as_str) {
         Some("assets") => assets::run(&root()),
+        Some("workflows") => workflows::run(&root()),
         Some("layers") => cmd_layers(),
         Some("wasm") => cmd_wasm(),
         Some("ci") => cmd_ci(),
@@ -181,6 +184,7 @@ fn cmd_ci() -> Result<(), String> {
             }),
         ),
         ("assets", Box::new(|| assets::run(&root()))),
+        ("workflows", Box::new(|| workflows::run(&root()))),
         ("layers", Box::new(cmd_layers)),
         ("wasm", Box::new(cmd_wasm)),
     ];
