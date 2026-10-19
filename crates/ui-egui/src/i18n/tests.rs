@@ -64,6 +64,23 @@ fn slovak_interface_can_be_selected_and_saved_without_changing_the_document_lang
     assert_eq!(Lang::from_pref(&restored.language), sk);
 }
 
+#[test]
+fn slovak_covers_every_key_of_every_other_catalog() {
+    use std::collections::HashSet;
+    let (entries, errors) = parse_entries(lang("sk").0.source);
+    assert!(errors.is_empty(), "sk: {errors:?}");
+    let sk_keys: HashSet<_> = entries.into_iter().map(|e| (e.context, e.source)).collect();
+    // Keep context in the key: a plain translation cannot replace a context-specific one.
+    for other in Lang::all().filter(|l| *l != Lang::EN && l.code() != "sk") {
+        let (entries, errors) = parse_entries(other.0.source);
+        assert!(errors.is_empty(), "{}: {errors:?}", other.code());
+        let keys: HashSet<_> = entries.into_iter().map(|e| (e.context, e.source)).collect();
+        let mut missing: Vec<_> = keys.difference(&sk_keys).cloned().collect();
+        missing.sort();
+        assert!(missing.is_empty(), "sk lacks {}'s {missing:?}", other.code());
+    }
+}
+
 /// A language tag no catalog will ever have: `qaa`–`qtz` are reserved for local use (ISO 639-2),
 /// so these tests keep working as real languages land.
 const UNSUPPORTED: &str = "qaa-QM";
@@ -1360,8 +1377,9 @@ fn croatian_covers_the_entire_existing_interface_catalog_and_keeps_count_labels_
     use std::collections::HashSet;
     let keys = |source| parse_entries(source).0.into_iter().map(|e| e.source).collect::<HashSet<_>>();
     let hr = lang("hr");
-    // Every key of every other catalog, and no catalog errors.
-    for other in Lang::all().filter(|l| *l != Lang::EN && l.code() != "hr") {
+    // Every key of the catalogs predating Slovak, and no catalog errors.
+    // Slovak includes newer keys that are not yet present in Croatian.
+    for other in Lang::all().filter(|l| *l != Lang::EN && !matches!(l.code(), "hr" | "sk")) {
         let mut missing: Vec<String> = keys(other.0.source).difference(&keys(hr.0.source)).cloned().collect();
         missing.sort();
         // Italian and Hungarian still carry "Style: APA", which the interface no longer shows.
