@@ -33,6 +33,10 @@ pub(super) fn shared_size(e: &El) -> Option<f32> {
         if depth > MAX_DEPTH || e.name == "m:argSz" {
             return None;
         }
+        // The reader drops deleted revisions, including their nested size properties.
+        if matches!(e.name.as_str(), "w:del" | "w:moveFrom" | "m:del") {
+            return Some(());
+        }
         if matches!(e.name.as_str(), "m:r" | "w:r" | "m:ctrlPr") {
             let mut r = MRun::default();
             wrpr(e.child("w:rPr"), &mut r);
@@ -428,6 +432,54 @@ mod tests {
             ] {
                 assert_eq!(shared_size(&omath(&inner)), None, "preserve operand/control boundaries: {inner}");
             }
+        }
+    }
+
+    fn sized_run(size: Option<u16>) -> String {
+        let prop = size.map(|v| format!("<w:sz w:val=\"{v}\"/>")).unwrap_or_default();
+        format!("<m:r><w:rPr>{prop}</w:rPr><m:t>x</m:t></m:r>")
+    }
+
+    #[test]
+    fn shared_size_deletions() {
+        for tag in ["w:del", "w:moveFrom", "m:del"] {
+            for deleted in [sized_run(Some(22)), sized_run(None), "<m:argPr><m:argSz m:val=\"-1\"/></m:argPr>".into()] {
+                let e = omath(&format!("{}<{tag}>{deleted}</{tag}>", sized_run(Some(28))));
+                assert_eq!(texts(&mut read_omath(&e, MathJc::CenterGroup)), ["x"]);
+                assert_eq!(shared_size(&e), Some(14.0), "{tag}: {deleted}");
+                assert_eq!(shared_size(&omath(&format!("<{tag}>{deleted}</{tag}>"))), None);
+            }
+        }
+    }
+
+    #[test]
+    fn shared_size_insertions() {
+        for tag in ["w:ins", "w:moveTo"] {
+            for (size, expected) in [(Some(28), Some(14.0)), (Some(22), None), (None, None)] {
+                let e = omath(&format!("{}<{tag}>{}</{tag}>", sized_run(Some(28)), sized_run(size)));
+                assert_eq!(texts(&mut read_omath(&e, MathJc::CenterGroup)).concat(), "xx");
+                assert_eq!(shared_size(&e), expected, "{tag}: {size:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn shared_size_nested_controls() {
+        let script = |size| {
+            format!(
+                "<m:sSup><m:sSupPr><m:ctrlPr><w:rPr><w:sz w:val=\"{size}\"/></w:rPr></m:ctrlPr></m:sSupPr><m:e>{}</m:e><m:sup>{}</m:sup></m:sSup>",
+                sized_run(Some(28)),
+                sized_run(Some(28))
+            )
+        };
+        let visible = script(28);
+        let inner = format!("<w:ins><w:moveTo>{visible}<w:del>{}</w:del></w:moveTo></w:ins>", script(22));
+        let e = omath(&inner);
+        assert_eq!(texts(&mut read_omath(&e, MathJc::CenterGroup)), ["x", "x"]);
+        assert_eq!(shared_size(&e), Some(14.0));
+        for visible in [script(22), visible.replace("<m:e>", "<m:e><m:argPr><m:argSz m:val=\"-1\"/></m:argPr>")] {
+            let e = omath(&format!("<w:ins>{visible}</w:ins>"));
+            assert_eq!(shared_size(&e), None, "visible size guards: {visible}");
         }
     }
 
