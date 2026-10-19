@@ -300,7 +300,7 @@ impl Tokens {
         Tokens {
             dark: false,
             title_bar: Color32::from_rgb(0xF0, 0xF0, 0xF0),
-            ribbon: Color32::from_rgb(0xF9, 0xF9, 0xF9),
+            ribbon: Color32::from_rgb(0xFF, 0xFF, 0xFF),
             tab_strip: Color32::from_rgb(0xF0, 0xF0, 0xF0),
             canvas: Color32::from_rgb(0xE6, 0xE6, 0xE6),
             panel: Color32::from_rgb(0xFA, 0xFA, 0xFA),
@@ -742,32 +742,32 @@ fn visuals(t: &Tokens) -> Visuals {
     v.window_fill = t.menu;
     v.extreme_bg_color = t.input;
     v.faint_bg_color = t.panel;
-    v.window_stroke = Stroke::new(1.0, t.border_strong);
-    v.window_corner_radius = CornerRadius::same(8);
-    v.menu_corner_radius = CornerRadius::same(6);
+    v.window_stroke = Stroke::new(1.0, if t.dark { Color32::from_rgb(0x42, 0x42, 0x42) } else { Color32::from_rgb(0xE2, 0xE2, 0xE2) });
+    v.window_corner_radius = CornerRadius::same(10);
+    v.menu_corner_radius = CornerRadius::same(8);
     v.selection.bg_fill = t.selection;
     v.selection.stroke = Stroke::new(1.0, t.accent);
     v.hyperlink_color = t.accent_text;
     v.widgets.noninteractive.bg_stroke = Stroke::new(1.0, t.border);
     v.widgets.noninteractive.fg_stroke = Stroke::new(1.0, t.text);
     v.widgets.inactive.bg_fill = t.input;
-    v.widgets.inactive.weak_bg_fill = t.input;
-    v.widgets.inactive.bg_stroke = Stroke::new(1.0, t.input_border);
+    v.widgets.inactive.weak_bg_fill = Color32::TRANSPARENT;
+    v.widgets.inactive.bg_stroke = Stroke::new(1.0, t.border);
     v.widgets.inactive.fg_stroke = Stroke::new(1.0, t.text);
-    v.widgets.inactive.corner_radius = CornerRadius::same(4);
+    v.widgets.inactive.corner_radius = CornerRadius::same(5);
     v.widgets.hovered.bg_fill = t.hover;
     v.widgets.hovered.weak_bg_fill = t.hover;
-    v.widgets.hovered.bg_stroke = Stroke::new(1.0, t.border_strong);
+    v.widgets.hovered.bg_stroke = Stroke::new(1.0, if t.dark { Color32::from_rgb(0x55, 0x55, 0x55) } else { Color32::from_rgb(0xD2, 0xD2, 0xD2) });
     v.widgets.hovered.fg_stroke = Stroke::new(1.0, t.text);
-    v.widgets.hovered.corner_radius = CornerRadius::same(4);
+    v.widgets.hovered.corner_radius = CornerRadius::same(5);
     v.widgets.active.bg_fill = t.pressed;
     v.widgets.active.weak_bg_fill = t.pressed;
     v.widgets.active.fg_stroke = Stroke::new(1.0, t.text);
-    v.widgets.active.corner_radius = CornerRadius::same(4);
+    v.widgets.active.corner_radius = CornerRadius::same(5);
     v.widgets.open.bg_fill = t.pressed;
-    v.widgets.open.weak_bg_fill = t.pressed;
-    v.popup_shadow = egui::Shadow { offset: [0, 4], blur: 16, spread: 0, color: Color32::from_black_alpha(if t.dark { 120 } else { 40 }) };
-    v.window_shadow = egui::Shadow { offset: [0, 8], blur: 28, spread: 0, color: Color32::from_black_alpha(if t.dark { 140 } else { 50 }) };
+    v.widgets.open.weak_bg_fill = t.menu;
+    v.popup_shadow = egui::Shadow { offset: [0, 6], blur: 24, spread: 0, color: Color32::from_black_alpha(if t.dark { 100 } else { 25 }) };
+    v.window_shadow = egui::Shadow { offset: [0, 8], blur: 32, spread: 0, color: Color32::from_black_alpha(if t.dark { 120 } else { 30 }) };
     v
 }
 

@@ -2666,28 +2666,7 @@ fn rulers(app: &mut WordApp, ui: &mut Ui, h: Rect, v: Rect, rects: &[Rect], layo
         let left = px(rp.indent_left);
         let right = px(w - rp.indent_right);
         let c = t.text_dim;
-        hp.add(egui::Shape::convex_polygon(
-            vec![pos2(first - 4.5, bar.min.y), pos2(first + 4.5, bar.min.y), pos2(first, bar.min.y + 5.0)],
-            t.ruler,
-            Stroke::new(1.0, c),
-        ));
-        hp.add(egui::Shape::convex_polygon(
-            vec![pos2(left - 4.5, bar.max.y - 3.0), pos2(left + 4.5, bar.max.y - 3.0), pos2(left, bar.max.y - 8.0)],
-            t.ruler,
-            Stroke::new(1.0, c),
-        ));
-        hp.rect(
-            Rect::from_min_max(pos2(left - 4.5, bar.max.y - 3.0), pos2(left + 4.5, bar.max.y + 1.0)),
-            0.0,
-            t.ruler,
-            Stroke::new(1.0, c),
-            egui::StrokeKind::Inside,
-        );
-        hp.add(egui::Shape::convex_polygon(
-            vec![pos2(right - 4.5, bar.max.y - 1.0), pos2(right + 4.5, bar.max.y - 1.0), pos2(right, bar.max.y - 6.0)],
-            t.ruler,
-            Stroke::new(1.0, c),
-        ));
+
         // Tab stops: drawn and registered before the indent markers' drags, which win where they overlap.
         let step = unit / div as f32 / 2.0;
         let ruler = crate::ruler_tabs::Ruler { bar, text, width: w, step, rtl, x_of: &px, dist_at: &dist_at };
@@ -2696,42 +2675,79 @@ fn rulers(app: &mut WordApp, ui: &mut Ui, h: Rect, v: Rect, rects: &[Rect], layo
         // spans the text area, so a border marker keeps its drag) and before the indent markers,
         // which keep the pointer where they overlap.
         crate::table_ruler::columns(app, ui, layout, pi, bar, x0, scale);
-        // Dragging the left-indent marker.
+
+        // Dragging the left-indent marker (bottom). Hitbox enlarged for easy handling.
         let id = ui.id().with("ruler_left");
-        let mr = Rect::from_center_size(pos2(left, bar.max.y - 3.0), vec2(12.0, 12.0));
-        let r = ui.interact(mr, id, Sense::click_and_drag());
-        if r.dragged()
-            && let Some(pp) = r.interact_pointer_pos()
+        let mr = Rect::from_center_size(pos2(left, bar.max.y - 4.0), vec2(16.0, 16.0));
+        let r_left = ui.interact(mr, id, Sense::click_and_drag());
+        if r_left.dragged()
+            && let Some(pp) = r_left.interact_pointer_pos()
         {
             let pt = dist_at(pp.x).clamp(-col_x, (w - 18.0).max(-col_x));
             let snapped = (pt / 4.5).round() * 4.5;
-            if !r.drag_started() {
+            if !r_left.drag_started() {
                 app.session.join_next_undo();
             }
-            let _ = app.run("para.indents", json!({"left": snapped}));
+            // Move only the bottom marker: keep first-line indent's absolute page position pinned.
+            let abs_first = rp.indent_left + rp.indent_first;
+            let new_first = abs_first - snapped;
+            let _ = app.run("para.indents", json!({"left": snapped, "firstLine": new_first}));
         }
-        let fr = Rect::from_center_size(pos2(first, bar.min.y + 3.0), vec2(12.0, 10.0));
-        let r = ui.interact(fr, ui.id().with("ruler_first"), Sense::click_and_drag());
-        if r.dragged()
-            && let Some(pp) = r.interact_pointer_pos()
+
+        // Dragging the first-line indent marker (top). Hitbox enlarged for easy handling.
+        let fr = Rect::from_center_size(pos2(first, bar.min.y + 4.0), vec2(16.0, 14.0));
+        let r_first = ui.interact(fr, ui.id().with("ruler_first"), Sense::click_and_drag());
+        if r_first.dragged()
+            && let Some(pp) = r_first.interact_pointer_pos()
         {
             let pt = dist_at(pp.x) - rp.indent_left;
-            if !r.drag_started() {
+            if !r_first.drag_started() {
                 app.session.join_next_undo();
             }
+            // Move only the top marker: left indent remains untouched.
             let _ = app.run("para.indents", json!({"firstLine": (pt / 4.5).round() * 4.5}));
         }
-        let rr = Rect::from_center_size(pos2(right, bar.max.y - 3.0), vec2(12.0, 12.0));
-        let r = ui.interact(rr, ui.id().with("ruler_right"), Sense::click_and_drag());
-        if r.dragged()
-            && let Some(pp) = r.interact_pointer_pos()
+
+        // Dragging the right-indent marker.
+        let rr = Rect::from_center_size(pos2(right, bar.max.y - 4.0), vec2(16.0, 16.0));
+        let r_right = ui.interact(rr, ui.id().with("ruler_right"), Sense::click_and_drag());
+        if r_right.dragged()
+            && let Some(pp) = r_right.interact_pointer_pos()
         {
             let pt = w - dist_at(pp.x);
-            if !r.drag_started() {
+            if !r_right.drag_started() {
                 app.session.join_next_undo();
             }
             let _ = app.run("para.indents", json!({"right": (pt / 4.5).round() * 4.5}));
         }
+
+        let c_first = if r_first.hovered() || r_first.dragged() { t.accent } else { c };
+        let c_left = if r_left.hovered() || r_left.dragged() { t.accent } else { c };
+        let c_right = if r_right.hovered() || r_right.dragged() { t.accent } else { c };
+
+        // Draw larger, clearer markers with hover/active highlights.
+        hp.add(egui::Shape::convex_polygon(
+            vec![pos2(first - 5.5, bar.min.y), pos2(first + 5.5, bar.min.y), pos2(first, bar.min.y + 6.5)],
+            if r_first.hovered() || r_first.dragged() { t.hover } else { t.ruler },
+            Stroke::new(1.2, c_first),
+        ));
+        hp.add(egui::Shape::convex_polygon(
+            vec![pos2(left - 5.5, bar.max.y - 4.0), pos2(left + 5.5, bar.max.y - 4.0), pos2(left, bar.max.y - 10.5)],
+            if r_left.hovered() || r_left.dragged() { t.hover } else { t.ruler },
+            Stroke::new(1.2, c_left),
+        ));
+        hp.rect(
+            Rect::from_min_max(pos2(left - 5.5, bar.max.y - 4.0), pos2(left + 5.5, bar.max.y + 2.0)),
+            0.0,
+            if r_left.hovered() || r_left.dragged() { t.hover } else { t.ruler },
+            Stroke::new(1.2, c_left),
+            egui::StrokeKind::Inside,
+        );
+        hp.add(egui::Shape::convex_polygon(
+            vec![pos2(right - 5.5, bar.max.y - 1.0), pos2(right + 5.5, bar.max.y - 1.0), pos2(right, bar.max.y - 7.5)],
+            if r_right.hovered() || r_right.dragged() { t.hover } else { t.ruler },
+            Stroke::new(1.2, c_right),
+        ));
     }
     // Vertical.
     let vp = ui.painter_at(v);
@@ -2757,9 +2773,9 @@ fn rulers(app: &mut WordApp, ui: &mut Ui, h: Rect, v: Rect, rects: &[Rect], layo
 /// first line (a flag at the top), left and right (at the bottom).
 fn indent_marker_rects(first: f32, left: f32, right: f32, bar: Rect) -> [Rect; 3] {
     [
-        Rect::from_min_max(pos2(first - 4.5, bar.min.y), pos2(first + 4.5, bar.min.y + 5.0)),
-        Rect::from_min_max(pos2(left - 4.5, bar.max.y - 8.0), pos2(left + 4.5, bar.max.y + 1.0)),
-        Rect::from_min_max(pos2(right - 4.5, bar.max.y - 6.0), pos2(right + 4.5, bar.max.y - 1.0)),
+        Rect::from_min_max(pos2(first - 6.0, bar.min.y), pos2(first + 6.0, bar.min.y + 7.0)),
+        Rect::from_min_max(pos2(left - 6.0, bar.max.y - 11.0), pos2(left + 6.0, bar.max.y + 2.5)),
+        Rect::from_min_max(pos2(right - 6.0, bar.max.y - 8.0), pos2(right + 6.0, bar.max.y)),
     ]
 }
 

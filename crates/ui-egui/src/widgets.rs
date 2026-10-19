@@ -252,7 +252,7 @@ fn big_button(ui: &mut Ui, app: &mut WordApp, icon: &str, label: &str, id: &str,
     keytip_badge(ui, r, id, &label.replace('\n', " "));
     let on = enabled(app, id);
     bg(ui, r, &resp, checked, &t);
-    let ic = Rect::from_center_size(pos2(r.center().x, r.min.y + BIG_ICON_Y), vec2(32.0, 32.0));
+    let ic = Rect::from_center_size(pos2(r.center().x, r.min.y + BIG_ICON_Y), vec2(35.0, 35.0));
     let (c, a) = if on { (t.icon, t.accent) } else { (t.text_disabled, t.text_disabled) };
     icons::paint(ui.painter(), ic, icon, c, a);
     let mut y = r.min.y + BIG_LABEL_Y;
@@ -280,7 +280,7 @@ pub fn small(ui: &mut Ui, app: &mut WordApp, icon: &str, label: Option<&str>, ti
     keytip_badge(ui, r, id, tip);
     let on = enabled(app, id);
     bg(ui, r, &resp, checked, &t);
-    let ic = Rect::from_center_size(pos2(r.min.x + 12.0, r.center().y), vec2(17.0, 17.0));
+    let ic = Rect::from_center_size(pos2(r.min.x + 12.0, r.center().y), vec2(19.0, 19.0));
     let (c, a) = if on { (t.icon, t.accent) } else { (t.text_disabled, t.text_disabled) };
     icons::paint(ui.painter(), ic, icon, c, a);
     if let Some(l) = label {
@@ -315,7 +315,7 @@ pub fn split(
     let on = enabled(app, id);
     bg(ui, r, &resp, checked, &t);
     bg(ui, ar, &aresp, false, &t);
-    let ic = Rect::from_center_size(r.center(), vec2(17.0, 17.0));
+    let ic = Rect::from_center_size(r.center(), vec2(19.0, 19.0));
     let (c, a) = if on { (t.icon, t.accent) } else { (t.text_disabled, t.text_disabled) };
     icons::paint(ui.painter(), ic, icon, c, a);
     if let Some(sw) = swatch {
@@ -373,7 +373,7 @@ pub fn menu_button(
         let (r, resp) = ui.allocate_exact_size(vec2(w, CONTENT_H), Sense::click());
         keytip_badge(ui, r, "menu", tip);
         bg(ui, r, &resp, false, &t);
-        icons::paint(ui.painter(), Rect::from_center_size(pos2(r.center().x, r.min.y + BIG_ICON_Y), vec2(32.0, 32.0)), icon, c, a);
+        icons::paint(ui.painter(), Rect::from_center_size(pos2(r.center().x, r.min.y + BIG_ICON_Y), vec2(35.0, 35.0)), icon, c, a);
         let lines: Vec<&str> = label.unwrap_or("").split('\n').collect();
         let mut y = r.min.y + BIG_LABEL_Y;
         for (i, l) in lines.iter().enumerate() {
@@ -386,7 +386,7 @@ pub fn menu_button(
         let (r, resp) = ui.allocate_exact_size(vec2(24.0 + text_w + 10.0, 22.0), Sense::click());
         keytip_badge(ui, r, "menu", tip);
         bg(ui, r, &resp, false, &t);
-        icons::paint(ui.painter(), Rect::from_center_size(pos2(r.min.x + 12.0, r.center().y), vec2(17.0, 17.0)), icon, c, a);
+        icons::paint(ui.painter(), Rect::from_center_size(pos2(r.min.x + 12.0, r.center().y), vec2(19.0, 19.0)), icon, c, a);
         if let Some(l) = label {
             ui.painter().text(pos2(r.min.x + 24.0, r.center().y), Align2::LEFT_CENTER, l, regular(11.5), text);
         }
@@ -621,11 +621,16 @@ pub fn command_menu(resp: &Response, app: &mut WordApp, id: &str) {
     });
 }
 
-/// "Customize the Ribbon…" and "Customize Quick Access Toolbar…" (context menus), and "Show
-/// Quick Access Toolbar" while the toolbar is hidden (#1945).
+/// "Customize the Ribbon…" and "Customize Quick Access Toolbar…" (context menus),
+/// "Show/Hide Quick Access Toolbar", and "Collapse/Expand the Ribbon" (#1945).
 pub fn customize_menu_items(ui: &mut Ui, app: &mut WordApp) {
-    if !app.ui.quick_access_toolbar && ui.button(tl!("Show Quick Access Toolbar")).clicked() {
-        let _ = app.run("ui.quickAccessToolbar", serde_json::json!({"value": true}));
+    let qat_label = if app.ui.quick_access_toolbar {
+        tl!("Hide Quick Access Toolbar")
+    } else {
+        tl!("Show Quick Access Toolbar")
+    };
+    if ui.button(qat_label).clicked() {
+        let _ = app.run("ui.quickAccessToolbar", serde_json::json!({"value": !app.ui.quick_access_toolbar}));
         ui.close();
     }
     if ui.button(tl!("Customize the Ribbon…")).clicked() {
@@ -634,6 +639,15 @@ pub fn customize_menu_items(ui: &mut Ui, app: &mut WordApp) {
     }
     if ui.button(tl!("Customize Quick Access Toolbar…")).clicked() {
         crate::dialogs_ribbon::open(app, crate::dialogs_ribbon::Page::QuickAccess);
+        ui.close();
+    }
+    let collapse_label = if app.ui.ribbon_collapsed {
+        tl!("Expand the Ribbon")
+    } else {
+        tl!("Collapse the Ribbon")
+    };
+    if ui.button(collapse_label).clicked() {
+        let _ = app.run("ui.collapseRibbon", serde_json::json!({}));
         ui.close();
     }
 }
@@ -1198,7 +1212,7 @@ pub fn icon_button(ui: &mut Ui, icon: &str, tip: &str) -> Response {
     let (r, resp) = ui.allocate_exact_size(vec2(22.0, 22.0), Sense::click());
     let st = drawn_state(ui, &resp, false);
     ui.painter().rect_filled(r, CornerRadius::same(4), st.fill);
-    icons::paint(ui.painter(), Rect::from_center_size(r.center(), vec2(14.0, 14.0)), icon, t.icon, t.accent);
+    icons::paint(ui.painter(), Rect::from_center_size(r.center(), vec2(16.0, 16.0)), icon, t.icon, t.accent);
     resp.on_hover_text(tip)
 }
 
@@ -1230,14 +1244,14 @@ fn icon_text_button_size(ui: &Ui, text_w: f32, marker: bool, show_text: bool) ->
     let pad = ui.spacing().button_padding;
     let gap = if show_text { 4.0 } else { 0.0 };
     let marker_w = if marker { DROPDOWN + 4.0 } else { 0.0 };
-    pad.x + 16.0 + gap + text_w + marker_w + pad.x
+    pad.x + 18.0 + gap + text_w + marker_w + pad.x
 }
 
 fn icon_text_button_with(ui: &mut Ui, icon: &str, text: &str, font: egui::FontId, marker: bool, show_text: bool) -> Response {
     let t = Tokens::get(ui.ctx());
     let galley = ui.painter().layout_no_wrap(text.to_string(), font, Color32::PLACEHOLDER);
     let pad = ui.spacing().button_padding;
-    let icon_w = 16.0;
+    let icon_w = 18.0;
     let text_w = if show_text { galley.size().x } else { 0.0 };
     let size = vec2(icon_text_button_size(ui, text_w, marker, show_text), galley.size().y.max(icon_w) + 2.0 * pad.y);
     let (r, resp) = ui.allocate_exact_size(size, Sense::click());
@@ -1270,7 +1284,7 @@ pub fn icon_menu_item(ui: &mut Ui, icon: &str, text: &str, shortcut: &str, min_w
     let galley = ui.painter().layout_no_wrap(text.to_string(), font.clone(), Color32::PLACEHOLDER);
     let sc = (!shortcut.is_empty()).then(|| ui.painter().layout_no_wrap(shortcut.to_string(), font, Color32::PLACEHOLDER));
     let pad = ui.spacing().button_padding;
-    let icon_w = 16.0;
+    let icon_w = 18.0;
     let sc_w = sc.as_ref().map_or(0.0, |g| g.size().x + 3.0 * pad.x);
     let w = (pad.x + icon_w + 6.0 + galley.size().x + sc_w + pad.x).max(min_w).max(ui.available_width());
     let (r, resp) = ui.allocate_exact_size(vec2(w, galley.size().y.max(icon_w) + 2.0 * pad.y), Sense::click());
