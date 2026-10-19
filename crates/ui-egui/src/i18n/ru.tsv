@@ -2697,3 +2697,7 @@ preview	Title	Пример
 	Type a size in any unit, such as 5 cm or 300 px. The other side follows, so the picture keeps its proportions.	Введите размер в любых единицах, например 5 cm или 300 px. Другая сторона изменится вместе с ней, и рисунок сохранит пропорции.
 
 	Import…	Импорт…
+
+# File › Info › Properties › Advanced Properties opens the Custom Document Properties dialog (#2982)
+	Advanced Properties…	Дополнительные свойства…
+	View and edit the document's custom properties.	Просмотр и редактирование настраиваемых свойств документа.
