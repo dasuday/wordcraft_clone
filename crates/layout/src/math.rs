@@ -234,6 +234,8 @@ pub fn layout_equation(
 enum FracEdges {
     Spaced,
     Tight,
+    LeftTight,
+    RightTight,
 }
 
 /// Layout style: script level (0 = text size, 1 = script, 2 = script-script), display or inline,
@@ -550,9 +552,26 @@ impl Ctx {
         if depth > MAX_DEPTH {
             return out;
         }
+        // Fence runs enclose the argument just as a structured delimiter does.
+        let fence = |n: &MNode, cls| matches!(n, MNode::Run(r) if !r.lit && !r.text.is_empty() && r.text.chars().all(|c| class_of(c) == cls));
+        let (first, last) = if st.frac_edges == FracEdges::Spaced {
+            (None, None)
+        } else {
+            (a.iter().position(|n| !fence(n, Cls::Open)), a.iter().rposition(|n| !fence(n, Cls::Close)))
+        };
         let mut seg = 0usize;
         let mut u = u0;
         for (i, n) in a.iter().enumerate() {
+            // Only outward-facing edges inherit radical packing; inner neighbours stay spaced.
+            let left = first == Some(i) && matches!(st.frac_edges, FracEdges::Tight | FracEdges::LeftTight);
+            let right = last == Some(i) && matches!(st.frac_edges, FracEdges::Tight | FracEdges::RightTight);
+            let frac_edges = match (left, right) {
+                (true, true) => FracEdges::Tight,
+                (true, false) => FracEdges::LeftTight,
+                (false, true) => FracEdges::RightTight,
+                (false, false) => FracEdges::Spaced,
+            };
+            let st = St { frac_edges, ..st };
             self.nodes += 1;
             if self.nodes > MAX_NODES {
                 break;
@@ -1364,16 +1383,23 @@ impl Ctx {
                     }
                     (su, sd)
                 };
-                // Native radicals pack fractions to their rule edges. Keep nested arguments spaced.
-                let pad = if kind == FracKind::Bar && st.frac_edges == FracEdges::Tight { 0.0 } else { em * 0.08 };
-                let w = n.w.max(dn.w) + 2.0 * pad;
+                // Pack only the boundary touching the radical; nested arguments stay spaced.
+                let pad = em * 0.08;
+                let (left, right) = match (kind, st.frac_edges) {
+                    (FracKind::Bar, FracEdges::Tight) => (0.0, 0.0),
+                    (FracKind::Bar, FracEdges::LeftTight) => (0.0, pad),
+                    (FracKind::Bar, FracEdges::RightTight) => (pad, 0.0),
+                    _ => (pad, pad),
+                };
+                let inner = n.w.max(dn.w);
+                let w = inner + left + right;
                 let (nw, dw) = (n.w, dn.w);
                 let mut out = Bx { w, ..Default::default() };
-                out.put(n, (w - nw) / 2.0, u);
-                out.put(dn, (w - dw) / 2.0, -v);
+                out.put(n, left + (inner - nw) / 2.0, u);
+                out.put(dn, left + (inner - dw) / 2.0, -v);
                 if kind == FracKind::Bar {
                     let t = self.k(C::FractionRuleThickness, st).max(0.4);
-                    out.rect(pad * 0.5, axis - t / 2.0, w - pad, t, self.color);
+                    out.rect(left * 0.5, axis - t / 2.0, w - (left + right) * 0.5, t, self.color);
                 }
                 out
             }
@@ -2220,6 +2246,107 @@ mod tests {
                 assert!((kern - expected).abs() < 0.001, "choose the smaller sum at the two touching heights");
             }
         }
+    }
+
+    #[test]
+    fn adjacent_radical_fraction_gap() {
+        let db = FontDb::with_font_dirs(Vec::new());
+        db.set_system_fallback(false);
+        let font = db.face(wordcraft_fonts::DEFAULT_FAMILY, "Regular");
+        let face = FaceRef::of(&font);
+        let mut failures = Vec::new();
+        for display in [false, true] {
+            for size in [9.0, 14.0, 20.0] {
+                let mut cx = Ctx {
+                    face,
+                    t: None,
+                    upem: face.upem as f32,
+                    base: size,
+                    color: Rgb::BLACK,
+                    text_font: wordcraft_fonts::DEFAULT_FAMILY.into(),
+                    nodes: 0,
+                    path: Vec::new(),
+                    node_stack: Vec::new(),
+                };
+                let st = St { level: 0, display, frac_edges: FracEdges::Spaced, cramped: false, upright: false };
+                for count in [2, 3] {
+                    let frac = MNode::Frac { kind: FracKind::Bar, num: vec![MNode::Run(MRun::new("a"))], den: vec![MNode::Run(MRun::new("b"))] };
+                    for body in [vec![frac.clone(); count], vec![MNode::Boxed { e: vec![frac] }; count]] {
+                        let plain = cx.arg(&body, st.cramp(), 0);
+                        let radical = cx.node(&MNode::Rad { deg: Vec::new(), deg_hide: true, e: body }, st, 0);
+                        let bars = |b: &Bx| {
+                            b.items
+                                .iter()
+                                .filter_map(|i| match i {
+                                    MItem::Rect { x, y, w, .. } => Some((*x, *y, *w)),
+                                    _ => None,
+                                })
+                                .collect::<Vec<_>>()
+                        };
+                        let plain = bars(&plain);
+                        let radical = bars(&radical);
+                        assert_eq!(plain.len(), count);
+                        assert_eq!(radical.len(), count + 1);
+                        for i in 0..count - 1 {
+                            let expected = plain[i + 1].0 - plain[i].0 - plain[i].2;
+                            let actual = radical[i + 2].0 - radical[i + 1].0 - radical[i + 1].2;
+                            assert!(expected > 0.0, "the ordinary fraction bars are separated");
+                            assert!((radical[i + 1].1 - radical[i + 2].1).abs() < 0.001, "the bars share a baseline");
+                            eprintln!("display={display} size={size} count={count} boundary={i} expected={expected} actual={actual}");
+                            if (actual - expected).abs() >= 0.001 {
+                                failures.push((display, size, count, i, expected, actual));
+                            }
+                        }
+                        assert!((radical[0].0 - radical[1].0).abs() < 0.001, "the first edge stays radical-facing");
+                        let last = radical.last().unwrap();
+                        assert!((radical[0].0 + radical[0].2 - last.0 - last.2).abs() < 0.001, "the last edge stays radical-facing");
+                    }
+                }
+            }
+        }
+        assert!(failures.is_empty(), "inner fraction edges lose their ordinary spacing: {failures:?}");
+    }
+
+    #[test]
+    fn radical_row_side_context() {
+        let db = FontDb::with_font_dirs(Vec::new());
+        db.set_system_fallback(false);
+        let font = db.face(wordcraft_fonts::DEFAULT_FAMILY, "Regular");
+        let face = FaceRef::of(&font);
+        let mut cx = Ctx {
+            face,
+            t: None,
+            upem: face.upem as f32,
+            base: 14.0,
+            color: Rgb::BLACK,
+            text_font: wordcraft_fonts::DEFAULT_FAMILY.into(),
+            nodes: 0,
+            path: Vec::new(),
+            node_stack: Vec::new(),
+        };
+        let st = St { level: 0, display: false, frac_edges: FracEdges::Spaced, cramped: true, upright: false };
+        let tight = St { frac_edges: FracEdges::Tight, ..st };
+        let frac = MNode::Frac { kind: FracKind::Bar, num: vec![MNode::Run(MRun::new("a"))], den: vec![MNode::Run(MRun::new("b"))] };
+        let text = MNode::Run(MRun::new("x"));
+        let plain = cx.node(&frac, st, 0).w;
+        let pad = cx.em(st) * 0.08;
+        let middle = cx.row(&[text.clone(), frac.clone(), text.clone()], tight, 0, 0);
+        assert!((middle[1].0.w - plain).abs() < 0.001, "a fraction between ordinary atoms retains both margins");
+        let first = cx.row(&[frac.clone(), text.clone()], tight, 0, 0);
+        let last = cx.row(&[text, frac], tight, 0, 0);
+        let bar_x = |b: &Bx| {
+            b.items
+                .iter()
+                .find_map(|i| match i {
+                    MItem::Rect { x, .. } => Some(*x),
+                    _ => None,
+                })
+                .unwrap()
+        };
+        assert!((first[0].0.w - (plain - pad)).abs() < 0.001, "only the leading margin is removed");
+        assert!((last[1].0.w - (plain - pad)).abs() < 0.001, "only the trailing margin is removed");
+        assert!(bar_x(&first[0].0).abs() < 0.001, "leading bar aligns with the radical");
+        assert!((bar_x(&last[1].0) - pad * 0.5).abs() < 0.001, "inner-facing bar edge retains its ordinary inset");
     }
 
     #[test]

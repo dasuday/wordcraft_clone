@@ -532,7 +532,7 @@ Footer page-table height and body wrapping are corrected. Other pagination gaps 
 | 2026-10-18 | trivial | Progress log: `wordcraft-cli run --script` (#1963) |
 | 2026-10-18 | trivial | Progress log: header-cell picture watermarks drawn behind the text (#1775); readiness estimates unchanged |
 | 2026-10-14 | trivial | Progress log: comment drafts kept and written before saving or closing (#1348) |
-| 2026-10-18 | trivial | Bound math corner kerning coverage and pack bar fractions inside radicals to their rule edges. Script glyph metrics remain incomplete. |
+| 2026-10-18 | trivial | Bound math corner kerning coverage and pack bar fractions inside radicals to their rule edges. Script glyph alternates remain incomplete. |
 | 2026-10-17 | trivial | Language dialog keeps inherited proofing language and no-proof choices (#2717); readiness estimates unchanged |
 | 2026-10-14 | trivial | Progress log: ASK and SET fields show nothing (#1765) |
 | 2026-10-15 | trivial | Progress log: at-least table rows start the next page whole (#1742) |
