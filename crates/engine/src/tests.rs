@@ -8528,6 +8528,42 @@ fn copying_text_that_is_not_a_list_is_unchanged() {
 }
 
 #[test]
+fn copying_up_to_the_next_item_does_not_bring_its_label() {
+    // A selection that stops at the start of the next item brings that paragraph along as the
+    // mark that ends the last line -- `copy_blocks` truncates it to nothing -- and it was
+    // rendered as an item of its own, so the clipboard ended with a bare "2.\t" (#2023 review).
+    let mut s = s();
+    run(&mut s, "document.setText", json!({"text": "Item 1\nItem 2\nItem 3"}));
+    run(&mut s, "select.all", json!({}));
+    run(&mut s, "para.numbering", json!({}));
+
+    for (anchor, focus, want) in [
+        // To the next item's start: the first item and the break, nothing of the second.
+        ((0, 0), (1, 0), "1.\tItem 1\n"),
+        // Two items and a break, from the middle of the first.
+        ((0, 2), (2, 0), "1.\tem 1\n2.\tItem 2\n"),
+        // The guard: a selection that takes any of the next item still labels it.
+        ((0, 0), (1, 3), "1.\tItem 1\n2.\tIte"),
+    ] {
+        run(&mut s, "select.range", json!({"anchor": {"block": anchor.0, "off": anchor.1}, "focus": {"block": focus.0, "off": focus.1}}));
+        run(&mut s, "edit.copy", json!({}));
+        assert_eq!(s.clipboard_text, want, "{anchor:?}..{focus:?}");
+    }
+
+    // And Copy still agrees with Save as .txt, which is what #2015 set out to fix: a list whose
+    // last paragraph is an empty mark reads the same either way.
+    let mut t = crate::tests::s();
+    run(&mut t, "document.setText", json!({"text": "Item 1\nItem 2\n"}));
+    run(&mut t, "select.all", json!({}));
+    run(&mut t, "para.numbering", json!({}));
+    run(&mut t, "select.all", json!({}));
+    run(&mut t, "edit.copy", json!({}));
+    let txt = String::from_utf8_lossy(&wordcraft_formats::txt::export(&t.doc)).replace("\r\n", "\n");
+    assert_eq!(t.clipboard_text, "1.\tItem 1\n2.\tItem 2\n");
+    assert_eq!(txt, t.clipboard_text);
+}
+
+#[test]
 fn copying_part_of_a_list_numbers_from_the_copy() {
     // Known limit, shared with the `.txt` export: the label counts from the start of what is
     // rendered, so items 3 and 4 copy as 1 and 2. Word puts their own numbers on the clipboard.
