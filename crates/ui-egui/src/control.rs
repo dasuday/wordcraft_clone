@@ -53,6 +53,7 @@ pub fn inspect(app: &mut WordApp, ctx: &egui::Context) -> Value {
         "dialog": app.dialog.as_ref().map(|d| serde_json::to_value(d).unwrap_or_default()),
         "window": [r.width(), r.height()],
         "canvasRect": app.canvas.canvas_rect.map(|c| [c.left(), c.top(), c.width(), c.height()]),
+        "scroll": [app.canvas.scroll_offset.x, app.canvas.scroll_offset.y],
         "pages": app.canvas.page_rects.iter().map(|r| [r.left(), r.top(), r.width(), r.height()]).collect::<Vec<_>>(),
         "scale": app.canvas.scale,
         "caret": caret,
@@ -61,7 +62,14 @@ pub fn inspect(app: &mut WordApp, ctx: &egui::Context) -> Value {
         "focused": app.canvas.focused,
         "title": app.title_stem(),
         "dirty": app.session.dirty,
-        "perf": {"frameMs": app.frame_ms, "renderMs": app.canvas.render_ms, "layoutMs": app.session.layout().ms},
+        "perf": {
+            "frameMs": app.frame_ms,
+            "renderMs": app.canvas.render_ms,
+            "rasterMs": app.canvas.raster_ms,
+            "layoutMs": app.session.layout().ms,
+            "pageRenders": app.canvas.full_renders,
+            "bandRenders": app.canvas.partial_renders,
+        },
     })
 }
 
@@ -326,4 +334,19 @@ pub fn save_screenshot(image: &egui::ColorImage, path: Option<&str>) -> Value {
         }
     }
     json!({"ok": true, "result": {"path": path, "width": w, "height": h}})
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// `docs/control-protocol.md` promises `perf.rasterMs`; a control client reads it to tell a
+    /// keystroke's page raster from the rest of the canvas work.
+    #[test]
+    fn inspect_reports_the_documented_raster_time() {
+        let mut app = WordApp::new(wordcraft_engine::Session::new(wordcraft_doc::Document::new()), Default::default());
+        app.canvas.raster_ms = 1.25;
+        let seen = inspect(&mut app, &egui::Context::default());
+        assert_eq!(seen["perf"]["rasterMs"].as_f64(), Some(1.25));
+    }
 }
