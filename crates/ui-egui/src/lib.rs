@@ -2224,7 +2224,7 @@ impl WordApp {
             match self.session.doc.media.get(&media).cloned() {
                 Some(png) => {
                     let w = Window::new(window);
-                    if let Err(e) = self.diagram.open(&w, &png) {
+                    if let Err(e) = self.diagram.open(&w, &media, &png) {
                         log::warn!("diagram: the editor didn't open: {e}");
                         self.status(e);
                         self.diagram.cancel();
@@ -2237,10 +2237,12 @@ impl WordApp {
         for event in self.diagram.poll() {
             match event {
                 Event::Ready => {}
-                // Save: the edited picture takes the place of the one it came from.
+                // Save: the edited picture takes the place of the one it came from. Which picture
+                // that is comes from the editor, not from whatever is selected now.
                 Event::Exported(png) => {
+                    let media = self.diagram.media_key().map(str::to_owned);
                     self.diagram.close();
-                    diagram::apply(self, png);
+                    diagram::apply(self, png, media.as_deref());
                 }
                 // draw.io's own Exit asked for nothing, so the picture is left as it was.
                 Event::Closed => self.diagram.close(),
@@ -2281,6 +2283,10 @@ impl WordApp {
         if self.session.view.focus_mode && self.dialog.is_none() && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
             let _ = self.run("view.focus", json!({"value": false}));
         }
+        // The diagram editor is a native view above everything this frame paints: `show` says
+        // whether the document area was drawn, and `settle` puts the view away when it wasn't (or
+        // when a dialog covers it) rather than leaving it floating over File or the dialog.
+        self.diagram.begin_frame();
         if self.ui.backstage {
             backstage::show(self, ui);
         } else if !self.has_document() {
@@ -2303,6 +2309,9 @@ impl WordApp {
                 diagram::show(self, ui);
             });
         }
+        // The document area has been drawn (or not): the editor's native view follows it, and a
+        // dialog is painted over it.
+        self.diagram.settle(self.dialog.is_some());
         content_controls::popup(self, &ctx);
         dialogs::show(self, &ctx);
         #[cfg(not(target_arch = "wasm32"))]

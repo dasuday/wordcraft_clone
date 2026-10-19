@@ -36,6 +36,11 @@ impl Editor {
     pub fn open(_window: &Window<'_>, _png: &[u8]) -> Result<Self, String> {
         Err(Self::WHY.into())
     }
+    /// No editor here at all, so nothing to ask about.
+    pub fn needs_consent(&self) -> bool {
+        false
+    }
+    pub fn allow_remote(&mut self) {}
     pub fn poll(&mut self) -> Vec<Event> {
         Vec::new()
     }

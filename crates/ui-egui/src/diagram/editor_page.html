@@ -25,6 +25,21 @@
 	var frame = document.getElementById('editor');
 	var loaded = false;
 
+	// The origin the framed editor answers from, when it has one that can be named: the embed
+	// site's (a third party), or the http scheme WebView2 needs on Windows. draw.io's own answers
+	// are only taken from that origin — a page that ended up opaque ("null") doesn't count as a
+	// match. The bundled app on macOS runs under a scheme of ours, which the URL API reports as
+	// opaque; there the frame's identity (`e.source`) is the check, and "*" the only targetOrigin
+	// a document without a name can be addressed by.
+	var editorOrigin = (function () {
+		try {
+			var u = new URL(window.__wcEditorSrc);
+			return (u.protocol === 'http:' || u.protocol === 'https:') ? u.origin : null;
+		} catch (e) {
+			return null;
+		}
+	})();
+
 	/** Something about the editor itself the app should know (a picture it can't read). */
 	function fail(message) {
 		try {
@@ -37,6 +52,10 @@
 	// draw.io's answers, on their way to the app.
 	window.addEventListener('message', function (e) {
 		if (e.source !== frame.contentWindow || typeof e.data !== 'string') {
+			return;
+		}
+		// From a site: it has to be that site's origin, not just any frame that got through.
+		if (editorOrigin !== null && e.origin !== editorOrigin) {
 			return;
 		}
 		try {
@@ -70,7 +89,7 @@
 
 	/** Everything else draw.io expects to hear, from the app. */
 	window.wcSend = function (message) {
-		frame.contentWindow.postMessage(JSON.stringify(message), '*');
+		frame.contentWindow.postMessage(JSON.stringify(message), editorOrigin === null ? '*' : editorOrigin);
 	};
 
 	if (!window.__wcEditorSrc) {

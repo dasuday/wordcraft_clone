@@ -62,10 +62,12 @@ fn update(s: &mut Session, v: &Value) -> CmdResult {
     // Keep the side it is fitted to and take the new picture's proportions on the other: a
     // diagram redrawn taller shouldn't come back squashed.
     let (w, h) = match p::str(v, "fit").unwrap_or("width") {
-        "height" => (w * nw as f32 / nh as f32, h),
+        "height" => (h * nw as f32 / nh as f32, h),
         "none" => (w, h),
         _ => (w, w * nh as f32 / nw as f32),
     };
+    // A very narrow or very wide redraw would otherwise give a frame no pointer can grab.
+    let (w, h) = super::objects::fit_size(w, h, true);
     // Reset Picture goes back to what was there before the editor was opened.
     let original = s.originals.get(&media).cloned().unwrap_or(media);
     let key = s.doc.add_media(bytes, "png");
@@ -166,5 +168,20 @@ mod tests {
     fn something_other_than_a_png_is_refused() {
         let mut s = session_with(&drawio_png(20, 10, "<mxfile/>"));
         assert!(s.run("diagram.update", &json!({"data": super::super::insert::base64_encode(b"not a png")})).is_err());
+    }
+
+    /// The height can be the side that is kept: the width then follows the new picture.
+    #[test]
+    fn fitting_to_the_height_keeps_it_and_takes_the_new_width() {
+        let mut s = session_with(&drawio_png(20, 10, "<mxfile/>"));
+        let (_, o) = selected(&s).unwrap();
+        let InlineObject::Image { h, .. } = o else { panic!("a picture") };
+        // Redrawn four times as wide as it is tall.
+        let png = drawio_png(80, 20, "<mxfile/>");
+        s.run("diagram.update", &json!({"data": super::super::insert::base64_encode(&png), "fit": "height"})).unwrap();
+        let (_, o) = selected(&s).unwrap();
+        let InlineObject::Image { w: nw, h: nh, .. } = o else { panic!("a picture") };
+        assert!((nh - h).abs() < 0.01, "the height is kept: {nh} != {h}");
+        assert!((nw - h * 4.0).abs() < 0.01, "the width follows the new picture's 4:1: {nw}");
     }
 }

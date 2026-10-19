@@ -5,6 +5,12 @@
 //! served from there by a custom protocol. Nothing is fetched and nothing is sent anywhere: the
 //! picture never leaves the document.
 //!
+//! A build without that bundle ([`drawio_dir`]) has no editor of its own, so it runs draw.io from
+//! its embed site (`EMBED_SITE`, JGraph's). That one is a third party: the picture *would* leave
+//! the document, so [`Editor::needs_consent`] holds it back and the page is built without it —
+//! [`Editor::allow_remote`] hands it over, and only then, once the person has said yes in the
+//! strip above the editor. Cancel never sends anything.
+//!
 //! draw.io runs in its *embed mode* (`?embed=1&proto=json`), which is a conversation with the page
 //! around it over `postMessage`: it answers `window.parent` and listens there. So the webview
 //! loads [`PAGE`], a page of ours, with draw.io in an `<iframe>` inside it — the shape a diagram
@@ -88,6 +94,13 @@ pub struct Editor {
     model_width: f64,
     /// Whether the picture has been handed over: draw.io asks for it once.
     sent: bool,
+    /// draw.io comes from its own site rather than the app (no bundled app): the diagram would
+    /// leave the document, so it is only handed over once the person says yes.
+    remote: bool,
+    /// The diagram's XML, kept until it is handed over (immediately for the bundled app).
+    xml: String,
+    /// The person agreed to the site: the diagram may go.
+    allowed: bool,
 }
 
 impl Editor {
@@ -102,17 +115,20 @@ impl Editor {
         let xml = wordcraft_diagram::png::drawio_xml(png).ok_or("the picture's diagram couldn't be read")?;
         let pixels = wordcraft_diagram::png::size(png).unwrap_or((0, 0));
         let root = drawio_dir();
+        let remote = root.is_none();
         let src = match &root {
             Some(dir) => {
                 log::info!("diagram editor: draw.io from {}", dir.display());
                 format!("{BASE}/index.html{PARAMS}")
             }
             None => {
-                log::warn!("diagram editor: no draw.io app was found, falling back to {EMBED_SITE}");
+                log::warn!("diagram editor: no draw.io app was found; {EMBED_SITE} needs the person's yes first");
                 format!("{EMBED_SITE}{PARAMS}")
             }
         };
-        let served = Arc::new(Served { page: page(&src, &xml), root });
+        // The page never sees the diagram before the person agrees: it is filled in then.
+        let page_xml = if remote { "" } else { xml.as_str() };
+        let served = Arc::new(Served { page: page(&src, page_xml), root });
         let (tx, rx) = mpsc::channel();
         let handler = Arc::clone(&served);
         let view = WebViewBuilder::new()
@@ -125,7 +141,25 @@ impl Editor {
             })
             .build_as_child(handle)
             .map_err(|e| format!("the diagram editor couldn't start: {e}"))?;
-        Ok(Self { view, rx, pixels, model_width: 0.0, sent: false })
+        Ok(Self { view, rx, pixels, model_width: 0.0, sent: false, remote, xml, allowed: !remote })
+    }
+
+    /// draw.io would come from its own site: the diagram must not go until the person agrees.
+    pub fn needs_consent(&self) -> bool {
+        self.remote && !self.allowed
+    }
+
+    /// The person agreed to draw.io's site: put the diagram in the page and hand it over.
+    pub fn allow_remote(&mut self) {
+        if !self.needs_consent() {
+            return;
+        }
+        self.allowed = true;
+        let script = format!("window.__wcDiagramXml = {}; window.wcLoad()", literal(&self.xml));
+        if let Err(e) = self.view.evaluate_script(&script) {
+            log::warn!("diagram editor: the diagram couldn't be handed over: {e}");
+        }
+        self.sent = true;
     }
 
     /// What draw.io has said since the last call. Cheap: call it every frame.
@@ -176,7 +210,8 @@ impl Editor {
 
     /// Hand the picture over, once draw.io says it is ready for it.
     fn load(&mut self) {
-        if self.sent {
+        // The site isn't the app: wait for the person's yes (`allow_remote` hands it over).
+        if self.sent || self.needs_consent() {
             return;
         }
         self.sent = true;

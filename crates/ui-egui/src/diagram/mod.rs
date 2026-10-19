@@ -55,6 +55,9 @@ pub fn is_drawio_selected(app: &WordApp) -> bool {
 pub struct Diagram {
     /// A picture the user asked to edit: opened once the host hands over its window.
     request: Option<String>,
+    /// The picture the editor was opened for: what its export goes back into, whatever is
+    /// selected by the time draw.io answers.
+    media: Option<String>,
     editor: Option<Editor>,
     /// Whether it has been put in place yet. It starts hidden, so it never flashes at a spot it
     /// isn't meant to be at.
@@ -63,6 +66,8 @@ pub struct Diagram {
     saving: bool,
     /// Where to put it, in points, written by [`show`] and read by [`WordApp::diagram_frame`].
     rect: Option<Rect>,
+    /// Whether [`show`] drew the document area this frame.
+    drawn: bool,
 }
 
 impl Diagram {
@@ -73,6 +78,10 @@ impl Diagram {
     /// The media key of a picture waiting to be opened.
     pub fn pending(&self) -> Option<&str> {
         self.request.as_deref()
+    }
+    /// The media key of the picture the editor is over.
+    pub fn media_key(&self) -> Option<&str> {
+        self.media.as_deref()
     }
 
     /// Edit the picture whose media key is `media`, on the frame the window is at hand.
@@ -85,12 +94,26 @@ impl Diagram {
     }
 
     /// Open draw.io over `png`, inside `window`.
-    pub fn open(&mut self, window: &Window<'_>, png: &[u8]) -> Result<(), String> {
+    pub fn open(&mut self, window: &Window<'_>, media: &str, png: &[u8]) -> Result<(), String> {
         self.request = None;
         self.saving = false;
         self.placed = false;
+        self.media = Some(media.to_owned());
         self.editor = Some(Editor::open(window, png)?);
         Ok(())
+    }
+
+    /// draw.io would come from its own site rather than the app: the picture goes to a third
+    /// party unless the person says yes ([`Self::allow_remote`]).
+    pub fn needs_consent(&self) -> bool {
+        self.editor.as_ref().is_some_and(Editor::needs_consent)
+    }
+
+    /// The person agreed to load draw.io from its site: hand the diagram over now.
+    pub fn allow_remote(&mut self) {
+        if let Some(editor) = self.editor.as_mut() {
+            editor.allow_remote();
+        }
     }
 
     /// What draw.io has said since the last frame.
@@ -117,11 +140,30 @@ impl Diagram {
         self.editor = None;
         self.saving = false;
         self.placed = false;
+        self.media = None;
+        self.rect = None;
     }
 
     /// Where the editor goes, in points, written by [`show`] and read by [`WordApp::diagram_frame`].
     pub fn placement(&self) -> Option<Rect> {
         self.rect
+    }
+
+    /// A frame is starting: [`show`] says whether the document area is drawn in it.
+    pub fn begin_frame(&mut self) {
+        self.drawn = false;
+    }
+
+    /// The frame is over: the editor is a native view above everything the app paints, so put it
+    /// away when the document area wasn't drawn (File, no document) or something covers it (a
+    /// dialog) — measured by what [`show`] did and by `covered`.
+    pub fn settle(&mut self, covered: bool) {
+        let Some(editor) = self.editor.as_ref() else { return };
+        if covered || !self.drawn {
+            editor.set_visible(false);
+            self.placed = false;
+            self.rect = None;
+        }
     }
 
     /// Put the editor over `rect` (egui points, top-left origin) and show it. wry turns the
@@ -131,7 +173,8 @@ impl Diagram {
     pub fn place(&mut self, rect: Rect) {
         let Some(editor) = self.editor.as_ref() else { return };
         editor.set_bounds(f64::from(rect.min.x), f64::from(rect.min.y.max(0.0)), f64::from(rect.width()), f64::from(rect.height()));
-        if !self.placed {
+        // Waiting for a yes to draw.io's site: the view stays hidden behind the question.
+        if !self.placed && !self.needs_consent() {
             self.placed = true;
             editor.set_visible(true);
             editor.focus();
@@ -144,6 +187,7 @@ impl Diagram {
 pub fn show(app: &mut WordApp, ui: &mut Ui) {
     let full = ui.clip_rect();
     let d = &mut app.diagram;
+    d.drawn = true;
     if !d.is_open() {
         d.rect = Some(full);
         return;
@@ -154,6 +198,24 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
     ui.scope_builder(egui::UiBuilder::new().max_rect(bar), |ui| {
         let t = crate::theme::Tokens::get(ui.ctx());
         egui::Frame::NONE.fill(t.canvas).show(ui, |ui| {
+            // The build has no bundled draw.io: the editor would run from draw.io's own site, so
+            // the picture would be sent there. Ask first; until then nothing has been handed over.
+            if app.diagram.needs_consent() {
+                ui.horizontal_centered(|ui| {
+                    ui.label(egui::RichText::new(tl!("draw.io isn't bundled in this build.")).strong());
+                    ui.label(tl!("Editing here loads draw.io from embed.diagrams.net, which sends this diagram to that site."));
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if ui.button(tl!("Cancel")).clicked() {
+                            app.diagram.close();
+                            app.status(tl!("The diagram was left as it was."));
+                        }
+                        if ui.button(tl!("Load from the web")).clicked() {
+                            app.diagram.allow_remote();
+                        }
+                    });
+                });
+                return;
+            }
             ui.horizontal_centered(|ui| {
                 ui.label(egui::RichText::new(tl!("Editing diagram")).strong());
                 ui.label(tl!("Save puts it back into the document; Cancel leaves it as it was."));
@@ -171,7 +233,7 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
         });
     });
     // Escape leaves as well: it commits, as clicking away from an activated object does.
-    if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+    if !app.diagram.needs_consent() && ui.input(|i| i.key_pressed(egui::Key::Escape)) {
         app.diagram.save();
     }
     // The view is a native child, so its place has to be kept up with the window: draw as long
@@ -180,7 +242,16 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
 }
 
 /// An `Exported` PNG, put back where the picture is (base64, as every command carries bytes).
-pub fn apply(app: &mut WordApp, png: Vec<u8>) {
+///
+/// `media` is the picture the editor was opened for: `diagram.update` works on the selection, so
+/// a selection that moved on while draw.io was open would otherwise take someone else's diagram.
+pub fn apply(app: &mut WordApp, png: Vec<u8>, media: Option<&str>) {
+    if let Some(expected) = media
+        && app.selected_picture_media().as_deref() != Some(expected)
+    {
+        app.status(tl!("The diagram was left as it was: the picture it belongs to isn't selected any more."));
+        return;
+    }
     let data = wordcraft_engine::cmd::insert::base64_encode(&png);
     match app.run("diagram.update", json!({"data": data})) {
         Ok(_) => app.status(tl!("The diagram was updated.")),

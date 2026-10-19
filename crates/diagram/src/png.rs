@@ -155,10 +155,11 @@ fn skip_nul(data: &[u8]) -> Option<&[u8]> {
     Some(&data[at + 1..])
 }
 
-/// Inflate `data`: draw.io deflates with a zlib wrapper, some tools write raw deflate.
+/// Inflate `data`: draw.io deflates with a zlib wrapper, some tools write raw deflate. Both
+/// attempts are capped at [`MAX_TEXT`]: the bytes come from a file and may be hostile.
 fn inflate(data: &[u8]) -> Option<Vec<u8>> {
-    use miniz_oxide::inflate::{decompress_to_vec, decompress_to_vec_zlib_with_limit};
-    decompress_to_vec_zlib_with_limit(data, MAX_TEXT).ok().or_else(|| decompress_to_vec(data).ok())
+    use miniz_oxide::inflate::{decompress_to_vec_with_limit, decompress_to_vec_zlib_with_limit};
+    decompress_to_vec_zlib_with_limit(data, MAX_TEXT).ok().or_else(|| decompress_to_vec_with_limit(data, MAX_TEXT).ok())
 }
 
 /// base64 of deflated XML, the XML as it stands, or the desktop app's percent-encoded XML.
