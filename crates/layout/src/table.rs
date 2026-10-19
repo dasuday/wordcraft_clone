@@ -402,10 +402,21 @@ pub fn layout_table(ctx: &mut Ctx, story: StoryRef, t: &Table, path: &[u32], ava
         let content = column_content(ctx, t, style.as_ref(), depth);
         ctx.eq_count = eq_count;
         if let Some(content) = content {
-            autofit(&mut grid, &content, t, avail);
+            // A table without a preferred width may grow into the room left beside it: up to the
+            // margins, or, before Word 2013's layout (the first cell's text at the margin), up to
+            // the cell margins beyond them.
+            let reach = if target.is_some() || ctx.doc.settings.compat_mode >= 15 {
+                avail
+            } else {
+                let def = default_margins(t, style.as_ref());
+                let last = t.rows.first().and_then(|r| r.cells.last()).and_then(|c| c.props.margins).unwrap_or(def)[3];
+                avail + (first_cell_left_margin_in(t, def) + last).clamp(0.0, avail)
+            };
+            let room = if target.is_some() { 0.0 } else { (reach - total).max(0.0) };
+            autofit(&mut grid, &content, t, avail, room, target);
             // Never wider than the room it had, however long an unbreakable word.
             let fitted: f32 = grid.iter().sum();
-            let cap = avail.max(total);
+            let cap = reach.max(total);
             if fitted > cap {
                 grid.iter_mut().for_each(|w| *w *= cap / fitted);
             }
@@ -1209,9 +1220,12 @@ fn para_content(pl: &ParaLayout) -> (f32, f32) {
 /// Whether nothing in `t` asks for a width (its own or any cell's): its columns then follow
 /// their content alone.
 fn is_automatic(t: &Table) -> bool {
-    t.props.width.is_none()
-        && t.props.width_pct.is_none()
-        && t.rows.iter().all(|r| r.cells.iter().all(|c| c.props.width.is_none() && c.props.width_pct.is_none()))
+    t.props.width.is_none() && t.props.width_pct.is_none() && cells_automatic(t)
+}
+
+/// Whether no cell of `t` asks for a width.
+fn cells_automatic(t: &Table) -> bool {
+    t.rows.iter().all(|r| r.cells.iter().all(|c| c.props.width.is_none() && c.props.width_pct.is_none()))
 }
 
 /// Consistent cell widths replace a stale grid without changing the table's total width.
@@ -1240,10 +1254,34 @@ fn apply_cell_widths(t: &Table, grid: &mut [f32]) {
 /// - With no preferred width anywhere (the table's and every cell's automatic) the columns come
 ///   from their content alone: each its widest line if they all fit in `avail`, else shared out
 ///   between narrowest and widest in proportion to how much each can give.
-/// - Otherwise the grid stands, but no column is narrower than its longest word: the columns with
-///   room to spare give up the difference.
-fn autofit(grid: &mut [f32], content: &[(f32, f32)], t: &Table, avail: f32) {
+/// - With a preferred width for the table (`target`, percent or points) but none for its cells,
+///   the grid is ignored too and the columns share that width by their content: in proportion
+///   to their widest lines when those fit, else between narrowest and widest as above (measured
+///   in Word: a 100 % table of six automatic cells, with one grid column or six equal ones).
+/// - Otherwise the grid stands, but no column is narrower than its longest word: those columns
+///   widen, the table first growing into `room` (a table without a preferred width: measured in
+///   Word, the other columns keep their widths), then the columns with room to spare giving up
+///   the rest, equal widths each down to their own longest word. Their own words are never broken
+///   while a column can give.
+fn autofit(grid: &mut [f32], content: &[(f32, f32)], t: &Table, avail: f32, room: f32, target: Option<f32>) {
     if grid.len() != content.len() || !avail.is_finite() {
+        return;
+    }
+    if let Some(tw) = target.filter(|w| w.is_finite() && *w > 0.0)
+        && cells_automatic(t)
+    {
+        let (lo, hi) = content.iter().fold((0.0f32, 0.0f32), |(l, h), c| (l + c.0, h + c.1.max(c.0)));
+        for (w, c) in grid.iter_mut().zip(content) {
+            let (min, max) = (c.0, c.1.max(c.0));
+            *w = if hi <= tw && hi > 0.01 {
+                max * tw / hi
+            } else if lo < tw && hi - lo >= 0.01 {
+                min + (max - min) * (tw - lo) / (hi - lo)
+            } else {
+                min
+            }
+            .max(4.0);
+        }
         return;
     }
     if is_automatic(t) {
@@ -1264,17 +1302,21 @@ fn autofit(grid: &mut [f32], content: &[(f32, f32)], t: &Table, avail: f32) {
     if short < 0.01 {
         return;
     }
-    // Donors give equal widths until they reach their own content minimum.
+    // The table grows into the room beside it first (a table without a preferred width); the
+    // donors give the rest, equal widths each until they reach their own content minimum.
+    let mut remaining = (short - room.max(0.0)).max(0.0);
     let mut rooms: Vec<_> = grid.iter().zip(content).map(|(w, c)| *w - c.0).filter(|room| *room > 0.0).collect();
     rooms.sort_by(f32::total_cmp);
-    let mut remaining = short;
     let mut share = 0.0;
-    for (i, room) in rooms.iter().enumerate() {
-        share = remaining / (rooms.len() - i) as f32;
-        if share <= *room {
+    for (i, r) in rooms.iter().enumerate() {
+        if remaining < 0.01 {
             break;
         }
-        remaining -= room;
+        share = remaining / (rooms.len() - i) as f32;
+        if share <= *r {
+            break;
+        }
+        remaining -= r;
     }
     for (w, c) in grid.iter_mut().zip(content) {
         *w = if *w < c.0 { c.0 } else { *w - (*w - c.0).min(share) };
@@ -1290,7 +1332,7 @@ mod width_tests {
         let table = Table::new(1, 4, 260.0);
         let mut grid = [30.0, 120.0, 20.0, 90.0];
         let content = [(28.0, 28.0), (40.0, 120.0), (40.0, 40.0), (30.0, 90.0)];
-        autofit(&mut grid, &content, &table, 260.0);
+        autofit(&mut grid, &content, &table, 260.0, 0.0, None);
         assert_eq!(grid, [28.0, 111.0, 40.0, 81.0]);
     }
 
@@ -1298,7 +1340,7 @@ mod width_tests {
     fn autofit_exhausts_donors() {
         let table = Table::new(1, 2, 50.0);
         let mut grid = [30.0, 20.0];
-        autofit(&mut grid, &[(25.0, 25.0), (40.0, 40.0)], &table, 50.0);
+        autofit(&mut grid, &[(25.0, 25.0), (40.0, 40.0)], &table, 50.0, 0.0, None);
         assert_eq!(grid, [25.0, 40.0]);
     }
 
@@ -1306,7 +1348,7 @@ mod width_tests {
     fn autofit_keeps_fitting_widths() {
         let table = Table::new(1, 3, 120.0);
         let mut grid = [30.0, 40.0, 50.0];
-        autofit(&mut grid, &[(10.0, 10.0), (20.0, 20.0), (30.0, 30.0)], &table, 120.0);
+        autofit(&mut grid, &[(10.0, 10.0), (20.0, 20.0), (30.0, 30.0)], &table, 120.0, 0.0, None);
         assert_eq!(grid, [30.0, 40.0, 50.0]);
     }
 }

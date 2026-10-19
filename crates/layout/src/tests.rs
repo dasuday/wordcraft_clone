@@ -9423,3 +9423,116 @@ fn caret_height_ignores_line_spacing() {
         assert!((single - wide).abs() < 0.01, "{spacing:?}: single {single}, wide {wide}");
     }
 }
+
+/// A one-row table with columns `grid` (points; the cells' preferred widths too), `texts` in its
+/// cells, laid out on its own page: the cells' widths and how many lines each text took.
+fn narrow_column_table(grid: &[f32], texts: &[&str], width: Option<f32>, fixed: bool) -> (Vec<f32>, Vec<usize>) {
+    let mut d = Document::from_text("before\nafter");
+    let mut t = Table::new(1, grid.len(), 100.0);
+    t.grid = grid.to_vec();
+    t.props.width = width;
+    t.props.fixed = fixed;
+    for ((c, w), text) in t.rows[0].cells.iter_mut().zip(grid).zip(texts) {
+        c.props.width = Some(*w);
+        c.blocks = vec![wordcraft_doc::para_block(wordcraft_doc::Paragraph::with_text(text, Default::default()))];
+    }
+    d.insert_block(StoryRef::Body, &Path::top(1), Block::Table(t)).unwrap();
+    let l = lay(&d);
+    let mut widths = vec![0.0; grid.len()];
+    let mut lines = vec![0; grid.len()];
+    for it in &l.pages[0].items {
+        match it {
+            Placed::Cell { rect, cell, .. } => widths[*cell] = rect.w,
+            Placed::Lines { path, para, .. } if path.0.len() == 4 => lines[path.0[2] as usize] = para.lines.len(),
+            _ => {}
+        }
+    }
+    (widths, lines)
+}
+
+/// Measured in Word: in a table whose widths follow its content, a column too narrow for its
+/// longest word widens and the word stays whole. Without a preferred width for the table, the
+/// table grows into the room beside it and the other columns keep their widths; with one, or
+/// without room, the other columns give up what they can spare, equal shares each. WordCraft took
+/// it all from the other columns, even with room beside the table.
+#[test]
+fn a_column_too_narrow_for_its_longest_word_widens() {
+    let texts = ["Q1ACCOUNTSLONGWORD", "Q2 a few short words here", "Q3 end"];
+    // Room enough: the table grows, the other columns stay as they are (Word: 200 and 100).
+    let (w, lines) = narrow_column_table(&[40.0, 200.0, 100.0], &texts, None, false);
+    assert!(w[0] > 100.0 && (w[1] - 200.0).abs() < 0.01 && (w[2] - 100.0).abs() < 0.01, "{w:?}");
+    assert_eq!(lines, [1, 1, 1]);
+    // Two narrow columns and one wide one: both widen, the wide one keeps its width.
+    let (w2, lines) = narrow_column_table(&[40.0, 200.0, 40.0], &["Q1ACCOUNTS", "Q2 a b c", "Q3SECONDWORD"], None, false);
+    assert!(w2[0] > 40.0 && w2[2] > 40.0 && (w2[1] - 200.0).abs() < 0.01, "{w2:?}");
+    assert_eq!(lines, [1, 1, 1]);
+    // A preferred table width stands: the others give up the difference, equal shares each
+    // (Word: 340 pt, the middle column about 184 pt).
+    let (wp, lines) = narrow_column_table(&[40.0, 200.0, 100.0], &texts, Some(340.0), false);
+    assert!((wp.iter().sum::<f32>() - 340.0).abs() < 0.1 && (wp[0] - w[0]).abs() < 0.01, "{wp:?}");
+    assert!(wp[1] < 200.0 && wp[2] < 100.0 && ((200.0 - wp[1]) - (100.0 - wp[2])).abs() < 0.1, "{wp:?}");
+    assert_eq!(lines[0], 1, "the long word stays whole");
+    // Little room: the table fills the line, the wide column gives the rest.
+    let s = wordcraft_doc::section::SectionProps::default();
+    let (wr, lines) = narrow_column_table(&[40.0, 360.0, 60.0], &texts, None, false);
+    assert!((wr.iter().sum::<f32>() - s.text_width()).abs() < 0.1 && wr[1] < 360.0 && (wr[0] - w[0]).abs() < 0.01, "{wr:?}");
+    assert_eq!(lines[0], 1, "the long word stays whole");
+    // A fixed layout keeps its widths, and the word is broken (as in Word).
+    let (wf, lines) = narrow_column_table(&[40.0, 200.0, 100.0], &texts, None, true);
+    assert!((wf[0] - 40.0).abs() < 0.01 && (wf[1] - 200.0).abs() < 0.01, "{wf:?}");
+    assert!(lines[0] > 1, "{lines:?}");
+}
+
+/// A table of `rows` (cell texts) with no cell width, preferred width `pct` percent of the line,
+/// and the grid `grid`: the cells' widths in its first row and the line's width.
+fn automatic_cells_table(rows: &[&[&str]], grid: &[f32], pct: f32) -> (Vec<f32>, f32) {
+    let mut d = Document::from_text("before\nafter");
+    let ncols = rows[0].len();
+    let mut t = Table::new(rows.len(), ncols, 100.0);
+    t.grid = grid.to_vec();
+    t.props.width_pct = Some(pct);
+    for (row, texts) in t.rows.iter_mut().zip(rows) {
+        for (c, text) in row.cells.iter_mut().zip(*texts) {
+            c.props.width = None;
+            c.blocks = vec![wordcraft_doc::para_block(wordcraft_doc::Paragraph::with_text(text, Default::default()))];
+        }
+    }
+    d.insert_block(StoryRef::Body, &Path::top(1), Block::Table(t)).unwrap();
+    let l = lay(&d);
+    let mut widths = vec![0.0; ncols];
+    for it in &l.pages[0].items {
+        if let Placed::Cell { rect, cell, row: 0, .. } = it {
+            widths[*cell] = rect.w;
+        }
+    }
+    (widths, wordcraft_doc::section::SectionProps::default().text_width())
+}
+
+/// Measured in Word: a table with a preferred width (here 100 %) whose cells have none
+/// (`tcW` auto) shares that width by content, whatever its grid says. When the widest lines fit,
+/// each column gets its widest line scaled up to fill the table (Word: 35.0 / 128.1 / 75.3 / 67.5
+/// / 53.8 / 93.8 pt for widest lines 25.8 / 94.9 / 55.8 / 49.8 / 39.8 / 69.3); when they don't,
+/// each gets its longest word plus the same share of what its widest line needs beyond it.
+/// WordCraft kept the grid: equal columns, or one grid column shared out evenly.
+#[test]
+fn a_table_with_a_preferred_width_and_automatic_cells_follows_its_content() {
+    let short: &[&[&str]] = &[&["No", "Name", "Born"], &["1", "Example-Sample Jane", "12.03.1961"], &["333", "Brown", "30.06.1988"]];
+    let (one_col, line) = automatic_cells_table(short, &[400.0], 100.0);
+    let (equal, _) = automatic_cells_table(short, &[150.0, 150.0, 150.0], 100.0);
+    assert!((one_col.iter().sum::<f32>() - line).abs() < 0.1, "fills the line: {one_col:?}");
+    for (a, b) in one_col.iter().zip(&equal) {
+        assert!((a - b).abs() < 0.01, "the grid does not count: {one_col:?} {equal:?}");
+    }
+    // In proportion to the widest lines: the name column is the widest, the number the narrowest.
+    assert!(one_col[1] > one_col[2] && one_col[2] > one_col[0], "{one_col:?}");
+    let ratio = one_col[1] / one_col[0];
+    let (half, _) = automatic_cells_table(short, &[400.0], 50.0);
+    assert!((half.iter().sum::<f32>() - line / 2.0).abs() < 0.1 && (half[1] / half[0] - ratio).abs() < 0.01, "{half:?}");
+    // Too long to fit on one line: the long column takes what the others leave beyond their
+    // widest lines' share; every word stays whole.
+    let long = "Joined in September 2019 after six years at the northern office as accountant and trainer, then two more years as manager of the coastal office and its branches";
+    let rows: &[&[&str]] = &[&["No", "Name", "Remark"], &["22", "Green Robert", long]];
+    let (w, _) = automatic_cells_table(rows, &[400.0], 100.0);
+    assert!((w.iter().sum::<f32>() - line).abs() < 0.1 && w[2] > w[1] && w[1] > w[0], "{w:?}");
+    assert!(w[0] < 40.0, "the number column stays near its content: {w:?}");
+}
