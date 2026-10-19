@@ -1974,7 +1974,12 @@ fn spreadsheet_rows(v: &Value) -> Result<Vec<Vec<String>>, CmdError> {
             return Err(CmdError::Params(format!("`values` row {} needs 1 to 63 cells", r + 1)));
         }
         if rows.first().is_some_and(|f| f.len() != cells.len()) {
-            return Err(CmdError::Params(format!("`values` row {} has {} cells, row 1 has {}", r + 1, cells.len(), rows.first().map_or(0, Vec::len))));
+            return Err(CmdError::Params(format!(
+                "`values` row {} has {} cells, row 1 has {}",
+                r + 1,
+                cells.len(),
+                rows.first().map_or(0, Vec::len)
+            )));
         }
         let mut out = Vec::with_capacity(cells.len());
         for cell in cells {
@@ -2098,7 +2103,8 @@ mod tests {
     #[test]
     fn spreadsheet_takes_values_header_and_style() {
         let mut s = Session::new(Document::from_text(""));
-        s.run("insert.spreadsheet", &json!({"values": [["Month", "Cases"], ["Jan", 12], ["Feb", null]], "header": true, "style": "TableGrid"})).unwrap();
+        s.run("insert.spreadsheet", &json!({"values": [["Month", "Cases"], ["Jan", 12], ["Feb", null]], "header": true, "style": "TableGrid"}))
+            .unwrap();
         let Some(Block::Table(t)) = s.doc.body.iter().map(|b| &**b).find(|b| matches!(b, Block::Table(_))) else { panic!("no table") };
         assert_eq!((t.rows.len(), t.rows[0].cells.len()), (3, 2));
         assert!(t.rows[0].props.header && !t.rows[1].props.header);
@@ -2111,7 +2117,18 @@ mod tests {
     fn spreadsheet_rejects_hostile_values() {
         let wide: Vec<Value> = (0..64).map(|i| json!(i)).collect();
         let many: Vec<Value> = (0..1001).map(|_| json!(["x"])).collect();
-        for bad in [json!("x"), json!(5), json!([]), json!(["a"]), json!([["a", "b"], ["c"]]), json!([wide]), json!(many), json!([[{"a": 1}]]), json!([[[1]]]), json!([[]])] {
+        for bad in [
+            json!("x"),
+            json!(5),
+            json!([]),
+            json!(["a"]),
+            json!([["a", "b"], ["c"]]),
+            json!([wide]),
+            json!(many),
+            json!([[{"a": 1}]]),
+            json!([[[1]]]),
+            json!([[]]),
+        ] {
             let mut s = Session::new(Document::from_text("keep"));
             assert!(s.run("insert.spreadsheet", &json!({"values": bad})).is_err(), "{bad}");
             assert_eq!(s.doc.plain_text(StoryRef::Body), "keep");

@@ -188,7 +188,14 @@ fn insert_table_fills_a_table_and_survives_docx() {
 fn insert_table_rejects_hostile_values() {
     let mut s = Server::new(Box::new(Headless::default()));
     let wide: Vec<Value> = (0..64).map(|i| json!(i)).collect();
-    for args in [json!({}), json!({"values": "x"}), json!({"values": [["a", "b"], ["c"]]}), json!({"values": [wide]}), json!({"values": [[{"a": 1}]]}), json!({"values": []})] {
+    for args in [
+        json!({}),
+        json!({"values": "x"}),
+        json!({"values": [["a", "b"], ["c"]]}),
+        json!({"values": [wide]}),
+        json!({"values": [[{"a": 1}]]}),
+        json!({"values": []}),
+    ] {
         let r = call(&mut s, 12, "tools/call", json!({"name": "insert_table", "arguments": args}));
         assert_eq!(r["result"]["isError"], true, "{args}: {r}");
     }
