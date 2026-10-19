@@ -673,7 +673,7 @@ fn mi_text(ui: &mut Ui, app: &mut WordApp, text: &str, id: &str, params: Value) 
 }
 
 /// The proofing languages the Language menu offers: tag and English name (translated when drawn).
-pub(crate) const PROOFING_LANGUAGES: [(&str, &str); 10] = [
+pub(crate) const PROOFING_LANGUAGES: [(&str, &str); 11] = [
     ("en-US", "English (United States)"),
     ("en-GB", "English (United Kingdom)"),
     ("pl-PL", "Polish"),
@@ -684,6 +684,7 @@ pub(crate) const PROOFING_LANGUAGES: [(&str, &str); 10] = [
     ("ru-RU", "Russian"),
     ("cs-CZ", "Czech"),
     ("id-ID", "Indonesian"),
+    ("ro-RO", "Romanian"),
 ];
 
 /// The English name of a proofing language tag, as the status bar shows it (no tag: WordCraft's
@@ -724,6 +725,7 @@ pub(crate) fn language_name(tag: Option<&str>) -> String {
             wordcraft_engine::proof::ProofLang::Ru => "Russian".into(),
             wordcraft_engine::proof::ProofLang::Cs => "Czech".into(),
             wordcraft_engine::proof::ProofLang::Id => "Indonesian".into(),
+            wordcraft_engine::proof::ProofLang::Ro => "Romanian".into(),
             wordcraft_engine::proof::ProofLang::En if tag.eq_ignore_ascii_case("en") => "English (United States)".into(),
             _ => tag.to_string(),
         },
@@ -837,18 +839,7 @@ pub(crate) fn language_menu(ui: &mut Ui, app: &mut WordApp) {
         _ => String::new(),
     };
     let no_proof = st.get("noProof").and_then(Value::as_bool).unwrap_or(false);
-    let listed = |tag: &str| {
-        current.eq_ignore_ascii_case(tag)
-            || (tag == "pl-PL" && current.eq_ignore_ascii_case("pl"))
-            || (tag == "pt-BR" && current.eq_ignore_ascii_case("pt"))
-            || (tag == "it-IT" && current.eq_ignore_ascii_case("it"))
-            || (tag == "hr-HR" && current.eq_ignore_ascii_case("hr"))
-            || (tag == "tr-TR" && current.eq_ignore_ascii_case("tr"))
-            || (tag == "cs-CZ" && wordcraft_engine::proof::ProofLang::from_tag(Some(&current)) == wordcraft_engine::proof::ProofLang::Cs)
-            || (tag == "id-ID" && wordcraft_engine::proof::ProofLang::from_tag(Some(&current)) == wordcraft_engine::proof::ProofLang::Id)
-            || (tag == "en-US" && current.eq_ignore_ascii_case("en"))
-    };
-    let checks = language_checks(&current, listed);
+    let checks = language_checks(&current, |tag| short_list_matches(&current, tag));
     if let Some(name) = checks.extra {
         mi_check(ui, app, &name, true, "review.language", json!({"lang": current}));
     }
@@ -860,6 +851,22 @@ pub(crate) fn language_menu(ui: &mut Ui, app: &mut WordApp) {
     ui.separator();
     mi_check(ui, app, "Set Proofing Language…", false, "review.language", json!({}));
     mi_check(ui, app, "Language Preferences…", false, "file.options", json!({"pane": "language"}));
+}
+
+/// Does the short-list entry `tag` stand for the `current` language tag? Its own tag, a bare
+/// language subtag (`pl` for `pl-PL`), or for Czech, Indonesian and Romanian any tag of the
+/// language (`ro-MD` checks Romanian).
+fn short_list_matches(current: &str, tag: &str) -> bool {
+    current.eq_ignore_ascii_case(tag)
+        || (tag == "pl-PL" && current.eq_ignore_ascii_case("pl"))
+        || (tag == "pt-BR" && current.eq_ignore_ascii_case("pt"))
+        || (tag == "it-IT" && current.eq_ignore_ascii_case("it"))
+        || (tag == "hr-HR" && current.eq_ignore_ascii_case("hr"))
+        || (tag == "tr-TR" && current.eq_ignore_ascii_case("tr"))
+        || (tag == "cs-CZ" && wordcraft_engine::proof::ProofLang::from_tag(Some(current)) == wordcraft_engine::proof::ProofLang::Cs)
+        || (tag == "id-ID" && wordcraft_engine::proof::ProofLang::from_tag(Some(current)) == wordcraft_engine::proof::ProofLang::Id)
+        || (tag == "ro-RO" && wordcraft_engine::proof::ProofLang::from_tag(Some(current)) == wordcraft_engine::proof::ProofLang::Ro)
+        || (tag == "en-US" && current.eq_ignore_ascii_case("en"))
 }
 
 /// The Language menu's check marks for the `current` tag: which short-list entries are checked
@@ -3035,6 +3042,41 @@ mod tests {
         let c = language_checks("PT-br-x-test", |_| false);
         assert_eq!(c.extra, None);
         assert_eq!(c.listed, PROOFING_LANGUAGES.map(|(t, _)| t == "pt-BR"));
+    }
+
+    #[test]
+    fn romanian_has_a_name_in_the_language_menu() {
+        assert!(PROOFING_LANGUAGES.contains(&("ro-RO", "Romanian")));
+        for tag in ["ro", "ro-RO", "RO-ro", "ron"] {
+            assert_eq!(language_name(Some(tag)), "Romanian", "{tag}");
+        }
+        // Every Romanian tag, Moldova's included, checks the one Romanian entry.
+        for tag in ["ro", "ro-RO", "ro-MD", "RO_md", "mo"] {
+            let c = language_checks(tag, |t| short_list_matches(tag, t));
+            assert_eq!(c.extra, None, "{tag}");
+            assert_eq!(c.listed, PROOFING_LANGUAGES.map(|(t, _)| t == "ro-RO"), "{tag}");
+        }
+    }
+
+    /// Clicking Review › Language › Romanian makes the selection Romanian, and the entry then
+    /// shows checked.
+    #[test]
+    fn the_romanian_menu_entry_sets_the_language() {
+        use egui_kittest::kittest::{By, NodeT, Queryable};
+        let mut app = WordApp::new(Session::new(wordcraft_doc::Document::from_text("Merg acasă")), crate::Services::default());
+        app.run("select.all", json!({})).unwrap();
+        let mut h = egui_kittest::Harness::builder().with_size(vec2(400.0, 900.0)).build_ui_state(language_menu, app);
+        h.run_steps(2);
+        let romanian = |h: &egui_kittest::Harness<'_, WordApp>| {
+            h.query_all(By::new().predicate(|n| n.label().is_some_and(|l| l.trim_start_matches('✓').trim() == "Romanian")))
+                .map(|n| n.accesskit_node().toggled() == Some(egui::accesskit::Toggled::True))
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(romanian(&h), [false], "one Romanian entry, not checked yet");
+        h.get(By::new().predicate(|n| n.label().is_some_and(|l| l.trim_start_matches('✓').trim() == "Romanian"))).click();
+        h.run_steps(2);
+        assert_eq!(h.state_mut().run("format.state", json!({})).unwrap()["lang"], "ro-RO");
+        assert_eq!(romanian(&h), [true], "the entry is checked now");
     }
 
     #[test]
