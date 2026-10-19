@@ -2298,3 +2298,7 @@
 	Type a size in any unit, such as 5 cm or 300 px. The other side follows, so the picture keeps its proportions.	Unesite veličinu u bilo kojoj jedinici, na primer 5 cm ili 300 px. Druga strana se prilagođava, pa slika zadržava svoje proporcije.
 
 	Import…	Uvezi…
+	Clear all	Obriši sve
+	Remove from list	Ukloni iz liste
+	Removed {name} from the recent list	{name} je uklonjen iz liste nedavnih dokumenata
+	Removed {count} documents from the recent list	Iz liste nedavnih dokumenata uklonjeno: {count}

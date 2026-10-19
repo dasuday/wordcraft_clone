@@ -2300,3 +2300,7 @@
 	Type a size in any unit, such as 5 cm or 300 px. The other side follows, so the picture keeps its proportions.	可用任意单位输入大小，例如 5 cm 或 300 px。另一边随之调整，图片保持原有比例。
 
 	Import…	导入…
+	Clear all	全部清除
+	Remove from list	从列表移除
+	Removed {name} from the recent list	已从最近使用的文档列表中移除 {name}
+	Removed {count} documents from the recent list	已从最近使用的文档列表中移除 {count} 个文档

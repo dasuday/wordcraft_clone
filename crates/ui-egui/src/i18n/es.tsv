@@ -2654,3 +2654,7 @@ preview	Title	Título
 	Type a size in any unit, such as 5 cm or 300 px. The other side follows, so the picture keeps its proportions.	Escribe un tamaño en cualquier unidad, como 5 cm o 300 px. El otro lado se ajusta, así que la imagen conserva sus proporciones.
 
 	Import…	Importar…
+	Clear all	Borrar todo
+	Remove from list	Quitar de la lista
+	Removed {name} from the recent list	{name} se quitó de la lista de documentos recientes
+	Removed {count} documents from the recent list	{count} documentos se quitaron de la lista de documentos recientes

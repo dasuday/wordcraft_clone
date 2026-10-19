@@ -2700,3 +2700,7 @@ template	Letter	Lettre
 	Type a size in any unit, such as 5 cm or 300 px. The other side follows, so the picture keeps its proportions.	Tapez une taille dans n'importe quelle unité, par exemple 5 cm ou 300 px. L'autre côté suit, et l'image garde ses proportions.
 
 	Import…	Importer…
+	Clear all	Effacer tout
+	Remove from list	Supprimer de la liste
+	Removed {name} from the recent list	{name} a été supprimé de la liste des documents récents
+	Removed {count} documents from the recent list	{count} documents supprimés de la liste des documents récents

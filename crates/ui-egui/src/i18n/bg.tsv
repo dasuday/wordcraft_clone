@@ -2688,3 +2688,7 @@
 	Type a size in any unit, such as 5 cm or 300 px. The other side follows, so the picture keeps its proportions.	Въведете размер в произволна единица, например 5 cm или 300 px. Другата страна се променя съответно, така че картината запазва пропорциите си.
 
 	Import…	Импортиране…
+	Clear all	Изчисти всичко
+	Remove from list	Премахване от списъка
+	Removed {name} from the recent list	{name} е премахнат от списъка с последни документи
+	Removed {count} documents from the recent list	От списъка с последни документи премахнати: {count}
