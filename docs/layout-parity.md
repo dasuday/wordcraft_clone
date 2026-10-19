@@ -1,6 +1,6 @@
 # Layout and pagination parity with Microsoft Word
 
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-18 · **Change:** trivial (the caret, clicks and selection edges fall between the letters of a ligature, #1974; previously trivial: a word after a slash wraps whole, like Word, #2963; previously trivial: VML header-cell floats always on the page, user-checked in Word for Mac, #1775; previously trivial: an at-least row with no room for its minimum starts the next page whole, #1742; previously trivial: AutoFit donors lose equal widths down to their content minima; previously trivial: automatic space between Asian text and Latin text or digits, #2358; previously trivial: hint-reliant CJK outlines; previously trivial: positional tabs go to the margins or indents, #2367; previously trivial: field results with right-to-left text read right to left, #1670; previously trivial: a list bullet no installed font can draw shows the level's default bullet, #1683; previously trivial: a missing Thai font is drawn in one Thai face for the whole run, #1549; previously trivial: the caret after spaces hanging past the margin stays at the margin, #2146; previously trivial: covered black-circle fallback before UI sans; previously trivial: resolved split-cell continuation top insets; previously trivial: Symbol PCL6 alias uses Symbol encoding; previously trivial: exact full font names select their installed face; previously trivial: Arial Unicode MS uses proportional fallbacks; previously trivial: DrawingML outline dashes, including zero-width paths; previously trivial: TOCs include table-cell headings and retain full targets; previously trivial: kept table rows follow the next row; previously trivial: consistent cell widths override a stale table grid; previously trivial: multi-paragraph field instructions no longer add blank lines; previously trivial: page-break-only list paragraphs hide their labels; previously trivial: floating-table overlap ignores empty line-break lines; previously trivial: paragraph spacing adds up when the document turns HTML auto spacing off; previously trivial: an inherited footer sizes its percentage tables by its own section; previously trivial: an empty section mark stays on a full page; previously trivial: a fitting row with less room than its minimum height moves on whole; oversized rows still split; previously trivial: text past an exact-height row is cut off; previously trivial: a list number stays with text after a leading page break; previously trivial: a bookmark after a page break takes no line; previously trivial: a page break followed by a page break before or a next-page section starts one page; previously trivial: All Caps and Small Caps draw ß as SS, #1581; previously trivial: justified vertical page alignment, #1320; previously trivial: page numbers restart at 0; previously trivial: a list label moves with its first line when the paragraph is centred or end-aligned (#1159); previously trivial: PAGE fields in a paragraph split across pages show the page they are on, #1352; previously trivial: a dragged floating object anchors in the column it lands in, #884; previously trivial: a paragraph ending on a page with footnotes keeps its space after above the separator, #1116; previously trivial: symbol-font text drawn as Unicode symbols, #776; previously trivial: large-table scrolling measured and fixed, #811; previously trivial: text boxes use their own margins; Resize shape to fit text never cuts text, #743; previously trivial: complex-script shaping and Myanmar line breaking, #604; previously trivial: body page totals, table-cell footnotes and bookmark link pages fixed, #450 #451 #455; previously major: first version; line breaking, pagination and object placement checked against Word's behaviour from the layout source on origin/main) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4
+> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-18 · **Change:** minor (local page-by-page layout corpus harness around visual-diff, with five synthetic cases; Word references stay local; also: the caret, clicks and selection edges fall between the letters of a ligature, #1974; previously trivial: a word after a slash wraps whole, like Word, #2963; previously trivial: VML header-cell floats always on the page, user-checked in Word for Mac, #1775; previously trivial: an at-least row with no room for its minimum starts the next page whole, #1742; previously trivial: AutoFit donors lose equal widths down to their content minima; previously trivial: automatic space between Asian text and Latin text or digits, #2358; previously trivial: hint-reliant CJK outlines; previously trivial: positional tabs go to the margins or indents, #2367; previously trivial: field results with right-to-left text read right to left, #1670; previously trivial: a list bullet no installed font can draw shows the level's default bullet, #1683; previously trivial: a missing Thai font is drawn in one Thai face for the whole run, #1549; previously trivial: the caret after spaces hanging past the margin stays at the margin, #2146; previously trivial: covered black-circle fallback before UI sans; previously trivial: resolved split-cell continuation top insets; previously trivial: Symbol PCL6 alias uses Symbol encoding; previously trivial: exact full font names select their installed face; previously trivial: Arial Unicode MS uses proportional fallbacks; previously trivial: DrawingML outline dashes, including zero-width paths; previously trivial: TOCs include table-cell headings and retain full targets; previously trivial: kept table rows follow the next row; previously trivial: consistent cell widths override a stale table grid; previously trivial: multi-paragraph field instructions no longer add blank lines; previously trivial: page-break-only list paragraphs hide their labels; previously trivial: floating-table overlap ignores empty line-break lines; previously trivial: paragraph spacing adds up when the document turns HTML auto spacing off; previously trivial: an inherited footer sizes its percentage tables by its own section; previously trivial: an empty section mark stays on a full page; previously trivial: a fitting row with less room than its minimum height moves on whole; oversized rows still split; previously trivial: text past an exact-height row is cut off; previously trivial: a list number stays with text after a leading page break; previously trivial: a bookmark after a page break takes no line; previously trivial: a page break followed by a page break before or a next-page section starts one page; previously trivial: All Caps and Small Caps draw ß as SS, #1581; previously trivial: justified vertical page alignment, #1320; previously trivial: page numbers restart at 0; previously trivial: a list label moves with its first line when the paragraph is centred or end-aligned (#1159); previously trivial: PAGE fields in a paragraph split across pages show the page they are on, #1352; previously trivial: a dragged floating object anchors in the column it lands in, #884; previously trivial: a paragraph ending on a page with footnotes keeps its space after above the separator, #1116; previously trivial: symbol-font text drawn as Unicode symbols, #776; previously trivial: large-table scrolling measured and fixed, #811; previously trivial: text boxes use their own margins; Resize shape to fit text never cuts text, #743; previously trivial: complex-script shaping and Myanmar line breaking, #604; previously trivial: body page totals, table-cell footnotes and bookmark link pages fixed, #450 #451 #455; previously major: first version; line breaking, pagination and object placement checked against Word's behaviour from the layout source on origin/main) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4
 
 A document only "opens correctly" if its pages break where Word breaks them: the same lines, the
 same page count, footnotes and pictures on the same pages. This checklist covers line breaking,
@@ -82,7 +82,65 @@ Exact line spacing keeps the run font baseline around tall equations; automatic 
 | Compatibility modes (Word 2003/2007/2010 layout for old files: `w:compat` options) | 🟡 | `allowSpaceOfSameStyleInTable` supported in modes 11/12/14; mode 15 retains contextual suppression. Most other legacy compat options remain ignored | 10–20 |
 | Fields: STYLEREF in headers and footers (running chapter titles) | ✅ | Evaluated per page at layout time: the page's first (or with `\l` last) paragraph of the style, else the nearest before it; style name, id or heading level (a level finds the style named `heading N` whatever its id, so localized documents match, #1286); character styles; `\n \r \w \s \t \p` (`\r` treated as `\w`); body STYLEREF updated with the other fields (#775). Field results with right-to-left text (a Hebrew heading, "פרק א") are laid out with bidi reordering like ordinary text: the result is an isolate taking its first strong letter's direction (else the text's around the field), and each level run is shaped and mirrored in its own direction, so `{ PAGE }` in field-code view and `(Chapter 1)` keep their brackets in right-to-left paragraphs; this covers every field and note mark shown as text (#1670). Header paragraphs are cached on their per-page results, so typing in body text no STYLEREF shows doesn't lay the headers out again (#1286) | — |
 | Fields: PAGE, NUMPAGES, SECTIONPAGES, TOC page numbers, PAGEREF in headers and footers | ✅ | #52; totals in the body need a second pass once the page count is known (#451); SECTIONPAGES includes shared continuous-section start pages; a PAGE field in a paragraph that runs onto a later page (a page break inside it, or a natural split) shows that page's number, the rest of the paragraph broken again for the wider result (#1352); PAGEREF in headers and footers shows its bookmark's page, filled in after pagination like their totals (#1477); in the body it keeps its result until fields are updated | — |
-| Page-by-page comparison harness against Word | ❌ | Run Word locally on our own synthetic documents, export PDF, compare line breaks; Word output stays under `plan/` (never committed) | 8–12 |
+| Page-by-page comparison harness against Word | 🟡 | `cargo xtask layout-corpus` exports each committed synthetic case, compares it with a manually exported Word PDF through `cargo xtask visual-diff`, and ranks page-count, line-break and offset mismatches. Five original cases cover page size/margins, a long paragraph, a table, heading page breaks and a footnote; reference PDFs stay local and are never committed. No Word reference has been recorded for the committed cases yet | 4–6 |
+
+## Page-by-page layout corpus
+
+`cargo xtask layout-corpus --dir corpus/layout` is the orchestration layer around the existing
+`cargo xtask visual-diff`. It does not reimplement the comparison: for each case it exports
+WordCraft's PDF with `wordcraft-cli convert case.docx case.wordcraft.pdf`, runs visual-diff as a
+subprocess (SSIM, line breaks, Δy/Δx, page starts) and reads that run's `result.json`.
+
+A case is a folder:
+
+```
+corpus/layout/<case>/
+  case.docx            committed original synthetic DOCX
+  case.word.pdf        reference PDF exported by hand from Word (local only, never committed)
+  case.expected.json   optional expected page count and known differences (committed)
+```
+
+The five committed cases are `page-size-margins` (A4 landscape with uneven margins and a manual
+page break), `long-paragraph` (one justified paragraph crossing a page), `table` (fixed widths,
+repeated header row), `heading-page-break` (two headings with `w:pageBreakBefore`) and `footnote`
+(a note at the foot of page one). They are our own text and geometry; no Microsoft template,
+sample or asset is copied.
+
+`case.expected.json` may contain:
+
+```json
+{
+  "page_count": 2,
+  "known_differences": [
+    "footer sits 1 pt lower",
+    {"page": 3, "reason": "the table splits one row earlier"}
+  ]
+}
+```
+
+The harness writes `summary.json` and `summary.md` under `target/layout-corpus` by default (use
+`--out DIR` to choose another folder). The report records, per case, the Word and WordCraft page
+counts and their delta, the same-break percentage, the median of visual-diff's per-page median
+|Δy|, mean SSIM, and the worst pages. Cases are ranked by a mismatch score:
+`100 × (1 − SSIM) + (100 − same-break %) + 2 × min(median |Δy|, 72 pt) + 20 × |page delta|`.
+A case with no `case.word.pdf` is reported as `skipped: no Word reference` and does not fail the
+run. Cases other than missing references are listed as `failed` and make the command fail after
+the report is written.
+
+`--private` passes `--private` to visual-diff (line hashes, no diff maps), replaces case names
+with `case-<hash>` labels and omits source paths, so a confidential corpus leaves numbers and
+hashes only. It also removes WordCraft's intermediate PDF after each comparison. The Word PDFs
+themselves are never copied into the repository or the report.
+
+**Word PDFs are never committed.** They are output of another word processor, they may contain
+confidential text, and the repository's asset policy does not cover them. Export them locally by
+hand from Word; the nested `corpus/layout/.gitignore` ignores `case.word.pdf`, WordCraft's
+generated PDFs and report folders.
+
+**This measures layout, not visual identity.** SSIM is one signal among several: font
+substitution, anti-aliasing and a different PDF writer change pixels even when pages break
+identically. Use the page counts, same-break percentage and line offsets to judge pagination;
+treat a high SSIM as supporting evidence, not a certificate that WordCraft looks like Word.
 
 ## Missing black-circle glyphs
 
@@ -214,6 +272,7 @@ Page-relative footer tables keep their physical wrap bounds without adding to fo
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-18 | minor | Page-by-page layout corpus harness: `cargo xtask layout-corpus` exports each synthetic DOCX, compares it with a local Word PDF through `visual-diff`, aggregates page counts, line breaks, offsets, SSIM and worst pages, and writes `summary.json`/`summary.md`; five original cases added. Word references and generated PDFs stay gitignored; no mismatch was fixed by this change. |
 | 2026-10-18 | trivial | A word after a slash (" /word") wraps whole instead of splitting between two letters (#2963) |
 | 2026-10-15 | trivial | An at-least table row with less room than its minimum on a page that holds something starts the next page whole, as checked in Word (#1742); the taller-than-a-page case (it then splits from the top of that page) and repeated header rows (they go with it) follow the issue and synthetic tests, not a Word check |
 | 2026-10-16 | trivial | Table row keep-next uses the first paragraph of the first cell, including inherited flags. Kept row chains start on a fresh page when the following row cannot start below them. Synthetic Word export covers mixed-cell flags, multiple paragraphs and kept prefixes before oversized followers. |
