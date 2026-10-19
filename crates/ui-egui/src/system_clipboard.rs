@@ -57,7 +57,7 @@ pub(crate) fn fill(app: &mut WordApp, id: &str, params: &mut Value) -> Option<Re
         o.insert("rtf".into(), Value::String(rtf));
     }
     if id == "edit.pasteSpecial"
-        && let Some(png) = paste_picture::clipboard_png(app)
+        && let Some(png) = paste_picture::clipboard_png(app).as_deref()
     {
         let data = wordcraft_engine::cmd::insert::base64_encode(&png);
         if data.len() <= MAX_PICTURE_BYTES {
@@ -240,7 +240,7 @@ mod tests {
         let mut a = app(Services::default());
         assert_eq!(a.run("edit.paste", json!({})).unwrap_err(), "the clipboard is empty");
         let unreadable = Services {
-            clipboard_picture: Some(Box::new(|| Some(ClipboardPicture::Unreadable("its format isn't supported".into())))),
+            clipboard_picture: Some(Box::new(|| Some(ClipboardPicture::Unreadable("its format isn't supported".to_string())))),
             ..Default::default()
         };
         let e = app(unreadable).run("edit.paste", json!({})).unwrap_err();
