@@ -87,11 +87,12 @@ pub fn specs() -> Vec<CommandSpec> {
                 return Ok(json!({"exported": false}));
             };
             let path = if path.to_ascii_lowercase().ends_with(".pdf") { path.to_string() } else { format!("{path}.pdf") };
-            let opts = export_options(s, v);
+            let mut opts = export_options(s, v);
+            opts.pdfa = pdfa_param(v)?;
             crate::io::save_path_with(std::path::Path::new(&path), &s.doc, None, &opts).map_err(CmdError::Failed)?;
-            Ok(json!({"path": path, "markup": opts.markup}))
+            Ok(json!({"path": path, "markup": opts.markup, "pdfa": opts.pdfa.map(wordcraft_pdf::PdfA::id)}))
         })
-        .params(r#"{"path": string, "markup"?: bool (Print Markup: tracked changes marked up and each page scaled down beside the comments in balloons; default file.printMarkup)}"#)
+        .params(r#"{"path": string, "markup"?: bool (Print Markup: tracked changes marked up and each page scaled down beside the comments in balloons; default file.printMarkup), "pdfa"?: "2b" | "2u" | "3b" (PDF/A archival PDF, checked as it is written; a document that can't conform fails with the reason)} → {"path", "markup", "pdfa"}"#)
         .pure(),
         CommandSpec::new("file.exportPng", "Export Page as PNG", "File › Export", export_png)
             .params(r#"{"path": string, "page"?: n (1-based), "scale"?: px per pt, "markup"?: bool (the page with its comments in balloons beside it; default file.printMarkup)}"#)
@@ -335,7 +336,24 @@ fn save_as(s: &mut Session, v: &Value) -> CmdResult {
 /// setting (`file.printMarkup`); comments as Track Changes Options show them.
 pub fn export_options(s: &Session, v: &Value) -> crate::io::ExportOptions {
     let markup = p::bool(v, "markup").unwrap_or(s.prefs.print_markup);
-    crate::io::ExportOptions { markup, comments: markup && s.prefs.markup.comments, word2003: p::str(v, "format") == Some(FORMAT_WORD_2003) }
+    crate::io::ExportOptions {
+        markup,
+        comments: markup && s.prefs.markup.comments,
+        word2003: p::str(v, "format") == Some(FORMAT_WORD_2003),
+        pdfa: None,
+    }
+}
+
+/// `file.exportPdf`'s `pdfa`: absent or null for a plain PDF, else a PDF/A level id.
+fn pdfa_param(v: &Value) -> Result<Option<wordcraft_pdf::PdfA>, CmdError> {
+    let Some(level) = v.get("pdfa").filter(|l| !l.is_null()) else { return Ok(None) };
+    match level.as_str().and_then(wordcraft_pdf::PdfA::parse) {
+        Some(level) => Ok(Some(level)),
+        None => {
+            let ids: Vec<String> = wordcraft_pdf::PdfA::ALL.iter().map(|l| format!("\"{}\"", l.id())).collect();
+            Err(CmdError::Params(format!("`pdfa` is one of {}", ids.join(", "))))
+        }
+    }
 }
 
 fn export_png(s: &mut Session, v: &Value) -> CmdResult {

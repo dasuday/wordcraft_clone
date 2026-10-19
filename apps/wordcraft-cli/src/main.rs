@@ -17,13 +17,14 @@ const USAGE: &str = "\
 wordcraft-cli — WordCraft from the command line
 
 USAGE:
-  wordcraft-cli convert <in> <out> [--markup] [--update-fields] [--format wordml2003|flatopc]
+  wordcraft-cli convert <in> <out> [--markup] [--update-fields] [--format wordml2003|flatopc] [--pdfa 2b|2u|3b]
                                               convert between formats (docx, doc [read], pdf, odt, rtf, html, md, tex, txt, json, png,
                                               xml); --update-fields refreshes unlocked fields before saving;
                                               an .xml file is a Word XML Document (Flat OPC), or with
                                               --format wordml2003 a Word 2003 XML Document;
                                               --markup (Print Markup): comments beside each page and
-                                              tracked changes in pdf/png, a comment list in html/md/txt
+                                              tracked changes in pdf/png, a comment list in html/md/txt;
+                                              --pdfa: a .pdf is PDF/A (archival) at that level
   wordcraft-cli info <file>                   pages, words, paragraphs, properties (JSON)
   wordcraft-cli text <file>                   plain text
   wordcraft-cli inspect <file>                document structure (JSON)
@@ -293,6 +294,7 @@ const CONVERT_OPTIONS: &[OptionSpec] = &[
     OptionSpec { name: "--markup", takes_value: false },
     OptionSpec { name: "--format", takes_value: true },
     OptionSpec { name: "--update-fields", takes_value: false },
+    OptionSpec { name: "--pdfa", takes_value: true },
     OptionSpec { name: "--password", takes_value: true },
     OptionSpec { name: "--password-file", takes_value: true },
 ];
@@ -392,17 +394,28 @@ fn run<S: AsRef<OsStr>>(args: &[S]) -> Result<(), Failure> {
     match cmd {
         "convert" => {
             validate_options("convert", &rest, CONVERT_OPTIONS)?;
-            // `--format wordml2003` (or `flatopc`) picks the kind of `.xml` file; its value isn't a path.
+            // `--format wordml2003` (or `flatopc`) picks the kind of `.xml` file, `--pdfa 2b` makes a
+            // PDF/A; their values aren't paths.
             let format = arg_value(&rest, "--format");
+            let pdfa = arg_value(&rest, "--pdfa").filter(|level| !level.starts_with("--"));
+            // An archival copy asked for must never quietly be a plain PDF.
+            if pdfa.is_none() && rest.iter().any(|a| a == "--pdfa") {
+                return Err("convert: --pdfa requires a level (2b, 2u or 3b)".into());
+            }
             let paths = positionals(&rest, CONVERT_OPTIONS);
             let (i, o) = (paths.first().ok_or_else(missing_argument)?.to_string(), paths.get(1).ok_or_else(missing_argument)?.to_string());
             let markup = rest.iter().any(|a| a == "--markup");
+            if pdfa.is_some() && !o.to_ascii_lowercase().ends_with(".pdf") {
+                return Err("convert: --pdfa needs a .pdf output".into());
+            }
             let password = password_from(&rest)?;
             let mut s = open(&i, password.as_deref())?;
             if rest.iter().any(|a| a == "--update-fields") {
                 s.run("references.updateFields", &json!({})).map_err(|e| e.to_string())?;
             }
-            let r = if o.to_ascii_lowercase().ends_with(".png") {
+            let r = if let Some(level) = pdfa {
+                s.run("file.exportPdf", &json!({"path": o, "markup": markup, "pdfa": level}))
+            } else if o.to_ascii_lowercase().ends_with(".png") {
                 s.run("file.exportPng", &json!({"path": o, "page": 1, "markup": markup}))
             } else {
                 let mut params = json!({"path": o, "markup": markup});
@@ -765,6 +778,23 @@ mod tests {
         assert_eq!(run(&args(&["info", "missing.docx", "--passwrod", "x"])), Err("info: unknown option --passwrod".into()));
         assert_eq!(run(&args(&["render", "missing.docx", "out.png", "--sclae", "2"])), Err("render: unknown option --sclae".into()));
         assert_eq!(run(&args(&["zotero", "refresh", "missing.docx", "--prot", "1"])), Err("zotero: unknown option --prot".into()));
+    }
+
+    #[test]
+    fn convert_pdfa_writes_an_archival_pdf() {
+        let dir = std::env::temp_dir().join(format!("wordcraft-cli-pdfa-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let input = dir.join("in.txt");
+        std::fs::write(&input, "Archived from the command line.").unwrap();
+        let (i, out) = (input.to_string_lossy().into_owned(), dir.join("out.pdf").to_string_lossy().into_owned());
+        assert!(run(&args(&["convert", &i, "--pdfa", "2b", &out])).is_ok());
+        let raw = String::from_utf8_lossy(&std::fs::read(&out).unwrap()).into_owned();
+        assert!(raw.contains("<pdfaid:part>2</pdfaid:part>") && raw.contains("<pdfaid:conformance>B</pdfaid:conformance>"));
+        let docx = dir.join("out.docx").to_string_lossy().into_owned();
+        assert!(run(&args(&["convert", &i, &docx, "--pdfa", "2b"])).is_err_and(|e| e.to_string().contains("--pdfa")));
+        assert!(run(&args(&["convert", &i, &out, "--pdfa", "9z"])).is_err_and(|e| e.to_string().contains("pdfa")));
+        assert!(run(&args(&["convert", &i, &out, "--pdfa"])).is_err_and(|e| e.to_string().contains("--pdfa")));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

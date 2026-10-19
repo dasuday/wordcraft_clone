@@ -59,6 +59,8 @@ pub struct ExportOptions {
     /// An `.xml` copy is a Word 2003 XML Document (WordprocessingML 2003) instead of a Word XML
     /// Document (Flat OPC): `format: "wordml2003"` on the save commands.
     pub word2003: bool,
+    /// A `.pdf` copy is PDF/A at this level (`pdfa: "2b"` on `file.exportPdf`).
+    pub pdfa: Option<wordcraft_pdf::PdfA>,
 }
 
 /// A document password: wiped from memory when dropped, never printed (`Debug` shows `***`).

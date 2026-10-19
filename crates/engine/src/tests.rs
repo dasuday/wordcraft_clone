@@ -5497,6 +5497,35 @@ fn format_state_reports_kerning_for_fonts() {
     assert_eq!(run(&mut s, "format.state", json!({}))["kern"], serde_json::Value::Null);
 }
 
+/// `file.exportPdf`'s `pdfa` writes PDF/A (identified in its XMP); a bad level is a params error
+/// and writes nothing; a document that can't conform fails with the reason.
+#[test]
+fn export_pdf_writes_pdfa_on_request() {
+    let mut s = Session::new(wordcraft_doc::Document::from_text("Archived copy, déjà vu."));
+    let dir = std::env::temp_dir().join(format!("wordcraft-pdfa-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("a.pdf");
+    let r = s.run("file.exportPdf", &json!({"path": path.to_string_lossy(), "pdfa": "2b"})).unwrap();
+    assert_eq!(r["pdfa"], "2b");
+    let bytes = std::fs::read(&path).unwrap();
+    assert!(bytes.starts_with(b"%PDF-1.7"));
+    let raw = String::from_utf8_lossy(&bytes);
+    assert!(raw.contains("<pdfaid:part>2</pdfaid:part>") && raw.contains("/OutputIntents"));
+    assert_eq!(s.run("file.exportPdf", &json!({"path": path.to_string_lossy(), "pdfa": null})).unwrap()["pdfa"], serde_json::Value::Null);
+    assert!(!String::from_utf8_lossy(&std::fs::read(&path).unwrap()).contains("pdfaid"));
+    let other = dir.join("b.pdf");
+    for bad in [json!("2a"), json!("1b"), json!(""), json!(2), json!(true), json!(["2b"])] {
+        let e = s.run("file.exportPdf", &json!({"path": other.to_string_lossy(), "pdfa": bad})).unwrap_err();
+        assert!(matches!(e, crate::CmdError::Params(_)), "{bad}: {e:?}");
+        assert!(!other.exists(), "{bad}: written anyway");
+    }
+    // `.notdef` (a character no font has) can't be PDF/A.
+    s.run("text.insert", &json!({"text": " \u{10FFFD}"})).unwrap();
+    let e = s.run("file.exportPdf", &json!({"path": other.to_string_lossy(), "pdfa": "2u"})).unwrap_err();
+    assert!(matches!(&e, crate::CmdError::Failed(m) if m.contains("PDF/A-2u") && m.contains("no glyph")), "{e:?}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// #606: the colour commands behind More Colors… take any `RRGGBB` (with or without `#`, any
 /// case), not only the palette's colours; junk is a params error and changes nothing.
 #[test]

@@ -682,6 +682,8 @@ fn unsubsettable_font_is_drawn_as_outlines() {
     let (glyphs, paths) = count_glyphs_and_paths(&bytes);
     assert_eq!(glyphs, 0, "no text in the font krilla can't subset");
     assert!(paths > 0, "its glyphs are drawn as outlines");
+    // Outlines need no font program: the fallback keeps PDF/A possible.
+    assert!(export(&doc(family), &PdfOptions { pdfa: Some(PdfA::A2b), ..opts }).is_ok());
 }
 
 #[test]
@@ -1801,13 +1803,13 @@ fn zero_width_connector_dashes() {
 fn image_budget_is_checked_from_the_header() {
     let data = Arc::new(png());
     // The decoded image and its RGBA conversion are charged: two buffers at peak.
-    assert!(load_image_within(&data, 1024).is_some());
-    assert!(load_image_within(&data, 1023).is_none());
+    assert!(load_image_within(&data, 1024, true).is_some());
+    assert!(load_image_within(&data, 1023, true).is_none());
     // A header (valid CRC) claiming 30000x30000 with no pixel data reads fine, then the budget refuses it.
     let hdr = ihdr_only_png(30_000, 30_000);
     let dims = image::ImageReader::new(std::io::Cursor::new(hdr.as_slice())).with_guessed_format().unwrap().into_dimensions().unwrap();
     assert_eq!(dims, (30_000, 30_000));
-    assert!(load_image(&Arc::new(hdr)).is_none());
+    assert!(load_image(&Arc::new(hdr), true).is_none());
 }
 
 /// Scale to paper size (#2108): every page goes on the chosen paper, turned to the page's
@@ -1858,5 +1860,119 @@ fn pages_print_scaled_to_other_paper() {
     for paper in [(f32::NAN, 1.0), (0.0, 0.0), (-5.0, f32::INFINITY)] {
         let bytes = export(&d, &PdfOptions { paper: Some(paper), ..Default::default() }).unwrap();
         assert_eq!(size(&bytes), size(&plain));
+    }
+}
+fn jpeg() -> Vec<u8> {
+    let img = image::RgbImage::from_fn(16, 16, |x, y| image::Rgb([(x * 15) as u8, 90, (y * 15) as u8]));
+    let mut buf = Vec::new();
+    img.write_to(&mut std::io::Cursor::new(&mut buf), image::ImageFormat::Jpeg).unwrap();
+    buf
+}
+
+/// The sample (headings, links, list, table, PNG with alpha, watermark, page colour), a JPEG and
+/// text in several scripts.
+fn pdfa_sample() -> Document {
+    let mut d = sample();
+    let key = d.add_media(jpeg(), "jpeg");
+    let mut p = Paragraph::with_text("Grüße, déjà vu — Ελληνικά, русский, עברית ", CharProps::default());
+    let n = p.len();
+    p.insert_object(
+        n,
+        InlineObject::Image { media: key, w: 40.0, h: 40.0, alt: "photo".into(), float: Default::default(), crop: [0.0; 4], ole: None },
+        &CharProps::default(),
+    )
+    .unwrap();
+    d.body.push(para_block(p));
+    d
+}
+
+/// The `<tag>value</tag>` of an XMP property.
+fn xmp_value<'a>(raw: &'a str, tag: &str) -> Option<&'a str> {
+    let open = format!("<{tag}>");
+    let start = raw.find(&open)? + open.len();
+    raw.get(start..).and_then(|rest| rest.split('<').next())
+}
+
+#[test]
+fn pdfa_levels_parse_from_their_ids() {
+    for level in PdfA::ALL {
+        assert_eq!(PdfA::parse(level.id()), Some(level));
+        assert_eq!(PdfA::parse(level.name()), Some(level));
+    }
+    assert_eq!(PdfA::parse(" pdfa-2B "), Some(PdfA::A2b));
+    assert_eq!(PdfA::parse("A-3b"), Some(PdfA::A3b));
+    for bad in ["", "2", "2a", "1b", "4", "pdf/a", "2bb", "\u{0}"] {
+        assert_eq!(PdfA::parse(bad), None, "{bad:?}");
+    }
+}
+
+#[test]
+fn pdfa_2b_export_is_identified_and_self_contained() {
+    let d = pdfa_sample();
+    let bytes = export(&d, &PdfOptions { compress: false, pdfa: Some(PdfA::A2b), ..Default::default() }).unwrap();
+    // PDF 1.7 with the binary comment PDF/A requires on the second line.
+    assert!(bytes.starts_with(b"%PDF-1.7\n%"));
+    assert!(bytes.get(10..14).is_some_and(|b| b.iter().all(|c| *c >= 128)), "binary header comment");
+    let raw = String::from_utf8_lossy(&bytes).into_owned();
+    // XMP identification, with the creation date and the title.
+    assert!(raw.contains("/Type /Metadata") || raw.contains("/Type/Metadata"), "XMP metadata stream");
+    assert_eq!(xmp_value(&raw, "pdfaid:part"), Some("2"));
+    assert_eq!(xmp_value(&raw, "pdfaid:conformance"), Some("B"));
+    assert_eq!(xmp_value(&raw, "xmp:CreateDate"), Some("2024-05-06T07:08:09+00:00"));
+    assert!(raw.contains("<rdf:li xml:lang=\"x-default\">PDF Sample</rdf:li>"), "title in XMP");
+    // The sRGB output intent with its ICC profile.
+    assert!(raw.contains("/OutputIntents"));
+    assert!(raw.contains("/GTS_PDFA1"));
+    assert!(raw.contains("/DestOutputProfile"));
+    // Every font has its program embedded.
+    let descriptors = raw.matches("/Type /FontDescriptor").count() + raw.matches("/Type/FontDescriptor").count();
+    let programs = raw.matches("/FontFile2").count() + raw.matches("/FontFile3").count() + raw.matches("/FontFile ").count();
+    assert!(descriptors > 0);
+    assert_eq!(descriptors, programs, "a font without its program");
+    // No encryption, no image interpolation; links print (annotation flag Print = 4).
+    assert!(!raw.contains("/Encrypt"));
+    assert!(!raw.contains("/Interpolate true"));
+    assert!(raw.contains("/Subtype /Link") || raw.contains("/Subtype/Link"));
+    assert!(raw.contains("/F 4"), "printable annotations");
+    // Still a tagged PDF with its text.
+    assert!(raw.contains("/StructTreeRoot"));
+    let all = squash(&extract_text(&bytes).concat());
+    for w in ["Hello WordCraft,", "Grüße, déjà vu", "Ελληνικά", "русский"] {
+        assert!(all.contains(w), "{w:?} missing from {all:?}");
+    }
+    // Hebrew inside a left-to-right paragraph extracts in visual order.
+    assert!(all.contains("עברית") || all.contains("תירבע"), "Hebrew missing from {all:?}");
+    // A plain export carries none of it (and keeps its JPEG interpolation).
+    let plain = String::from_utf8_lossy(&export(&d, &PdfOptions { compress: false, ..Default::default() }).unwrap()).into_owned();
+    assert!(!plain.contains("pdfaid:part") && !plain.contains("/OutputIntents"));
+    assert!(plain.contains("/Interpolate true"));
+}
+
+#[test]
+fn pdfa_levels_write_their_part_and_conformance() {
+    let d = pdfa_sample();
+    for (level, part, conformance) in [(PdfA::A2u, "2", "U"), (PdfA::A3b, "3", "B")] {
+        let raw =
+            String::from_utf8_lossy(&export(&d, &PdfOptions { compress: false, pdfa: Some(level), ..Default::default() }).unwrap()).into_owned();
+        assert_eq!(xmp_value(&raw, "pdfaid:part"), Some(part), "{level:?}");
+        assert_eq!(xmp_value(&raw, "pdfaid:conformance"), Some(conformance), "{level:?}");
+    }
+    // Untagged and compressed PDF/A-2b is fine too (tagging is level A's requirement).
+    assert!(export(&d, &PdfOptions { tagged: false, pdfa: Some(PdfA::A2b), ..Default::default() }).is_ok());
+}
+
+#[test]
+fn pdfa_missing_glyph_is_a_readable_error() {
+    // A character no font has is drawn with `.notdef`, which PDF/A forbids.
+    let mut d = Document::new();
+    d.body = vec![para_block(Paragraph::with_text("tofu \u{10FFFD} here", CharProps::default()))];
+    assert!(export(&d, &PdfOptions::default()).is_ok());
+    for level in PdfA::ALL {
+        match export(&d, &PdfOptions { pdfa: Some(level), ..Default::default() }) {
+            Err(PdfError::Conformance(msg)) => {
+                assert!(msg.contains(level.name()) && msg.contains("has no glyph for"), "{msg}");
+            }
+            other => panic!("{level:?}: {other:?}"),
+        }
     }
 }

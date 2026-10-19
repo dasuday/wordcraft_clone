@@ -13,6 +13,10 @@
 //! - **Interactive:** link annotations for hyperlinked runs (URLs and internal `#bookmark`
 //!   links) and a document outline built from the headings (outline levels).
 //! - **Metadata:** title, author, subject, keywords, language, creation date.
+//! - **PDF/A (optional):** [`PdfOptions::pdfa`] writes PDF/A-2b, 2u or 3b: krilla adds the XMP
+//!   identification, the sRGB output intent and ICC-based colour, and checks what it can (fonts
+//!   embedded and licensed for embedding, no `.notdef` glyph, no interpolated images…). A document
+//!   that can't conform fails with [`PdfError::Conformance`] instead of writing a PDF that claims to.
 //! - **Tagged PDF (best effort):** one structure element per paragraph (`H1`–`H6` for headings,
 //!   `P` otherwise), `Figure` for pictures with their alt text; headers, footers, decorations and
 //!   the watermark are artifacts.
@@ -30,6 +34,7 @@ use craft_pdf::write::{self, Metadata, WriteError, Writer, backend as krilla};
 use krilla::action::{Action, LinkAction};
 use krilla::annotation::{Annotation, LinkAnnotation, Target};
 use krilla::color::rgb;
+use krilla::configure::{Archival, PdfVersion, ValidationError};
 use krilla::destination::XyzDestination;
 use krilla::error::KrillaError;
 use krilla::geom::{Path, PathBuilder, Point, Size, Transform};
@@ -66,6 +71,60 @@ pub enum PdfError {
     BadPage(usize),
     #[error("PDF writing failed: {0}")]
     Write(String),
+    /// The document can't be written in the requested PDF/A conformance level (why, readably).
+    #[error("{0}")]
+    Conformance(String),
+}
+
+/// A PDF/A conformance level (ISO 19005). Level A (2a, 3a) is not offered: it requires a complete
+/// logical structure (lists, tables, reading order) beyond the best-effort tagging written here.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum PdfA {
+    /// PDF/A-2b (ISO 19005-2, basic): the visual appearance is preserved.
+    A2b,
+    /// PDF/A-2u: 2b, and every glyph maps to Unicode text.
+    A2u,
+    /// PDF/A-3b (ISO 19005-3, basic): as 2b, with embedded files allowed (none are written).
+    A3b,
+}
+
+impl PdfA {
+    /// Every level, in the order they are listed to people.
+    pub const ALL: [PdfA; 3] = [PdfA::A2b, PdfA::A2u, PdfA::A3b];
+
+    /// The short id used by commands and the CLI: `2b`, `2u`, `3b`.
+    pub fn id(self) -> &'static str {
+        match self {
+            PdfA::A2b => "2b",
+            PdfA::A2u => "2u",
+            PdfA::A3b => "3b",
+        }
+    }
+
+    /// The display name: `PDF/A-2b`…
+    pub fn name(self) -> &'static str {
+        match self {
+            PdfA::A2b => "PDF/A-2b",
+            PdfA::A2u => "PDF/A-2u",
+            PdfA::A3b => "PDF/A-3b",
+        }
+    }
+
+    /// Parse `2b`, `A-2b`, `PDF/A-2b`… (any case, surrounding spaces ignored).
+    pub fn parse(s: &str) -> Option<PdfA> {
+        let s = s.trim().to_ascii_lowercase();
+        let s = s.strip_prefix("pdf/a").or_else(|| s.strip_prefix("pdfa")).or_else(|| s.strip_prefix('a')).unwrap_or(&s);
+        let s = s.strip_prefix('-').unwrap_or(s);
+        PdfA::ALL.into_iter().find(|level| level.id() == s)
+    }
+
+    fn archival(self) -> Archival {
+        match self {
+            PdfA::A2b => Archival::A2_B,
+            PdfA::A2u => Archival::A2_U,
+            PdfA::A3b => Archival::A3_B,
+        }
+    }
 }
 
 impl From<WriteError> for PdfError {
@@ -95,11 +154,23 @@ pub struct PdfOptions {
     /// is scaled to fit and centred, the paper turned to the page's orientation (Scale to paper
     /// size, #2108). `None` keeps the document's page sizes.
     pub paper: Option<(f32, f32)>,
+    /// Write PDF/A (validated by krilla); `None` = plain PDF 1.7.
+    pub pdfa: Option<PdfA>,
 }
 
 impl Default for PdfOptions {
     fn default() -> Self {
-        PdfOptions { pages: None, title: None, author: None, tagged: true, include_markup: false, comments: false, compress: true, paper: None }
+        PdfOptions {
+            pages: None,
+            title: None,
+            author: None,
+            tagged: true,
+            include_markup: false,
+            comments: false,
+            compress: true,
+            paper: None,
+            pdfa: None,
+        }
     }
 }
 
@@ -157,7 +228,12 @@ enum Attempt {
 }
 
 fn write_attempt(doc: &Document, lay: &DocLayout, opts: &PdfOptions, pages: &[usize], outlined: &HashSet<u32>) -> Result<Attempt, PdfError> {
-    let settings = krilla::SerializeSettings { compress_content_streams: opts.compress, enable_tagging: opts.tagged, ..Default::default() };
+    let configuration = match opts.pdfa {
+        Some(level) => write::configuration(PdfVersion::Pdf17, Some(level.archival()))?,
+        None => Default::default(),
+    };
+    let settings =
+        krilla::SerializeSettings { compress_content_streams: opts.compress, enable_tagging: opts.tagged, configuration, ..Default::default() };
     let language = doc.styles.default_chr.lang.clone().filter(|l| !l.is_empty() && l.is_ascii());
     let mut writer = Writer::new_with_language(settings, metadata(doc, opts), language);
     let pdf = writer.document_mut();
@@ -221,6 +297,7 @@ fn write_attempt(doc: &Document, lay: &DocLayout, opts: &PdfOptions, pages: &[us
                     None => Err(PdfError::Write(format!("a font could not be embedded ({msg})"))),
                 }
             }
+            KrillaError::Validation(errors) => Err(ex.conformance_error(errors.iter().map(|(e, _)| e))),
             error => Err(PdfError::Write(format!("{error:?}"))),
         },
         Err(error) => Err(error.into()),
@@ -691,6 +768,63 @@ enum Role {
 }
 
 impl Exporter<'_> {
+    /// The face a krilla font was made from, by name.
+    fn font_name(&self, font: &Font) -> String {
+        match self.fonts.values().find(|(_, f)| f.as_ref() == Some(font)) {
+            Some((face, _)) => format!("{} {}", face.family, face.style),
+            None => "a font".to_string(),
+        }
+    }
+
+    /// Why krilla's PDF/A validation failed, readably: each distinct problem once, the first few.
+    fn conformance_error<'e>(&self, errors: impl Iterator<Item = &'e ValidationError>) -> PdfError {
+        const SHOWN: usize = 5;
+        let mut seen = Vec::new();
+        let mut total = 0usize;
+        for error in errors {
+            let line = self.describe(error);
+            if !seen.contains(&line) {
+                total = total.saturating_add(1);
+                if seen.len() < SHOWN {
+                    seen.push(line);
+                }
+            }
+        }
+        let level = self.opts.pdfa.map_or("PDF/A", PdfA::name);
+        let mut msg = format!("the document can't be saved as {level}: {}", seen.join("; "));
+        if total > seen.len() {
+            msg.push_str(&format!(" (and {} more)", total - seen.len()));
+        }
+        PdfError::Conformance(msg)
+    }
+
+    fn describe(&self, error: &ValidationError) -> String {
+        let text = |t: &str| t.chars().take(40).collect::<String>();
+        match error {
+            ValidationError::ContainsNotDefGlyph(font, _, t) => {
+                format!("{} has no glyph for \"{}\"", self.font_name(font), text(t))
+            }
+            ValidationError::NoCodepointMapping(font, glyph, _) => {
+                format!("glyph {} of {} has no Unicode text", glyph.to_u32(), self.font_name(font))
+            }
+            ValidationError::InvalidCodepointMapping(font, _, c, _) | ValidationError::UnicodePrivateArea(font, _, c, _) => {
+                format!("{} maps a glyph to the invalid or private-use character U+{:04X}", self.font_name(font), u32::from(*c))
+            }
+            ValidationError::RestrictedLicense(font) => format!("the licence of {} does not allow embedding it", self.font_name(font)),
+            ValidationError::MissingCMYKProfile => "a CMYK colour needs a CMYK colour profile".to_string(),
+            ValidationError::MissingDocumentDate => "the document has no creation date".to_string(),
+            ValidationError::ImageInterpolation(_) => "a picture asks for interpolation".to_string(),
+            ValidationError::ContainsPostScript(_) => "a gradient needs PostScript".to_string(),
+            ValidationError::TooLongString => "a text string is longer than 32,767 bytes".to_string(),
+            ValidationError::TooLongName => "a name (a font name, say) is longer than 127 bytes".to_string(),
+            ValidationError::TooManyIndirectObjects => "the document has too many objects".to_string(),
+            ValidationError::TooHighQNestingLevel => "graphics are nested too deeply".to_string(),
+            ValidationError::EmbeddedPDF(_) => "an embedded PDF can't be checked".to_string(),
+            ValidationError::EmbeddedFile(..) => "an embedded file is not allowed".to_string(),
+            other => format!("{other:?}"),
+        }
+    }
+
     fn font(&mut self, face: &FaceRef) -> Option<Font> {
         if self.outlined.contains(&face.id()) {
             return None;
@@ -753,7 +887,9 @@ impl Exporter<'_> {
         if let Some(i) = self.images.get(key) {
             return i.clone();
         }
-        let img = self.doc.media.get(key).and_then(load_image);
+        // PDF/A forbids asking viewers to interpolate images.
+        let interpolate = self.opts.pdfa.is_none();
+        let img = self.doc.media.get(key).and_then(|data| load_image(data, interpolate));
         if img.is_none() {
             log::warn!("PDF: picture `{key}` could not be decoded");
         }
@@ -1724,12 +1860,12 @@ fn path_from(b: &kurbo::BezPath) -> Option<Path> {
 
 /// Decode a picture for embedding (validated with the `image` crate first, so a broken file
 /// can't fail the whole export).
-fn load_image(data: &Arc<Vec<u8>>) -> Option<Image> {
-    load_image_within(data, wordcraft_geom::MAX_DECODED_BYTES)
+fn load_image(data: &Arc<Vec<u8>>, interpolate: bool) -> Option<Image> {
+    load_image_within(data, wordcraft_geom::MAX_DECODED_BYTES, interpolate)
 }
 
 /// [`load_image`] with an explicit RGBA byte budget (a small one in tests).
-fn load_image_within(data: &Arc<Vec<u8>>, budget: u64) -> Option<Image> {
+fn load_image_within(data: &Arc<Vec<u8>>, budget: u64, interpolate: bool) -> Option<Image> {
     let fmt = image::guess_format(data).ok()?;
     // Header-only size check before anything is allocated (decode buffer + RGBA conversion are
     // charged); the side limits and the default 512 MB allocation cap stay as a second guard.
@@ -1748,7 +1884,7 @@ fn load_image_within(data: &Arc<Vec<u8>>, budget: u64) -> Option<Image> {
         return None;
     }
     if fmt == image::ImageFormat::Jpeg && matches!(dec.color(), image::ColorType::L8 | image::ColorType::Rgb8) {
-        return Image::from_jpeg(data.clone().into(), true).ok();
+        return Image::from_jpeg(data.clone().into(), interpolate).ok();
     }
     Some(Image::from_rgba8(dec.into_rgba8().into_raw(), w, h))
 }
