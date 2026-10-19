@@ -2645,6 +2645,10 @@
 # Reading Mode column widths (#1040)
 	Narrow	Keskeny
 	Medium	Közepes
+	Interface font:	Felület betűtípusa:
+	Inter (default)	Inter (alapértelmezett)
+	System default	Rendszer (alapértelmezett)
+	Draws the ribbon, menus and dialogs in Inter (the default), your desktop's interface font, or an installed family. Document text is unchanged.	A menüszalagot, a menüket és a párbeszédablakokat az Inter (alapértelmezett), az asztal felületi betűtípusa vagy egy telepített betűcsalád rajzolja. A dokumentum szövege nem változik.
 # Split Cells and Convert Text to Table (#2592)
 	Merge cells before split	Cellák egyesítése felosztás előtt
 	Table size	Táblázat mérete

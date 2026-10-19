@@ -2646,6 +2646,10 @@ preview	Title	Örnek
 # Reading Mode column widths (#1040)
 	Narrow	Dar
 	Medium	Orta
+	Interface font:	Arayüz yazı tipi:
+	Inter (default)	Inter (varsayılan)
+	System default	Sistem varsayılanı
+	Draws the ribbon, menus and dialogs in Inter (the default), your desktop's interface font, or an installed family. Document text is unchanged.	Şeridi, menüleri ve iletişim kutularını Inter (varsayılan), masaüstünüzün arayüz yazı tipi veya yüklü bir aile ile çizer. Belge metni değişmez.
 # Split Cells and Convert Text to Table (#2592)
 	Merge cells before split	Bölmeden önce hücreleri birleştir
 	Table size	Tablo boyutu

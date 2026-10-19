@@ -2689,6 +2689,10 @@ template	Letter	Thư
 # Reading Mode column widths (#1040)
 	Narrow	Hẹp
 	Medium	Trung bình
+	Interface font:	Phông chữ giao diện:
+	Inter (default)	Inter (mặc định)
+	System default	Mặc định của hệ thống
+	Draws the ribbon, menus and dialogs in Inter (the default), your desktop's interface font, or an installed family. Document text is unchanged.	Vẽ dải băng, menu và hộp thoại bằng Inter (mặc định), phông chữ giao diện của màn hình nền hoặc một bộ phông đã cài. Nội dung tài liệu không thay đổi.
 # Split Cells and Convert Text to Table (#2592)
 	Merge cells before split	Gộp ô trước khi tách
 	Table size	Kích thước bảng

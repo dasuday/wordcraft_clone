@@ -2658,6 +2658,10 @@ preview	Title	Esempio
 # Reading Mode column widths (#1040)
 	Narrow	Stretta
 	Medium	Media
+	Interface font:	Carattere dell'interfaccia:
+	Inter (default)	Inter (predefinito)
+	System default	Predefinito di sistema
+	Draws the ribbon, menus and dialogs in Inter (the default), your desktop's interface font, or an installed family. Document text is unchanged.	Disegna la barra multifunzione, i menu e le finestre di dialogo con Inter (predefinito), il carattere dell'interfaccia del desktop o una famiglia installata. Il testo del documento non cambia.
 # Split Cells and Convert Text to Table (#2592)
 	Merge cells before split	Unisci le celle prima di dividere
 	Table size	Dimensioni tabella

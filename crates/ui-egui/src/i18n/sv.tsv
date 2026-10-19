@@ -2662,6 +2662,10 @@ preview	Title	Titel
 	Bottom Right Cell	Nedre högra cellen
 	Inside Horizontal Border	Inre vågrät kantlinje
 	Inside Vertical Border	Inre lodrät kantlinje
+	Interface font:	Gränssnittstypsnitt:
+	Inter (default)	Inter (standard)
+	System default	Systemets standard
+	Draws the ribbon, menus and dialogs in Inter (the default), your desktop's interface font, or an installed family. Document text is unchanged.	Ritar menyfliksområdet, menyerna och dialogrutorna med Inter (standard), skrivbordets gränssnittstypsnitt eller en installerad familj. Dokumenttexten ändras inte.
 # Split Cells and Convert Text to Table (#2592)
 	Merge cells before split	Sammanfoga celler före delning
 	Table size	Tabellstorlek

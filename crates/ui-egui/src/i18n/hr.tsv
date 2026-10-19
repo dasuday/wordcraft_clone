@@ -2647,6 +2647,10 @@ preview	Title	Naslov
 	Bottom Right Cell	Donja desna ćelija
 	Inside Horizontal Border	Unutarnji vodoravni obrub
 	Inside Vertical Border	Unutarnji okomiti obrub
+	Interface font:	Font sučelja:
+	Inter (default)	Inter (zadano)
+	System default	Zadano sustava
+	Draws the ribbon, menus and dialogs in Inter (the default), your desktop's interface font, or an installed family. Document text is unchanged.	Crta vrpcu, izbornike i dijaloge slovnim licem Inter (zadano), fontom sučelja radne površine ili instaliranom obitelji. Tekst dokumenta ostaje nepromijenjen.
 # Split Cells and Convert Text to Table (#2592)
 	Merge cells before split	Spoji ćelije prije razdvajanja
 	Table size	Veličina tablice
