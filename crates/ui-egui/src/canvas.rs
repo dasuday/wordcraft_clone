@@ -88,6 +88,8 @@ pub struct CanvasState {
     pub scale: f32,
     /// Whether this frame's pages were drawn hinted ([`hint_pages`]).
     pub(crate) pages_hinted: bool,
+    /// Page rasters rendered so far (whole pages, not tiles), for tests.
+    pub(crate) rasters: u64,
     pub canvas_rect: Option<Rect>,
     pub focused: bool,
     /// The page's widget id and the pass that last drew it, so a click elsewhere can hand the
@@ -245,6 +247,7 @@ impl Default for CanvasState {
             scrollbar_page: None,
             scale: PX_PER_PT,
             pages_hinted: screen_render_options().hinting,
+            rasters: 0,
             canvas_rect: None,
             focused: false,
             widget_id: None,
@@ -1023,7 +1026,11 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
     if rescaled {
         ui.ctx().request_repaint();
     }
-    let hinted = hint_pages(zoom_delta, rescaled);
+    // Does the zoom move over several frames? An eased wheel notch or a pinch does; with animation
+    // effects off a wheel step lands finished in its own frame (and is drawn so at once).
+    let gliding = animate || ui.input(|i| i.multi_touch().is_some() || i.events.iter().any(|e| matches!(e, egui::Event::Zoom(_))));
+    let zooming = pointer_zoom(zoom_delta, rescaled, gliding);
+    let hinted = hint_pages(zoom_delta, rescaled, gliding);
     app.canvas.pages_hinted = hinted;
     app.canvas.scale = geo.scale;
     sync_fit_zoom(app, geo.scale);
@@ -1233,7 +1240,11 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
             let forced = hidden.as_ref().is_some_and(|(page, _)| *page == i);
             // Render before placing the page: a page re-rendered in this frame (a zoom step, an
             // edit) then sits on the pixel grid in this frame too, rather than a frame later.
-            if visible && !tiled && !fresh && (forced || rendered < 2 || !app.canvas.textures.contains_key(&i) && rendered < 4) {
+            // During a pointer zoom the page's last raster is stretched to the new size instead of
+            // rendered at each in-between size (each shown for a frame, a few ms a page on a 4K
+            // screen): it is rendered once the zoom stops, or before stretching softens it too much.
+            let stretched = zooming && !forced && app.canvas.textures.get(&i).is_some_and(|(_, tex)| stretch_fits(tex.size()[0], page.w, scale_px));
+            if visible && !tiled && !fresh && !stretched && (forced || rendered < 2 || !app.canvas.textures.contains_key(&i) && rendered < 4) {
                 let mut opts = page_render_options(app, dim_body);
                 opts.hinting &= hinted;
                 // Only on the page it is on: the `Pos` can't match an object of another page.
@@ -1251,6 +1262,7 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
                     }
                 }
                 rendered += 1;
+                app.canvas.rasters += 1;
                 fresh = true;
             } else if visible && !tiled && !fresh {
                 ui.ctx().request_repaint();
@@ -3336,17 +3348,35 @@ fn caret_color_at(app: &mut WordApp, layout: &std::sync::Arc<DocLayout>, page: u
 }
 
 /// Are pages drawn hinted this frame (as [`screen_render_options`] says)? Not while a pointer
-/// zoom (Ctrl/⌘+wheel easing in, a pinch: `zoom_delta` other than 1) changes the scale
-/// (`rescaled`): each such frame is a new size shown for a moment, and hinting every one would
+/// zoom moving over several frames ([`pointer_zoom`]) changes the scale: each such frame is a new size shown for a moment, and hinting every one would
 /// cost each page about 1.5 ms more and fill the hint caches with sizes nobody rests on, pushing
 /// out the one the zoom ends at. The first frame at rest draws the page hinted (the hinting is in
 /// the page's key). A zoom that leaves the scale as it is (at 10 % or 500 %, or over the ribbon)
 /// keeps the pages hinted, and other scale changes (the Zoom dialog or slider, a fit zoom
-/// following the window) are drawn hinted at once.
-fn hint_pages(zoom_delta: f32, rescaled: bool) -> bool {
+/// following the window, a wheel step with animation effects off) are drawn hinted at once.
+fn hint_pages(zoom_delta: f32, rescaled: bool, gliding: bool) -> bool {
+    screen_render_options().hinting && !pointer_zoom(zoom_delta, rescaled, gliding)
+}
+
+/// Is a pointer zoom (Ctrl/⌘+wheel, a pinch: `zoom_delta` other than 1) changing the scale this
+/// frame (`rescaled`) on its way over several frames (`gliding`: easing in, or following the
+/// fingers)? Its frames are in-between sizes, each shown for a moment. A wheel step with
+/// animation effects off lands finished in its frame: not in between.
+fn pointer_zoom(zoom_delta: f32, rescaled: bool, gliding: bool) -> bool {
     let gesture = zoom_delta.is_nan() || (zoom_delta - 1.0).abs() > 1e-3;
-    let zooming = gesture && rescaled;
-    screen_render_options().hinting && !zooming
+    gesture && rescaled && gliding
+}
+
+/// A page raster is stretched at most this much (either way) during a pointer zoom before it is
+/// rendered again at the zoom's current size.
+const STRETCH_MAX: f32 = 1.5;
+
+/// Can a page raster `tex_w` pixels wide, of a page `page_w` points wide, stand in for one at
+/// `scale_px` pixels per point while a zoom goes on ([`STRETCH_MAX`])?
+fn stretch_fits(tex_w: usize, page_w: f32, scale_px: f32) -> bool {
+    let had = tex_w as f32 / page_w.max(1.0);
+    let ratio = scale_px / had;
+    ratio.is_finite() && (1.0 / STRETCH_MAX..=STRETCH_MAX).contains(&ratio)
 }
 
 /// Render options for page rasters shown on screen, so a page looks as text does in the
@@ -6125,15 +6155,30 @@ mod tests {
     #[test]
     fn pages_are_hinted_again_once_a_zoom_stops() {
         let platform = screen_render_options().hinting;
-        assert_eq!(hint_pages(1.0, false), platform, "at rest, as the platform draws text");
+        assert_eq!(hint_pages(1.0, false, true), platform, "at rest, as the platform draws text");
         for zoom in [1.1, 0.9, 1.002, 0.998, f32::NAN, f32::INFINITY, 0.0] {
-            assert!(!hint_pages(zoom, true), "{zoom}: the scale changes under a pointer zoom");
-            assert_eq!(hint_pages(zoom, false), platform, "{zoom}: at 10 % or 500 %, or over the ribbon: nothing changes");
+            assert!(!hint_pages(zoom, true, true), "{zoom}: the scale changes under a gliding pointer zoom");
+            assert_eq!(hint_pages(zoom, false, true), platform, "{zoom}: at 10 % or 500 %, or over the ribbon: nothing changes");
+            assert_eq!(hint_pages(zoom, true, false), platform, "{zoom}: a wheel step with animation effects off lands finished");
         }
-        assert_eq!(hint_pages(1.0, true), platform, "the Zoom dialog or slider, a fit zoom: hinted at once");
+        assert_eq!(hint_pages(1.0, true, true), platform, "the Zoom dialog or slider, a fit zoom: hinted at once");
         // The hinting is part of the page's key: the last zoom frame's raster is replaced.
         let doc = wordcraft_doc::Document::from_text("Hello WordCraft");
         let app = WordApp::new(wordcraft_engine::Session::new(doc), Default::default());
         assert_ne!(view_key(&app, false, None, true), view_key(&app, false, None, false));
+    }
+
+    /// While a zoom goes on, a page raster stands in for one up to half again larger or smaller.
+    #[test]
+    fn a_raster_is_stretched_at_most_half_again_during_a_zoom() {
+        // A 612 pt page rendered 816 px wide (100 % at 1x): 1.333 px per point.
+        assert!(stretch_fits(816, 612.0, 816.0 / 612.0));
+        assert!(stretch_fits(816, 612.0, 1.9), "zoomed in 43 %");
+        assert!(!stretch_fits(816, 612.0, 2.1), "zoomed in 58 %: rendered again");
+        assert!(stretch_fits(816, 612.0, 0.95), "zoomed out to 71 %");
+        assert!(!stretch_fits(816, 612.0, 0.85), "zoomed out to 64 %: rendered again");
+        for hostile in [(0, 612.0, 1.0), (816, 0.0, 1.0), (816, 612.0, f32::NAN), (816, 612.0, f32::INFINITY), (816, f32::NAN, 1.0)] {
+            assert!(!stretch_fits(hostile.0, hostile.1, hostile.2), "{hostile:?}");
+        }
     }
 }
