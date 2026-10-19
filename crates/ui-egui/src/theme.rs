@@ -558,23 +558,37 @@ fn system_interface_faces() -> Option<InterfaceFaces> {
     }
 }
 
-/// The installed `family`'s regular, medium and semibold faces (the closest weight it has).
+/// Whether `face` really is a face of `family`: its typographic, legacy or full name, or one of the
+/// family's localized names (宋体 for SimSun). [`wordcraft_fonts::FontDb::face`] falls back to another
+/// family when a cataloged family's files can't be read, so a caller that chose `family` must check.
+fn face_is_family(face: &wordcraft_fonts::FontFace, family: &str) -> bool {
+    face.named(family) || face.local_names.iter().any(|n| n.name.eq_ignore_ascii_case(family))
+}
+
+/// The installed `family`'s regular, medium and semibold faces (the closest weight it has). `None`
+/// when `family` can't be resolved to a face of its own: a selected family never silently becomes
+/// another one.
 fn family_interface_faces(family: &str) -> Option<InterfaceFaces> {
     let db = wordcraft_fonts::FontDb::global();
     if !db.has_family(family) {
         return None;
     }
     let regular = db.face(family, "Regular");
+    if !face_is_family(&regular, family) {
+        return None;
+    }
     let medium = db.face(family, "Medium");
     let semibold = db.face(family, "SemiBold");
+    // A missing weight resolves to the closest one in the family; a face from another family is a
+    // fallback and must not be used, so the chosen family's regular face stands in instead.
+    let medium = (medium.id() != regular.id() && face_is_family(&medium, family)).then_some(medium);
+    let semibold = (semibold.id() != regular.id() && face_is_family(&semibold, family)).then_some(semibold);
     let rd = face_data(&regular);
-    let md = if medium.id() == regular.id() { rd.clone() } else { face_data(&medium) };
-    let sd = if semibold.id() == regular.id() {
-        rd.clone()
-    } else if semibold.id() == medium.id() {
-        md.clone()
-    } else {
-        face_data(&semibold)
+    let md = medium.as_ref().map_or_else(|| rd.clone(), |face| face_data(face));
+    let sd = match semibold {
+        Some(face) if medium.as_ref().is_some_and(|m| m.id() == face.id()) => md.clone(),
+        Some(face) => face_data(&face),
+        None => md.clone(),
     };
     Some(InterfaceFaces { label: regular.family.clone(), regular: rd, medium: md, semibold: sd })
 }
@@ -1230,6 +1244,22 @@ mod tests {
         );
         assert!(semibold.iter().any(|n| n == "InterSemiBold"), "Inter's semibold face is the fallback");
         assert_eq!(faces.label, "Source Sans 3");
+    }
+
+    /// #1375: a family setting resolves only to that family's own faces. `FontDb::face` falls back
+    /// to another family when the chosen one can't be loaded, and that fallback is rejected, while
+    /// legacy and localized names of the family still count.
+    #[test]
+    fn chosen_interface_font_never_resolves_to_another_family() {
+        let db = wordcraft_fonts::FontDb::global();
+        let face = db.face(wordcraft_fonts::FALLBACK_FAMILY, "Regular");
+        assert!(super::face_is_family(&face, wordcraft_fonts::FALLBACK_FAMILY));
+        assert!(!super::face_is_family(&face, "No Such Interface Family"), "a fallback face is not the chosen family");
+        let semibold = db.face("Source Sans 3 Semibold", "Regular");
+        assert_eq!(semibold.style, "Semibold");
+        assert!(super::face_is_family(&semibold, "Source Sans 3 Semibold"), "a legacy family name counts");
+        assert!(super::family_interface_faces("Source Sans 3 Semibold").is_some(), "a legacy family name resolves");
+        assert!(super::family_interface_faces("No Such Interface Family").is_none());
     }
 
     /// #1375: without a setting the chain is exactly Inter first (the default), and an unknown
