@@ -25,6 +25,12 @@ pub struct Resolved {
 /// metric-compatible come first (Carlito ↔ Calibri, Caladea ↔ Cambria, Liberation ↔ Arial /
 /// Times New Roman / Courier New), then common system fonts, then our bundled families.
 fn substitutes(family: &str) -> &'static [&'static str] {
+    substitutes_by_name(family).0
+}
+
+/// [`substitutes`], and whether `family` is a font we know by name (`false`: a generic list
+/// guessed from its name, or the default).
+fn substitutes_by_name(family: &str) -> (&'static [&'static str], bool) {
     const SANS: &[&str] = &["Carlito", "Helvetica Neue", "Arial", "Liberation Sans", "Noto Sans", "DejaVu Sans", "Source Sans 3"];
     const SERIF: &[&str] = &["Caladea", "Times New Roman", "Liberation Serif", "Georgia", "Noto Serif", "DejaVu Serif", "Source Serif 4"];
     const MONO: &[&str] = &["Courier New", "Liberation Mono", "Menlo", "Consolas", "DejaVu Sans Mono", "JetBrains Mono"];
@@ -88,21 +94,21 @@ fn substitutes(family: &str) -> &'static [&'static str] {
     ];
     let f = family.to_ascii_lowercase();
     if is_thai_serif(&f) {
-        return THAI_SERIF;
+        return (THAI_SERIF, true);
     }
     if is_thai(&f) {
-        return THAI;
+        return (THAI, true);
     }
     if is_hebrew(&f) {
-        return HEBREW;
+        return (HEBREW, true);
     }
     if is_persian_naskh(&f) {
-        return NASKH;
+        return (NASKH, true);
     }
     if is_persian_sans(&f) {
-        return ARABIC_SANS;
+        return (ARABIC_SANS, true);
     }
-    match f.as_str() {
+    let named = match f.as_str() {
         "palatino linotype" | "book antiqua" | "palatino" => PALATINO,
         "arial" | "helvetica" | "arial nova" => ARIAL,
         "arial unicode ms" => ARIAL_UNICODE,
@@ -121,10 +127,11 @@ fn substitutes(family: &str) -> &'static [&'static str] {
         | "sitka text"
         | "sitka"
         | "aptos serif" => SERIF,
-        _ if f.contains("mono") || f.contains("code") => MONO,
-        _ if f.contains("serif") && !f.contains("sans") => SERIF,
-        _ => SANS,
-    }
+        _ if f.contains("mono") || f.contains("code") => return (MONO, false),
+        _ if f.contains("serif") && !f.contains("sans") => return (SERIF, false),
+        _ => return (SANS, false),
+    };
+    (named, true)
 }
 
 /// The font a Windows 3.1-era charset name stands for: `Times New Roman Cyr`, `Arial CE`,
@@ -139,6 +146,13 @@ pub fn charset_base_family(family: &str) -> &str {
         .find(|s| lower.ends_with(*s) && lower.len() > s.len())
         .and_then(|s| family.trim_end().get(..lower.len() - s.len()))
         .map_or(family, str::trim_end)
+}
+
+/// Whether `family` (or the font its charset name stands for) is a font we know by name, with
+/// substitutes of its own: Times New Roman, Book Antiqua, Courier New, the symbol, Hebrew and
+/// Persian fonts… A name we only guess a generic list for (`Mystery Serif`, `Acme Mono`) is not.
+pub fn has_own_substitutes(family: &str) -> bool {
+    substitutes_by_name(charset_base_family(family)).1
 }
 
 /// Naskh-style Persian/Arabic document fonts (the "B …" family names come from the common
@@ -448,6 +462,28 @@ mod tests {
         assert_eq!(charset_base_family("Cyr"), "Cyr");
         assert_eq!(charset_base_family("Calibri"), "Calibri");
         assert_eq!(substitutes(charset_base_family("Times New Roman Cyr")), substitutes("Times New Roman"));
+    }
+
+    #[test]
+    fn fonts_known_by_name_have_their_own_substitutes() {
+        for f in [
+            "Times New Roman",
+            "times",
+            "Times New Roman Cyr",
+            "Book Antiqua",
+            "Palatino Linotype",
+            "Courier New",
+            "Arial",
+            "Georgia",
+            "Wingdings",
+            "David",
+        ] {
+            assert!(has_own_substitutes(f), "{f}");
+        }
+        // Names we only guess a generic list for are not known fonts.
+        for f in ["No Such Brand Font", "NewCenturySchlbk", "", "Mystery Serif", "Acme Mono", "Some Code"] {
+            assert!(!has_own_substitutes(f), "{f}");
+        }
     }
 
     #[test]

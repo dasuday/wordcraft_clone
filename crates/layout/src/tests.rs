@@ -795,21 +795,42 @@ fn legacy_form_fields_are_drawn() {
 fn a_missing_roman_font_is_drawn_as_word_draws_it() {
     // Measured in Word: a font that isn't installed is drawn in Cambria when the font table calls
     // it roman, in Calibri otherwise.
-    let face = |roman: bool| {
+    let face_of = |font: &str, roman: bool| {
         let mut d = Document::from_text("Serif");
         if roman {
-            d.settings.roman_fonts = vec!["No Such Brand Font".into()];
+            d.settings.roman_fonts = vec![font.into()];
         }
         let p = d.para_mut(StoryRef::Body, &Path::top(0)).unwrap();
-        p.runs[0].props.font = Some("No Such Brand Font".into());
+        p.runs[0].props.font = Some(font.into());
         let l = lay(&d);
         let Some(Placed::Lines { para, .. }) = l.pages[0].items.iter().find(|i| matches!(i, Placed::Lines { .. })) else { panic!("no text") };
         let first = para.clusters.first().expect("a cluster");
         para.styles[first.style as usize].face
     };
+    let face = |roman: bool| face_of("No Such Brand Font", roman);
     let cambria = wordcraft_fonts::word::resolve("Cambria", false, false).face;
     assert_eq!(face(true), cambria);
     assert_ne!(face(false), cambria);
+    // An unknown name that only sounds serif or mono is still a missing roman font (#2191).
+    for font in ["Mystery Serif", "Acme Mono"] {
+        assert_eq!(face_of(font, true), cambria, "{font}");
+    }
+}
+
+#[test]
+fn a_roman_font_with_its_own_substitutes_keeps_them() {
+    // Word's font tables class Times New Roman and Book Antiqua as roman. Word has them, so where
+    // they aren't installed they take their own substitutes, not Cambria (#2191).
+    for font in ["Times New Roman", "Book Antiqua"] {
+        let mut d = Document::from_text("Serif");
+        d.settings.roman_fonts = vec![font.into()];
+        let p = d.para_mut(StoryRef::Body, &Path::top(0)).unwrap();
+        p.runs[0].props.font = Some(font.into());
+        let l = lay(&d);
+        let Some(Placed::Lines { para, .. }) = l.pages[0].items.iter().find(|i| matches!(i, Placed::Lines { .. })) else { panic!("no text") };
+        let first = para.clusters.first().expect("a cluster");
+        assert_eq!(para.styles[first.style as usize].face, wordcraft_fonts::word::resolve(font, false, false).face, "{font}");
+    }
 }
 
 #[test]
