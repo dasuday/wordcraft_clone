@@ -630,4 +630,162 @@ mod probe_work_tests {
         assert_eq!(COPIED_BLOCKS.with(std::cell::Cell::get), copied, "rejected probes never clone Blocks");
         assert_eq!(MEASURE_COUNTS.with(|counts| counts.borrow()[0]), 3);
     }
+
+    fn with_probe_ctx(d: &Document, f: impl FnOnce(&mut Ctx)) {
+        let mut cache = crate::LayoutCache::new();
+        let opts = crate::LayoutOptions::default();
+        let prior_wraps = crate::PriorBodyWraps::new();
+        let mut back_wraps = crate::BackBodyWraps::new();
+        let mut ctx = Ctx {
+            doc: d,
+            cache: &mut cache,
+            opts: &opts,
+            counters: Default::default(),
+            fields: Default::default(),
+            notes_hash: 0,
+            numbers: HashMap::new(),
+            eq_count: 0,
+            boxes: Default::default(),
+            chains: Default::default(),
+            grid: Default::default(),
+            hide_deleted: opts.hides_deleted(StoryRef::Body),
+            uses_totals: false,
+            track_totals: true,
+            pct_base: None,
+            quiet_marks: Vec::new(),
+            mirror: false,
+            table_keys: Vec::new(),
+            prior_wraps: &prior_wraps,
+            back_wraps: &mut back_wraps,
+            pin: None,
+            footer_wraps: HashMap::new(),
+            header_tables: HashMap::new(),
+            fitted: HashMap::new(),
+            fitted_order: Vec::new(),
+            measure_left: 0,
+            measure_depth: 0,
+            measure_exhausted: false,
+        };
+        f(&mut ctx);
+    }
+
+    fn inline_shape(id: u32, w: f32) -> InlineObject {
+        let mut obj = shape(id, w);
+        if let InlineObject::Shape { float, .. } = &mut obj {
+            float.wrap = Wrap::Inline;
+        }
+        obj
+    }
+
+    #[test]
+    fn root_none_is_reused() {
+        let (mut d, root) = shared_graph(Graph::Shared, Fit::Auto);
+        let p = d.para_mut(StoryRef::Body, &Path::top(0)).unwrap();
+        p.objects[0] = inline_shape(root, 240.0);
+        p.touch();
+        let p = d.para(StoryRef::Body, &Path::top(0)).unwrap();
+        with_probe_ctx(&d, |ctx| {
+            MEASURE_COUNTS.with(|counts| counts.borrow_mut().clear());
+            COPIED_BLOCKS.with(|count| count.set(0));
+            let first = ctx.para_labelled(p, 500.0, None, &[], None);
+            let before = MEASURE_COUNTS.with(|counts| counts.borrow().clone());
+            assert_eq!(before, [MAX_MEASURE_BOXES]);
+            assert!(ctx.measure_exhausted);
+            let copied = COPIED_BLOCKS.with(std::cell::Cell::get);
+            for _ in 0..4 {
+                let repeated = ctx.para_labelled(p, 500.0, None, &[], None);
+                assert!(Arc::ptr_eq(&first, &repeated));
+                let measured = ctx.para_measured(p, 500.0, None, None, |pl| (pl.height, pl.height));
+                assert_eq!(measured, (first.height, first.height));
+            }
+            let after = MEASURE_COUNTS.with(|counts| counts.borrow().clone());
+            eprintln!(
+                "ROOT_PROBE_WORK before={before:?} after={after:?} copied_before={copied} copied_after={}",
+                COPIED_BLOCKS.with(std::cell::Cell::get)
+            );
+            assert_eq!(after, before, "repeated layout and table measurement reuse the exhausted root result");
+            assert_eq!(COPIED_BLOCKS.with(std::cell::Cell::get), copied);
+            let key = (root, 240.0f32.to_bits());
+            assert_eq!(ctx.fitted.get(&key), Some(&None));
+            assert_eq!(ctx.fitted_order, [key]);
+            assert_eq!(ctx.measure_depth, 0);
+            assert!(!ctx.boxes.inside());
+            assert_eq!(ctx.boxes.total(), 0);
+            assert!(ctx.chains.flows.is_empty());
+        });
+        let mut fixed = d.clone();
+        for part in fixed.parts.values_mut() {
+            part.body.auto_fit = false;
+        }
+        let expected = layout(&fixed);
+        let actual = layout(&d);
+        assert_eq!(visible(&actual), visible(&expected));
+        assert_eq!(actual.text_boxes, expected.text_boxes);
+        assert!(actual.text_boxes <= 1 + wordcraft_doc::BoxBudget::MAX_NESTED);
+    }
+
+    #[derive(Clone, Copy, Debug)]
+    enum Nest {
+        ActualBox,
+        Probe,
+    }
+
+    #[test]
+    fn nested_none_is_not_cached() {
+        let mut d = Document::from_text("");
+        d.styles.default_chr.font = Some("Source Sans 3".into());
+        let list = d.numbering.add_list(wordcraft_doc::ListKind::Numbered);
+        let parent = d.add_part(PartKind::TextBox, vec![]);
+        let leaf = d.add_part(PartKind::TextBox, Document::from_text("Visible child").body);
+        let root = d.add_part(PartKind::TextBox, Document::from_text("Numbered root").body);
+        for id in [root, leaf] {
+            d.parts.get_mut(&id).unwrap().body = TextBody { auto_fit: true, inset: Some([0; 4]), ..Default::default() };
+        }
+        d.para_mut(StoryRef::Part(root), &Path::top(0)).unwrap().props.numbering = Some(wordcraft_doc::props::NumRef { num: list, level: 0 });
+        d.insert_object(&Pos::new(StoryRef::Part(root), Path::top(0), 0), inline_shape(leaf, 180.0), &Default::default()).unwrap();
+        d.insert_object(&Pos::body(0, 0), inline_shape(root, 240.0), &Default::default()).unwrap();
+        let p = d.para(StoryRef::Body, &Path::top(0)).unwrap();
+        for nest in [Nest::ActualBox, Nest::Probe] {
+            with_probe_ctx(&d, |ctx| {
+                match nest {
+                    Nest::ActualBox => assert!(ctx.boxes.enter(parent)),
+                    Nest::Probe => ctx.measure_depth = 1,
+                }
+                ctx.eq_count = 7;
+                let before = (ctx.boxes.total(), ctx.measure_depth);
+                ctx.measure_left = 1;
+                MEASURE_COUNTS.with(|counts| *counts.borrow_mut() = vec![0]);
+                assert!(ctx.fitted_boxes(p).is_empty());
+                assert!(ctx.measure_exhausted);
+                assert_eq!(ctx.measure_left, 0);
+                assert_eq!((ctx.boxes.total(), ctx.measure_depth), before);
+                assert_eq!(ctx.boxes.inside(), matches!(nest, Nest::ActualBox));
+                assert_eq!(ctx.eq_count, 7);
+                assert!(ctx.fitted.is_empty(), "exhausted {nest:?} must not poison the fitted cache");
+                assert!(ctx.fitted_order.is_empty());
+                assert!(ctx.chains.flows.is_empty());
+                let mut counters = ctx.counters.clone();
+                assert_eq!(counters.next_label(&d.numbering, list, 0).unwrap().0, "1.");
+                match nest {
+                    Nest::ActualBox => ctx.boxes.leave(),
+                    Nest::Probe => ctx.measure_depth = 0,
+                }
+                let measured = ctx.fitted_boxes(p);
+                assert_eq!(measured.len(), 1, "a fresh root must recover from exhausted {nest:?}");
+                assert!(measured[0].1 > 0.0);
+                assert!(!ctx.measure_exhausted);
+                let key = (root, 240.0f32.to_bits());
+                assert_eq!(ctx.fitted.get(&key), Some(&Some(measured[0].1)));
+                assert_eq!(ctx.fitted_order, [key]);
+                assert_eq!(ctx.eq_count, 7);
+                let mut counters = ctx.counters.clone();
+                assert_eq!(counters.next_label(&d.numbering, list, 0).unwrap().0, "1.");
+                eprintln!(
+                    "NESTED_PROBE_CACHE context={nest:?} exhausted_uncached=true fresh_height={} phases={:?}",
+                    measured[0].1,
+                    MEASURE_COUNTS.with(|counts| counts.borrow().clone())
+                );
+            });
+        }
+    }
 }
