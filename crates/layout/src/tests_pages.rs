@@ -568,3 +568,52 @@ fn a_roman_page_number_in_the_footer_stays_roman_with_the_page_count_in_the_body
         assert_eq!(glyphs, want.chars().count(), "page {}: the footer should show {want}", p.number);
     }
 }
+
+/// The x and y of the four page border rules of a page, as (left, right, top, bottom).
+fn border_box(p: &Page) -> (f32, f32, f32, f32) {
+    let rules: Vec<(f32, f32, f32, f32)> = p
+        .items
+        .iter()
+        .filter_map(|i| if let Placed::Rule { x0, y0, x1, y1, .. } = i { Some((*x0, *y0, *x1, *y1)) } else { None })
+        .collect();
+    assert_eq!(rules.len(), 4, "{rules:?}");
+    // Order: top, bottom, left, right.
+    (rules[2].0, rules[3].0, rules[0].1, rules[1].1)
+}
+
+#[test]
+fn page_borders_follow_offset_from() {
+    // #3073: 72pt margins and a 24pt border space put the border 48pt from the page edge when
+    // measured from the text (the default), and 24pt when measured from the page.
+    use wordcraft_doc::props::{Border, Borders};
+    let mut d = Document::from_text("Text");
+    let b = Border { space: 24.0, ..Border::single(1.0) };
+    d.last_section.page_borders = Some(Borders::box_(b));
+    let s = d.last_section.clone();
+    let (l, r, t, bt) = border_box(&lay(&d).pages[0]);
+    assert_eq!((l, t), (48.0, 48.0));
+    assert_eq!((r, bt), (s.page_w - 48.0, s.page_h - 48.0));
+    d.last_section.page_borders_from_page = true;
+    let (l, r, t, bt) = border_box(&lay(&d).pages[0]);
+    assert_eq!((l, t), (24.0, 24.0));
+    assert_eq!((r, bt), (s.page_w - 24.0, s.page_h - 24.0));
+}
+
+#[test]
+fn text_measured_page_borders_follow_mirrored_margins() {
+    // #3073: on an even page of a book the margins swap, and the border with them.
+    use wordcraft_doc::props::{Border, Borders};
+    let mut d = Document::from_text(&"Body line\n".repeat(90));
+    d.last_section.margin_left = 108.0;
+    d.last_section.margin_right = 36.0;
+    d.settings.mirror_margins = true;
+    d.last_section.page_borders = Some(Borders::box_(Border { space: 24.0, ..Border::single(1.0) }));
+    let w = d.last_section.page_w;
+    let l = lay(&d);
+    assert!(l.pages.len() >= 2);
+    for p in &l.pages {
+        let (left, right, _, _) = border_box(p);
+        let (want_l, want_r) = if p.number % 2 == 1 { (84.0, w - 12.0) } else { (12.0, w - 84.0) };
+        assert_eq!((left, right), (want_l, want_r), "page {}", p.number);
+    }
+}

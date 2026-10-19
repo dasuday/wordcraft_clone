@@ -362,7 +362,15 @@ fn sections_headers_footers_round_trip() {
     s1.headers.default = Some(h1);
     s1.headers.first = Some(hf);
     s1.footers.default = Some(f1);
-    let mut s2 = SectionProps { start: SectionStart::OddPage, rtl: true, doc_grid: Some(DocGrid::default()), ..Default::default() };
+    // #3073: borders measured from the page edge keep `w:offsetFrom="page"` (the first section's stay "text").
+    let mut s2 = SectionProps {
+        start: SectionStart::OddPage,
+        rtl: true,
+        doc_grid: Some(DocGrid::default()),
+        page_borders: Some(Borders::box_(Border::single(1.0))),
+        page_borders_from_page: true,
+        ..Default::default()
+    };
     s2.set_landscape(true);
     s2.columns = Columns { count: 2, space: 24.0, separator: true, widths: Vec::new() };
     s2.footers.default = Some(f2);
