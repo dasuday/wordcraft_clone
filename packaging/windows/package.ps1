@@ -91,6 +91,43 @@ Remove-Item -Recurse -Force $Stage -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path $Stage | Out-Null
 Copy-Item (Join-Path $Bin 'wordcraft.exe'), (Join-Path $Bin 'wordcraft-cli.exe') $Stage
 
+# The draw.io web app (Apache-2.0), which the diagram editor runs as its own UI, served from
+# `drawio` beside the executable (see README). packaging/fetch-drawio.sh puts it in vendor/drawio;
+# without it the editor falls back to draw.io's embed site, which needs a network, so a build with
+# none still installs and runs.
+$Drawio = Join-Path $Root 'vendor\drawio'
+$HasDrawio = Test-Path (Join-Path $Drawio 'index.html')
+if ($HasDrawio) {
+  # The VERSION label only says which tag was asked for; the files are what ships. Check them
+  # against the manifest fetch-drawio.sh wrote, so an edited or stale cache can't be embedded.
+  $Manifest = Join-Path $Drawio 'MANIFEST.sha256'
+  if (-not (Test-Path $Manifest)) {
+    throw 'vendor/drawio has no MANIFEST.sha256; run packaging/fetch-drawio.sh again before packaging'
+  }
+  $Bad = @()
+  $Listed = 0
+  foreach ($Line in Get-Content $Manifest) {
+    if ($Line -notmatch '^([0-9a-fA-F]{64})\s\s(.+)$') { continue }
+    $Want = $Matches[1].ToLowerInvariant()
+    $Rel = $Matches[2]
+    $Listed++
+    $File = Join-Path $Drawio $Rel
+    if (-not (Test-Path -LiteralPath $File)) { $Bad += "$Rel is missing"; continue }
+    if ((Get-FileHash -LiteralPath $File -Algorithm SHA256).Hash.ToLowerInvariant() -ne $Want) { $Bad += "$Rel was changed" }
+  }
+  $Present = @(Get-ChildItem -Recurse -File -LiteralPath $Drawio | Where-Object { $_.Name -ne 'MANIFEST.sha256' }).Count
+  if ($Listed -eq 0) { throw 'vendor/drawio''s MANIFEST.sha256 lists no files; run packaging/fetch-drawio.sh again' }
+  if ($Bad.Count -gt 0 -or $Present -ne $Listed) {
+    $Bad | Select-Object -First 10 | ForEach-Object { Write-Output "    $_" }
+    throw "vendor/drawio doesn't match its MANIFEST.sha256 ($Present files present, $Listed listed); delete it and run packaging/fetch-drawio.sh again"
+  }
+  $Mb = [math]::Round(((Get-ChildItem -Recurse -File $Drawio | Measure-Object -Property Length -Sum).Sum) / 1MB)
+  Write-Output "==> staging vendor/drawio ($Mb MB, $Listed files verified)"
+  Copy-Item -Recurse -Force $Drawio (Join-Path $Stage 'drawio')
+} else {
+  Write-Warning 'vendor/drawio is missing; run packaging/fetch-drawio.sh to embed the diagram editor'
+}
+
 & (Join-Path $PSScriptRoot 'sign.ps1') (Join-Path $Stage 'wordcraft.exe') (Join-Path $Stage 'wordcraft-cli.exe')
 
 # ---- MSI ---------------------------------------------------------------------------------------
@@ -125,11 +162,15 @@ $rtf = '{\rtf1\ansi\ansicpg1252\deff0{\fonttbl{\f0\fswiss\fcharset0 Tahoma;}}\vi
 [System.IO.File]::WriteAllText($LicenseRtf, $rtf, [System.Text.Encoding]::ASCII)
 
 $Msi = Join-Path $Dist "wordcraft-$Version-windows-$Arch.msi"
+# `DrawioDir` is only defined when the app is staged: the .wxs harvests it into `drawio` beside the
+# executable, and leaves that out of a build with none.
+$DrawioArgs = if ($HasDrawio) { @('-d', "DrawioDir=$Drawio") } else { @() }
 Invoke-Native 'wix build' {
   wix build (Join-Path $PSScriptRoot 'wordcraft.wxs') -arch $Arch `
     -ext WixToolset.UI.wixext -ext WixToolset.Util.wixext `
     -d "Version=$MsiVersion" -d "BinDir=$Stage" -d "IconPath=$(Join-Path $Root 'assets\app-icon\wordcraft.ico')" `
     -d "LicenseRtf=$LicenseRtf" `
+    @DrawioArgs `
     -o $Msi
 }
 # wix writes its debug symbols (.wixpdb) next to the MSI; keep them out of the release assets.
@@ -141,6 +182,9 @@ $Portable = Join-Path $TargetDir "windows-package\wordcraft-$Version-windows-$Ar
 Remove-Item -Recurse -Force $Portable -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path $Portable | Out-Null
 Copy-Item (Join-Path $Stage '*.exe') $Portable
+# The portable build is the whole app, so the diagram editor goes with it: without it the editor
+# would fall back to the network while the MSI's copy edits offline.
+if ($HasDrawio) { Copy-Item -Recurse -Force (Join-Path $Stage 'drawio') $Portable }
 foreach ($f in 'README.md', 'LICENSE', 'LICENSE-MIT', 'LICENSE-APACHE') {
   $p = Join-Path $Root $f
   if (Test-Path $p) { Copy-Item $p $Portable }

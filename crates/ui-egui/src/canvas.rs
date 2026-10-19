@@ -3169,6 +3169,10 @@ fn context_menu(app: &mut WordApp, ui: &mut Ui) {
         ui.separator();
     }
     if picture {
+        // A draw.io PNG carries the diagram it was exported from: edit it in place.
+        if crate::diagram::is_drawio_selected(app) {
+            item(ui, app, "Edit Diagram", "ui.editDiagram", json!({}));
+        }
         item(ui, app, "Change Picture…", "ui.changePicture", json!({}));
         item(ui, app, "Reset Picture", "picture.reset", json!({}));
         item(ui, app, "Size and Crop…", "ui.tab", json!({"tab": "Picture Format"}));
@@ -4639,6 +4643,73 @@ mod tests {
         }
         let o = wordcraft_engine::cmd::objects::selected(&h.state().session).unwrap().1;
         assert_eq!(o.frame().unwrap().2.wrap, wordcraft_doc::para::Wrap::Square);
+    }
+
+    /// #2028: a double-click on a draw.io picture asks for the in-place editor over it, and a
+    /// plain picture — one with no diagram inside — stays a picture. The gesture is driven
+    /// through the harness, so what is asserted is what a person's two clicks do.
+    #[test]
+    fn double_click_on_a_drawio_picture_asks_for_the_editor() {
+        // A PNG with draw.io's diagram chunk in it, as File › Export writes it.
+        fn drawio_png(diagram: bool) -> Vec<u8> {
+            let img = image::RgbaImage::from_pixel(40, 20, image::Rgba([200, 30, 30, 255]));
+            let mut b = Vec::new();
+            image::DynamicImage::ImageRgba8(img).write_to(&mut std::io::Cursor::new(&mut b), image::ImageFormat::Png).unwrap();
+            let mut data = if diagram { b"mxfile\0<mxfile/>".to_vec() } else { b"Title\0holiday".to_vec() };
+            let mut chunk = (data.len() as u32).to_be_bytes().to_vec();
+            chunk.extend_from_slice(b"tEXt");
+            chunk.append(&mut data);
+            chunk.extend_from_slice(&0u32.to_be_bytes());
+            // Where a PNG reader keeps looking: right before IEND.
+            let at = (8..b.len()).find(|&i| b[i..].starts_with(b"IEND")).map_or(b.len(), |i| i - 4);
+            b.splice(at..at, chunk);
+            b
+        }
+        /// Two clicks and their releases, one frame apart — egui's double-click.
+        fn double_click(h: &mut egui_kittest::Harness<'static, WordApp>, at: egui::Pos2) {
+            for pressed in [true, false, true, false] {
+                h.event(egui::Event::PointerButton { pos: at, button: egui::PointerButton::Primary, pressed, modifiers: Default::default() });
+            }
+            for _ in 0..3 {
+                h.step();
+            }
+        }
+        for (diagram, opens) in [(true, true), (false, false)] {
+            let mut a = WordApp::new(wordcraft_engine::Session::new(wordcraft_doc::Document::new()), Default::default());
+            a.run("text.insert", json!({"text": "Text before the picture "})).unwrap();
+            a.run("insert.picture", json!({"data": wordcraft_engine::cmd::insert::base64_encode(&drawio_png(diagram)), "width": 160})).unwrap();
+            let media = a.selected_picture_media().expect("the picture is selected");
+            let pos = wordcraft_engine::cmd::objects::selected(&a.session).unwrap().0;
+            // A caret in the text, so the picture is clicked rather than being the selection.
+            a.session.sel = wordcraft_engine::Selection::caret(Pos::body(0, 0));
+            // 1/60 s a frame: the harness's default 0.25 s puts two clicks a second apart, and
+            // egui's double-click has to land inside 0.3 s.
+            let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(1440.0, 900.0)).with_step_dt(1.0 / 60.0).build_ui_state(
+                |ui, app: &mut WordApp| {
+                    let ctx = ui.ctx().clone();
+                    app.logic(&ctx);
+                    app.ui(ui);
+                },
+                a,
+            );
+            for _ in 0..6 {
+                h.step();
+            }
+            let rect = h.state_mut().session.layout().object(&pos, 0).expect("the picture is laid out").rect;
+            let at = crate::frame::to_screen(h.state().canvas.page_rects[0], h.state().canvas.scale, rect).center();
+            let (rev, steps) = (h.state().session.rev(), h.state().session.undo_depth());
+            double_click(&mut h, at);
+            let asked = h.state().diagram.pending().map(str::to_owned);
+            // Asking for the editor is not an edit: the picture, what Undo would take back, and
+            // the document's revision are all where the double-click found them.
+            assert_eq!(h.state().session.rev(), rev, "the double-click changed the document");
+            assert_eq!(h.state().session.undo_depth(), steps, "the double-click added an undo step");
+            if opens {
+                assert_eq!(asked.as_deref(), Some(media.as_str()), "the double-click asked for the editor");
+            } else {
+                assert_eq!(asked, None, "a picture with no diagram in it is only a picture");
+            }
+        }
     }
 
     /// #1197: the context menu on a table of contents entry offers Update Field, as in Word, and

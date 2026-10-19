@@ -105,6 +105,17 @@ cp "$WORK/bin/wordcraft" "$APP/Contents/MacOS/WordCraft"
 cp "$ROOT/assets/app-icon/wordcraft.icns" "$APP/Contents/Resources/WordCraft.icns"
 # Licences of the embedded craft-fonts fonts (only when built with CRAFT_FONTS_DIR).
 copy_font_licences "$APP/Contents/Resources"
+# The draw.io web app (Apache-2.0), which the diagram editor serves as its UI: diagrams are edited
+# inside the app, with nothing fetched. Without it the editor falls back to draw.io's embed site.
+if [ -d "$ROOT/vendor/drawio" ]; then
+  # The VERSION file says which tag was asked for, not what the files are: check them against the
+  # manifest the fetch wrote, so an edited or stale cache can't be embedded. Non-zero = don't ship.
+  "$ROOT/packaging/fetch-drawio.sh" --verify
+  echo "==> embedding vendor/drawio ($(du -sh "$ROOT/vendor/drawio" | cut -f1))"
+  ditto "$ROOT/vendor/drawio" "$APP/Contents/Resources/drawio"
+else
+  warn "macOS: vendor/drawio is missing; run packaging/fetch-drawio.sh to embed the diagram editor"
+fi
 sed -e "s/@VERSION@/$VERSION/g" -e "s/@SHORT_VERSION@/$SHORT_VERSION/g" \
   -e "s/@BUILD_SHA@/${WORDCRAFT_BUILD_SHA:-unknown}/g" \
   "$HERE/Info.plist.in" >"$APP/Contents/Info.plist"

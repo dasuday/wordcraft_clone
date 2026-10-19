@@ -34,6 +34,7 @@ pub mod control;
 pub mod credits;
 pub mod crop;
 pub mod desktop_theme;
+pub mod diagram;
 pub mod dialogs;
 pub mod dialogs_chart;
 pub mod dialogs_controls;
@@ -502,6 +503,8 @@ pub struct WordApp {
     pub printing: printing::State,
     print_feedback_seen: Option<printing::Feedback>,
     pub canvas: canvas::CanvasState,
+    /// The draw.io editor opened over a picture in the document (`diagram`).
+    pub diagram: diagram::Diagram,
     /// Content control frames, check boxes and lists on the page.
     pub controls: content_controls::ControlUi,
     pub dialog: Option<dialogs::Dialog>,
@@ -710,6 +713,7 @@ impl WordApp {
             saves_in_flight: Vec::new(),
             awaiting_save: None,
             change_picture_target: None,
+            diagram: diagram::Diagram::default(),
             recipient_list_pending: false,
             font_generation: wordcraft_fonts::FontDb::global().generation(),
             dialog_pick: None,
@@ -1512,6 +1516,48 @@ impl WordApp {
                 self.pick_picture();
                 json!({"pending": self.change_picture_target.is_some()})
             }
+            // A draw.io picture (its PNG carries the diagram's XML): edit it where it is, as
+            // Word opens a Visio object in place. Opens on the next frame, which is the first
+            // one with the window (`WordApp::diagram_frame`).
+            "ui.editDiagram" => {
+                // One diagram at a time: a second `open` replaces the editor's webview, and the
+                // edits in the first go with it — unsaved, and without asking. A request that
+                // hasn't been opened yet counts: until the host's next frame, `is_open` is false.
+                if self.diagram.is_open() || self.diagram.pending().is_some() {
+                    return Some(Err("finish editing the diagram that is open first".into()));
+                }
+                // The picture's place in the document travels with the request: the selection can
+                // move on while draw.io is open, and a copy of the picture shares its media key.
+                let selected = wordcraft_engine::cmd::objects::selected(&self.session);
+                // With `media` the caller already knows the picture (the double-click path);
+                // without it, the selected one is edited.
+                let media = match p.get("media").and_then(|v| v.as_str()) {
+                    Some(m) => m.to_owned(),
+                    None => match &selected {
+                        Some((_, wordcraft_doc::para::InlineObject::Image { media, .. })) => media.clone(),
+                        _ => {
+                            log::warn!("diagram: edit asked for, but no picture is selected");
+                            return Some(Err("select a picture first".into()));
+                        }
+                    },
+                };
+                let at = selected.and_then(|(pos, o)| match o {
+                    wordcraft_doc::para::InlineObject::Image { media: m, .. } if m == media => Some(pos),
+                    _ => None,
+                });
+                if !self.session.doc.media.get(&media).is_some_and(|b| wordcraft_diagram::png::is_drawio(b)) {
+                    log::warn!("diagram: picture {media} carries no draw.io data");
+                    return Some(Err("the picture isn't a draw.io diagram: export it from draw.io as a PNG with a copy of the diagram in it".into()));
+                }
+                if let Some(why) = crate::diagram::unsupported() {
+                    return Some(Err(why.into()));
+                }
+                log::info!("diagram: opening the editor for picture {media}");
+                // The editor is bound to the document that is open now: a file.open or file.new
+                // replaces it, and the media key and position name nothing there.
+                self.diagram.request(media.clone(), at, self.session.document_id());
+                json!({"pending": "editDiagram", "media": media})
+            }
             // The page's context menu at the caret, as Shift+F10 or the Menu key opens it (#821).
             "ui.contextMenu" => {
                 self.canvas.context_menu_from_keys = true;
@@ -2182,6 +2228,79 @@ impl WordApp {
         raw.events.extend(self.synthetic.drain(..n));
     }
 
+    /// The diagram editor's share of a frame: open it now that the window is at hand, take what
+    /// draw.io says, and keep the view over the document area. The host calls this after
+    /// [`Self::ui`], with the window the editor goes inside (`eframe::Frame`, a winit window);
+    /// a host with no such window (the browser) calls it never, and nothing is opened.
+    pub fn diagram_frame(&mut self, window: &impl raw_window_handle::HasWindowHandle) {
+        use crate::diagram::editor::{Event, Window};
+        // `file.open` and `file.new` replace the document under a pending request or an open
+        // editor, without a word to it: media keys and positions are document-local, and the
+        // replacement can hold the same key at the same place. The editor is bound to the
+        // document it was opened on, so a replacement puts the whole session away.
+        if self.diagram.belongs_to_another_document(self.session.document_id()) {
+            log::info!("diagram: the document was replaced; the editor is closed with it");
+            self.diagram.close();
+            self.status(tl!("The diagram was left as it was: the document it belongs to isn't open any more."));
+        }
+        // Open: the request waited for a frame that has the window, which is this one.
+        if let Some(media) = self.diagram.pending().map(str::to_owned) {
+            match self.session.doc.media.get(&media).cloned() {
+                Some(png) => {
+                    let w = Window::new(window);
+                    if let Err(e) = self.diagram.open(&w, &media, &png) {
+                        log::warn!("diagram: the editor didn't open: {e}");
+                        self.status(e);
+                        self.diagram.cancel();
+                    }
+                }
+                // The picture went away between the request and this frame.
+                None => self.diagram.cancel(),
+            }
+        }
+        for event in self.diagram.poll() {
+            match event {
+                Event::Ready => {}
+                // Save: the edited picture takes the place of the one it came from. Which picture
+                // that is comes from the editor, not from whatever is selected now.
+                Event::Exported(png) => {
+                    let media = self.diagram.media_key().map(str::to_owned);
+                    let at = self.diagram.at().cloned();
+                    let replaced = self.diagram.belongs_to_another_document(self.session.document_id());
+                    self.diagram.close();
+                    // Without the key there is nothing to put the picture back into: applying it
+                    // to whatever is selected now would be an edit the user never asked for.
+                    // The document check is belt and braces — the frame's head already put the
+                    // editor away when the document was replaced, so this poll shouldn't see it.
+                    match media {
+                        Some(media) if !replaced => diagram::apply(self, png, &media, at.as_ref()),
+                        Some(_) => {
+                            log::warn!("diagram: an export arrived after the document was replaced; it is dropped");
+                            self.status(tl!("The diagram was left as it was: the document it belongs to isn't open any more."));
+                        }
+                        None => log::warn!("diagram: an export arrived with no picture to put it back into"),
+                    }
+                    // The editor closed with this event, so nothing else in this poll is still
+                    // addressed to one; a second export would be applied twice.
+                    break;
+                }
+                // draw.io's own Exit asked for nothing, so the picture is left as it was.
+                Event::Closed => {
+                    self.diagram.close();
+                    break;
+                }
+                Event::Failed(e) => {
+                    self.diagram.close();
+                    self.status(e);
+                    break;
+                }
+            }
+        }
+        if let Some(rect) = self.diagram.placement() {
+            self.diagram.place(rect);
+        }
+    }
+
     /// Lay out the window.
     pub fn ui(&mut self, ui: &mut egui::Ui) {
         let t0 = now_ms();
@@ -2208,6 +2327,10 @@ impl WordApp {
         if self.session.view.focus_mode && self.dialog.is_none() && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
             let _ = self.run("view.focus", json!({"value": false}));
         }
+        // The diagram editor is a native view above everything this frame paints: `show` says
+        // whether the document area was drawn, and `settle` puts the view away when it wasn't (or
+        // when a dialog covers it) rather than leaving it floating over File or the dialog.
+        self.diagram.begin_frame();
         if self.ui.backstage {
             backstage::show(self, ui);
         } else if !self.has_document() {
@@ -2225,8 +2348,14 @@ impl WordApp {
             }
             egui::CentralPanel::default().frame(egui::Frame::NONE.fill(t.canvas)).show(ui, |ui| {
                 canvas::show(self, ui);
+                // After the page: the strip that says how to leave the editor can't be painted
+                // over by it. The area the editor covers is `diagram`'s to hand to the window.
+                diagram::show(self, ui);
             });
         }
+        // The document area has been drawn (or not): the editor's native view follows it, and a
+        // dialog is painted over it.
+        self.diagram.settle(self.dialog.is_some());
         content_controls::popup(self, &ctx);
         dialogs::show(self, &ctx);
         #[cfg(not(target_arch = "wasm32"))]
