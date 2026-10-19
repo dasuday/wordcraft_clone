@@ -2702,5 +2702,5 @@ preview	Title	Örnek
 	Dock Right	Sağa Yerleştir
 	Float	Serbest Bırak
 	Pane Options	Bölme Seçenekleri
-	Move Pane	Bölmeyi Taşı
+	Move Pane: {title}	Bölmeyi Taşı: {title}
 	Resize Pane	Bölmeyi Yeniden Boyutlandır
