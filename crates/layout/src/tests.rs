@@ -9423,3 +9423,165 @@ fn caret_height_ignores_line_spacing() {
         assert!((single - wide).abs() < 0.01, "{spacing:?}: single {single}, wide {wide}");
     }
 }
+
+fn fit_image(float: wordcraft_doc::para::Float) -> InlineObject {
+    InlineObject::Image { media: "original-probe".into(), w: 400.0, h: 280.0, alt: String::new(), float, crop: [0.0; 4], ole: None }
+}
+
+fn image_rects(items: &[Placed]) -> Vec<Rect> {
+    items
+        .iter()
+        .filter_map(|it| match it {
+            Placed::Image { rect, .. } => Some(*rect),
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn paragraph_floats_fit_the_page() {
+    use wordcraft_doc::para::{Anchor, Float, GroupChild, Wrap};
+    for grouped in [false, true] {
+        let mut d = Document::from_text("\n\n");
+        for block in 0..3 {
+            let p = d.para_mut(StoryRef::Body, &Path::top(block)).unwrap();
+            p.props.space_after = Some(280.0);
+            let f = Float { wrap: Wrap::Square, h_rel: Anchor::Column, v_rel: Anchor::Paragraph, dist: 9.0, ..Default::default() };
+            let o = if grouped {
+                InlineObject::Group {
+                    w: 400.0,
+                    h: 280.0,
+                    float: f,
+                    ch_w: 400.0,
+                    ch_h: 280.0,
+                    children: vec![GroupChild { x: 0.0, y: 0.0, obj: fit_image(Default::default()) }],
+                    canvas: None,
+                }
+            } else {
+                fit_image(f)
+            };
+            p.insert_object(0, o, &Default::default()).unwrap();
+        }
+        let l = lay(&d);
+        assert_eq!(l.pages.iter().map(|p| image_rects(&p.items).len()).sum::<usize>(), 3);
+        for page in &l.pages {
+            for r in image_rects(&page.items) {
+                assert!(r.bottom() <= page.body.bottom() + 0.01, "picture {r:?} overflows body {:?}", page.body);
+            }
+        }
+    }
+}
+
+#[test]
+fn page_float_keeps_its_position() {
+    use wordcraft_doc::para::{Anchor, Float, Wrap};
+    let mut d = Document::from_text("Before\n");
+    d.para_mut(StoryRef::Body, &Path::top(0)).unwrap().props.space_after = Some(520.0);
+    let f = Float { wrap: Wrap::Square, h_rel: Anchor::Page, v_rel: Anchor::Page, x: 100.0, y: 650.0, ..Default::default() };
+    d.insert_object(&Pos::body(1, 0), fit_image(f), &Default::default()).unwrap();
+    let l = lay(&d);
+    assert_eq!(l.pages.len(), 1);
+    assert!((image_rects(&l.pages[0].items)[0].y - 650.0).abs() < 0.01);
+}
+
+#[test]
+fn annotation_keeps_its_anchor() {
+    use wordcraft_doc::para::{Anchor, Float, Wrap};
+    let mut d = Document::from_text("Before\nAnchor");
+    d.para_mut(StoryRef::Body, &Path::top(0)).unwrap().props.space_after = Some(520.0);
+    let f = Float { wrap: Wrap::Square, v_rel: Anchor::Paragraph, y: 300.0, ..Default::default() };
+    d.insert_object(&Pos::body(1, 0), rect_shape(10.0, 10.0, f), &Default::default()).unwrap();
+    assert_eq!(lay(&d).pages.len(), 1);
+}
+
+mod contextual_picture_fit {
+    use super::*;
+    use wordcraft_doc::para::{Anchor, Float, GroupChild, Wrap};
+    use wordcraft_doc::props::LineSpacing;
+
+    const PICTURE_WIDTH: f32 = 400.0;
+    const PICTURE_HEIGHT: f32 = 280.0;
+    const SUPPRESSED_GAP: f32 = 80.0;
+
+    #[derive(Clone, Copy, Debug)]
+    enum PictureKind {
+        Image,
+        Group,
+    }
+
+    #[derive(Clone, Copy)]
+    enum Gap {
+        Contextual,
+        Zero,
+    }
+
+    fn document(kind: PictureKind, gap: Gap, first_height: f32) -> Document {
+        let mut d = Document::from_text("Before\n");
+        for block in 0..2 {
+            let p = d.para_mut(StoryRef::Body, &Path::top(block)).unwrap();
+            p.props = ParaProps {
+                space_before: Some(0.0),
+                space_after: Some(0.0),
+                contextual_spacing: Some(false),
+                line_spacing: Some(LineSpacing::Exactly(if block == 0 { first_height } else { 24.0 })),
+                ..Default::default()
+            };
+        }
+        if matches!(gap, Gap::Contextual) {
+            let p = d.para_mut(StoryRef::Body, &Path::top(0)).unwrap();
+            p.props.space_after = Some(SUPPRESSED_GAP);
+            p.props.contextual_spacing = Some(true);
+        }
+        let float = Float { wrap: Wrap::Square, h_rel: Anchor::Column, v_rel: Anchor::Paragraph, dist: 0.0, ..Default::default() };
+        let picture = match kind {
+            PictureKind::Image => fit_image(float),
+            PictureKind::Group => InlineObject::Group {
+                w: PICTURE_WIDTH,
+                h: PICTURE_HEIGHT,
+                float,
+                ch_w: PICTURE_WIDTH,
+                ch_h: PICTURE_HEIGHT,
+                children: vec![GroupChild { x: 0.0, y: 0.0, obj: fit_image(Default::default()) }],
+                canvas: None,
+            },
+        };
+        d.insert_object(&Pos::body(1, 0), picture, &Default::default()).unwrap();
+        d
+    }
+
+    fn assert_pair(first_height: f32, expected_page: usize) {
+        for kind in [PictureKind::Image, PictureKind::Group] {
+            let contextual = lay(&document(kind, Gap::Contextual, first_height));
+            let control = lay(&document(kind, Gap::Zero, first_height));
+            for l in [&contextual, &control] {
+                assert_eq!(l.pages.len(), expected_page + 1, "{kind:?}");
+                assert_eq!(l.pages.iter().map(|p| image_rects(&p.items).len()).sum::<usize>(), 1, "{kind:?}");
+                let page = &l.pages[expected_page];
+                let images = image_rects(&page.items);
+                assert_eq!(images.len(), 1, "{kind:?}");
+                let r = images[0];
+                let expected_y = page.body.y + if expected_page == 0 { first_height } else { 0.0 };
+                assert!((r.y - expected_y).abs() < 0.01, "{kind:?}: {r:?}, expected y={expected_y}");
+                assert!((r.x - page.body.x).abs() < 0.01, "{kind:?}: {r:?} vs {:?}", page.body);
+                assert!((r.w - PICTURE_WIDTH).abs() < 0.01 && (r.h - PICTURE_HEIGHT).abs() < 0.01, "{kind:?}: {r:?}");
+                assert!(r.bottom() <= page.body.bottom() + 0.01, "{kind:?}: {r:?} outside {:?}", page.body);
+            }
+            let a = contextual.caret(&Pos::body(1, 0)).unwrap();
+            let b = control.caret(&Pos::body(1, 0)).unwrap();
+            assert_eq!(a.page, b.page, "{kind:?}");
+            assert!((a.x - b.x).abs() < 0.01 && (a.top - b.top).abs() < 0.01, "{kind:?}: {a:?} vs {b:?}");
+        }
+    }
+
+    #[test]
+    fn suppressed_gap_fits_here() {
+        // A 648 pt body fits 300 + 280 pt, but not the discarded 80 pt gap as well.
+        assert_pair(300.0, 0);
+    }
+
+    #[test]
+    fn effective_overflow_still_moves() {
+        // Even after discarding the gap, 400 + 280 pt exceeds the 648 pt body.
+        assert_pair(400.0, 1);
+    }
+}
