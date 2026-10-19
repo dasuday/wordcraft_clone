@@ -12,7 +12,7 @@ use wordcraft_layout::display::CommentDisplay;
 use wordcraft_layout::{DocLayout, Page, Placed};
 
 use crate::WordApp;
-use crate::theme::{Tokens, regular, semibold};
+use crate::theme::{Tokens, medium, regular, semibold};
 
 /// Points on screen per document point at 100% (96 px per inch, like a word processor).
 pub const PX_PER_PT: f32 = 96.0 / 72.0;
@@ -897,6 +897,36 @@ fn drawing_grid_step(spacing: f32, scale: f32) -> f32 {
         step *= 2.0;
     }
     step
+}
+
+/// The page area with no document open (#3126): what to do next, so Esc on the Start screen or
+/// File › Close leaves the ways to make or open a document in sight instead of just a greyed-out
+/// ribbon that looks broken. The page itself stays empty until one is made or opened, as #1129
+/// has it; Home goes back to the Start screen.
+pub(crate) fn empty_state(app: &mut WordApp, ui: &mut Ui) {
+    let t = Tokens::get(ui.ctx());
+    let full = ui.available_rect_before_wrap();
+    // Centred in the page area, but never pushed off the top of a short window.
+    ui.add_space(((full.height() - 100.0) * 0.5).max(24.0));
+    ui.vertical_centered(|ui| {
+        ui.label(egui::RichText::new(tl!("No document is open. Create a document or open one first.")).font(regular(15.0)).color(t.text_dim));
+        ui.add_space(16.0);
+        if ui.button(egui::RichText::new(tl!("Blank document")).font(medium(14.0))).clicked() {
+            let _ = app.run("file.new", json!({"template": "blank"}));
+            app.canvas.want_focus = true;
+        }
+        ui.add_space(2.0);
+        if ui.button(egui::RichText::new(tl!("Browse…")).font(medium(14.0))).clicked() {
+            let _ = app.run("ui.openFileDialog", json!({}));
+        }
+        ui.add_space(8.0);
+        // A frame-less button, so it reads as a link beside the two actions; the ribbon's Home tab
+        // is a button above it, so the test takes the lower one with the label.
+        let home = ui.add(egui::Button::new(egui::RichText::new(tl!("Home")).font(medium(13.5)).color(t.accent)).frame(false));
+        if home.clicked() {
+            let _ = app.run("ui.backstage", json!({"value": true, "page": "home"}));
+        }
+    });
 }
 
 pub fn show(app: &mut WordApp, ui: &mut Ui) {
