@@ -11,6 +11,28 @@ use crate::{WordApp, icons};
 
 pub const TABS: [&str; 13] = wordcraft_engine::ribbon::TABS;
 
+/// Share in the title bar. Cloud sharing replaces the old export affordance
+/// when the connected provider supports it.
+pub(crate) fn title_share(app: &mut WordApp, ui: &mut Ui) {
+    let t = Tokens::get(ui.ctx());
+    if crate::cloud::shares(app) {
+        if let Some(format) = crate::cloud::share_button(app, ui, &crate::cloud::copies()) {
+            app.export_dialog(&format);
+        }
+        return;
+    }
+
+    let share = tl!("Share");
+    let share_w = ui.ctx().fonts_mut(|f| f.layout_no_wrap(share.to_string(), medium(12.0), t.text).size().x);
+    let (r, resp) = ui.allocate_exact_size(vec2((share_w + 36.0).max(74.0), 24.0), Sense::click());
+    ui.painter().rect_filled(r, 4.0, if resp.hovered() { t.accent_text } else { t.accent });
+    icons::paint(ui.painter(), Rect::from_center_size(pos2(r.min.x + 14.0, r.center().y), vec2(14.0, 14.0)), "share", t.on_accent, t.on_accent);
+    ui.painter().text(pos2(r.min.x + 26.0, r.center().y), Align2::LEFT_CENTER, share, medium(12.0), t.on_accent);
+    if resp.on_hover_text(tl!("Export a copy to share (PDF, Word document)")).clicked() {
+        let _ = app.run("ui.backstage", json!({"value": true, "page": "export"}));
+    }
+}
+
 /// True when the caret/selection touches a picture (#147).
 pub fn has_picture_selected(s: &wordcraft_engine::Session) -> bool {
     matches!(wordcraft_engine::cmd::objects::selected(s), Some((_, wordcraft_doc::para::InlineObject::Image { .. })))
@@ -300,23 +322,22 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
         .exact_size(30.0)
         .frame(egui::Frame::NONE.fill(t.tab_strip).inner_margin(egui::Margin { left: 8, right: 10, top: 0, bottom: 0 }))
         .show(ui, |ui| {
+            // Editing mode and Comments are the only controls in this row.
+            // Account, presence and Share belong in the title bar.
             ui.horizontal_centered(|ui| {
                 ui.spacing_mut().item_spacing = vec2(2.0, 0.0);
-                // Share, Editing mode and Comments keep their room; the tabs get what is left of it
-                // (#897, #2026), and the buttons give up their labels before a tab is drawn over them.
-                let share = tl!("Share");
+                // Editing mode and Comments keep their room; Share lives in the title bar. The tabs
+                // get what is left (#897, #2026), and the buttons give up their labels before a tab
+                // is drawn over them.
                 let editing_label = if app.session.doc.settings.track_changes { tl!("Reviewing") } else { tl!("Editing") };
                 let comments = tl!("Comments");
-                let share_w = ui.ctx().fonts_mut(|f| f.layout_no_wrap(share.to_string(), medium(12.0), t.text).size().x);
                 let spaced = |w: f32| w + 2.0;
                 let button_widths = |level: usize| -> f32 {
                     let labels = level == 0;
-                    let share_full = (share_w + 36.0).max(74.0);
-                    let share_button = if level < 2 { share_full } else { 30.0 };
                     let editing = crate::widgets::icon_text_button_width(ui, editing_label, regular(12.0), true, labels);
                     let comment = crate::widgets::icon_text_button_width(ui, comments, regular(12.0), false, labels);
-                    // The gaps (6 + 4 + 8) and the strip's margin.
-                    spaced(share_button) + spaced(editing) + spaced(comment) + 18.0 + 12.0
+                    // The gaps (4 + 8) and the strip's margin.
+                    spaced(editing) + spaced(comment) + 18.0 + 12.0
                 };
                 let button_levels = [button_widths(0), button_widths(1), button_widths(2)];
                 let labels: Vec<&str> = tabs.iter().map(|(tab, custom)| if *custom { tab.as_str() } else { tl!(tab) }).collect();
@@ -332,31 +353,10 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
                     .collect();
                 let plan = plan_strip(&specs, button_levels, ui.available_width(), MORE_TABS_W + 2.0);
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    // No document open (#1129): nothing to share, edit or comment on — but only
-                    // these buttons. Disabling the whole line took the tab strip with it: the
-                    // tabs took clicks that did nothing, so the empty window had no way back to
-                    // the Start screen (#3045).
+                    // No document open (#1129): nothing to edit or comment on, but only these
+                    // buttons. Disabling the whole line took the tab strip with it, so the empty
+                    // window had no way back to the Start screen (#3045). Share is in the title bar.
                     ui.add_enabled_ui(app.has_document(), |ui| {
-                        let (share_size, share_text) =
-                            if plan.buttons < 2 { (((share_w + 36.0).max(74.0), 24.0), true) } else { ((30.0, 24.0), false) };
-                        let (r, resp) = ui.allocate_exact_size(vec2(share_size.0, share_size.1), Sense::click());
-                        ui.painter().rect_filled(r, 4.0, if resp.hovered() { t.accent_text } else { t.accent });
-                        let icon_x = if share_text { r.min.x + 14.0 } else { r.center().x };
-                        icons::paint(
-                            ui.painter(),
-                            Rect::from_center_size(pos2(icon_x, r.center().y), vec2(14.0, 14.0)),
-                            "share",
-                            t.on_accent,
-                            t.on_accent,
-                        );
-                        if share_text {
-                            ui.painter().text(pos2(r.min.x + 26.0, r.center().y), Align2::LEFT_CENTER, share, medium(12.0), t.on_accent);
-                        }
-                        resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, share));
-                        if resp.on_hover_text(tl!("Export a copy to share (PDF, Word document)")).clicked() {
-                            let _ = app.run("ui.backstage", json!({"value": true, "page": "export"}));
-                        }
-                        ui.add_space(6.0);
                         let track = app.session.doc.settings.track_changes;
                         let mode = if plan.buttons == 0 {
                             crate::widgets::icon_text_menu_button(ui, "pencil", editing_label, regular(12.0))
