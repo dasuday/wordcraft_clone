@@ -39,6 +39,10 @@ pub enum ProofLang {
     /// `id_ID` dictionary, dictionary-driven suggestions and generic checks with Indonesian
     /// messages. Hyphenation keeps the fallback English patterns.
     Id,
+    /// Greek (`el`, `el-GR`, `el-CY`; ISO 639-2 `ell`/`gre`): the installed Hunspell `el_GR`
+    /// dictionary, Greek-aware suggestions (final sigma, accents) and Greek grammar checks.
+    /// Hyphenation keeps the fallback English patterns.
+    El,
     /// A language without proofing tools here (`fr-FR`, `ja-JP`, `x-none`…). Like Word without
     /// the language's proofing tools: no spelling or grammar marks, so its words are never
     /// flagged as English misspellings. Hyphenation keeps using the English patterns, as before
@@ -48,8 +52,18 @@ pub enum ProofLang {
 
 impl ProofLang {
     /// Every language with a spelling dictionary, in display order.
-    pub const PROOFED: [ProofLang; 9] =
-        [ProofLang::En, ProofLang::Pl, ProofLang::Pt, ProofLang::It, ProofLang::Hr, ProofLang::Tr, ProofLang::Ru, ProofLang::Cs, ProofLang::Id];
+    pub const PROOFED: [ProofLang; 10] = [
+        ProofLang::En,
+        ProofLang::Pl,
+        ProofLang::Pt,
+        ProofLang::It,
+        ProofLang::Hr,
+        ProofLang::Tr,
+        ProofLang::Ru,
+        ProofLang::Cs,
+        ProofLang::Id,
+        ProofLang::El,
+    ];
 
     /// The proofing language of a BCP 47 tag (`pl-PL`, `en_GB`, `PL`…). Only the primary subtag
     /// counts. No tag (or an empty one) is English, WordCraft's default editing language.
@@ -76,12 +90,14 @@ impl ProofLang {
             ProofLang::Cs
         } else if primary.eq_ignore_ascii_case("id") || primary.eq_ignore_ascii_case("ind") || primary.eq_ignore_ascii_case("in") {
             ProofLang::Id
+        } else if primary.eq_ignore_ascii_case("el") || primary.eq_ignore_ascii_case("ell") || primary.eq_ignore_ascii_case("gre") {
+            ProofLang::El
         } else {
             ProofLang::Other
         }
     }
 
-    /// The primary language subtag (`en`, `pl`, `bg`, `tr`, `ru`, `cs`, `id`); empty for [`ProofLang::Other`].
+    /// The primary language subtag (`en`, `pl`, `bg`, `tr`, `ru`, `cs`, `id`, `el`); empty for [`ProofLang::Other`].
     pub fn code(self) -> &'static str {
         match self {
             ProofLang::En => "en",
@@ -94,6 +110,7 @@ impl ProofLang {
             ProofLang::Ru => "ru",
             ProofLang::Cs => "cs",
             ProofLang::Id => "id",
+            ProofLang::El => "el",
             ProofLang::Other => "",
         }
     }
@@ -183,6 +200,11 @@ mod tests {
         }
         assert_eq!(ProofLang::Id.code(), "id");
         assert!(ProofLang::Id.is_proofed() && ProofLang::PROOFED.contains(&ProofLang::Id));
+        for t in ["el", "el-GR", "EL-gr", "el_GR", "el_GR.UTF-8", " el-CY ", "ell", "gre"] {
+            assert_eq!(ProofLang::from_tag(Some(t)), ProofLang::El, "{t}");
+        }
+        assert_eq!(ProofLang::El.code(), "el");
+        assert!(ProofLang::El.is_proofed() && ProofLang::PROOFED.contains(&ProofLang::El));
         for t in ["en", "en-US", "en-GB", "EN_au", "en-Latn-US"] {
             assert_eq!(ProofLang::from_tag(Some(t)), ProofLang::En, "{t}");
         }
@@ -192,7 +214,7 @@ mod tests {
         for t in ["tr", "tr-TR", "tr-CY", "TR_tr", "tur"] {
             assert_eq!(ProofLang::from_tag(Some(t)), ProofLang::Tr, "{t}");
         }
-        for t in ["fr-FR", "de", "x-none", "ja-JP", "plx", "bgx", "trx", "csx", "idx", "inx", "e", "-"] {
+        for t in ["fr-FR", "de", "x-none", "ja-JP", "plx", "bgx", "trx", "csx", "idx", "inx", "elx", "e", "-"] {
             assert_eq!(ProofLang::from_tag(Some(t)), ProofLang::Other, "{t}");
         }
         assert_eq!(ProofLang::from_tag(None), ProofLang::En);

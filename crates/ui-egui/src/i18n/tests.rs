@@ -991,8 +991,8 @@ fn polish_covers_every_key_of_every_other_catalog() {
     // Hungarian and Bulgarian also name the citation styles, and Bulgarian has a few one-line
     // pieces of gallery labels. Polish matches every other catalog, including the built-in style
     // names, citation styles and equation gallery. French carries newer strings (paper sizes,
-    // bookmarks, printing) the Polish catalog hasn't caught up with yet.
-    for other in Lang::all().filter(|l| *l != Lang::EN && !matches!(l.code(), "pl" | "it" | "hu" | "bg" | "vi" | "sv" | "hr" | "fr")) {
+    // bookmarks, printing) the Polish catalog hasn't caught up with yet; Greek has every catalog's keys.
+    for other in Lang::all().filter(|l| *l != Lang::EN && !matches!(l.code(), "pl" | "it" | "hu" | "bg" | "vi" | "sv" | "hr" | "fr" | "el")) {
         let mut missing: Vec<String> = keys(other.0.source).difference(&polish).cloned().collect();
         missing.sort();
         assert!(missing.is_empty(), "pl lacks {}'s {missing:?}", other.code());
@@ -1123,7 +1123,7 @@ fn an_italian_interface_writes_new_documents_in_italian() {
 #[test]
 fn the_editing_languages_are_the_ones_wordcraft_can_proof() {
     let with: Vec<(&str, &str)> = Lang::all().filter_map(|l| l.editing_lang().map(|e| (l.code(), e))).collect();
-    assert_eq!(with, [("pt-br", "pt-BR"), ("pl", "pl-PL"), ("cs", "cs-CZ"), ("tr", "tr-TR"), ("it", "it-IT")]);
+    assert_eq!(with, [("pt-br", "pt-BR"), ("pl", "pl-PL"), ("cs", "cs-CZ"), ("tr", "tr-TR"), ("it", "it-IT"), ("el", "el-GR")]);
 }
 
 #[test]
@@ -1559,4 +1559,62 @@ fn bundled_interface_fonts_cover_vietnamese_letters() {
         }
     }
     assert!(!lang("vi").uses_cjk());
+}
+
+#[test]
+fn greek_locales_resolve_and_the_catalog_covers_every_other_one() {
+    use std::collections::HashSet;
+    let el = lang("el");
+    for tag in ["el", "el-GR", "el_GR.UTF-8", "EL-cy", "el-Grek-GR"] {
+        assert_eq!(lang_from_tag(tag), Some(el), "{tag}");
+    }
+    assert_eq!(el.name(), "Ελληνικά");
+    let keys = |source| parse_entries(source).0.into_iter().map(|e| (e.context, e.source)).collect::<HashSet<_>>();
+    let (_, errors) = parse_entries(el.0.source);
+    assert!(errors.is_empty(), "{errors:?}");
+    let greek = keys(el.0.source);
+    for other in Lang::all().filter(|l| *l != Lang::EN && *l != el) {
+        let mut missing: Vec<_> = keys(other.0.source).difference(&greek).cloned().collect();
+        missing.sort();
+        assert!(missing.is_empty(), "el lacks {}'s {missing:?}", other.code());
+    }
+    assert_eq!(tr(el, "Greek"), "Ελληνικά");
+    assert_ne!(tr(el, "File"), "File");
+    assert_ne!(tr(el, "Spelling & Grammar"), "Spelling & Grammar");
+    assert_eq!(tr(el, "unknown future label"), "unknown future label");
+}
+
+#[test]
+fn bundled_interface_fonts_cover_greek_without_system_fallbacks() {
+    let db = wordcraft_fonts::FontDb::with_font_dirs(Vec::new());
+    let (entries, errors) = parse_entries(lang("el").0.source);
+    assert!(errors.is_empty());
+    let chars: std::collections::HashSet<char> = entries
+        .iter()
+        .flat_map(|e| e.translation.chars())
+        .filter(|c| ('\u{0370}'..='\u{03FF}').contains(c) || matches!(c, '«' | '»' | '—'))
+        .chain("ΑΒΓΔΕΖΗΘΙΚΛΜΝΞΟΠΡΣΤΥΦΧΨΩαβγδεζηθικλμνξοπρσςτυφχψωάέήίόύώϊϋΐΰΆΈΉΊΌΎΏ".chars())
+        .collect();
+    for (family, style) in [("Inter", "Regular"), ("Inter", "Medium"), ("Inter", "SemiBold")] {
+        let face = db.face(family, style);
+        assert_eq!(face.family, family, "must use the bundled interface face");
+        for ch in &chars {
+            assert_ne!(face.glyph_for(*ch), 0, "{family} {style} lacks {ch}");
+        }
+    }
+}
+
+#[test]
+fn a_greek_interface_writes_new_documents_in_greek() {
+    let mut app = crate::WordApp::new(wordcraft_engine::Session::new(wordcraft_doc::Document::new()), Default::default());
+    let ctx = egui::Context::default();
+    let frame = |app: &mut crate::WordApp| ctx.run_ui(egui::RawInput::default(), |ui| app.logic(ui.ctx())).drop_without_applying_deltas();
+    frame(&mut app);
+    app.run("ui.language", serde_json::json!({"value": "el"})).unwrap();
+    frame(&mut app);
+    assert_eq!(app.session.editing_lang.as_deref(), Some("el-GR"));
+    assert_eq!(app.session.doc.styles.default_chr.lang.as_deref(), Some("el-GR"));
+    set_current(lang("el"));
+    assert_eq!(crate::ribbon::caret_language(&app), "Ελληνικά");
+    set_current(Lang::EN);
 }
