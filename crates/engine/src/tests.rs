@@ -8491,3 +8491,25 @@ fn rtf_list_round_trip_keeps_text() {
         assert_eq!(d.plain_text(StoryRef::Body), "first\nsecond", "{cmd}");
     }
 }
+
+/// #1870: Insert › Page Number › Format Page Numbers… (the command without parameters) opens the
+/// dialog and leaves the section's numbering alone; with parameters it applies them.
+#[test]
+fn page_number_format_without_params_opens_dialog_and_keeps_start() {
+    use wordcraft_doc::section::NumFormat;
+    let mut s = s();
+    run(&mut s, "layout.pageNumberFormat", json!({"format": "upperRoman", "start": 5}));
+    s.ui_requests.clear();
+    run(&mut s, "layout.pageNumberFormat", json!({}));
+    assert!(s.ui_requests.iter().any(|r| r["open"] == "pageNumberFormat"), "menu opens no dialog: {:?}", s.ui_requests);
+    let sp = &s.doc.last_section;
+    assert_eq!((sp.page_num_format, sp.page_num_start), (NumFormat::UpperRoman, Some(5)));
+    s.ui_requests.clear();
+    run(&mut s, "layout.pageNumberFormat", json!({"format": "lowerRoman", "start": 3}));
+    assert!(s.ui_requests.is_empty(), "programmatic calls never open dialogs");
+    let sp = &s.doc.last_section;
+    assert_eq!((sp.page_num_format, sp.page_num_start), (NumFormat::LowerRoman, Some(3)));
+    // `"start": null` continues from the previous section again.
+    run(&mut s, "layout.pageNumberFormat", json!({"start": null}));
+    assert_eq!(s.doc.last_section.page_num_start, None);
+}
