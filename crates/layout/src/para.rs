@@ -159,6 +159,9 @@ pub struct Line {
     /// The text's own ascent and descent on this line, without line-spacing leading (the caret's extent).
     pub text_asc: f32,
     pub text_desc: f32,
+    /// The part of `height` below the text that multiple line spacing (above single) adds. Measured
+    /// in Word: the last line on a page may run this far past the bottom margin.
+    pub hang: f32,
     /// Cluster index range.
     pub c0: usize,
     pub c1: usize,
@@ -2345,6 +2348,11 @@ fn break_lines(pl: &mut ParaLayout, env: &ParaEnv, mark_style: u32, level: Optio
             (LineSpacing::AtLeast(v), None) => (natural.max(text_pictures).max(v), false),
             (LineSpacing::Exactly(v), _) => (v, false),
         };
+        // Leading that multiple spacing adds under the text (and under any picture taller than it).
+        let hang = match (rp.line_spacing, grid) {
+            (LineSpacing::Multiple(m), None) if m > 1.0 => (height - (text_natural + label_extra).max(text_pictures)).max(0.0),
+            _ => 0.0,
+        };
         let baseline = if centred {
             let up = asc.max(obj_asc);
             top + ((height - up - desc) / 2.0).max(0.0) + up
@@ -2442,6 +2450,7 @@ fn break_lines(pl: &mut ParaLayout, env: &ParaEnv, mark_style: u32, level: Optio
             baseline,
             text_asc,
             text_desc,
+            hang,
             c0,
             c1,
             xs,
@@ -2490,6 +2499,7 @@ fn break_lines(pl: &mut ParaLayout, env: &ParaEnv, mark_style: u32, level: Optio
                     baseline: top + if grid.is_some() { h - desc } else { baseline_offset(rp.line_spacing, asc, h, desc) },
                     text_asc: asc,
                     text_desc: desc,
+                    hang: if grid.is_none() && matches!(rp.line_spacing, LineSpacing::Multiple(m) if m > 1.0) { (h - natural).max(0.0) } else { 0.0 },
                     c0: n,
                     c1: n,
                     xs: vec![x0],

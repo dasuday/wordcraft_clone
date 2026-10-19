@@ -7770,7 +7770,7 @@ fn space_after_stays_clear_of_the_footnote_separator() {
 #[test]
 fn space_after_may_overflow_the_bottom_margin_without_notes() {
     // Without footnotes nothing changes: the last line only has to fit, its space after may run
-    // past the bottom margin (Word).
+    // past the bottom margin (Word). So may the leading its multiple line spacing adds.
     let mut tight = 0;
     for before in 0..=300 {
         let (d, t, _) = space_after_doc(before as f32, false);
@@ -7778,7 +7778,16 @@ fn space_after_may_overflow_the_bottom_margin_without_notes() {
         let bottom_margin = d.last_section.page_h - d.last_section.margin_bottom;
         let (pieces, _) = para_pieces(&l, t);
         let &(_, _, _, bottom) = pieces.last().unwrap();
-        assert!(bottom <= bottom_margin + 0.01, "before {before}: {bottom}");
+        let hang = l
+            .pages
+            .iter()
+            .flat_map(|p| &p.items)
+            .find_map(|it| match it {
+                Placed::Lines { story: StoryRef::Body, path, para, .. } if path.0 == [t as u32] => para.lines.last().map(|x| x.hang),
+                _ => None,
+            })
+            .unwrap();
+        assert!(bottom - hang <= bottom_margin + 0.01, "before {before}: {bottom} (leading {hang})");
         if bottom > bottom_margin - 6.0 {
             tight += 1;
         }
@@ -9421,5 +9430,50 @@ fn caret_height_ignores_line_spacing() {
     for spacing in [LineSpacing::Multiple(2.0), LineSpacing::AtLeast(40.0), LineSpacing::Exactly(40.0)] {
         let wide = caret_height(Some(spacing));
         assert!((single - wide).abs() < 0.01, "{spacing:?}: single {single}, wide {wide}");
+    }
+}
+
+/// Measured in Word for Mac: with multiple line spacing, a page's last line fits once its text
+/// does; the leading the spacing adds under it may run past the bottom margin. Double- and
+/// 1.5-spaced 12 pt lines fit with 13.9 pt to spare, not with 13.7 (the single line is 13.8);
+/// exact and at-least spacing still need the whole line. WordCraft wanted the whole spaced line,
+/// so double-spaced papers broke a line early and widow control then moved two.
+#[test]
+fn multiple_spacing_lets_the_last_line_hang_into_the_bottom_margin() {
+    use wordcraft_doc::props::LineSpacing;
+    let doc = |spacing: LineSpacing, bottom_room: f32| {
+        let mut d = Document::new();
+        let chr = wordcraft_doc::CharProps { font: Some("Source Sans 3".into()), size: Some(12.0), ..Default::default() };
+        d.body = (0..60)
+            .map(|i| {
+                let mut p = wordcraft_doc::Paragraph::with_text(&format!("Line {i}"), chr.clone());
+                p.props = ParaProps { line_spacing: Some(spacing), space_after: Some(0.0), widow_control: Some(false), ..Default::default() };
+                wordcraft_doc::para_block(p)
+            })
+            .collect();
+        d.last_section.margin_top = 72.0;
+        d.last_section.margin_bottom = d.last_section.page_h - 72.0 - bottom_room;
+        d
+    };
+    let on_page_one = |d: &Document| {
+        let l = lay(d);
+        (0..60).take_while(|i| l.caret(&Pos::body(*i, 0)).is_some_and(|c| c.page == 0)).count()
+    };
+    let line = |spacing| {
+        let l = lay(&doc(spacing, 600.0));
+        l.caret(&Pos::body(1, 0)).unwrap().top - l.caret(&Pos::body(0, 0)).unwrap().top
+    };
+    let single = line(LineSpacing::Multiple(1.0));
+    for m in [1.5, 2.0] {
+        let spaced = LineSpacing::Multiple(m);
+        let full = line(spaced);
+        assert!((full - single * m).abs() < 0.05, "{m}: {full} vs {single}");
+        // Room for 24 whole lines and then just under, or just over, one line's text.
+        assert_eq!(on_page_one(&doc(spaced, 24.0 * full + single - 0.1)), 24, "{m}: text doesn't fit");
+        assert_eq!(on_page_one(&doc(spaced, 24.0 * full + single + 0.1)), 25, "{m}: text fits, spacing hangs");
+    }
+    for spacing in [LineSpacing::Exactly(2.0 * single), LineSpacing::AtLeast(2.0 * single)] {
+        let full = line(spacing);
+        assert_eq!(on_page_one(&doc(spacing, 24.0 * full + single + 0.1)), 24, "{spacing:?} needs the whole line");
     }
 }

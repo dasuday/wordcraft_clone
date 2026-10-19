@@ -3624,7 +3624,10 @@ fn place_para_in_flow(ctx: &mut Ctx, pb: &mut PageBuilder, p: &Paragraph, block:
             } else {
                 0.0
             };
-            let over = bottom + tail > limit + 0.01;
+            // Measured in Word: with multiple line spacing the line fits once its text does; the
+            // leading the spacing adds under it may run past the bottom margin (not into notes).
+            let hang = if has_notes { 0.0 } else { l.hang };
+            let over = bottom - hang + tail > limit + 0.01;
             // Notes too long for the rest of the page continue on the next one: the line still
             // fits if the notes before its last one, and that one's first line, fit below it.
             // The notes then take the rest of the page.
