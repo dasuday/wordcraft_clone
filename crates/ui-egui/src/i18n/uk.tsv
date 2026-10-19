@@ -78,6 +78,7 @@
 	AutoSave saves every change to the file (needs a saved document)	Автозбереження записує кожну зміну у файл (документ потрібно спочатку зберегти)
 	AutoSave isn't available in the browser: it can't write to your files. Save downloads a copy.	Автозбереження недоступне в браузері: воно не може записувати у ваші файли. Збереження завантажує копію.
 	AutoSave only keeps .docx, .odt and .rtf files; {name} can't keep all formatting. Save as .docx to turn on AutoSave.	Автозбереження підтримує лише файли .docx, .odt і .rtf; {name} не може зберегти все форматування. Збережіть як .docx, щоб увімкнути автозбереження.
+	Back	Назад
 	Balloons	Виноски
 	Bullet	Маркер
 	By author	За автором

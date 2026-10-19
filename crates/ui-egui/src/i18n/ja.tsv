@@ -65,6 +65,7 @@
 	AutoSave	自動保存
 	AutoSave documents you have saved in WordCraft	WordCraft で保存した文書を自動保存する
 	AutoSave failed: {error}. Save the document to turn AutoSave back on.	自動保存できませんでした: {error}。文書を保存し直すと、自動保存が再開します。
+	Back	戻る
 	Balloons	吹き出し
 	Bottom Margin	下余白
 	Centimeters	センチメートル

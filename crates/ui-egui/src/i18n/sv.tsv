@@ -76,6 +76,7 @@
 	AutoSave isn't available in the browser: it can't write to your files. Save downloads a copy.	Autospara finns inte i webbläsaren, eftersom den inte kan skriva till dina filer. Spara laddar ner en kopia.
 	AutoSave only keeps .docx, .odt and .rtf files; {name} can't keep all formatting. Save as .docx to turn on AutoSave.	Autospara fungerar bara med .docx-, .odt- och .rtf-filer; {name} kan inte behålla all formatering. Spara som .docx för att slå på Autospara.
 	AutoSave writes your changes to the file a moment after you stop typing.	Autospara skriver dina ändringar till filen en liten stund efter att du slutat skriva.
+	Back	Tillbaka
 	Balloons	Pratbubblor
 	Bullet	Punkt
 	By author	Efter författare

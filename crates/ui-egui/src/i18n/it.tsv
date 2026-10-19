@@ -73,6 +73,7 @@
 	AutoSave saves every change to the file (needs a saved document)	Il salvataggio automatico salva ogni modifica nel file (richiede un documento salvato)
 	AutoSave isn't available in the browser: it can't write to your files. Save downloads a copy.	Il salvataggio automatico non è disponibile nel browser: non può scrivere nei tuoi file. Salva scarica una copia.
 	AutoSave only keeps .docx, .odt and .rtf files; {name} can't keep all formatting. Save as .docx to turn on AutoSave.	Il salvataggio automatico supporta solo file .docx, .odt e .rtf; {name} non può conservare tutta la formattazione. Salva come .docx per attivare il salvataggio automatico.
+	Back	Indietro
 	Balloons	Fumetti
 	Bullet	Punto elenco
 	By author	Per autore

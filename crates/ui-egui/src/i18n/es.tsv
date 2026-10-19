@@ -75,6 +75,7 @@
 	AutoSave isn't available in the browser: it can't write to your files. Save downloads a copy.	El autoguardado no está disponible en el navegador: no puede escribir en tus archivos. Guardar descarga una copia.
 	AutoSave only keeps .docx, .odt and .rtf files; {name} can't keep all formatting. Save as .docx to turn on AutoSave.	El autoguardado solo admite archivos .docx, .odt y .rtf; {name} no puede conservar todo el formato. Guarda como .docx para activar el autoguardado.
 	AutoSave writes your changes to the file a moment after you stop typing.	El autoguardado escribe tus cambios en el archivo poco después de que dejes de escribir.
+	Back	Atrás
 	Balloons	Globos
 	Bullet	Viñeta
 	By author	Por autor

@@ -67,6 +67,7 @@
 	AutoSave saves every change to the file (needs a saved document)	자동 저장은 모든 변경 내용을 파일에 저장합니다(문서를 먼저 저장해야 함).
 	AutoSave isn't available in the browser: it can't write to your files. Save downloads a copy.	브라우저에서는 자동 저장을 사용할 수 없습니다. 파일에 직접 쓸 수 없으므로 저장하면 사본이 다운로드됩니다.
 	AutoSave only keeps .docx, .odt and .rtf files; {name} can't keep all formatting. Save as .docx to turn on AutoSave.	자동 저장은 .docx, .odt, .rtf 파일만 지원합니다. {name}에서는 모든 서식을 유지할 수 없습니다. 자동 저장을 사용하려면 .docx로 저장하세요.
+	Back	뒤로
 	Balloons	말풍선
 	Bullet	글머리 기호
 	By author	작성자별

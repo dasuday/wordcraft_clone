@@ -1241,6 +1241,11 @@ pub fn paint(p: &Painter, r: Rect, name: &str, c: Color32, accent: Color32) {
         "minus" => pen.line(&[(4.0, 10.0), (16.0, 10.0)]),
         "check" => pen.line_c(&[(4.0, 10.5), (8.5, 15.0), (16.5, 5.0)], c),
         "chevronLeft" => pen.line(&[(13.0, 4.0), (7.0, 10.0), (13.0, 16.0)]),
+        "back" => {
+            pen.circle(10.0, 10.0, 7.5, c);
+            pen.line_c(&[(14.0, 10.0), (6.0, 10.0)], c);
+            pen.line_c(&[(9.0, 7.0), (6.0, 10.0), (9.0, 13.0)], c);
+        }
         "chevronRight" => pen.line(&[(7.0, 4.0), (13.0, 10.0), (7.0, 16.0)]),
         "chevronUp" => pen.line(&[(4.0, 13.0), (10.0, 7.0), (16.0, 13.0)]),
         "chevronDown" => pen.line(&[(4.0, 7.0), (10.0, 13.0), (16.0, 7.0)]),

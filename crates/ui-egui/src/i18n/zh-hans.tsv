@@ -77,6 +77,7 @@
 	AutoSave	自动保存
 	AutoSave documents you have saved in WordCraft	自动保存在 WordCraft 中保存过的文档
 	AutoSave failed: {error}. Save the document to turn AutoSave back on.	自动保存失败：{error}。重新保存文档后将恢复自动保存。
+	Back	返回
 	Balloons	批注框
 	Bottom Margin	下边距
 	Centimeters	厘米

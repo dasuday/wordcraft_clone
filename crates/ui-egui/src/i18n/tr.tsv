@@ -67,6 +67,7 @@
 	AutoSave	Otomatik Kaydet
 	AutoSave saves every change to the file (needs a saved document)	Otomatik Kaydet, her değişikliği dosyaya kaydeder (belgenin önce kaydedilmesi gerekir)
 	AutoText	Otomatik Metin
+	Back	Geri
 	Backspace	Geri Sil
 	Banded Columns	Şeritli Sütunlar
 	Banded Rows	Şeritli Satırlar

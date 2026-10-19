@@ -75,6 +75,7 @@
 	AutoSave saves every change to the file (needs a saved document)	Автоматичното запазване записва всяка промяна във файла (изисква запазен документ)
 	AutoSave isn't available in the browser: it can't write to your files. Save downloads a copy.	Автоматичното запазване не е налично в браузъра: то не може да записва във Вашите файлове. „Запазване“ изтегля копие.
 	AutoSave only keeps .docx, .odt and .rtf files; {name} can't keep all formatting. Save as .docx to turn on AutoSave.	Автоматичното запазване поддържа само файлове .docx, .odt и .rtf; {name} не може да запази цялото форматиране. Запазете като .docx, за да включите автоматичното запазване.
+	Back	Назад
 	Balloons	Балончета
 	Bullet	Водещ символ
 	By author	По автор

@@ -118,6 +118,7 @@
 	AutoSave only keeps .docx, .odt and .rtf files; {name} can't keep all formatting. Save as .docx to turn on AutoSave.	Automatické ukládání podporuje pouze soubory .docx, .odt a .rtf; formát {name} nedokáže zachovat veškeré formátování. Pro zapnutí automatického ukládání uložte dokument jako .docx.
 	AutoSave saves every change to the file (needs a saved document)	Automatické ukládání zapisuje každou změnu do souboru (vyžaduje uložený dokument)
 	AutoText	Automatický text
+	Back	Zpět
 	Backspace	Backspace
 	Balloons	Bubliny
 	Banded Columns	Pruhované sloupce

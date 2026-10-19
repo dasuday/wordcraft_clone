@@ -2947,10 +2947,10 @@ mod tests {
     }
 
     /// #766: started with nothing to open, the app shows File › Home (the Start screen) as Word
-    /// does. #1129: no document is open behind it, so Esc (or Back) shows an empty window, with
-    /// no page, the ribbon greyed out but for Help, and nothing to save on close. With the setting
-    /// off it starts in the editor, and `WordApp::new` alone (tests, ui_shot, windows opened for a
-    /// document) never shows it.
+    /// does. #1129: no document is open behind it, so Esc shows an empty window, with no page,
+    /// the ribbon greyed out but for Help, and nothing to save on close; Back opens a blank
+    /// document instead. With the setting off it starts in the editor, and `WordApp::new` alone
+    /// (tests, ui_shot, windows opened for a document) never shows it.
     #[test]
     fn start_screen_shows_file_home_and_esc_leaves_no_document() {
         use egui_kittest::kittest::Queryable;
@@ -3015,7 +3015,7 @@ mod tests {
         a.start_screen();
         let mut h = harness(a);
         h.run_steps(4);
-        // Esc (or the back arrow) leaves the Start screen for the empty window, as #1129 has it.
+        // Esc leaves the Start screen for the empty window, as #1129 has it.
         h.key_press(egui::Key::Escape);
         h.run_steps(4);
         assert!(!h.state().ui.backstage, "the empty window");

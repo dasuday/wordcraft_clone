@@ -70,6 +70,7 @@
 	AutoSave	Automatikus mentés
 	AutoSave saves every change to the file (needs a saved document)	Az automatikus mentés minden módosítást a fájlba ír (ehhez mentett dokumentum kell)
 	AutoText	Autoszöveg
+	Back	Vissza
 	Backspace	Backspace
 	Banded Columns	Sávos oszlopok
 	Banded Rows	Sávos sorok

@@ -68,6 +68,7 @@
 	AutoSave	Автосохранение
 	AutoSave saves every change to the file (needs a saved document)	Автосохранение записывает каждое изменение в файл (документ должен быть уже сохранён)
 	AutoText	Автотекст
+	Back	Назад
 	Backspace	Backspace
 	Banded Columns	Чередующиеся столбцы
 	Banded Rows	Чередующиеся строки

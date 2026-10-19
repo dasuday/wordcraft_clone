@@ -66,6 +66,7 @@
 	AutoSave	自動儲存
 	AutoSave documents you have saved in WordCraft	自動儲存在 WordCraft 中儲存過的文件
 	AutoSave failed: {error}. Save the document to turn AutoSave back on.	自動儲存失敗：{error}。重新儲存文件後將恢復自動儲存。
+	Back	返回
 	Balloons	註解方塊
 	Bottom Margin	下邊界
 	Centimeters	公分

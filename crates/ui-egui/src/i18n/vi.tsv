@@ -75,6 +75,7 @@
 	AutoSave saves every change to the file (needs a saved document)	Tự động lưu ghi lại mọi thay đổi vào tệp (cần tài liệu đã lưu)
 	AutoSave isn't available in the browser: it can't write to your files. Save downloads a copy.	Tự động lưu không khả dụng trong trình duyệt: không thể ghi vào tệp của bạn. Lưu sẽ tải xuống một bản sao.
 	AutoSave only keeps .docx, .odt and .rtf files; {name} can't keep all formatting. Save as .docx to turn on AutoSave.	Tự động lưu chỉ hỗ trợ tệp .docx, .odt và .rtf; {name} không giữ được toàn bộ định dạng. Lưu dưới dạng .docx để bật Tự động lưu.
+	Back	Quay lại
 	Balloons	Bong bóng chú thích
 	Bullet	Dấu đầu dòng
 	By author	Theo tác giả

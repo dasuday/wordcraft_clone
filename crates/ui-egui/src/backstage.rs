@@ -6,8 +6,8 @@ use serde_json::json;
 use crate::theme::{APP_COLOR, Tokens, medium, regular, semibold};
 use crate::{WordApp, icons};
 
-/// The side menu: page id, label and icon (#1714).
-const PAGES: [(&str, &str, &str); 11] = [
+/// The side menu: page id, label and icon (#1714). Options is pinned at the bottom.
+const PAGES: [(&str, &str, &str); 10] = [
     ("home", "Home", "homeFolder"),
     ("new", "New", "blankPage"),
     ("open", "Open", "open"),
@@ -18,16 +18,7 @@ const PAGES: [(&str, &str, &str); 11] = [
     ("print", "Print", "print"),
     ("export", "Export", "export"),
     ("close", "Close", "close"),
-    ("options", "Options", "options"),
 ];
-
-/// The Backstage back chevron's centre on macOS (#1873): beside the traffic lights in a
-/// window (the title bar's content edge), at the plain control inset in full screen, where the
-/// lights aren't docked top-left and the reserved offset would leave dead space.
-fn back_chevron_c(band_min_x: f32, center_y: f32, fullscreen: bool, content_left: f32) -> egui::Pos2 {
-    let x = if fullscreen { 26.0 } else { content_left + 3.0 };
-    pos2(band_min_x + x, center_y)
-}
 
 pub fn show(app: &mut WordApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
@@ -49,56 +40,31 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
             bottom: 12,
         }))
         .show(ui, |ui| {
-            let back = if mac {
-                // macOS (#222): the Backstage covers the title bar, so its top band is the title
-                // bar: the back button sits beside the traffic lights, centred with them and as far
-                // from them as the title bar's own controls, and the rest of the band drags the window.
-                let (band, drag) = ui.allocate_exact_size(vec2(200.0, app.mac_titlebar.height), Sense::click_and_drag());
+            // macOS (#222): the Backstage covers the title bar, so its top band is the title
+            // bar: it carries the traffic lights and drags the window. The Back item sits below
+            // it, like every other item.
+            if mac {
+                let (_, drag) = ui.allocate_exact_size(vec2(200.0, app.mac_titlebar.height), Sense::click_and_drag());
                 if drag.drag_started() {
                     ui.ctx().send_viewport_cmd(egui::ViewportCommand::StartDrag);
                 }
-                // The chevron's stroke starts at the content edge.
-                let c = back_chevron_c(band.min.x, band.center().y, app.session.view.full_screen, app.mac_titlebar.content_left);
-                let resp = ui.interact(Rect::from_center_size(c, vec2(22.0, band.height())), ui.id().with("backstage_back"), Sense::click());
-                icons::paint(ui.painter(), Rect::from_center_size(c, vec2(18.0, 18.0)), "chevronLeft", egui::Color32::WHITE, egui::Color32::WHITE);
-                resp
-            } else {
-                let (r, resp) = ui.allocate_exact_size(vec2(200.0, 40.0), Sense::click());
-                icons::paint(
-                    ui.painter(),
-                    Rect::from_center_size(pos2(r.min.x + 26.0, r.center().y), vec2(18.0, 18.0)),
-                    "chevronLeft",
-                    egui::Color32::WHITE,
-                    egui::Color32::WHITE,
-                );
-                resp
-            };
-            // Escape in the built-in file browser closes only the browser.
-            if back.clicked() || (!app.file_dialog_open() && ui.input(|i| i.key_pressed(egui::Key::Escape))) {
-                app.ui.backstage = false;
-                app.canvas.want_focus = true;
             }
-            ui.add_space(if mac { 12.0 } else { 6.0 });
+            ui.spacing_mut().item_spacing.y = 0.0;
+            if nav_item(ui, "back", tl!("Back"), false, true).clicked() {
+                let opened = has_document || app.run("file.new", json!({"template": "blank"})).is_ok();
+                if opened {
+                    app.ui.backstage = false;
+                    app.canvas.want_focus = true;
+                } else {
+                    // At worst, stay on Home rather than show an empty window.
+                    app.ui.backstage_page = "home".into();
+                }
+            }
+            ui.add_space(6.0);
             for (id, label, icon) in PAGES {
                 // No document open (#1129): Info, Save, Save As, Print and Export are greyed out.
                 let on = has_document || works_without_document(id);
-                let (r, resp) = ui.add_enabled_ui(on, |ui| ui.allocate_exact_size(vec2(200.0, 38.0), Sense::click())).inner;
-                resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, on, tl!(label)));
-                let active = app.ui.backstage_page == id;
-                if active {
-                    ui.painter().rect_filled(r, 0.0, egui::Color32::from_white_alpha(46));
-                } else if on && resp.hovered() {
-                    ui.painter().rect_filled(r, 0.0, egui::Color32::from_white_alpha(26));
-                }
-                let ink = if on { egui::Color32::WHITE } else { egui::Color32::from_white_alpha(110) };
-                icons::paint(ui.painter(), Rect::from_center_size(pos2(r.min.x + 31.0, r.center().y), vec2(18.0, 18.0)), icon, ink, ink);
-                ui.painter().text(
-                    pos2(r.min.x + 52.0, r.center().y),
-                    Align2::LEFT_CENTER,
-                    tl!(label),
-                    if active { semibold(14.0) } else { medium(14.0) },
-                    ink,
-                );
+                let resp = nav_item(ui, icon, tl!(label), app.ui.backstage_page == id, on);
                 if resp.clicked() {
                     match id {
                         // A document without a file goes to the Save As page (as in Word) instead
@@ -127,24 +93,20 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
                         _ => app.ui.backstage_page = id.into(),
                     }
                 }
+                if id == "open" {
+                    nav_separator(ui);
+                }
             }
             ui.with_layout(egui::Layout::bottom_up(egui::Align::Min), |ui| {
-                for (label, id) in [("About", "about"), ("Discord community", "discord")] {
-                    let (r, resp) = ui.allocate_exact_size(vec2(200.0, 32.0), Sense::click());
-                    resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), tl!(label)));
-                    if resp.hovered() {
-                        ui.painter().rect_filled(r, 0.0, egui::Color32::from_white_alpha(26));
-                    }
-                    ui.painter().text(pos2(r.min.x + 22.0, r.center().y), Align2::LEFT_CENTER, tl!(label), regular(13.0), egui::Color32::WHITE);
-                    if resp.clicked() {
-                        if id == "discord" {
-                            let _ = app.run("ui.discord", json!({}));
-                        } else {
-                            app.dialog = crate::dialogs::Dialog::open("about", app);
-                        }
-                    }
+                if nav_item(ui, "options", tl!("Options"), app.ui.backstage_page == "options", true).clicked() {
+                    app.ui.backstage_page = "options".into();
                 }
             });
+            // Escape in the built-in file browser closes only the browser.
+            if !app.file_dialog_open() && ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+                app.ui.backstage = false;
+                app.canvas.want_focus = true;
+            }
         });
     egui::CentralPanel::default()
         .frame(egui::Frame::NONE.fill(if recovery { egui::Color32::BLACK } else { t.ribbon }).inner_margin(egui::Margin::symmetric(40, 30)))
@@ -166,6 +128,29 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
                 _ => home_page(app, ui),
             });
         });
+}
+
+/// A File › navigation row: icon, label, selected bar, hover and disabled ink, as in GridCraft.
+fn nav_item(ui: &mut Ui, icon: &str, label: &str, selected: bool, enabled: bool) -> egui::Response {
+    let (r, resp) = ui.add_enabled_ui(enabled, |ui| ui.allocate_exact_size(vec2(200.0, 38.0), Sense::click())).inner;
+    resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, enabled, label));
+    if selected {
+        ui.painter().rect_filled(r, 0.0, egui::Color32::from_white_alpha(46));
+        ui.painter().rect_filled(Rect::from_min_size(r.min, vec2(4.0, r.height())), 0.0, egui::Color32::WHITE);
+    } else if enabled && resp.hovered() {
+        ui.painter().rect_filled(r, 0.0, egui::Color32::from_white_alpha(26));
+    }
+    let ink = if enabled { egui::Color32::WHITE } else { egui::Color32::from_white_alpha(110) };
+    icons::paint(ui.painter(), Rect::from_center_size(pos2(r.min.x + 31.0, r.center().y), vec2(18.0, 18.0)), icon, ink, ink);
+    ui.painter().text(pos2(r.min.x + 52.0, r.center().y), Align2::LEFT_CENTER, label, if selected { semibold(14.0) } else { medium(14.0) }, ink);
+    resp
+}
+
+/// The thin rule between the pages that open a document and the rest, as in GridCraft.
+fn nav_separator(ui: &mut Ui) {
+    let (r, _) = ui.allocate_exact_size(vec2(200.0, 17.0), Sense::hover());
+    let y = r.center().y;
+    ui.painter().line_segment([pos2(r.left() + 20.0, y), pos2(r.right() - 20.0, y)], Stroke::new(1.0, egui::Color32::from_white_alpha(90)));
 }
 
 /// Recovery is a separate copy. Leaving this page never discards it.
@@ -564,17 +549,6 @@ mod tests {
         assert!(app.ui.backstage, "File stays open");
     }
 
-    /// #1873: the macOS back chevron sits beside the traffic lights windowed, at the plain
-    /// control inset in full screen.
-    #[test]
-    fn back_chevron_keeps_clear_of_traffic_lights_only_windowed() {
-        let windowed = super::back_chevron_c(0.0, 14.0, false, 70.0);
-        assert_eq!((windowed.x, windowed.y), (73.0, 14.0));
-        let full = super::back_chevron_c(0.0, 14.0, true, 70.0);
-        assert_eq!((full.x, full.y), (26.0, 14.0));
-        assert!(full.x < windowed.x);
-    }
-
     #[cfg(not(target_arch = "wasm32"))]
     fn recovery_app() -> (WordApp, std::path::PathBuf) {
         let root = std::env::temp_dir().join(format!(
@@ -721,13 +695,13 @@ mod tests {
         assert!(h.query_by_label("Recent").is_none(), "New has no Recent list");
     }
 
-    /// Clicking the back arrow closes the File page and gives the keyboard back to the page,
-    /// without naming as focused a widget the frame didn't draw: with accessibility on (a screen
+    /// Clicking Back closes the File page and gives the keyboard back to the page, without
+    /// naming as focused a widget the frame didn't draw: with accessibility on (a screen
     /// reader, or any UI Automation client on Windows) AccessKit ends the program over that, and
-    /// 0.8.0 vanished after Blank document, File, then the back arrow. The test harness always runs
+    /// 0.8.0 vanished after Blank document, File, then Back. The test harness always runs
     /// AccessKit.
     #[test]
-    fn back_arrow_returns_to_the_page_with_accessibility_on() {
+    fn back_item_returns_to_the_page_with_accessibility_on() {
         let a = WordApp::new(wordcraft_engine::Session::new(wordcraft_doc::Document::new()), Services::default());
         let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(1440.0, 900.0)).build_ui_state(
             |ui, app: &mut WordApp| {
@@ -741,15 +715,35 @@ mod tests {
         assert!(h.state().canvas.widget_id.is_some(), "the page has been drawn");
         h.state_mut().run("ui.backstage", json!({"value": true})).unwrap();
         h.run_steps(4);
-        // The arrow heads the File page's side bar; it has no label to find it by.
-        let arrow = egui::pos2(100.0, 32.0);
-        h.event(egui::Event::PointerMoved(arrow));
-        for pressed in [true, false] {
-            h.event(egui::Event::PointerButton { pos: arrow, button: egui::PointerButton::Primary, pressed, modifiers: egui::Modifiers::NONE });
-        }
+        h.get_by_label("Back").click();
         h.run_steps(4);
-        assert!(!h.state().ui.backstage, "the arrow closes the File page");
+        assert!(!h.state().ui.backstage, "Back closes the File page");
         assert!(h.state().canvas.focused, "and the page has the keyboard");
+    }
+
+    /// No document open: Back starts a blank document instead of leaving an empty window.
+    #[test]
+    fn back_from_the_start_screen_opens_a_blank_document() {
+        let mut a = WordApp::new(wordcraft_engine::Session::new(wordcraft_doc::Document::new()), Services::default());
+        a.start_screen();
+        let first = a.session.document_id();
+        let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(1440.0, 900.0)).build_ui_state(
+            |ui, app: &mut WordApp| {
+                let ctx = ui.ctx().clone();
+                app.logic(&ctx);
+                app.ui(ui);
+            },
+            a,
+        );
+        h.run_steps(4);
+        h.get_by_label("Back").click();
+        h.run_steps(4);
+        let a = h.state_mut();
+        assert!(!a.ui.backstage, "Back leaves the Start screen");
+        assert!(a.has_document(), "and opens a blank document");
+        assert_ne!(a.session.document_id(), first);
+        a.run("text.insert", json!({"text": "Hello"})).unwrap();
+        assert_eq!(a.session.doc.plain_text(wordcraft_doc::StoryRef::Body).trim(), "Hello");
     }
 
     /// A harness over the whole app; kittest always runs AccessKit, so a frame that names as
@@ -776,32 +770,26 @@ mod tests {
         h.run_steps(4);
     }
 
-    /// The macOS back chevron beside the traffic lights, in a window.
-    fn mac_chevron(a: &WordApp) -> egui::Pos2 {
-        super::back_chevron_c(0.0, a.mac_titlebar.height / 2.0, false, a.mac_titlebar.content_left)
-    }
-
-    /// #2972: on macOS the File page's back button is the chevron beside the traffic lights (the
-    /// "sidebar collapse toggle" of the report; there is no other toggle there). Blank document,
-    /// File, then the chevron ended 0.8.0 with AccessKit's "Focused ID … is not in the node
-    /// list". The same spot clicked in the editor (the title bar) must not either.
+    /// #2972: on macOS the File page's Back item returns to the page with AccessKit on. The
+    /// title bar above it (the traffic lights' band) takes no click, so the old chevron spot
+    /// cannot end the program by naming a focused widget the frame didn't draw.
     #[test]
-    fn mac_back_chevron_returns_to_the_page_with_accessibility_on() {
+    fn mac_back_item_returns_to_the_page_with_accessibility_on() {
         let mut a = WordApp::new(wordcraft_engine::Session::new(wordcraft_doc::Document::new()), Services::default());
         a.integrated_titlebar = true;
         a.mac_titlebar = crate::chrome::MacTitleBar { height: 28.0, content_left: 70.0 };
-        let chevron = mac_chevron(&a);
         let mut h = a11y_harness(a);
         assert!(h.state().canvas.widget_id.is_some(), "the page has been drawn");
         for _ in 0..2 {
             h.state_mut().run("ui.backstage", json!({"value": true})).unwrap();
             h.run_steps(4);
             assert!(h.state().ui.backstage);
-            click_at(&mut h, chevron);
-            assert!(!h.state().ui.backstage, "the chevron closes the File page");
+            h.get_by_label("Back").click();
+            h.run_steps(4);
+            assert!(!h.state().ui.backstage, "Back closes the File page");
             assert!(h.state().canvas.focused, "and the page has the keyboard");
-            // The same spot in the editor's title bar.
-            click_at(&mut h, chevron);
+            // The traffic lights' band above the item takes no click.
+            click_at(&mut h, egui::pos2(73.0, 14.0));
             assert!(!h.state().ui.backstage);
         }
     }
@@ -837,10 +825,10 @@ mod tests {
         }
     }
 
-    /// #2908: File › Options, then the back arrow (Windows/Linux layout and the macOS chevron),
-    /// with a document open and from the Start screen, without AccessKit ending the program.
+    /// #2908: File › Options, then Back, with a document open and from the Start screen, without
+    /// AccessKit ending the program. From the Start screen, Back opens a blank document.
     #[test]
-    fn options_back_arrow_with_accessibility_on() {
+    fn options_back_with_accessibility_on() {
         for (mac, start) in [(false, false), (true, false), (false, true), (true, true)] {
             let mut a = WordApp::new(wordcraft_engine::Session::new(wordcraft_doc::Document::new()), Services::default());
             a.integrated_titlebar = mac;
@@ -848,7 +836,6 @@ mod tests {
                 a.ui.start_screen = true;
                 assert!(a.start_screen());
             }
-            let back = if mac { mac_chevron(&a) } else { egui::pos2(100.0, 32.0) };
             let mut h = a11y_harness(a);
             if !start {
                 h.state_mut().run("ui.backstage", json!({"value": true})).unwrap();
@@ -860,10 +847,11 @@ mod tests {
             // Into a pane, so the Options page has a focused widget of its own.
             h.get_by_label("Display").click();
             h.run_steps(4);
-            click_at(&mut h, back);
-            assert!(!h.state().ui.backstage, "mac {mac} start {start}: the arrow closes the File page");
+            h.get_by_label("Back").click();
+            h.run_steps(4);
+            assert!(!h.state().ui.backstage, "mac {mac} start {start}: Back closes the File page");
             if start {
-                assert!(!h.state().has_document(), "mac {mac}: from the Start screen, an empty window");
+                assert!(h.state().has_document(), "mac {mac}: from the Start screen, Back opens a blank document");
             } else {
                 assert!(h.state().canvas.focused, "mac {mac}: and the page has the keyboard");
             }
