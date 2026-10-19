@@ -7066,10 +7066,14 @@ fn paragraph_relative_floats_start_above_the_space_before() {
         let mut d = Document::from_text("");
         d.body = vec![wordcraft_doc::para_block(first), wordcraft_doc::para_block(p)];
         let l = lay(&d);
-        let first_bottom = {
-            let c = l.caret(&Pos::body(0, 0)).unwrap();
-            c.top + c.height
-        };
+        let first_bottom = l.pages[0]
+            .items
+            .iter()
+            .find_map(|i| match i {
+                Placed::Lines { path, para, l0, y, .. } if *path == Path::top(0) => para.lines.get(*l0).map(|ln| y + ln.height),
+                _ => None,
+            })
+            .unwrap();
         let top = l.pages[0].items.iter().find_map(|i| if let Placed::Shape { rect, .. } = i { Some(rect.y) } else { None }).unwrap();
         (top, first_bottom)
     };
@@ -9503,6 +9507,102 @@ fn even_footer_reserves_body() {
                 assert!((page.body.bottom() - limit).abs() < 0.01, "page {}: {} versus {limit}", page.number, page.body.bottom());
                 let bottom = page.items.iter().map(v_span).map(|(_, bottom)| bottom).fold(0.0, f32::max);
                 assert!(bottom <= limit + 0.01, "page {}: body {bottom} crosses footer {limit}", page.number);
+            }
+        }
+    }
+}
+
+#[test]
+fn caret_height_ignores_line_spacing() {
+    // #2920: extra line spacing is leading below the text; the caret stays the height of the font.
+    use wordcraft_doc::props::LineSpacing;
+    let caret_height = |spacing: Option<LineSpacing>| {
+        let mut d = Document::new();
+        let chr = wordcraft_doc::CharProps { font: Some("Source Sans 3".into()), size: Some(12.0), ..Default::default() };
+        let mut p = wordcraft_doc::Paragraph::with_text("Alpha probe", chr);
+        p.props = ParaProps { line_spacing: spacing, ..Default::default() };
+        d.body = vec![wordcraft_doc::para_block(p)];
+        lay(&d).caret(&Pos::body(0, 3)).unwrap().height
+    };
+    let single = caret_height(Some(LineSpacing::Multiple(1.0)));
+    for spacing in [LineSpacing::Multiple(2.0), LineSpacing::AtLeast(40.0), LineSpacing::Exactly(40.0)] {
+        let wide = caret_height(Some(spacing));
+        assert!((single - wide).abs() < 0.01, "{spacing:?}: single {single}, wide {wide}");
+    }
+}
+
+/// A page-positioned drawing in a footer cell reserves its wrap bounds once, outside that cell.
+#[test]
+fn pinned_footer_reserves_body() {
+    use wordcraft_doc::para::{Anchor, Float, Wrap};
+    use wordcraft_doc::props::LineSpacing;
+
+    for wrap in [Wrap::TopAndBottom, Wrap::BehindText, Wrap::InFrontOfText, Wrap::Square] {
+        for (even_odd, title, start, distance) in [(false, false, 1, 0.0), (true, false, 2, 8.0), (true, true, 2, 8.0)] {
+            let mut doc = Document::new();
+            doc.styles.default_chr.font = Some(GEOMETRY_FONT.into());
+            doc.settings.even_odd_headers = even_odd;
+            doc.last_section.title_page = title;
+            doc.last_section.page_num_start = Some(start);
+            let mut body = Table::new(80, 1, 468.0);
+            body.props.cell_margins = Some([0.0; 4]);
+            for row in &mut body.rows {
+                let mut para = Paragraph::with_text("Body control", Default::default());
+                para.props = ParaProps {
+                    space_before: Some(0.0),
+                    space_after: Some(0.0),
+                    line_spacing: Some(LineSpacing::Exactly(20.0)),
+                    ..Default::default()
+                };
+                row.cells[0].blocks = vec![wordcraft_doc::para_block(para)];
+                row.props.cant_split = true;
+            }
+            doc.body = vec![Arc::new(Block::Table(body))];
+            let mut footer = |y| {
+                let mut para = Paragraph::new();
+                let float = Float {
+                    wrap,
+                    outside_cell: true,
+                    h_rel: Anchor::Page,
+                    v_rel: Anchor::Page,
+                    x: 72.0,
+                    y,
+                    dist_top: distance,
+                    dist_bottom: 6.0,
+                    ..Default::default()
+                };
+                para.insert_object(0, rect_shape(200.0, 40.0, float), &Default::default()).unwrap();
+                let mut table = Table::new(1, 1, 468.0);
+                table.props.style = None;
+                table.props.cell_margins = Some([0.0; 4]);
+                table.rows[0].cells[0].blocks = vec![wordcraft_doc::para_block(para)];
+                doc.add_part(wordcraft_doc::PartKind::Footer, vec![Arc::new(Block::Table(table))])
+            };
+            let default_id = footer(660.0);
+            let even_id = footer(640.0);
+            let first_id = footer(620.0);
+            doc.last_section.footers.default = Some(default_id);
+            doc.last_section.footers.even = Some(even_id);
+            doc.last_section.footers.first = Some(first_id);
+            let laid = lay(&doc);
+            assert!(laid.pages.len() >= 3);
+            for (index, page) in laid.pages.iter().enumerate() {
+                let (selected, y) = if title && index == 0 {
+                    (first_id, 620.0)
+                } else if even_odd && page.number.is_multiple_of(2) {
+                    (even_id, 640.0)
+                } else {
+                    (default_id, 660.0)
+                };
+                assert_eq!(page.footer_story, Some(selected));
+                let objects: Vec<_> =
+                    page.footer.iter().filter_map(|item| if let Placed::Object { rect, .. } = item { Some(rect) } else { None }).collect();
+                assert_eq!(objects.len(), 1, "the pinned drawing is placed once");
+                assert!((objects[0].y - y).abs() < 0.01, "page-positioned footer: {:?}", objects[0]);
+                let limit = if wrap == Wrap::TopAndBottom { y - distance } else { doc.last_section.page_h - doc.last_section.margin_bottom };
+                assert!((page.body.bottom() - limit).abs() < 0.01, "{wrap:?}, page {}: body bottom {} vs {limit}", page.number, page.body.bottom());
+                let bottom = page.items.iter().map(v_span).map(|(_, bottom)| bottom).fold(0.0, f32::max);
+                assert!(bottom <= limit + 0.01, "body {bottom} crosses footer bound {limit}");
             }
         }
     }

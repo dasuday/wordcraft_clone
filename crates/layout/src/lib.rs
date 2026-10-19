@@ -741,6 +741,8 @@ struct Pin {
     mirror: bool,
     behind: Vec<Placed>,
     front: Vec<Placed>,
+    /// Pinned top-and-bottom wrap bounds, in page coordinates.
+    top_bottom: Vec<Rect>,
     seen: HashSet<(Vec<u32>, usize)>,
 }
 
@@ -755,11 +757,11 @@ fn page_anchored(f: &Float) -> bool {
 
 /// Run `f`, a layout of header or footer `id` for page `number` of `sect`, with the floats in its
 /// table cells that are placed on the page put there (see [`Pin`]). Returns `f`'s result and those
-/// floats' items, in page coordinates: behind the header's text, and in front.
-fn with_pin<T>(ctx: &mut Ctx, id: u32, sect: &SectionProps, number: u32, f: impl FnOnce(&mut Ctx) -> T) -> (T, Vec<Placed>, Vec<Placed>) {
+/// floats' items, in page coordinates: behind the header's text, in front, and top-and-bottom wrap bounds.
+fn with_pin<T>(ctx: &mut Ctx, id: u32, sect: &SectionProps, number: u32, f: impl FnOnce(&mut Ctx) -> T) -> (T, Vec<Placed>, Vec<Placed>, Vec<Rect>) {
     let tables = ctx.doc.parts.get(&id).is_some_and(|p| p.blocks.iter().any(|b| matches!(**b, Block::Table(_))));
     if !tables {
-        return (f(ctx), Vec::new(), Vec::new());
+        return (f(ctx), Vec::new(), Vec::new(), Vec::new());
     }
     let pin = Pin {
         story: StoryRef::Part(id),
@@ -768,13 +770,14 @@ fn with_pin<T>(ctx: &mut Ctx, id: u32, sect: &SectionProps, number: u32, f: impl
         mirror: ctx.mirror,
         behind: Vec::new(),
         front: Vec::new(),
+        top_bottom: Vec::new(),
         seen: HashSet::new(),
     };
     let outer = ctx.pin.replace(pin);
     let out = f(ctx);
     let pin = std::mem::replace(&mut ctx.pin, outer);
-    let (behind, front) = pin.map(|p| (p.behind, p.front)).unwrap_or_default();
-    (out, behind, front)
+    let (behind, front, top_bottom) = pin.map(|p| (p.behind, p.front, p.top_bottom)).unwrap_or_default();
+    (out, behind, front, top_bottom)
 }
 
 impl Ctx<'_> {
@@ -2853,7 +2856,7 @@ fn foot_top_for(ctx: &mut Ctx, sect: &SectionProps, footer: Option<u32>) -> f32 
     let boxes = std::mem::take(&mut ctx.boxes);
     let chains = std::mem::take(&mut ctx.chains);
     let fields = ctx.fields.clone();
-    let (positioned, ..) = with_pin(ctx, id, sect, frame.number, |ctx| {
+    let (positioned, _, _, pinned_wraps) = with_pin(ctx, id, sect, frame.number, |ctx| {
         again(ctx, 0, |ctx| layout_box(ctx, StoryRef::Part(id), &blocks, &[], sect.text_width(), BoxContext::Other, 0, Some(frame)))
     });
     ctx.counters = counters;
@@ -2861,8 +2864,13 @@ fn foot_top_for(ctx: &mut Ctx, sect: &SectionProps, footer: Option<u32>) -> f32 
     ctx.chains = chains;
     ctx.fields = fields;
     ctx.track_totals = track;
-    let wrap_top =
-        positioned.exclusions.iter().filter(|(r, tb, ..)| *tb && r.bottom() + top > sect.margin_top).map(|(r, ..)| top + r.y).fold(top, f32::min);
+    let wrap_top = positioned
+        .exclusions
+        .iter()
+        .filter(|(r, tb, ..)| *tb && r.bottom() + top > sect.margin_top)
+        .map(|(r, ..)| top + r.y)
+        .chain(pinned_wraps.iter().filter(|r| r.bottom() > sect.margin_top).map(|r| r.y))
+        .fold(top, f32::min);
     // Flow-table strokes extend above their cell boxes. Floating decorations keep their wrap rules.
     let flow_cells: Vec<_> = laid
         .items
@@ -3336,6 +3344,9 @@ fn place_objects(
                 {
                     pin.behind.extend(b);
                     pin.front.extend(f);
+                    if let Some((area, true, ..)) = wrap_area(rect, float, None) {
+                        pin.top_bottom.push(area);
+                    }
                 }
             }
         }
@@ -4545,7 +4556,7 @@ fn headers_footers(ctx: &mut Ctx, pages: &mut [Page], sections: &[(usize, &Secti
             let blocks = part.blocks.clone();
             let frame = PageFrame { sect, origin: (x, sect.header), number: page.number, mirror: ctx.mirror };
             let base = defining_width(sections, page.section, |s| s.headers, hid);
-            let (mut items, behind, front) = with_pin(ctx, id, sect, page.number, |ctx| {
+            let (mut items, behind, front, _) = with_pin(ctx, id, sect, page.number, |ctx| {
                 with_pct_base(ctx, base, |c| layout_box(c, StoryRef::Part(id), &blocks, &[], w, BoxContext::Other, 0, Some(frame)).items)
             });
             for it in &mut items {
@@ -4564,7 +4575,7 @@ fn headers_footers(ctx: &mut Ctx, pages: &mut [Page], sections: &[(usize, &Secti
                 with_pct_base(ctx, base, |c| layout_box(c, StoryRef::Part(id), &blocks, &[], w, BoxContext::Other, 0, None).height)
             });
             let frame = PageFrame { sect, origin: (x, sect.page_h - sect.footer - h), number: page.number, mirror: ctx.mirror };
-            let (mut items, behind, front) = with_pin(ctx, id, sect, page.number, |ctx| {
+            let (mut items, behind, front, _) = with_pin(ctx, id, sect, page.number, |ctx| {
                 with_pct_base(ctx, base, |c| layout_box(c, StoryRef::Part(id), &blocks, &[], w, BoxContext::Other, 0, Some(frame)).items)
             });
             for it in &mut items {
