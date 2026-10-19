@@ -3509,6 +3509,26 @@ fn place_para_in_flow(ctx: &mut Ctx, pb: &mut PageBuilder, p: &Paragraph, block:
             applied_before = pl.rp.space_before.min(0.0);
         }
     }
+    // A floating object placed down from this paragraph that would run past the bottom margin
+    // takes the paragraph to the next column or page, where it fits (as LibreOffice lays it out),
+    // rather than running over the footer or off the page.
+    if !pb.web && !pb.at_top() {
+        let shift = (pb.y - applied_before) - (guess - space_before);
+        // (A rotated object reaches as far as its rotated bounds, as it wraps text.)
+        let reach = float_rects
+            .iter()
+            .filter_map(|(oi, r)| p.objects.get(*oi).and_then(floating).map(|(_, _, f)| (f, r)))
+            .filter(|(f, _)| f.v_rel == Anchor::Paragraph && f.v_align.is_none())
+            .map(|(f, r)| f.spin().bounds(*r).bottom())
+            .fold(f32::NEG_INFINITY, f32::max);
+        // How far below the paragraph's top it reaches, against an empty column.
+        let need = reach - (guess - space_before);
+        if reach.is_finite() && reach + shift > pb.bottom + 0.01 && need <= pb.uncapped_bottom() - pb.top {
+            pb.advance(block, body_top);
+            pb.y += pl.rp.space_before.min(0.0);
+            applied_before = pl.rp.space_before.min(0.0);
+        }
+    }
     // A different top only matters when there is something to wrap around.
     if spot(pb) != placed_at || ((pb.y - guess).abs() > 0.01 && !pb.excl.is_empty()) {
         let y0 = pb.y;
@@ -3922,6 +3942,22 @@ fn space_after_kept(ctx: &Ctx, block: usize, rp: &wordcraft_doc::resolve::Resolv
     after
 }
 
+/// How far below the top of paragraph `p` (above its space before) its floating objects placed
+/// down from it reach: those relative to the paragraph at an offset, to their rotated bounds,
+/// leaving out those the layout leaves out (as `anchor_floats` does); 0 without any.
+fn float_reach(ctx: &Ctx, p: &Paragraph) -> f32 {
+    let left_out = left_out_objects(ctx.doc, p, None, ctx.opts.show_hidden, ctx.hide_deleted);
+    p.objects
+        .iter()
+        .enumerate()
+        .filter(|(oi, _)| !left_out(*oi))
+        .filter_map(|(_, o)| floating(o))
+        .filter(|(_, _, f)| f.v_rel == Anchor::Paragraph && f.v_align.is_none() && !f.hidden)
+        .map(|(w, h, f)| f.spin().bounds(Rect::new(0.0, f.y, w, h)).bottom())
+        .filter(|v| v.is_finite())
+        .fold(0.0, f32::max)
+}
+
 /// The room the paragraphs after `block` need on the page for keep with next: enough of the
 /// next one to start there — its first line, two of its lines with widow/orphan control (it
 /// doesn't leave a single line at the bottom of a page; it moves over whole instead), or all
@@ -3955,7 +3991,8 @@ fn next_first_line(ctx: &mut Ctx, block: usize, width: f32, depth: usize) -> f32
             let _ = rp;
             let pl = para::layout_para(p, &env);
             if pl.rp.keep_next && depth < 8 {
-                pl.rp.space_before + pl.height + pl.rp.space_after + next_first_line(ctx, block + 1, width, depth + 1)
+                // Its floats count in the chain too (see below).
+                (pl.rp.space_before + pl.height).max(float_reach(ctx, p)) + pl.rp.space_after + next_first_line(ctx, block + 1, width, depth + 1)
             } else {
                 // The room this one needs to start on the page with the kept paragraph before
                 // it (#966).
@@ -3963,14 +4000,17 @@ fn next_first_line(ctx: &mut Ctx, block: usize, width: f32, depth: usize) -> f32
                     (Some(first), Some(last)) => last.top + last.height - first.top,
                     _ => 0.0,
                 };
-                pl.rp.space_before
+                let text = pl.rp.space_before
                     + if pl.rp.keep_lines {
                         pl.height
                     } else if pl.rp.widow_control && pl.lines.len() >= 2 {
                         to(1)
                     } else {
                         to(0)
-                    }
+                    };
+                // A floating object placed down from it goes where it goes (see
+                // `place_para_in_flow`), so the kept paragraph needs room for it too.
+                text.max(float_reach(ctx, p))
             }
         }
         Some(Block::Table(_)) => 24.0,
