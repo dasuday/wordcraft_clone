@@ -140,6 +140,7 @@ Imported Word 97–2003 `.doc`/`.dot` files now ask for a supported DOCX target 
 - 2026-10-15: Find opens Navigation on Results; editing the query restores Results after manual Headings/Pages navigation. Typed and selected-text searches retain document contents (#2096).
 
 | Date | What landed |
+| 2026-10-14 | Pictures keep the brightness, contrast and transparency their file gives them (#1711, #1766): a "Washout" picture watermark (VML `gain`/`blacklevel`) and a washed-out letterhead picture behind the text (`a:lum`) are drawn faded on screen and in PDF instead of at full colour, with the pixel curve measured on Word's own PDF export; `a:alphaModFix` transparency too. Saved back as DrawingML (and as VML `gain`/`blacklevel` in Word 2003 XML, without the transparency). Picture Format › Corrections, Transparency and Color › Washout replace the file's values (other Color modes leave them alone), and Reset Picture discards them all, as in Word; the PDF embeds the corrected pixels once per picture |
 | 2026-10-19 | Save As, Export and Open no longer do nothing on Linux desktops whose file chooser portal fails to show its dialog (#2999): a "cancel" quicker than anyone could make one asks again without the parent window, then opens the built-in file browser. |
 | 2026-10-18 | Long navigation headings wrap onto further lines inside the resizable pane instead of ending in an ellipsis: the row grows with the text and the pane keeps its width (#759, #3015). |
 | 2026-10-18 | Clearing a font query with no matches keeps Recently Used Fonts visible at the top of a scrollable list. The initial scroll position no longer skips its heading; measured keyboard scrolling is unchanged (#2068). |
@@ -504,6 +505,7 @@ Footer page-table height and body wrapping are corrected. Other pagination gaps 
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-14 | trivial | Progress log: picture brightness, contrast and transparency (#1711, #1766) |
 | 2026-10-19 | trivial | Progress log: forms protection keeps its content controls: no inserting, Properties or Remove Content Control |
 | 2026-10-18 | trivial | Progress log: long navigation headings wrap within the pane instead of ending in an ellipsis (#3015) |
 | 2026-10-18 | trivial | Font list starts at its first row after clearing a no-match query; recent heading remains visible (#2068) |
