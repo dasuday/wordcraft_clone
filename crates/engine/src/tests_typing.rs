@@ -2137,15 +2137,18 @@ fn typing_over_backward_selection_keeps_its_font() {
 
 #[test]
 fn right_arrow_moves_through_a_ligature_one_letter_at_a_time() {
-    // The default font draws "ffi" as one glyph; each Right press moves the drawn caret (#1974).
-    let mut s = typed("ffi");
+    // A font that draws "ffi" as one glyph (bundled, so the test doesn't depend on the installed
+    // fonts); each Right press moves the drawn caret (#1974).
+    let mut s = s();
+    run(&mut s, "format.font", json!({"name": "Source Serif 4"}));
+    typ(&mut s, "ffi");
     let drawn_as_one_glyph = s
         .layout()
         .pages
         .iter()
         .flat_map(|p| p.items.iter())
         .any(|it| matches!(it, wordcraft_layout::Placed::Lines { para, .. } if para.glyphs.len() < para.clusters.len()));
-    assert!(drawn_as_one_glyph, "the default font should draw ffi as a ligature");
+    assert!(drawn_as_one_glyph, "Source Serif 4 should draw ffi as a ligature");
     run(&mut s, "caret.home", json!({}));
     let mut xs = Vec::new();
     for _ in 0..4 {

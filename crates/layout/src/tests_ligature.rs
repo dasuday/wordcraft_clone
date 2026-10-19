@@ -21,6 +21,17 @@ fn para_layout(l: &DocLayout) -> &ParaLayout {
     panic!("no paragraph laid out");
 }
 
+/// `text` in a bundled font that draws fi and ffi as ligatures, so the tests don't depend on the
+/// installed fonts (Liberation Sans, the usual Linux stand-in for the default font, draws none).
+fn doc(text: &str) -> Document {
+    let mut d = Document::from_text(text);
+    let end = d.body.first().and_then(|b| b.as_para()).map_or(0, |p| p.text.len());
+    let _ = d.format_range(&Pos::body(0, 0), &Pos::body(0, end), &|c| c.font = Some(LIGATURE_FONT.into()));
+    d
+}
+
+const LIGATURE_FONT: &str = "Source Serif 4";
+
 fn caret_x(l: &DocLayout, off: usize) -> f32 {
     l.caret(&Pos::body(0, off)).map(|c| c.x).unwrap_or(f32::NAN)
 }
@@ -33,7 +44,7 @@ fn has_fi_ligature(l: &DocLayout) -> bool {
 
 #[test]
 fn caret_between_the_letters_of_a_ligature_is_inside_it() {
-    let l = lay(&Document::from_text("fi"));
+    let l = lay(&doc("fi"));
     assert!(has_fi_ligature(&l), "the default font should draw fi as a ligature");
     let (a, b, c) = (caret_x(&l, 0), caret_x(&l, 1), caret_x(&l, 2));
     assert!(a < b && b < c, "caret x before, inside and after fi: {a} {b} {c}");
@@ -42,7 +53,7 @@ fn caret_between_the_letters_of_a_ligature_is_inside_it() {
 
 /// Width of "fi" (both letters) with character spacing `sp` points per letter.
 fn fi_width_with_spacing(sp: Option<f32>) -> (DocLayout, f32) {
-    let mut d = Document::from_text("fi");
+    let mut d = doc("fi");
     d.format_range(&Pos::body(0, 0), &Pos::body(0, 2), &|c| c.spacing = sp).unwrap();
     let l = lay(&d);
     let w = caret_x(&l, 2) - caret_x(&l, 0);
@@ -64,7 +75,7 @@ fn character_spacing_inside_a_ligature_is_kept() {
 
 #[test]
 fn clicks_inside_a_ligature_land_between_its_letters() {
-    let l = lay(&Document::from_text("fi"));
+    let l = lay(&doc("fi"));
     let (a, b, c) = (caret_x(&l, 0), caret_x(&l, 1), caret_x(&l, 2));
     let cr = l.caret(&Pos::body(0, 1)).unwrap();
     let y = cr.top + cr.height / 2.0;
@@ -77,7 +88,7 @@ fn clicks_inside_a_ligature_land_between_its_letters() {
 
 #[test]
 fn every_letter_of_a_three_letter_ligature_has_its_own_caret() {
-    let l = lay(&Document::from_text("ffi"));
+    let l = lay(&doc("ffi"));
     assert!(has_fi_ligature(&l), "the default font should draw ffi as a ligature");
     let xs: Vec<f32> = (0..=3).map(|o| caret_x(&l, o)).collect();
     assert!(xs.windows(2).all(|w| w[0] < w[1]), "{xs:?}");
@@ -85,7 +96,7 @@ fn every_letter_of_a_three_letter_ligature_has_its_own_caret() {
 
 #[test]
 fn a_combining_mark_stays_in_its_letters_cluster() {
-    let l = lay(&Document::from_text("fi\u{301}"));
+    let l = lay(&doc("fi\u{301}"));
     let pl = para_layout(&l);
     let offs = pl.line_offsets(0);
     assert!(!offs.contains(&2), "no caret between i and its accent: {offs:?}");
@@ -93,7 +104,7 @@ fn a_combining_mark_stays_in_its_letters_cluster() {
 
 #[test]
 fn selection_edges_inside_a_ligature_use_the_same_positions() {
-    let d = Document::from_text("fi");
+    let d = doc("fi");
     let l = lay(&d);
     let rects = l.selection_rects(&d, &Pos::body(0, 0), &Pos::body(0, 1), 0);
     let r = rects.first().map(|(_, r)| *r).unwrap();
@@ -174,7 +185,7 @@ fn a_long_word_never_wraps_inside_a_ligature() {
     // never ends between a ligature's glyph and its glyphless letters.
     let mut seen_ligature = false;
     for k in 0..24 {
-        let mut d = Document::from_text(&format!("{}ffi", "x".repeat(k)));
+        let mut d = doc(&format!("{}ffi", "x".repeat(k)));
         d.last_section.margin_left = 250.0;
         d.last_section.margin_right = 250.0;
         let l = lay(&d);
@@ -195,7 +206,7 @@ fn a_hyphenation_point_never_splits_a_ligature() {
     // Soft hyphens sit between the letters of "ffi"; a line never ends between a ligature's glyph
     // and its glyphless letters, whether or not the soft hyphen leaves the ligature intact.
     for k in 0..24 {
-        let mut d = Document::from_text(&format!("{}f\u{ad}f\u{ad}i", "x".repeat(k)));
+        let mut d = doc(&format!("{}f\u{ad}f\u{ad}i", "x".repeat(k)));
         d.last_section.margin_left = 250.0;
         d.last_section.margin_right = 250.0;
         let l = lay(&d);
