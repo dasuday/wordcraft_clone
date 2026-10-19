@@ -279,6 +279,10 @@ pub struct UiState {
     /// The heading being dragged in the Navigation pane, as its paragraph path; never saved.
     #[serde(skip)]
     pub nav_drag: Option<Vec<u32>>,
+    /// The outline the folded headings were folded on (a hash of its headings' paths and levels),
+    /// so another document or a structural edit drops them instead of folding other headings.
+    #[serde(skip)]
+    pub nav_outline: Option<u64>,
     pub show_discord: bool,
     /// User name (File › Options) for comments and tracked changes; empty keeps the default.
     pub author: String,
@@ -383,6 +387,7 @@ impl Default for UiState {
             nav_pane: false,
             nav_collapsed: Vec::new(),
             nav_drag: None,
+            nav_outline: None,
             show_discord: true,
             author: String::new(),
             window: None,

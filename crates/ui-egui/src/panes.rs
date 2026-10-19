@@ -271,6 +271,15 @@ fn outline(app: &mut WordApp, ui: &mut Ui) {
         ui.label(egui::RichText::new(tl!("Create an interactive outline of your document.\n\nIt's a great way to keep track of where you are or quickly move your content around.\n\nTo get started, go to the Home tab and apply Heading styles to the headings in your document.")).weak());
         return;
     }
+    // Folded headings and a drag belong to the outline they were made on: another document, a
+    // heading inserted above, a level changed — and the paths name other headings (or none), so
+    // the set is dropped rather than folding the wrong ones.
+    let skeleton = outline_skeleton(app.session.document_id(), &items);
+    if app.ui.nav_outline != Some(skeleton) {
+        app.ui.nav_outline = Some(skeleton);
+        app.ui.nav_collapsed.clear();
+        app.ui.nav_drag = None;
+    }
     // The rows to draw: everything not tucked away under a folded heading.
     let mut shown: Vec<usize> = Vec::new();
     let mut folded: Option<u8> = None;
@@ -436,17 +445,35 @@ fn has_children(items: &[(Path, u8, String)], i: usize) -> bool {
     items.get(i + 1).is_some_and(|(_, l, _)| *l > items[i].1)
 }
 
+/// What the outline's headings *are*, as one number: the document they are in, and their paths and
+/// levels (FNV-1a). Text isn't in it — typing in a heading doesn't move it, so a fold stays where
+/// it was.
+fn outline_skeleton(document: u64, items: &[(Path, u8, String)]) -> u64 {
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+    let mut mix = |v: u64| h = (h ^ v).wrapping_mul(0x0000_0100_0000_01b3);
+    mix(document);
+    for (path, level, _) in items {
+        for i in &path.0 {
+            mix(u64::from(*i));
+        }
+        mix(u64::from(*level));
+    }
+    h
+}
+
 /// Where a drop at `pos` would put the dragged section: the paragraph it goes in front of, as the
-/// path `nav.move` wants, and the height the drop line is drawn at. Dropping on a row's upper half
-/// lands before that heading; the lower half lands after its whole section, in front of the next
-/// heading at its level or above. `None` (no line) = the end of the container it is in.
+/// path `nav.move` wants (`null` for the end of the container), and the height the drop line is
+/// drawn at. Dropping on a row's upper half lands before that heading; the lower half lands after
+/// its whole section, in front of the next heading at its level or above — or at the end of the
+/// container when that was the last section in it. `None` only when there are no rows.
 fn landing(items: &[(Path, u8, String)], rows: &[(usize, Rect)], pos: Pos2) -> Option<(serde_json::Value, f32)> {
     let (top, bottom) = (rows.first()?.1, rows.last()?.1);
     if pos.y < top.min.y {
         return rows.first().map(|(i, r)| (json!(items[*i].0.0), r.min.y));
     }
+    // Below every row: the end of the container, the line under the last one.
     if pos.y > bottom.max.y {
-        return None;
+        return Some((serde_json::Value::Null, bottom.max.y));
     }
     let (i, rect) = *rows.iter().find(|(_, r)| r.contains(pos))?;
     if pos.y <= rect.center().y {
@@ -456,15 +483,16 @@ fn landing(items: &[(Path, u8, String)], rows: &[(usize, Rect)], pos: Pos2) -> O
     // that row — or, when it is the last section, at the bottom of the last row it covers.
     let level = items[i].1;
     let next = items.iter().enumerate().skip(i + 1).find(|(_, (_, l, _))| *l <= level);
+    // The last row this section covers, folded or not: the line and the end go under it.
+    let end_y = || rows.iter().filter(|(k, _)| *k >= i).map(|(_, r)| r.max.y).next_back().unwrap_or(rect.max.y);
     match next {
         Some((j, (p, _, _))) if p.parent() == items[i].0.parent() => {
-            let y = rows
-                .iter()
-                .find(|(k, _)| *k == j)
-                .map_or_else(|| rows.iter().filter(|(k, _)| *k >= i).map(|(_, r)| r.max.y).next_back().unwrap_or(rect.max.y), |(_, r)| r.min.y);
+            let y = rows.iter().find(|(k, _)| *k == j).map_or_else(end_y, |(_, r)| r.min.y);
             Some((json!(p.0), y))
         }
-        _ => None,
+        // Nothing after it in this container (or the next heading is in another one, a table
+        // cell's, say): the end of the container it is in.
+        _ => Some((serde_json::Value::Null, end_y())),
     }
 }
 
@@ -1214,9 +1242,29 @@ mod navigation_tests {
         assert_eq!(land(at_row(1, 0.25)), Some((Some(vec![1]), rows[1].1.min.y)));
         assert_eq!(land(at_row(0, 0.75)), Some((Some(vec![2]), rows[2].1.min.y)), "past One and the subheading under it");
         assert_eq!(land(at_row(1, 0.75)), Some((Some(vec![2]), rows[2].1.min.y)), "past One A's section");
-        // Past the last section there is nothing left to go in front of.
-        assert_eq!(land(at_row(2, 0.75)), None);
-        assert_eq!(land(rows[2].1.max.y + 5.0), None);
+        // Past the last section: the end of the container, the line under its last row — the drop
+        // still lands there rather than doing nothing.
+        assert_eq!(land(at_row(2, 0.75)), Some((None, rows[2].1.max.y)));
+        assert_eq!(land(rows[2].1.max.y + 5.0), Some((None, rows[2].1.max.y)));
+    }
+
+    /// Folded headings belong to the outline they were folded on: another document, or a heading
+    /// inserted above, drops them; typing in a heading doesn't.
+    #[test]
+    fn a_fold_belongs_to_the_outline_it_was_made_on() {
+        let (items, _) = tree();
+        let h = outline_skeleton(1, &items);
+        assert_eq!(h, outline_skeleton(1, &items.clone()), "the same outline hashes the same");
+        let mut retitled = items.clone();
+        retitled[0].2 = "One, renamed".into();
+        assert_eq!(h, outline_skeleton(1, &retitled), "typing in a heading keeps the fold");
+        let mut inserted = items.clone();
+        inserted.insert(1, (Path::top(1), 1u8, "New".into()));
+        assert_ne!(h, outline_skeleton(1, &inserted), "a heading inserted above moves the others");
+        let mut levelled = items.clone();
+        levelled[1].1 = 1;
+        assert_ne!(h, outline_skeleton(1, &levelled), "a level change is a different tree");
+        assert_ne!(h, outline_skeleton(2, &items), "another document's outline, even an identical one");
     }
 
     /// An empty outline has nowhere to drop, and the pane must not index into nothing.

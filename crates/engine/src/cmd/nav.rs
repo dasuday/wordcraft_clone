@@ -80,6 +80,11 @@ fn target(s: &Session, v: &Value) -> Result<Path, CmdError> {
         }
         return Ok(Path::top(i));
     }
+    // The caret's path is only a heading's path in the body: in a header, footer, footnote or
+    // note it indexes another story, so folding a body heading there would be a guess.
+    if s.sel.focus.story != StoryRef::Body {
+        return Err(CmdError::Params("`path` or `block` required: the caret isn't in the body".into()));
+    }
     Ok(s.sel.focus.path.clone())
 }
 
