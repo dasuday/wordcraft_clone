@@ -9423,3 +9423,60 @@ fn caret_height_ignores_line_spacing() {
         assert!((single - wide).abs() < 0.01, "{spacing:?}: single {single}, wide {wide}");
     }
 }
+
+/// Page borders measure their space in from the page edge, or out from the text margins
+/// (`w:offsetFrom="text"`); with mirrored margins only text-measured borders move on even pages.
+#[test]
+fn page_border_offset_measures_from_page_or_text() {
+    // (left, top, right, bottom) of the border rules on each page.
+    let frames = |from_text: bool, mirror: bool| -> Vec<(f32, f32, f32, f32)> {
+        let mut d = Document::from_text(&"line\n".repeat(80));
+        d.settings.mirror_margins = mirror;
+        let s = &mut d.last_section;
+        (s.margin_left, s.margin_right, s.margin_top, s.margin_bottom) = (90.0, 54.0, 72.0, 72.0);
+        s.page_borders = Some(Borders::box_(Border { space: 24.0, ..Border::single(1.0) }));
+        s.page_borders_from_text = from_text;
+        let l = lay(&d);
+        l.pages
+            .iter()
+            .map(|p| {
+                let rules: Vec<(f32, f32, f32, f32)> = p
+                    .items
+                    .iter()
+                    .filter_map(|i| if let Placed::Rule { x0, y0, x1, y1, .. } = i { Some((*x0, *y0, *x1, *y1)) } else { None })
+                    .collect();
+                let left = rules.iter().map(|r| r.0.min(r.2)).fold(f32::MAX, f32::min);
+                let top = rules.iter().map(|r| r.1.min(r.3)).fold(f32::MAX, f32::min);
+                let right = rules.iter().map(|r| r.0.max(r.2)).fold(f32::MIN, f32::max);
+                let bottom = rules.iter().map(|r| r.1.max(r.3)).fold(f32::MIN, f32::max);
+                (left, top, right, bottom)
+            })
+            .collect()
+    };
+    let (w, h) = (612.0, 792.0);
+    let page = frames(false, false);
+    assert!(page.len() >= 2, "{} pages", page.len());
+    assert_eq!(page[0], (24.0, 24.0, w - 24.0, h - 24.0));
+    let text = frames(true, false);
+    assert_eq!(text[0], (90.0 - 24.0, 72.0 - 24.0, w - 54.0 + 24.0, h - 72.0 + 24.0));
+    // Mirrored: the even page's text starts at the narrower (54pt) margin.
+    assert_eq!(frames(false, true)[1], page[1]);
+    assert_eq!(frames(true, true)[1], (54.0 - 24.0, 72.0 - 24.0, w - 90.0 + 24.0, h - 72.0 + 24.0));
+    // A margin narrower than the spacing: each page clamps its own edge to the page, so the
+    // even page's left border is at the page edge, not pushed off it by the move.
+    let narrow = |mirror: bool| {
+        let mut d = Document::from_text(&"line\n".repeat(80));
+        d.settings.mirror_margins = mirror;
+        let s = &mut d.last_section;
+        (s.margin_left, s.margin_right) = (90.0, 10.0);
+        s.page_borders = Some(Borders::box_(Border { space: 24.0, ..Border::single(1.0) }));
+        s.page_borders_from_text = true;
+        lay(&d).pages[1]
+            .items
+            .iter()
+            .filter_map(|i| if let Placed::Rule { x0, x1, .. } = i { Some(x0.min(*x1)) } else { None })
+            .fold(f32::MAX, f32::min)
+    };
+    assert_eq!(narrow(true), 0.0);
+    assert_eq!(narrow(false), 90.0 - 24.0);
+}
