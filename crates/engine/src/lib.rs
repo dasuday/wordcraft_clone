@@ -70,6 +70,10 @@ pub struct CommandSpec {
     pub mutates: bool,
     /// `None` = enabled; `Some(reason)` = disabled.
     pub enabled: fn(&Session) -> Option<&'static str>,
+    /// Whether `enabled` only allows some states: such a command wins a key it shares with an
+    /// always-available one while it is available (Outline view's Demote to Body Text and Normal
+    /// Style both use Ctrl+Shift+N on Windows/Linux).
+    pub(crate) conditional: bool,
     pub run: fn(&mut Session, &Value) -> CmdResult,
 }
 
@@ -79,7 +83,7 @@ fn always(_: &Session) -> Option<&'static str> {
 
 impl CommandSpec {
     pub const fn new(id: &'static str, label: &'static str, location: &'static str, run: fn(&mut Session, &Value) -> CmdResult) -> Self {
-        CommandSpec { id, label, location, shortcut: "", params: "{}", mutates: true, enabled: always, run }
+        CommandSpec { id, label, location, shortcut: "", params: "{}", mutates: true, enabled: always, conditional: false, run }
     }
     pub const fn key(mut self, s: &'static str) -> Self {
         self.shortcut = s;
@@ -96,6 +100,7 @@ impl CommandSpec {
     }
     pub const fn when(mut self, f: fn(&Session) -> Option<&'static str>) -> Self {
         self.enabled = f;
+        self.conditional = true;
         self
     }
 }
