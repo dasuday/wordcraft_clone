@@ -210,3 +210,29 @@ fn inline_box_that_resizes_to_fit_takes_its_texts_height() {
 /// Filler paragraphs before the box in [`inline_box_that_resizes_to_fit_takes_its_texts_height`]:
 /// enough that a 10 cm box no longer leaves room for the page break on the first page.
 const FILLER: usize = 22;
+
+#[test]
+fn floating_box_that_resizes_to_fit_takes_its_texts_height() {
+    // #3129: Word saves a floating caption's box 0.05 pt tall and fits it to its line when it lays
+    // the document out, as an inline box (#2791), in Web Layout too.
+    let doc = |auto_fit: bool, view: ViewMode| {
+        let mut d = Document::from_text("Kilns");
+        let id = text_box(&mut d, 0, "Figure 1", 120.0, 0.05, TextBody { auto_fit, inset: Some([0; 4]), ..Default::default() });
+        let p = d.para_mut(StoryRef::Body, &Path::top(0)).unwrap();
+        let off = p.object_offsets()[0];
+        p.object_at_mut(off).and_then(|o| o.float_mut()).unwrap().wrap = Wrap::Square;
+        layout(&d, &mut LayoutCache::new(), &LayoutOptions { view, ..Default::default() }).pages[0]
+            .items
+            .iter()
+            .find_map(|it| match it {
+                Placed::Object { rect, text_box: Some(s), .. } if *s == id => Some(*rect),
+                _ => None,
+            })
+            .unwrap()
+    };
+    for view in [ViewMode::Print, ViewMode::Web] {
+        let r = doc(true, view);
+        assert!(r.h > 8.0 && r.h < 30.0, "the box fits its line in {view:?}: {r:?}");
+        assert!(doc(false, view).h <= 1.0, "without auto-fit the box keeps its saved height");
+    }
+}

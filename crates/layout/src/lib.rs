@@ -905,20 +905,33 @@ impl Ctx<'_> {
             if float.wrap != Wrap::Inline || float.rot != 0.0 {
                 continue;
             }
-            let key = (*id, w.to_bits());
-            let h = match self.fitted.get(&key) {
-                Some(h) => *h,
-                None => {
-                    let h = textbox::fitted_height(self, *id, *w);
-                    self.fitted.insert(key, h);
-                    h
-                }
-            };
-            if let Some(h) = h {
+            if let Some(h) = self.fitted_height(*id, *w) {
                 out.push((k, h));
             }
         }
         out
+    }
+
+    /// [`textbox::fitted_height`], worked out once per layout.
+    fn fitted_height(&mut self, id: u32, w: f32) -> Option<f32> {
+        let key = (id, w.to_bits());
+        if let Some(h) = self.fitted.get(&key) {
+            return *h;
+        }
+        let h = textbox::fitted_height(self, id, w);
+        self.fitted.insert(key, h);
+        h
+    }
+
+    /// A floating (not inline) picture, chart or shape: its size and placement. A text box that
+    /// resizes to fit its text is as tall as its text.
+    fn floating<'o>(&mut self, o: &'o InlineObject) -> Option<(f32, f32, &'o Float)> {
+        let (w, h, float) = o.frame().filter(|(_, _, float)| float.wrap != Wrap::Inline)?;
+        let fitted = match o {
+            InlineObject::Shape { story: Some(id), .. } if float.rot == 0.0 => self.fitted_height(*id, w),
+            _ => None,
+        };
+        Some((w, fitted.unwrap_or(h), float))
     }
 
     /// The cache key of `p` laid out with these inputs, and its first automatic equation number
@@ -1258,7 +1271,7 @@ fn layout_box(
                 let mut pinned = HashMap::new();
                 let left_out = left_out_objects(ctx.doc, p, table.map(|t| &t.chr), ctx.opts.show_hidden, ctx.hide_deleted);
                 for (oi, o) in p.objects.iter().enumerate() {
-                    let Some((w, h, float)) = floating(o) else { continue };
+                    let Some((w, h, float)) = ctx.floating(o) else { continue };
                     if left_out(oi) {
                         continue;
                     }
@@ -2903,11 +2916,6 @@ impl PageFrame<'_> {
     }
 }
 
-/// A floating (not inline) picture, chart or shape: its size and placement.
-fn floating(o: &InlineObject) -> Option<(f32, f32, &Float)> {
-    o.frame().filter(|(_, _, float)| float.wrap != Wrap::Inline)
-}
-
 /// Where a floating object goes, in the coordinates of the box `frame` places on the page.
 /// `col` is the column (or cell) left edge and width, `y0` the anchor paragraph's top. Without a
 /// frame (table cells, text boxes, notes) positions relative to the page or margins fall back
@@ -3098,7 +3106,7 @@ fn anchor_floats(
         // it takes no room either.
         let left_out = left_out_objects(ctx.doc, p, None, ctx.opts.show_hidden, ctx.hide_deleted);
         for (oi, o) in p.objects.iter().enumerate() {
-            let Some((w, h, float)) = floating(o) else { continue };
+            let Some((w, h, float)) = ctx.floating(o) else { continue };
             if left_out(oi) {
                 continue;
             }
@@ -3239,7 +3247,7 @@ fn place_objects(
                 continue;
             }
             let Some(obj) = p.objects.get(oi) else { continue };
-            let Some((w, h, float)) = obj.frame() else { continue };
+            let Some((w, h, float)) = ctx.floating(obj).or_else(|| obj.frame()) else { continue };
             let floating = float.wrap != Wrap::Inline;
             if if floating { !first } else { !in_piece } {
                 continue;
@@ -4397,15 +4405,15 @@ fn headers_footers_refer_to_pages(doc: &Document) -> bool {
     })
 }
 
-/// Where each bookmark in the body starts: the number and number format of the page it is placed
-/// on (with two of the same name, the first in the document).
+/// Where each bookmark in the body and its text boxes starts: the number and number format of the
+/// page it is placed on (with two of the same name, the first in the document).
 fn bookmark_pages(doc: &Document, pages: &[Page], sections: &[(usize, &SectionProps)]) -> fields::BookmarkPages {
     // Each paragraph's bookmarks: name, offset, and its line in the paragraph layout last looked
     // up (the pieces of a paragraph usually share one).
-    let mut wanted: HashMap<Path, Vec<(String, usize, Option<(usize, usize)>)>> = HashMap::new();
+    let mut wanted: HashMap<(StoryRef, Path), Vec<(String, usize, Option<(usize, usize)>)>> = HashMap::new();
     let mut seen = HashSet::new();
-    for path in doc.para_paths(StoryRef::Body) {
-        let Some(p) = doc.para(StoryRef::Body, &path) else { continue };
+    for (story, path) in doc.body_para_paths() {
+        let Some(p) = doc.para(story, &path) else { continue };
         if !p.objects.iter().any(|o| matches!(o, InlineObject::BookmarkStart { .. })) {
             continue;
         }
@@ -4413,7 +4421,7 @@ fn bookmark_pages(doc: &Document, pages: &[Page], sections: &[(usize, &SectionPr
             if let InlineObject::BookmarkStart { name } = o
                 && seen.insert(name.as_str())
             {
-                wanted.entry(path.clone()).or_default().push((name.clone(), off, None));
+                wanted.entry((story, path.clone())).or_default().push((name.clone(), off, None));
             }
         }
     }
@@ -4424,8 +4432,9 @@ fn bookmark_pages(doc: &Document, pages: &[Page], sections: &[(usize, &SectionPr
         }
         let format = sections.get(page.section).map(|(_, s)| s.page_num_format).unwrap_or_default();
         for it in &page.items {
-            let Placed::Lines { story: StoryRef::Body, path, para, l0, l1, .. } = it else { continue };
-            let Some(marks) = wanted.get_mut(path) else { continue };
+            let Placed::Lines { story, path, para, l0, l1, .. } = it else { continue };
+            let key = (*story, path.clone());
+            let Some(marks) = wanted.get_mut(&key) else { continue };
             let layout = Arc::as_ptr(para) as usize;
             marks.retain_mut(|(name, off, line)| {
                 let li = match *line {
@@ -4443,7 +4452,7 @@ fn bookmark_pages(doc: &Document, pages: &[Page], sections: &[(usize, &SectionPr
                 false
             });
             if marks.is_empty() {
-                wanted.remove(path);
+                wanted.remove(&key);
             }
         }
     }

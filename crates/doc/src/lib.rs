@@ -890,6 +890,21 @@ impl Document {
         out
     }
 
+    /// Paths of the body's paragraphs in document order, each followed by those of the text boxes
+    /// anchored in it.
+    pub fn body_para_paths(&self) -> Vec<(StoryRef, Path)> {
+        let mut out = Vec::new();
+        for path in self.para_paths(StoryRef::Body) {
+            let boxes: Vec<u32> =
+                self.para(StoryRef::Body, &path).map(|p| p.objects.iter().flat_map(InlineObject::text_boxes).collect()).unwrap_or_default();
+            out.push((StoryRef::Body, path));
+            for id in boxes.into_iter().filter(|id| self.parts.get(id).is_some_and(|p| p.kind == PartKind::TextBox)) {
+                out.extend(self.para_paths(StoryRef::Part(id)).into_iter().map(|p| (StoryRef::Part(id), p)));
+            }
+        }
+        out
+    }
+
     /// First and last positions of a story.
     pub fn start_of(&self, s: StoryRef) -> Pos {
         let path = self.para_paths(s).into_iter().next().unwrap_or_else(|| Path::top(0));
@@ -1409,14 +1424,14 @@ impl Document {
         out
     }
 
-    /// Bookmark names in the body, in order.
+    /// Bookmark names in the body and its text boxes, in order.
     pub fn bookmarks(&self) -> Vec<(String, Pos)> {
         let mut out = Vec::new();
-        for path in self.para_paths(StoryRef::Body) {
-            if let Some(p) = self.para(StoryRef::Body, &path) {
+        for (story, path) in self.body_para_paths() {
+            if let Some(p) = self.para(story, &path) {
                 for off in p.object_offsets() {
                     if let Some(InlineObject::BookmarkStart { name }) = p.object_at(off) {
-                        out.push((name.clone(), Pos { story: StoryRef::Body, path: path.clone(), off }));
+                        out.push((name.clone(), Pos { story, path: path.clone(), off }));
                     }
                 }
             }

@@ -281,6 +281,32 @@ fn prune_text_boxes_drops_only_unshown_ones() {
     assert_eq!(d.prune_text_boxes(), 0);
 }
 
+#[test]
+fn body_para_paths_follow_each_paragraph_with_its_text_boxes() {
+    let shape = |story| InlineObject::Shape {
+        kind: para::ShapeKind::TextBox,
+        w: 50.0,
+        h: 20.0,
+        fill: None,
+        stroke: None,
+        stroke_width: 0.0,
+        float: Default::default(),
+        story: Some(story),
+        freeform: None,
+        effects: Default::default(),
+        extra: Default::default(),
+    };
+    let para_of = |t: &str| vec![para_block(Paragraph::with_text(t, CharProps::default()))];
+    let mut d = Document::from_text("one\ntwo");
+    let a = d.add_part(PartKind::TextBox, para_of("box"));
+    let hdr = d.add_part(PartKind::Header, para_of("header"));
+    d.insert_object(&Pos::body(0, 0), shape(a), &CharProps::default()).unwrap();
+    // A damaged file's shape showing a header is no text box of the body.
+    d.insert_object(&Pos::body(1, 0), shape(hdr), &CharProps::default()).unwrap();
+    let texts: Vec<String> = d.body_para_paths().iter().map(|(s, p)| d.para(*s, p).unwrap().plain_text()).collect();
+    assert_eq!(texts, ["one", "box", "two"]);
+}
+
 /// `blocks` in the only cell of `levels` tables, each nested in the next.
 fn nested_tables(levels: usize, blocks: Blocks) -> Blocks {
     (0..levels).fold(blocks, |inner, _| {

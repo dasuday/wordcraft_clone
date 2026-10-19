@@ -2,7 +2,7 @@
 
 use serde_json::{Value, json};
 use wordcraft_doc::numbering::{Counters, LevelSuffix};
-use wordcraft_doc::para::{InlineObject, NoteKind, OBJ};
+use wordcraft_doc::para::{Anchor, Float, InlineObject, NoteKind, OBJ, ShapeKind, Wrap};
 use wordcraft_doc::props::{CharProps, TabAlign, TabLeader, TabStop};
 use wordcraft_doc::section::NumFormat;
 use wordcraft_doc::{Block, Paragraph, PartKind, Path, Pos, StoryRef, para_block};
@@ -837,6 +837,14 @@ fn caption(s: &mut Session, v: &Value) -> CmdResult {
     if !text.is_empty() {
         para.insert_text(para.len(), &format!(": {text}"), &CharProps::default())?;
     }
+    // A selected floating picture or shape: in a text box under it (#3129), unless it is in a
+    // text box itself (no text box goes in a text box).
+    let floating = super::objects::object_selection(s).and_then(|(pos, o)| Some((pos, o.frame()?.2.clone()))).filter(|(pos, f)| {
+        f.wrap != Wrap::Inline && !matches!(pos.story, StoryRef::Part(id) if s.doc.parts.get(&id).is_some_and(|p| p.kind == PartKind::TextBox))
+    });
+    if let Some((pos, float)) = floating {
+        return floating_caption(s, &pos, &float, para, above);
+    }
     // A selected picture, shape or chart: next to the paragraph holding it, in the same cell or
     // text box (#1230). Otherwise next to the caret's top-level block: a paragraph, or the whole
     // table it is in.
@@ -858,19 +866,78 @@ fn caption(s: &mut Session, v: &Value) -> CmdResult {
     sel_result(s)
 }
 
+/// The caption of the floating picture or shape at `pos`, as Word makes it: in a text box with no
+/// fill, outline or margins that fits its text, as wide as the picture and right under it (over it
+/// with `above`), wrapped like it and anchored in its paragraph.
+fn floating_caption(s: &mut Session, pos: &Pos, float: &Float, para: Paragraph, above: bool) -> CmdResult {
+    let pic = s.layout().object(pos, s.page_hint).ok_or_else(|| CmdError::Failed("the picture isn't laid out".into()))?;
+    let id = s.doc.try_add_part(PartKind::TextBox, vec![para_block(para)])?;
+    if let Some(part) = s.doc.parts.get_mut(&id) {
+        part.body.auto_fit = true;
+        part.body.inset = Some([0; 4]);
+    }
+    let (x, top) = (pic.rect.x - pic.origin.x, pic.rect.y - pic.origin.y);
+    let obj = InlineObject::Shape {
+        kind: ShapeKind::TextBox,
+        w: pic.rect.w,
+        h: 18.0,
+        fill: None,
+        stroke: None,
+        stroke_width: 0.0,
+        float: Float {
+            wrap: float.wrap,
+            wrap_text: float.wrap_text,
+            h_rel: Anchor::Column,
+            v_rel: Anchor::Paragraph,
+            x,
+            y: top + pic.rect.h,
+            dist: float.dist,
+            dist_bottom: float.dist_bottom,
+            ..Float::default()
+        },
+        story: Some(id),
+        freeform: None,
+        effects: Default::default(),
+        extra: Default::default(),
+    };
+    let at = Pos { off: pos.off + OBJ.len_utf8(), ..pos.clone() };
+    s.doc.insert_object(&at, obj, &CharProps::default())?;
+    update_seq(s)?;
+    // Keep the height the box fits to; above the picture, its bottom meets the picture's top.
+    s.touch();
+    if let Some(h) = s.layout().object(&at, pic.page).map(|o| o.rect.h) {
+        let p = s.doc.para_mut(at.story, &at.path)?;
+        if let Some(o) = p.object_at_mut(at.off) {
+            o.set_size(pic.rect.w, h);
+            if above && let Some(f) = o.float_mut() {
+                f.y = top - h;
+            }
+        }
+        p.touch();
+    }
+    s.sel = Selection::caret(s.doc.end_of(StoryRef::Part(id)));
+    sel_result(s)
+}
+
 /// Renumber the body's SEQ fields in document order, honouring `\* format`, `\s level` (restart
 /// after each heading of that level), `\r n` (reset to n), `\c` (repeat) and `\h` (hide), and
 /// fill body STYLEREF fields ([`wordcraft_layout::styleref`]): chapter numbers (`STYLEREF n \s`,
 /// the last level-n heading's number, or its count when the heading isn't numbered) and the
-/// text or number of the nearest paragraph of a style.
+/// text or number of the nearest paragraph of a style. A text box's fields count right after the
+/// paragraph it is anchored in (#3129).
 pub fn update_seq(s: &mut Session) -> Result<(), CmdError> {
     let mut headings = [0u32; 9];
     let mut seq: std::collections::HashMap<String, (u32, u32)> = Default::default();
     // Built on the first STYLEREF (field results don't change what it finds).
     let mut styles: Option<wordcraft_layout::styleref::StyleIndex> = None;
-    for path in s.doc.para_paths(StoryRef::Body) {
-        let Some(p) = s.doc.para(StoryRef::Body, &path) else { continue };
-        if let Some(l) = heading_style_level(p)
+    let mut body = Path::top(0);
+    for (story, path) in s.doc.body_para_paths() {
+        if story == StoryRef::Body {
+            body = path.clone();
+        }
+        let Some(p) = s.doc.para(story, &path) else { continue };
+        if story == StoryRef::Body
+            && let Some(l) = heading_style_level(p)
             && let Some(k) = (l as usize).checked_sub(1)
             && let Some(count) = headings.get_mut(k)
         {
@@ -901,7 +968,7 @@ pub fn update_seq(s: &mut Session) -> Result<(), CmdError> {
                 }
                 "STYLEREF" => {
                     let ix = styles.get_or_insert_with(|| wordcraft_layout::styleref::StyleIndex::build(&s.doc));
-                    if let Some(i) = ix.index_of(&path) {
+                    if let Some(i) = ix.index_of(&body) {
                         updates.push((k, ix.eval(instr, wordcraft_layout::styleref::At::Body(i))));
                     }
                 }
@@ -911,7 +978,7 @@ pub fn update_seq(s: &mut Session) -> Result<(), CmdError> {
         if updates.is_empty() {
             continue;
         }
-        let para = s.doc.para_mut(StoryRef::Body, &path)?;
+        let para = s.doc.para_mut(story, &path)?;
         for (k, r) in updates {
             if let Some(InlineObject::Field { result, dirty, .. }) = para.objects.get_mut(k) {
                 // A computed result is no longer stale: Word's F9 clears `w:dirty` too.
@@ -1419,5 +1486,56 @@ mod tests {
         s.run("references.caption", &json!({})).unwrap();
         let texts: Vec<String> = s.doc.body.iter().filter_map(|b| b.as_para()).map(|p| p.plain_text()).collect();
         assert_eq!(texts.get(1).map(String::as_str), Some("Figure 1"), "{texts:?}");
+    }
+
+    /// #3129: a floating picture's caption goes in a text box right under it (over it with
+    /// Above), as wide as it and wrapped like it, not in a paragraph of the body. Captions in text
+    /// boxes count where they are anchored.
+    #[test]
+    fn caption_for_a_floating_picture_goes_in_a_text_box_under_it() {
+        let mut s = Session::new(wordcraft_doc::Document::from_text("Before\nAfter"));
+        s.run("select.text", &json!({"text": "Before"})).unwrap();
+        s.run("caret.end", &json!({})).unwrap();
+        s.run("insert.shape", &json!({"kind": "ellipse", "width": 60, "height": 40})).unwrap();
+        s.run("arrange.wrap", &json!({"wrap": "square"})).unwrap();
+        let (at, _) = crate::cmd::objects::selected(&s).expect("the shape is selected");
+        let end = Pos { off: at.off + OBJ.len_utf8(), ..at.clone() };
+        let pic = s.layout().object(&at, 0).unwrap().rect;
+        s.run("references.caption", &json!({"label": "Figure", "text": "Kiln"})).unwrap();
+        assert_eq!(s.doc.body.len(), 2, "no caption paragraph in the body");
+        let caption = |s: &Session| match s.doc.para_at(&end).and_then(|p| p.object_at(end.off)) {
+            Some(InlineObject::Shape { kind: ShapeKind::TextBox, story: Some(id), fill: None, stroke: None, float, .. }) => (*id, float.wrap),
+            o => panic!("no caption text box after the shape: {o:?}"),
+        };
+        let (id, wrap) = caption(&s);
+        assert_eq!((s.doc.plain_text(StoryRef::Part(id)).as_str(), wrap), ("Figure 1: Kiln", Wrap::Square));
+        assert_eq!(s.sel.focus.story, StoryRef::Part(id), "the caret is in the caption");
+        let r = s.layout().object(&end, 0).unwrap().rect;
+        assert!((r.x - pic.x).abs() < 0.5 && (r.w - pic.w).abs() < 0.5 && (r.y - pic.bottom()).abs() < 0.5, "{r:?} under {pic:?}");
+        // The box is as tall as its line.
+        let story = StoryRef::Part(id);
+        let line = s.layout().selection_rects(&s.doc, &s.doc.start_of(story), &s.doc.end_of(story), 0)[0].1;
+        assert!((r.bottom() - line.bottom()).abs() < 0.5, "{r:?} fits {line:?}");
+        s.run("edit.undo", &json!({})).unwrap();
+        assert!(s.doc.para_at(&end).and_then(|p| p.object_at(end.off)).is_none(), "one undo takes the caption away");
+        s.run("edit.redo", &json!({})).unwrap();
+        // A caption further on counts on; one above the picture counts first.
+        s.sel = Selection::caret(Pos::body(1, 0));
+        s.run("references.caption", &json!({"label": "Figure", "text": "Lid"})).unwrap();
+        assert!(s.doc.plain_text(StoryRef::Body).contains("Figure 2: Lid"));
+        s.sel = Selection { anchor: at.clone(), focus: end.clone() };
+        s.run("references.caption", &json!({"label": "Figure", "text": "Top", "position": "above"})).unwrap();
+        let (id, _) = caption(&s);
+        assert_eq!(s.doc.plain_text(StoryRef::Part(id)), "Figure 1: Top");
+        let r = s.layout().object(&end, 0).unwrap().rect;
+        assert!((r.bottom() - pic.y).abs() < 0.5, "{r:?} over {pic:?}");
+        assert!(s.doc.plain_text(StoryRef::Body).contains("Figure 3: Lid"));
+        // In a text box, a floating shape's caption is a paragraph of the box: no box in a box.
+        let mut s = Session::new(wordcraft_doc::Document::new());
+        let id = s.run("insert.textBox", &json!({"width": 200, "height": 200})).unwrap()["story"].as_u64().unwrap() as u32;
+        s.run("insert.shape", &json!({"kind": "ellipse", "width": 60, "height": 40})).unwrap();
+        s.run("arrange.wrap", &json!({"wrap": "square"})).unwrap();
+        s.run("references.caption", &json!({"label": "Figure", "text": "Kiln"})).unwrap();
+        assert!(s.doc.plain_text(StoryRef::Part(id)).ends_with("Figure 1: Kiln"), "{:?}", s.doc.plain_text(StoryRef::Part(id)));
     }
 }

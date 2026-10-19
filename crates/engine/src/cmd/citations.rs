@@ -875,11 +875,11 @@ fn entries_for(s: &mut Session, kind: &str) -> Vec<(String, bool)> {
     // Collect marks with positions.
     let mut marks: Vec<(String, Pos)> = Vec::new();
     let caption_label = kind.split('"').nth(1).unwrap_or("Figure").to_string();
-    for path in s.doc.para_paths(StoryRef::Body) {
-        let Some(p) = s.doc.para(StoryRef::Body, &path) else { continue };
+    for (story, path) in s.doc.body_para_paths() {
+        let Some(p) = s.doc.para(story, &path) else { continue };
         if kind.starts_with("TOC \\c") {
             if p.props.style.as_deref() == Some("Caption") && p.plain_text().starts_with(&caption_label) {
-                marks.push((p.plain_text(), Pos { story: StoryRef::Body, path: path.clone(), off: 0 }));
+                marks.push((p.plain_text(), Pos { story, path: path.clone(), off: 0 }));
             }
             continue;
         }
@@ -889,40 +889,12 @@ fn entries_for(s: &mut Session, kind: &str) -> Vec<(String, bool)> {
                 let want = if kind.starts_with("INDEX") { "XE" } else { "TA" };
                 if t.starts_with(want) {
                     let e = t.split('"').nth(1).unwrap_or("").to_string();
-                    marks.push((e, Pos { story: StoryRef::Body, path: path.clone(), off }));
+                    marks.push((e, Pos { story, path: path.clone(), off }));
                 }
             }
         }
     }
-    let mut with_pages: Vec<(String, u32)> = marks.into_iter().map(|(e, _)| (e, 0)).collect();
-    // Pages (layout once).
-    let positions: Vec<Pos> = {
-        let mut v = Vec::new();
-        for path in s.doc.para_paths(StoryRef::Body) {
-            let Some(p) = s.doc.para(StoryRef::Body, &path) else { continue };
-            if kind.starts_with("TOC \\c") {
-                if p.props.style.as_deref() == Some("Caption") && p.plain_text().starts_with(&caption_label) {
-                    v.push(Pos { story: StoryRef::Body, path: path.clone(), off: 0 });
-                }
-                continue;
-            }
-            for off in p.object_offsets() {
-                if let Some(InlineObject::Field { instr, .. }) = p.object_at(off) {
-                    let want = if kind.starts_with("INDEX") { "XE" } else { "TA" };
-                    if instr.trim_start().starts_with(want) {
-                        v.push(Pos { story: StoryRef::Body, path: path.clone(), off });
-                    }
-                }
-            }
-        }
-        v
-    };
-    for (i, pos) in positions.iter().enumerate() {
-        let pg = page_of(s, pos);
-        if let Some(x) = with_pages.get_mut(i) {
-            x.1 = pg;
-        }
-    }
+    let with_pages: Vec<(String, u32)> = marks.into_iter().map(|(e, pos)| (e, page_of(s, &pos))).collect();
     if kind.starts_with("TOC \\c") {
         return with_pages.into_iter().map(|(t, p)| (format!("{t}\t{p}"), false)).collect();
     }
@@ -1027,21 +999,21 @@ fn caption_label(p: &Paragraph, text: &str) -> Option<String> {
     (!label.is_empty() && label.chars().count() <= 40).then_some(label)
 }
 
-/// The caption paragraphs of the body: (text, position, label).
+/// The caption paragraphs of the body and its text boxes: (text, position, label).
 fn captions(s: &Session) -> Vec<(String, Pos, Option<String>)> {
     s.doc
-        .para_paths(StoryRef::Body)
+        .body_para_paths()
         .into_iter()
-        .filter_map(|path| {
-            let p = s.doc.para(StoryRef::Body, &path).filter(|p| p.props.style.as_deref() == Some("Caption"))?;
+        .filter_map(|(story, path)| {
+            let p = s.doc.para(story, &path).filter(|p| p.props.style.as_deref() == Some("Caption"))?;
             let text = p.plain_text();
             let label = caption_label(p, &text);
-            Some((text, Pos { story: StoryRef::Body, path, off: 0 }, label))
+            Some((text, Pos { story, path, off: 0 }, label))
         })
         .collect()
 }
 
-/// The labels the body's captions use, first seen first: Figure, Table and Equation, and any the
+/// The labels the captions use, first seen first: Figure, Table and Equation, and any the
 /// person made with Insert Caption › New Label. Each is a cross-reference type, `label:<Name>` (#2940).
 pub fn caption_labels(s: &Session) -> Vec<String> {
     let mut labels: Vec<String> = Vec::new();
@@ -1073,12 +1045,12 @@ pub fn ref_targets(s: &Session, to: &str) -> Vec<(String, Pos)> {
                 "equation" => "Equation",
                 _ => "Figure",
             };
-            for path in s.doc.para_paths(StoryRef::Body) {
-                if let Some(p) = s.doc.para(StoryRef::Body, &path)
+            for (story, path) in s.doc.body_para_paths() {
+                if let Some(p) = s.doc.para(story, &path)
                     && p.props.style.as_deref() == Some("Caption")
                     && p.plain_text().starts_with(label)
                 {
-                    targets.push((p.plain_text(), Pos { story: StoryRef::Body, path: path.clone(), off: 0 }));
+                    targets.push((p.plain_text(), Pos { story, path: path.clone(), off: 0 }));
                 }
             }
         }
@@ -1259,6 +1231,45 @@ mod tests {
         let (name, _) = s.doc.bookmarks().into_iter().find(|(n, _)| n.starts_with("_Ref")).unwrap();
         assert_eq!(crate::cmd::references::bookmark_text(&s.doc, &name).as_deref(), Some("Figure 1"));
         assert!(fields(&s).contains(&(format!("REF {name} \\h"), "Figure 1".to_string())), "{:?}", fields(&s));
+    }
+
+    /// #3129: a floating picture's caption is in a text box; cross-references, the Table of
+    /// Figures and bookmarks find it there like a caption paragraph in the body.
+    #[test]
+    fn captions_in_text_boxes_are_found() {
+        let mut s = Session::new(wordcraft_doc::Document::from_text("Intro\nKilns\nSee "));
+        s.run("select.text", &json!({"text": "Intro"})).unwrap();
+        s.run("caret.end", &json!({})).unwrap();
+        s.run("insert.pageBreak", &json!({})).unwrap();
+        s.run("select.text", &json!({"text": "Kilns"})).unwrap();
+        s.run("caret.end", &json!({})).unwrap();
+        s.run("insert.shape", &json!({"kind": "ellipse", "width": 60, "height": 40})).unwrap();
+        s.run("arrange.wrap", &json!({"wrap": "square"})).unwrap();
+        s.run("references.caption", &json!({"label": "Figure", "text": "The kiln"})).unwrap();
+        let story = s.sel.focus.story;
+        assert!(matches!(story, StoryRef::Part(_)), "the caption is in a text box");
+        assert_eq!(caption_labels(&s), ["Figure"]);
+        assert_eq!(ref_targets(&s, "label:Figure").len(), 1);
+        s.sel = Selection::caret(s.doc.end_of(StoryRef::Body));
+        let list = s.run("insert.crossReference", &json!({"to": "figure"})).unwrap();
+        assert_eq!(list, json!(["Figure 1: The kiln"]));
+        s.run("insert.crossReference", &json!({"to": "figure", "target": "Figure 1", "show": "number"})).unwrap();
+        s.run("insert.crossReference", &json!({"to": "figure", "target": "Figure 1", "show": "page"})).unwrap();
+        assert!(s.doc.plain_text(StoryRef::Body).ends_with("See Figure 12"), "{}", s.doc.plain_text(StoryRef::Body));
+        let refs: Vec<(String, Pos)> = s.doc.bookmarks().into_iter().filter(|(n, _)| n.starts_with("_Ref")).collect();
+        assert!(!refs.is_empty() && refs.iter().all(|(_, at)| at.story == story), "the references' bookmarks are in the text box: {refs:?}");
+        assert!(refs.iter().any(|(n, _)| crate::cmd::references::bookmark_text(&s.doc, n).as_deref() == Some("Figure 1")));
+        // A bookmark of the person's own in the text box.
+        let end = s.doc.end_of(story);
+        let off = s.doc.para(story, &end.path).unwrap().text.rfind("kiln").unwrap();
+        s.sel = Selection { anchor: Pos { off, ..end.clone() }, focus: Pos { off: off + "kiln".len(), ..end } };
+        s.run("insert.bookmark", &json!({"name": "Kiln"})).unwrap();
+        s.sel = Selection::caret(s.doc.end_of(StoryRef::Body));
+        s.run("insert.crossReference", &json!({"to": "bookmark", "target": "Kiln"})).unwrap();
+        assert!(s.doc.plain_text(StoryRef::Body).ends_with("See Figure 12kiln"), "{}", s.doc.plain_text(StoryRef::Body));
+        s.run("text.newParagraph", &json!({})).unwrap();
+        s.run("references.tableOfFigures", &json!({})).unwrap();
+        assert!(s.doc.plain_text(StoryRef::Body).contains("Figure 1: The kiln\t2"), "{}", s.doc.plain_text(StoryRef::Body));
     }
 
     /// #2940: a caption with a label of the person's own (Insert Caption › New Label) is a
