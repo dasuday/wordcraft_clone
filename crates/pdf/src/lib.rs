@@ -530,7 +530,6 @@ fn shape_effects(
     s.set_stroke(None);
 }
 
-
 /// A structure element being collected (one per paragraph, in reading order).
 struct TagEntry {
     kind: TagKind,

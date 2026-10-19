@@ -1017,7 +1017,6 @@ fn ink_path(pts: &[(f32, f32)]) -> Option<BezPath> {
     Some(p)
 }
 
-
 /// Render the page area (`x`, `y`, `w`×`h` points) at `scale` px/pt — for previews and thumbnails.
 pub fn render_area(doc: &Document, page: &Page, x: f32, y: f32, w: f32, h: f32, scale: f32, opts: &RenderOptions) -> Rendered {
     let scale = if scale.is_finite() && scale > 0.0 { scale } else { 1.0 };
