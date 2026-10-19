@@ -3927,15 +3927,17 @@ mod tests {
             phase: egui::TouchPhase::Move,
             modifiers: egui::Modifiers::COMMAND,
         };
-        // Frames until the zoom stops; returns (frames with a new scale, rasters rendered in them).
+        // Frames until the zoom stops; returns (frames with a new scale, rasters rendered in them,
+        // rasters rendered in the frame it stopped).
         let ease = |a: &mut WordApp, frame: &mut dyn FnMut(&mut WordApp, Vec<egui::Event>), notches: &[usize]| {
             let before = a.canvas.rasters;
             let (mut moving, mut last, mut f) = (0, a.canvas.scale, 0);
             loop {
+                let ahead = a.canvas.rasters;
                 frame(a, if notches.contains(&f) { vec![wheel()] } else { Vec::new() });
                 f += 1;
                 if a.canvas.scale == last && f > notches.iter().max().copied().unwrap_or(0) {
-                    return (moving, a.canvas.rasters - before);
+                    return (moving, ahead - before, a.canvas.rasters - ahead);
                 }
                 moving += usize::from(a.canvas.scale != last);
                 last = a.canvas.scale;
@@ -3943,12 +3945,13 @@ mod tests {
             }
         };
         let start = a.canvas.scale;
-        let (moving, rasters) = ease(&mut a, &mut frame, &[0]);
+        let (moving, while_moving, at_rest) = ease(&mut a, &mut frame, &[0]);
         assert!(moving >= 3 && a.canvas.scale / start > 1.2, "a notch eases in: {moving} frames");
-        assert_eq!(rasters, 1, "one raster, the frame the zoom stopped, not one per frame ({moving} frames)");
+        assert_eq!((while_moving, at_rest), (0, 1), "no raster while it moves ({moving} frames), one the frame it stops");
         // A long zoom (three notches, about 1.8x): rendered again only every half again.
         let start = a.canvas.scale;
-        let (moving, rasters) = ease(&mut a, &mut frame, &[0, 3, 6]);
+        let (moving, while_moving, at_rest) = ease(&mut a, &mut frame, &[0, 3, 6]);
+        let rasters = while_moving + at_rest;
         assert!(a.canvas.scale / start > 1.7, "{}", a.canvas.scale / start);
         assert!((2..=3).contains(&rasters) && rasters < moving as u64, "{rasters} rasters over {moving} frames");
         // View › Zoom isn't a gesture: the page is rendered at the new size in that frame.
@@ -3956,6 +3959,17 @@ mod tests {
         a.run("view.zoom", json!({"value": 100.0})).unwrap();
         frame(&mut a, Vec::new());
         assert_eq!(a.canvas.rasters, before + 1);
+        // Read Mode: the wheel changes the text size and the pages reflow, so a raster of the old
+        // text must not stand in for them: they are rendered as they change.
+        a.run("view.readMode", json!({})).unwrap();
+        for _ in 0..10 {
+            frame(&mut a, Vec::new());
+        }
+        let over_page = a.canvas.canvas_rect.unwrap().center();
+        frame(&mut a, vec![egui::Event::PointerMoved(over_page)]);
+        let (moving, while_moving, _) = ease(&mut a, &mut frame, &[0]);
+        assert!(moving >= 3, "the text size eases in: {moving} frames");
+        assert!(while_moving >= 2, "reflowed pages rendered while it moves: {while_moving} over {moving} frames");
     }
 
     /// With animation effects off a zoom step is finished in its own frame: Ctrl+wheel zooms the

@@ -36,7 +36,10 @@ const EDGE_MAX_DT: f32 = 0.1;
 const TEXTURE_KEEP_SCREENS: f32 = 3.0;
 
 pub struct CanvasState {
-    textures: HashMap<usize, (u64, TextureHandle)>,
+    /// Page rasters: (key, what the page showed, texture). The key ([`page_key`]) includes the
+    /// raster scale; what the page showed ([`page_shows`]) doesn't, so a zoom can tell whether
+    /// a raster may stand in for the page at another size.
+    textures: HashMap<usize, (u64, u64, TextureHandle)>,
     /// Visible full-resolution tiles of pages too tall for one GPU texture.
     tiles: HashMap<(usize, usize), (u64, TextureHandle)>,
     /// Page content fingerprints of the current layout, for the texture cache (#811).
@@ -814,6 +817,14 @@ impl PageKeys {
     }
 }
 
+/// What page `i` shows, whatever its size: its content and the view (`view_key` with the
+/// hinting fixed). A raster that showed this may be stretched to stand in for the page.
+fn page_shows(app: &mut WordApp, layout: &std::sync::Arc<DocLayout>, i: usize, view: u64) -> u64 {
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    (view, app.canvas.page_keys.content(layout, i)).hash(&mut h);
+    h.finish()
+}
+
 /// The texture cache key of page `i`: its content, the view, and the raster scale.
 fn page_key(app: &mut WordApp, layout: &std::sync::Arc<DocLayout>, i: usize, view: u64, scale_px: f32) -> u64 {
     let mut h = std::collections::hash_map::DefaultHasher::new();
@@ -1217,6 +1228,8 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
         // would be on the page where it was and under the pointer at once).
         let hidden = app.canvas.dragged_off_page();
         let view = view_key(app, dim_body, hidden.as_ref().map(|(_, p)| p), hinted);
+        // The view without the hinting, which a stretched raster may differ in (see `stretched`).
+        let shown_view = view_key(app, dim_body, hidden.as_ref().map(|(_, p)| p), true);
         for (i, pr) in geo.rects.iter().enumerate() {
             let sr = pr.translate(content_origin.to_vec2());
             let Some(page) = layout.pages.get(i) else { continue };
@@ -1234,7 +1247,7 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
             let cached = !tiled && app.canvas.textures.contains_key(&i);
             let key =
                 if visible || cached { page_key(app, &layout, i, view, scale_px) ^ if tiled { (tile_height_px as u64) << 32 } else { 0 } } else { 0 };
-            let mut fresh = cached && app.canvas.textures.get(&i).is_some_and(|(k, _)| *k == key);
+            let mut fresh = cached && app.canvas.textures.get(&i).is_some_and(|(k, _, _)| *k == key);
             // The page a drag took an object off: render it this frame whatever the budget, or the
             // raster with the object still on it shows for a frame.
             let forced = hidden.as_ref().is_some_and(|(page, _)| *page == i);
@@ -1243,7 +1256,12 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
             // During a pointer zoom the page's last raster is stretched to the new size instead of
             // rendered at each in-between size (each shown for a frame, a few ms a page on a 4K
             // screen): it is rendered once the zoom stops, or before stretching softens it too much.
-            let stretched = zooming && !forced && app.canvas.textures.get(&i).is_some_and(|(_, tex)| stretch_fits(tex.size()[0], page.w, scale_px));
+            // Only a raster of what the page shows now: a zoom that reflows the pages (Read Mode's
+            // text size, Web Layout's width) renders them anew.
+            let shows = if visible || cached { page_shows(app, &layout, i, shown_view) } else { 0 };
+            let stretched = zooming
+                && !forced
+                && app.canvas.textures.get(&i).is_some_and(|(_, showed, tex)| *showed == shows && stretch_fits(tex.size()[0], page.w, scale_px));
             if visible && !tiled && !fresh && !stretched && (forced || rendered < 2 || !app.canvas.textures.contains_key(&i) && rendered < 4) {
                 let mut opts = page_render_options(app, dim_body);
                 opts.hinting &= hinted;
@@ -1252,13 +1270,14 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
                 let img = wordcraft_render::render_page(&app.session.doc, page, scale_px, &opts);
                 let ci = page_image(&img);
                 match app.canvas.textures.get_mut(&i) {
-                    Some((k, tex)) => {
+                    Some((k, showed, tex)) => {
                         tex.set(ci, egui::TextureOptions::LINEAR);
                         *k = key;
+                        *showed = shows;
                     }
                     None => {
                         let tex = ui.ctx().load_texture(format!("page{i}"), ci, egui::TextureOptions::LINEAR);
-                        app.canvas.textures.insert(i, (key, tex));
+                        app.canvas.textures.insert(i, (key, shows, tex));
                     }
                 }
                 rendered += 1;
@@ -1269,7 +1288,7 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
             }
             let current_scale = geo.scale * ppp;
             let visual_sr = if fresh && (scale_px - current_scale).abs() <= 0.0001_f32.max(current_scale.abs() * 0.0001) {
-                app.canvas.textures.get(&i).map_or(sr, |(_, tex)| texel_aligned_rect(sr, tex.size_vec2(), ppp))
+                app.canvas.textures.get(&i).map_or(sr, |(_, _, tex)| texel_aligned_rect(sr, tex.size_vec2(), ppp))
             } else {
                 sr
             };
@@ -1342,7 +1361,7 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
                         painter.image(tex.id(), rect, Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), Color32::WHITE);
                     }
                 }
-            } else if let Some((_, tex)) = app.canvas.textures.get(&i) {
+            } else if let Some((_, _, tex)) = app.canvas.textures.get(&i) {
                 painter.image(tex.id(), visual_sr, Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), Color32::WHITE);
             }
             let page_scale = page_screen_scale(visual_sr, page, geo.scale);
