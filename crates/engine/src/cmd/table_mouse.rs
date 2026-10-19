@@ -822,6 +822,47 @@ mod tests {
         assert_eq!((para(&s, 0, 0).plain_text(), para(&s, 1, 0).plain_text()), ("r1c0".to_string(), "r3c0".to_string()));
     }
 
+    /// Backspace on rows or columns Ctrl/Cmd+clicked apart deletes them (#1844); on cells apart
+    /// whose bounds span the table's width or height it clears just them.
+    #[test]
+    fn backspace_on_scattered_cells_deletes_only_whole_rows_or_columns() {
+        let mut s = table_session(4, 3);
+        fill(&mut s);
+        let (r0, r2) = (row_area(&mut s, 0), row_area(&mut s, 2));
+        click(&mut s, r0, false);
+        click(&mut s, r2, true);
+        s.run("text.backspace", &json!({})).unwrap();
+        let t = first_table(&s);
+        assert_eq!(t.rows.len(), 2);
+        assert_eq!((para(&s, 0, 0).plain_text(), para(&s, 1, 0).plain_text()), ("r1c0".to_string(), "r3c0".to_string()));
+
+        let mut s = table_session(4, 3);
+        fill(&mut s);
+        let (col0, col2) = (col_area(&mut s, 0), col_area(&mut s, 2));
+        click(&mut s, col0, false);
+        click(&mut s, col2, true);
+        s.run("text.backspace", &json!({})).unwrap();
+        let t = first_table(&s);
+        assert_eq!((t.rows.len(), t.cols()), (4, 1));
+        assert_eq!(para(&s, 0, 0).plain_text(), "r0c1");
+
+        // Top-left and bottom-right cells: bounds every row and column, but neither whole rows
+        // nor whole columns.
+        let mut s = table_session(4, 3);
+        fill(&mut s);
+        let (a, b) = (cell_rect(&mut s, 0, 0), cell_rect(&mut s, 3, 2));
+        click(&mut s, (a.x + 4.5, mid_y(a)), false);
+        click(&mut s, (b.x + 4.5, mid_y(b)), true);
+        assert_eq!(picked(&s), [(0, 0), (3, 2)]);
+        s.run("text.backspace", &json!({})).unwrap();
+        let t = first_table(&s);
+        assert_eq!((t.rows.len(), t.cols()), (4, 3));
+        assert_eq!(
+            (para(&s, 0, 0).plain_text(), para(&s, 3, 2).plain_text(), para(&s, 1, 1).plain_text()),
+            (String::new(), String::new(), "r1c1".to_string())
+        );
+    }
+
     /// Ctrl/Cmd+clicks add columns and single cells, and take out what's selected already; a
     /// Ctrl/Cmd+drag goes on from the cells selected before it.
     #[test]
