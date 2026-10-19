@@ -658,6 +658,10 @@ fn alt_transition(app: &mut WordApp, pressed: bool, modifiers: egui::Modifiers) 
     }
 }
 
+/// Windows reports AltGr as Ctrl+Alt, which `alt_transition` already treats as a chord; macOS
+/// never arms keytips from Alt. Elsewhere a right Alt press must not arm them.
+const ALT_GR_IS_CHORD: bool = !cfg!(any(target_os = "macos", target_os = "windows"));
+
 /// Read keytip input every frame, before layout, so the frame paints the new state. Suppression
 /// cancels keytips so letters reach the text; Alt still reaches the rest of the UI (the
 /// registry's Alt+letter shortcuts are untouched).
@@ -692,6 +696,14 @@ pub fn logic(app: &mut WordApp, ctx: &egui::Context) {
             egui::Event::Key { key, pressed, modifiers, .. } => {
                 if is_alt(*key) {
                     alt_released |= alt_transition(app, *pressed, *modifiers);
+                    // Right Alt is AltGr on most layouts (Polish, Czech, German…): a chord that
+                    // types letters (AltGr+A = ą), never a keytip tap. Linux backends can report
+                    // it as a bare Alt press followed by `ModifiersChanged(alt: false)`, which
+                    // would look like a release and arm keytips before the letter arrives. The
+                    // left Alt key and F10 still open keytips.
+                    if *pressed && *key == egui::Key::AltRight && ALT_GR_IS_CHORD {
+                        app.ui.alt_chord_used = true;
+                    }
                 } else if *pressed {
                     other_key = true;
                     app.ui.alt_chord_used = true;
@@ -811,7 +823,9 @@ mod tests {
                             release.insert(0, key_event(key, false, alt));
                         }
                     }
-                    for expected in [if cfg!(target_os = "macos") { Phase::Off } else { Phase::Tabs }, Phase::Off] {
+                    // A right Alt tap is AltGr: it never arms keytips off macOS/Windows (see `logic`).
+                    let taps_arm = !cfg!(target_os = "macos") && !(key == Some(egui::Key::AltRight) && ALT_GR_IS_CHORD);
+                    for expected in [if taps_arm { Phase::Tabs } else { Phase::Off }, Phase::Off] {
                         if same_frame {
                             input_frame(&ctx, &mut a, press.iter().chain(&release).cloned().collect());
                         } else {
@@ -823,6 +837,29 @@ mod tests {
                     }
                 }
             }
+        }
+    }
+
+    /// AltGr+letter (Polish ą on Linux): the backend may send the Alt key press and then a
+    /// `ModifiersChanged` without `alt` (AltGr is not Mod1), before the letter. That must not
+    /// look like a bare Alt release and arm keytips, which would eat the letter.
+    #[test]
+    fn altgr_letter_does_not_arm_keytips() {
+        if cfg!(any(target_os = "macos", target_os = "windows")) {
+            return;
+        }
+        let none = egui::Modifiers::NONE;
+        for modifiers_in_between in [false, true] {
+            let ctx = egui::Context::default();
+            let mut a = app();
+            input_frame(&ctx, &mut a, vec![key_event(egui::Key::AltRight, true, none)]);
+            if modifiers_in_between {
+                input_frame(&ctx, &mut a, vec![egui::Event::ModifiersChanged(none)]);
+            }
+            assert_eq!(a.ui.keytips, Phase::Off, "AltGr press must not arm keytips");
+            input_frame(&ctx, &mut a, vec![key_event(egui::Key::A, true, none), egui::Event::Text("ą".into())]);
+            input_frame(&ctx, &mut a, vec![key_event(egui::Key::A, false, none), key_event(egui::Key::AltRight, false, none)]);
+            assert_eq!(a.ui.keytips, Phase::Off, "AltGr+A then release must not arm keytips");
         }
     }
 
