@@ -315,10 +315,12 @@ pub fn prepare_edit(s: &mut Session) -> Result<Option<CharProps>, CmdError> {
         return Ok(None);
     }
     // Text typed in place of the placeholder takes the control's own run properties (Word, and
-    // ECMA-376 §17.5.2.27), else the content's formatting without the placeholder style.
+    // ECMA-376 §17.5.2.27), else the content's formatting without the placeholder style. The
+    // showing placeholder's own character style is that style, whatever a producer called it
+    // (Word localizes only the id; another program may localize the name too).
     let props = match &r.control.run_props {
         Some(rp) => content_props(&s.doc, rp),
-        None => content_base(s, &r),
+        None => CharProps { style: None, ..content_base(s, &r) },
     };
     s.sel = Selection { anchor: r.content_start(), focus: r.end.clone() };
     if let Some(c) = s.doc.control_mut(&r.start) {
@@ -801,6 +803,20 @@ mod editing_tests {
         let eingabe = CharProps { style: Some("Eingabe".into()), ..Default::default() };
         assert_eq!(typed_style(Some(eingabe)).as_deref(), Some("Eingabe"), "the control's run properties");
         assert_eq!(typed_style(None), None, "no placeholder style left");
+        // A producer that localizes the style's name as well: the showing placeholder's own
+        // style goes all the same.
+        let mut s = Session::new(wordcraft_doc::Document::new());
+        let grey = CharProps { color: Some(TextColor::Rgb(Rgb(0x80, 0x80, 0x80))), ..Default::default() };
+        s.doc.styles.styles.push(style("TexteEspaceReserve", "Texte de l'espace réservé", grey));
+        run(&mut s, "text.insert", json!({"text": "Nom : "}));
+        run(&mut s, "developer.plainText", json!({"tag": "nom"}));
+        let r = s.doc.control_at(&s.sel.focus).unwrap();
+        s.doc.format_range(&r.content_start(), &r.end, &|c| c.style = Some("TexteEspaceReserve".into())).unwrap();
+        run(&mut s, "caret.right", json!({}));
+        run(&mut s, "text.insert", json!({"text": "Ada"}));
+        let r = s.doc.control_at(&s.sel.focus).unwrap();
+        let typed = s.doc.para_at(&r.content_start()).unwrap().props_of_char(r.content_start().off).style.clone();
+        assert_eq!(typed, None, "a placeholder style localized in id and name");
     }
 
     #[test]
