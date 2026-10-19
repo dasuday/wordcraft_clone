@@ -98,7 +98,7 @@ impl InterfaceSize {
     /// Follow the display scale the system reports.
     pub const AUTO: InterfaceSize = InterfaceSize(None);
     /// The sizes File › Options offers after Auto, in percent (PhotoCraft's and PdfCraft's).
-    pub const PRESETS: [u16; 12] = [75, 80, 85, 90, 95, 100, 125, 150, 175, 200, 250, 300];
+    pub const PRESETS: [u16; 13] = [75, 80, 85, 90, 95, 100, 125, 150, 175, 200, 225, 250, 300];
 
     /// A chosen size from any number: rounded and clamped to 50–300 %; `None` for NaN or infinity.
     pub fn from_percent(percent: f64) -> Option<InterfaceSize> {
