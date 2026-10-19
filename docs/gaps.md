@@ -106,7 +106,7 @@ Footer page-table height and body wrapping are corrected. Other pagination gaps 
 
 | Date | Change | Summary |
 |---|---|---|
-| 2026-10-18 | minor | Local page-by-page layout corpus harness: `cargo xtask layout-corpus` exports each committed synthetic DOCX case, compares it with a local Word PDF through `visual-diff`, aggregates page counts, line breaks, offsets, SSIM and worst pages, and writes `summary.json`/`summary.md`; five original cases added. Word references and generated PDFs stay gitignored; no mismatch was fixed by this change |
+| 2026-10-18 | minor | Local page-by-page layout corpus harness: `cargo xtask layout-corpus` exports each committed synthetic DOCX case, compares the cases that have a local Word PDF through `visual-diff`, aggregates page counts, line breaks, offsets, SSIM and worst pages, and writes `summary.json`/`summary.md`; five original cases added. Word references and generated PDFs stay gitignored; no mismatch was fixed by this change |
 | 2026-10-19 | trivial | Restrict Editing: with Filling in forms enforced, inserting content controls, their Properties and Remove Content Control are refused, as in Word (it greys them out), so a form's fields stay as they are and only their content is filled in |
 | 2026-10-19 | trivial | Content controls: text typed over a placeholder takes the control's own run properties (`w:sdtPr/w:rPr`, ECMA-376 §17.5.2.27), as in Word, and the placeholder style is recognised by its built-in name "Placeholder Text" whatever its localized id (German Word: `Platzhaltertext`), so entries in forms from localized Word no longer stay grey |
 | 2026-10-18 | trivial | Font list starts at its first row after clearing a no-match query; recent heading remains visible (#2068) |
