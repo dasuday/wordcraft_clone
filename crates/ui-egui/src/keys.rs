@@ -242,6 +242,21 @@ pub fn canvas_events(app: &mut WordApp, ctx: &egui::Context) {
     // `DeleteSurrounding` and the text replacing what it erased arrive in the same frame.
     app.canvas.ime_join_text = None;
     for e in events {
+        // Middle-click autoscrolling (#1065): a middle press toggles, a primary press stops.
+        if let egui::Event::PointerButton { button: egui::PointerButton::Middle, pressed: true, pos, .. } = &e
+            && !app.session.view.read_mode
+        {
+            if app.canvas.autoscroll.is_some() {
+                app.canvas.autoscroll = None;
+            } else {
+                app.canvas.autoscroll = Some(*pos);
+                app.status(tl!("Autoscrolling — move the mouse; click to stop"));
+            }
+            continue;
+        }
+        if matches!(&e, egui::Event::PointerButton { button: egui::PointerButton::Primary, pressed: true, .. }) {
+            app.canvas.autoscroll = None;
+        }
         // An Alt shortcut (Alt+Shift+D, Alt+F7…) may also send its key's text; it isn't typed.
         match &e {
             egui::Event::Key { pressed: true, .. } => {
@@ -351,6 +366,9 @@ pub fn canvas_events(app: &mut WordApp, ctx: &egui::Context) {
                 let _ = app.run(id, json!({}));
             }
             egui::Event::Key { key, pressed: true, modifiers, .. } => {
+                if key == Key::Escape && app.canvas.autoscroll.take().is_some() {
+                    continue;
+                }
                 if key == Key::Escape && app.session.painter.is_some() {
                     app.session.painter = None;
                     continue;
