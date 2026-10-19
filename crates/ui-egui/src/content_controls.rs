@@ -172,6 +172,10 @@ pub fn popup(app: &mut WordApp, ctx: &egui::Context) {
             match &r.control.kind {
                 ControlKind::ComboBox { items, .. } | ControlKind::DropDown { items, .. } => {
                     egui::ScrollArea::vertical().max_height(260.0).show(ui, |ui| {
+                        if items.is_empty() {
+                            // #3144: an empty list says so instead of an empty popup.
+                            ui.label(egui::RichText::new(tl!("(none)")).weak());
+                        }
                         for (i, item) in items.iter().enumerate() {
                             if ui.selectable_label(false, &item.display).clicked() {
                                 let _ = app.run("developer.chooseItem", json!({"at": at_json, "index": i}));
@@ -240,4 +244,37 @@ fn calendar(ui: &mut Ui, t: &Tokens, month: &mut (i64, u32)) -> Option<u32> {
         }
     });
     picked
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    /// #3144: a list control with no entries opens a popup that says so, not an empty frame.
+    #[test]
+    fn an_empty_control_popup_says_none() {
+        let mut app = crate::WordApp::new(wordcraft_engine::Session::new(wordcraft_doc::Document::new()), crate::Services::default());
+        app.run("developer.comboBox", json!({})).unwrap();
+        let at = app.session.sel.focus.clone();
+        app.controls.popup = Some(Popup { at, anchor: Rect::from_min_size(pos2(20.0, 20.0), vec2(120.0, 20.0)), month: (2024, 1) });
+        let mut h = egui_kittest::Harness::builder().with_size(vec2(800.0, 600.0)).build_ui_state(
+            |ui, app: &mut crate::WordApp| {
+                let ctx = ui.ctx().clone();
+                popup(app, &ctx);
+            },
+            app,
+        );
+        h.run_steps(2);
+        let texts: Vec<String> = h
+            .output()
+            .shapes
+            .iter()
+            .filter_map(|s| match &s.shape {
+                egui::Shape::Text(t) => Some(t.galley.text().to_string()),
+                _ => None,
+            })
+            .collect();
+        assert!(texts.iter().any(|t| t.contains("(none)")), "the empty list says so");
+    }
 }

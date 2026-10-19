@@ -367,8 +367,13 @@ fn comments(app: &mut WordApp, ui: &mut Ui) {
     ui.separator();
     let list = app.session.run("review.comments", &json!({})).unwrap_or_default();
     let t = Tokens::get(ui.ctx());
+    let comments = list.as_array().cloned().unwrap_or_default();
+    if comments.is_empty() {
+        // #3144: the pane says it has no comments instead of leaving a blank area.
+        ui.label(egui::RichText::new(tl!("No comments yet. Select text and choose New Comment to start a thread.")).color(t.text_dim));
+    }
     egui::ScrollArea::vertical().show(ui, |ui| {
-        for c in list.as_array().cloned().unwrap_or_default() {
+        for c in comments {
             let id = c.get("id").and_then(Value::as_u64).unwrap_or(0);
             let reply = c.get("parent").is_some_and(|p| !p.is_null());
             egui::Frame::NONE.fill(t.input).stroke(Stroke::new(1.0, t.border)).corner_radius(6).inner_margin(8).show(ui, |ui| {
@@ -989,5 +994,36 @@ mod navigation_tests {
         let (top, second) = (text_left(0), text_left(1));
         assert!(top < 30.0, "a top-level heading starts at the pane's left edge, not centred: {top}px in");
         assert!((second - top - 14.0).abs() < 0.5, "a level-2 heading is indented 14px under its parent: {top} / {second}");
+    }
+
+    /// #3144: with no comments the pane says so instead of leaving a blank area; the first
+    /// comment replaces the message and deleting it brings the message back.
+    #[test]
+    fn the_comments_pane_says_when_there_are_no_comments() {
+        let ctx = egui::Context::default();
+        crate::theme::install_fonts(&ctx);
+        let mut a = crate::WordApp::new(wordcraft_engine::Session::new(wordcraft_doc::Document::from_text("Hello")), crate::Services::default());
+        let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, vec2(760.0, 700.0));
+        let texts = |app: &mut crate::WordApp| -> Vec<String> {
+            let output = ctx.run_ui(egui::RawInput { screen_rect: Some(screen), ..Default::default() }, |ui| {
+                super::comments(app, ui);
+            });
+            let out = output
+                .shapes
+                .iter()
+                .filter_map(|s| match &s.shape {
+                    egui::Shape::Text(t) => Some(t.galley.text().to_string()),
+                    _ => None,
+                })
+                .collect();
+            output.drop_without_applying_deltas();
+            out
+        };
+        assert!(texts(&mut a).iter().any(|t| t.contains("No comments yet")), "the empty pane says so");
+        a.run("review.newComment", serde_json::json!({"text": "First"})).unwrap();
+        assert!(!texts(&mut a).iter().any(|t| t.contains("No comments yet")), "the comment shows instead");
+        let id = a.session.doc.comments.keys().next().copied().expect("the comment exists");
+        a.run("review.deleteComment", serde_json::json!({"id": id})).unwrap();
+        assert!(texts(&mut a).iter().any(|t| t.contains("No comments yet")), "deleting the last one brings it back");
     }
 }

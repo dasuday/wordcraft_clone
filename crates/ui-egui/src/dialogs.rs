@@ -2607,6 +2607,10 @@ fn body(app: &mut WordApp, ui: &mut Ui, d: &mut Dialog) -> bool {
                 reg.all().iter().filter(|c| command_matches(c, query)).collect()
             };
             hits.truncate(14);
+            if !query.trim().is_empty() && hits.is_empty() {
+                // #3144: no command matches says so; the document search below still applies.
+                ui.label(egui::RichText::new(tl!("No commands match your search.")).weak());
+            }
             let enter = ui.input(|i| i.key_pressed(egui::Key::Enter));
             let mut run: Option<&str> = enter.then(|| hits.first().map(|c| c.id)).flatten();
             for c in &hits {
@@ -5025,5 +5029,44 @@ mod tests {
         let pages = &s.layout().pages;
         assert!(pages[0].footer_story.is_none(), "the title page shows no page number");
         assert!(pages[1].footer_story.is_some(), "the next page keeps its number");
+    }
+
+    /// #3144: a Search query that matches no command says so instead of showing nothing, and the
+    /// line goes away as soon as a command matches.
+    #[test]
+    fn the_search_box_says_when_no_command_matches() {
+        let mut app = app_with("Hello");
+        app.dialog = Some(Dialog::Commands { query: "zzqqxx".to_string(), swallow: false });
+        let mut h = egui_kittest::Harness::builder().with_size(vec2(1440.0, 900.0)).build_ui_state(
+            |ui, app: &mut WordApp| {
+                let ctx = ui.ctx().clone();
+                app.logic(&ctx);
+                app.ui(ui);
+            },
+            app,
+        );
+        for _ in 0..4 {
+            h.step();
+        }
+        let texts = |h: &egui_kittest::Harness<'static, WordApp>| -> Vec<String> {
+            h.output()
+                .shapes
+                .iter()
+                .filter_map(|s| match &s.shape {
+                    egui::Shape::Text(t) => Some(t.galley.text().to_string()),
+                    _ => None,
+                })
+                .collect()
+        };
+        assert!(texts(&h).iter().any(|t| t.contains("No commands match your search.")), "no match: the hint shows");
+        match &mut h.state_mut().dialog {
+            Some(Dialog::Commands { query, .. }) => *query = "insert table".to_string(),
+            _ => panic!("the Search dialog is open"),
+        }
+        for _ in 0..2 {
+            h.step();
+        }
+        assert!(!texts(&h).iter().any(|t| t.contains("No commands match your search.")), "a matching query lists commands");
+        assert!(texts(&h).iter().any(|t| t.contains("Table")), "the matching command shows");
     }
 }

@@ -530,7 +530,12 @@ fn math_tab(ui: &mut Ui, f: &mut AutoCorrectForm) {
         ui.add(egui::TextEdit::singleline(&mut f.math_filter).desired_width(140.0));
     });
     let filter = f.math_filter.trim().trim_start_matches('\\').to_string();
+    let matches = filter.is_empty() || wordcraft_doc::math_symbols::SYMBOLS.iter().any(|(n, _)| n.starts_with(filter.as_str()));
     egui::ScrollArea::vertical().id_salt("ac_math").max_height(240.0).auto_shrink([false, true]).show(ui, |ui| {
+        if !matches {
+            // #3144: a filter that matches nothing says so instead of leaving the list blank.
+            ui.label(egui::RichText::new(tl!("(none)")).small().color(Tokens::get(ui.ctx()).text_dim));
+        }
         egui::Grid::new("ac_math_grid").num_columns(2).spacing(vec2(16.0, 1.0)).striped(true).show(ui, |ui| {
             for (name, c) in wordcraft_doc::math_symbols::SYMBOLS.iter().filter(|(n, _)| filter.is_empty() || n.starts_with(filter.as_str())) {
                 ui.label(format!("\\{name}"));
@@ -889,5 +894,60 @@ mod tests {
             h.step();
         }
         assert!(texts(&h).iter().any(|t| t.contains("(none)")), "no matches: the hint shows");
+    }
+
+    /// #3144: the Math AutoCorrect list says when the filter matches nothing, like the Replace
+    /// list, and brings the symbols back when it matches again.
+    #[test]
+    fn the_math_tab_says_when_the_filter_matches_nothing() {
+        let mut app = app("");
+        app.run("tools.autocorrect", json!({})).unwrap();
+        let mut h = egui_kittest::Harness::builder().with_size(vec2(1440.0, 900.0)).build_ui_state(
+            |ui, app: &mut WordApp| {
+                let ctx = ui.ctx().clone();
+                app.logic(&ctx);
+                app.ui(ui);
+            },
+            app,
+        );
+        for _ in 0..4 {
+            h.step();
+        }
+        let texts = |h: &egui_kittest::Harness<'static, WordApp>| -> Vec<String> {
+            h.output()
+                .shapes
+                .iter()
+                .filter_map(|s| match &s.shape {
+                    egui::Shape::Text(t) => Some(t.galley.text().to_string()),
+                    _ => None,
+                })
+                .collect()
+        };
+        match &mut h.state_mut().dialog {
+            Some(crate::dialogs::Dialog::Review(d)) => match &mut **d {
+                ReviewDialog::AutoCorrect(f) => {
+                    f.tab = 2;
+                    f.math_filter = "zzz".to_string();
+                }
+                _ => panic!("the AutoCorrect form is open"),
+            },
+            _ => panic!("the AutoCorrect dialog is open"),
+        }
+        for _ in 0..2 {
+            h.step();
+        }
+        assert!(texts(&h).iter().any(|t| t.contains("(none)")), "no symbol matches: the hint shows");
+        match &mut h.state_mut().dialog {
+            Some(crate::dialogs::Dialog::Review(d)) => match &mut **d {
+                ReviewDialog::AutoCorrect(f) => f.math_filter = "alpha".to_string(),
+                _ => panic!("the AutoCorrect form is open"),
+            },
+            _ => panic!("the AutoCorrect dialog is open"),
+        }
+        for _ in 0..2 {
+            h.step();
+        }
+        assert!(!texts(&h).iter().any(|t| t.contains("(none)")), "a match brings the symbols back");
+        assert!(texts(&h).iter().any(|t| t.contains("\\alpha")), "the matching symbol shows");
     }
 }

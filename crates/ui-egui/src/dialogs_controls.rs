@@ -188,6 +188,11 @@ fn entries(ui: &mut Ui, f: &mut ControlForm) {
         ui.label(egui::RichText::new(tl!("Display text")).small());
         ui.label(egui::RichText::new(tl!("Value")).small());
         ui.end_row();
+        if f.items.is_empty() {
+            // #3144: no entries says so instead of a header-only grid.
+            ui.label(egui::RichText::new(tl!("(none)")).small().weak());
+            ui.end_row();
+        }
         for (i, e) in f.items.iter_mut().enumerate() {
             ui.add(egui::TextEdit::singleline(&mut e.display).desired_width(170.0));
             ui.add(egui::TextEdit::singleline(&mut e.value).desired_width(140.0));
@@ -204,5 +209,56 @@ fn entries(ui: &mut Ui, f: &mut ControlForm) {
     }
     if f.items.len() < wordcraft_doc::control::MAX_LIST_ITEMS && ui.button(tl!("Add")).clicked() {
         f.items.push(Entry::default());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use wordcraft_engine::Session;
+
+    fn app() -> WordApp {
+        WordApp::new(Session::new(wordcraft_doc::Document::new()), crate::Services::default())
+    }
+
+    /// #3144: a list with no entries says so instead of showing only the headings, and the hint
+    /// goes away with the first entry.
+    #[test]
+    fn empty_list_entries_say_none() {
+        let mut app = app();
+        app.run("developer.comboBox", json!({})).unwrap();
+        app.run("developer.properties", json!({})).unwrap();
+        assert_eq!(app.dialog.as_ref().map(|d| d.name()), Some("controlProperties"));
+        let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(1440.0, 900.0)).build_ui_state(
+            |ui, app: &mut WordApp| {
+                let ctx = ui.ctx().clone();
+                app.logic(&ctx);
+                app.ui(ui);
+            },
+            app,
+        );
+        for _ in 0..4 {
+            h.step();
+        }
+        let texts = |h: &egui_kittest::Harness<'static, WordApp>| -> Vec<String> {
+            h.output()
+                .shapes
+                .iter()
+                .filter_map(|s| match &s.shape {
+                    egui::Shape::Text(t) => Some(t.galley.text().to_string()),
+                    _ => None,
+                })
+                .collect()
+        };
+        assert!(texts(&h).iter().any(|t| t.contains("(none)")), "no entries: the hint shows");
+        match &mut h.state_mut().dialog {
+            Some(crate::dialogs::Dialog::Control { form }) => form.items.push(Entry { display: "One".into(), value: "1".into() }),
+            _ => panic!("the control properties dialog is open"),
+        }
+        for _ in 0..2 {
+            h.step();
+        }
+        assert!(!texts(&h).iter().any(|t| t.contains("(none)")), "an entry replaces the hint");
+        assert!(texts(&h).iter().any(|t| t.contains("One")), "the entry shows");
     }
 }

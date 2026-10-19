@@ -913,31 +913,31 @@ fn symbol_ui(app: &mut WordApp, ui: &mut Ui, f: &mut SymbolForm) -> bool {
             f.selected = Some(c);
             f.sync_code();
         }
-        ui.add_space(6.0);
-        ui.label(tl!("Recently used symbols:"));
         let recent = app.ui.recent_symbols.clone();
-        ui.horizontal(|ui| {
-            ui.spacing_mut().item_spacing = vec2(0.0, 0.0);
-            for r in recent.iter().take(GRID_COLS) {
-                let Some(c) = r.ch.chars().next() else { continue };
-                let rfont = if r.font.is_empty() { f.text_font.clone() } else { r.font.clone() };
-                let resp = symbol_cell(app, ui, &rfont, c, false, &t);
-                if resp.clicked() || resp.double_clicked() {
-                    f.font = r.font.clone();
-                    f.selected = Some(c);
-                    f.load();
-                    f.sync_code();
-                    f.scroll_to = f.row_of(c);
+        if !recent.is_empty() {
+            // #3144: the section appears with the first symbol picked, not as an empty row.
+            ui.add_space(6.0);
+            ui.label(tl!("Recently used symbols:"));
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing = vec2(0.0, 0.0);
+                for r in recent.iter().take(GRID_COLS) {
+                    let Some(c) = r.ch.chars().next() else { continue };
+                    let rfont = if r.font.is_empty() { f.text_font.clone() } else { r.font.clone() };
+                    let resp = symbol_cell(app, ui, &rfont, c, false, &t);
+                    if resp.clicked() || resp.double_clicked() {
+                        f.font = r.font.clone();
+                        f.selected = Some(c);
+                        f.load();
+                        f.sync_code();
+                        f.scroll_to = f.row_of(c);
+                    }
+                    if resp.double_clicked() {
+                        double = true;
+                    }
                 }
-                if resp.double_clicked() {
-                    double = true;
-                }
-            }
-            if recent.is_empty() {
-                let _ = ui.allocate_exact_size(vec2(CELL, CELL), Sense::hover());
-            }
-        });
-        ui.add_space(6.0);
+            });
+            ui.add_space(6.0);
+        }
         ui.horizontal(|ui| {
             let name = f.selected.map(|c| format!("U+{:04X}", c as u32)).unwrap_or_default();
             ui.label(egui::RichText::new(name).font(semibold(12.0)));
@@ -1573,5 +1573,42 @@ mod tests {
         assert_eq!(f.final_code(), "NUMPAGES \\* Arabic");
         f.code = "  ".into();
         assert!(f.params().is_none());
+    }
+
+    /// #3144: the recently used row appears with the first symbol picked instead of leaving a
+    /// label above an empty cell.
+    #[test]
+    fn the_symbol_dialog_hides_recent_symbols_until_there_are_some() {
+        let mut a = app();
+        assert!(a.ui.recent_symbols.is_empty());
+        a.run("insert.symbol", json!({})).unwrap();
+        assert_eq!(a.dialog.as_ref().map(|d| d.name()), Some("symbol"));
+        let mut h = egui_kittest::Harness::builder().with_size(vec2(1440.0, 900.0)).build_ui_state(
+            |ui, app: &mut WordApp| {
+                let ctx = ui.ctx().clone();
+                app.logic(&ctx);
+                app.ui(ui);
+            },
+            a,
+        );
+        for _ in 0..4 {
+            h.step();
+        }
+        let texts = |h: &egui_kittest::Harness<'static, WordApp>| -> Vec<String> {
+            h.output()
+                .shapes
+                .iter()
+                .filter_map(|s| match &s.shape {
+                    egui::Shape::Text(t) => Some(t.galley.text().to_string()),
+                    _ => None,
+                })
+                .collect()
+        };
+        assert!(!texts(&h).iter().any(|t| t.contains("Recently used symbols:")), "no section yet");
+        h.state_mut().ui.recent_symbols.push(RecentSymbol { ch: "\u{2665}".to_string(), font: String::new() });
+        for _ in 0..2 {
+            h.step();
+        }
+        assert!(texts(&h).iter().any(|t| t.contains("Recently used symbols:")), "the section shows with the first symbol");
     }
 }
