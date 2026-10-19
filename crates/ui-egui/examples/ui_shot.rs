@@ -35,7 +35,7 @@ fn main() {
     }
     let w = lines.iter().find_map(|l| l.get("width").and_then(|v| v.as_f64())).unwrap_or(1440.0) as f32;
     let h = lines.iter().find_map(|l| l.get("height").and_then(|v| v.as_f64())).unwrap_or(900.0) as f32;
-    let ppp = lines.iter().find_map(|l| l.get("ppp").and_then(|v| v.as_f64())).filter(|p| (0.5..=4.0).contains(p)).unwrap_or(2.0) as f32;
+    let ppp = lines.iter().find_map(|l| l.get("ppp").and_then(|v| v.as_f64())).map(|p| p.clamp(0.5, 4.0)).unwrap_or(2.0) as f32;
     let mut harness =
         egui_kittest::Harness::builder().with_size(egui::vec2(w, h)).with_pixels_per_point(ppp).with_max_steps(1_000_000).wgpu().build_ui_state(
             |ui, app: &mut WordApp| {
