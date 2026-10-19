@@ -2444,6 +2444,18 @@ fn mouse(app: &mut WordApp, ui: &Ui, resp: &egui::Response, rects: &[Rect], layo
         let clicks = press_count(app.canvas.last_press, now, p, delay, dist);
         app.canvas.last_press = Some((now, p, clicks));
         app.canvas.unit_drag = None;
+        // eframe's web runner runs a frame inside pointerdown, before touchstart, so remember
+        // this press before any branch below can return: the finger's Touch Start next frame
+        // adopts it and undoes the drag it started (#1503).
+        app.canvas.touch.arm(p, now, app.session.sel.clone());
+        // A finger begins its gesture before any branch below can return early (the selection
+        // bar, an equation, Alt column selection): a swipe from there pans (#1503, #2155).
+        let finger = ui.input(|i| i.any_touches());
+        let finger_press = finger && !app.canvas.touch.down() && !app.canvas.touch.pinching();
+        if finger_press {
+            app.canvas.touch.press(p, app.session.sel.clone());
+            app.canvas.column_drag = None;
+        }
         // A double-click that enters or leaves a header/footer is handled on release.
         let hf_switch =
             (hf_zone.is_some() && story == StoryRef::Body) || (matches!(story, StoryRef::Part(_)) && !in_text_box(app) && hf_zone.is_none());
@@ -2508,8 +2520,12 @@ fn mouse(app: &mut WordApp, ui: &Ui, resp: &egui::Response, rects: &[Rect], layo
                 let (start, end) = app.session.sel.ordered();
                 (unit, start, end)
             };
-            app.canvas.unit_drag = Some(UnitDrag { unit, clicks, start, end, last: line });
-            app.canvas.dragging = true;
+            // A finger selects the line on a tap, but its gesture owns the movement: never
+            // start a mouse drag-select from it.
+            if !finger {
+                app.canvas.unit_drag = Some(UnitDrag { unit, clicks, start, end, last: line });
+                app.canvas.dragging = true;
+            }
             return;
         }
         let Some(pos) = layout.hit(page, x, y, story) else { return };
@@ -2531,29 +2547,23 @@ fn mouse(app: &mut WordApp, ui: &Ui, resp: &egui::Response, rects: &[Rect], layo
         }
         let pj = serde_json::to_value(&pos).unwrap_or_default();
         // Alt+drag selects a column (block) of text.
-        if mods.alt && !mods.shift && !mods.command {
+        if mods.alt && !mods.shift && !mods.command && !finger {
             let _ = app.run("caret.set", json!({"pos": pj}));
             app.session.page_hint = page;
             app.canvas.column_drag = Some(((page, x, y), (page, x, y)));
             app.canvas.dragging = true;
             return;
         }
-        // A finger: a tap places the caret, a drag pans (the gesture owns the movement above),
-        // and a long press selects (above). Never start a mouse drag-select here (#1503, #2155).
-        if ui.input(|i| i.any_touches()) {
-            if !app.canvas.touch.down() && !app.canvas.touch.pinching() {
-                app.canvas.touch.press(p, app.session.sel.clone());
-                app.canvas.column_drag = None;
-                let pj = serde_json::to_value(&pos).unwrap_or_default();
+        // A finger: the press above began its gesture; a tap places the caret, a drag pans (the
+        // gesture owns the movement above), and a long press selects (above). Never start a
+        // mouse drag-select here (#1503, #2155).
+        if finger {
+            if finger_press {
                 let _ = app.run("caret.set", json!({"pos": pj}));
                 app.session.page_hint = page;
             }
             return;
         }
-        // eframe's web runner runs a frame inside pointerdown, before touchstart, so remember
-        // this press: the finger's Touch Start next frame adopts it and undoes the drag it
-        // started (#1503).
-        app.canvas.touch.arm(p, now, app.session.sel.clone());
         app.canvas.column_drag = None;
         let _ = app.run("caret.set", json!({"pos": pj, "extend": mods.shift}));
         // Double-click selects a word, triple-click a paragraph, Ctrl/⌘+click a sentence; holding
@@ -5299,6 +5309,75 @@ mod tests {
         h.run_steps(5);
         assert!(h.state().canvas.scroll_offset.y > 100.0, "the page followed the finger: {:?}", h.state().canvas.scroll_offset);
         assert!(h.state().session.sel.is_collapsed(), "a pan must not select: {:?}", h.state().session.sel);
+    }
+
+    /// #1503 / #2155: the left margin is the selection bar for a mouse, but a finger swipe that
+    /// starts there pans the page instead of selecting lines.
+    #[test]
+    fn a_touch_drag_from_the_selection_bar_pans_the_page() {
+        let mut h = long_document();
+        let start = screen(&mut h, 30.0, 300.0);
+        assert!(h.state_mut().session.layout().selection_bar_at(0, 30.0, 300.0).is_some(), "the drag starts in the selection bar");
+        h.event(touch(0, egui::TouchPhase::Start, start));
+        h.event(primary(start, true));
+        h.step();
+        let mut at = start;
+        for k in 1..=10 {
+            at = start - vec2(0.0, 30.0 * k as f32);
+            h.event(egui::Event::PointerMoved(at));
+            h.event(touch(0, egui::TouchPhase::Move, at));
+            h.step();
+        }
+        h.event(primary(at, false));
+        h.event(touch(0, egui::TouchPhase::End, at));
+        h.run_steps(5);
+        assert!(h.state().canvas.scroll_offset.y > 100.0, "the page followed the finger: {:?}", h.state().canvas.scroll_offset);
+        assert!(h.state().session.sel.is_collapsed(), "a pan from the margin must not select: {:?}", h.state().session.sel);
+    }
+
+    /// The same through the web's pointerdown-first order: that frame selects a line, and the
+    /// finger's `Touch Start` takes the line drag back so the swipe pans.
+    #[test]
+    fn a_web_touch_drag_from_the_selection_bar_pans_and_keeps_the_selection() {
+        let mut h = long_document();
+        h.state_mut().run("select.text", json!({"text": "A line of text"})).unwrap();
+        let before = h.state().session.sel.clone();
+        let start = screen(&mut h, 30.0, 300.0);
+        h.event(primary(start, true));
+        h.step();
+        assert!(h.state().canvas.dragging, "the pointerdown frame starts a line drag");
+        assert!(!h.state().session.sel.is_collapsed(), "the pointerdown frame selected a line");
+        h.event(touch(0, egui::TouchPhase::Start, start));
+        h.step();
+        assert!(!h.state().canvas.dragging, "the Touch Start takes the line drag back");
+        let mut at = start;
+        for k in 1..=10 {
+            at = start - vec2(0.0, 30.0 * k as f32);
+            h.event(egui::Event::PointerMoved(at));
+            h.event(touch(0, egui::TouchPhase::Move, at));
+            h.step();
+        }
+        h.event(primary(at, false));
+        h.event(touch(0, egui::TouchPhase::End, at));
+        h.run_steps(5);
+        assert!(h.state().canvas.scroll_offset.y > 100.0, "the page followed the finger: {:?}", h.state().canvas.scroll_offset);
+        assert_eq!(h.state().session.sel, before, "panning puts back the selection it found");
+    }
+
+    /// A finger tap in the selection bar still selects the line, as a mouse click there does;
+    /// only a drag pans.
+    #[test]
+    fn a_touch_tap_in_the_selection_bar_selects_the_line() {
+        let mut h = long_document();
+        let at = screen(&mut h, 30.0, 300.0);
+        h.event(touch(0, egui::TouchPhase::Start, at));
+        h.event(primary(at, true));
+        h.step();
+        h.event(primary(at, false));
+        h.event(touch(0, egui::TouchPhase::End, at));
+        h.run_steps(3);
+        assert!(!h.state().session.sel.is_collapsed(), "a tap in the selection bar selects the line: {:?}", h.state().session.sel);
+        assert_eq!(h.state().canvas.scroll_offset.y, 0.0, "a tap must not scroll");
     }
 
     /// The web runner runs a frame inside `pointerdown`, before `touchstart`: the press starts a
