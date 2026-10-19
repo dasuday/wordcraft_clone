@@ -478,7 +478,11 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
     egui::Panel::top("ribbon")
         .exact_size(CONTENT_H + LABEL_H + 10.0)
         .frame(
-            egui::Frame::NONE.fill(t.ribbon).inner_margin(egui::Margin { left: 8, right: 8, top: 4, bottom: 4 }).stroke(Stroke::new(1.0, t.border)),
+            egui::Frame::NONE
+                .fill(t.ribbon)
+                .corner_radius(egui::CornerRadius::same(6))
+                .inner_margin(egui::Margin { left: 8, right: 8, top: 4, bottom: 4 })
+                .stroke(Stroke::new(1.0, t.border)),
         )
         .show(ui, |ui| {
             // Right-click on the ribbon (outside a button): Customize Ribbon. Registered first, so
@@ -947,6 +951,13 @@ fn painter_double_click(app: &mut WordApp) {
 fn home(app: &mut WordApp, ui: &mut Ui) {
     let st = app.session.run("format.state", &json!({})).unwrap_or_default();
     let flag = |k: &str| st.get(k).and_then(Value::as_bool).unwrap_or(false);
+    group(ui, "Undo", None, app, |ui, app| {
+        stack(ui, |ui| {
+            let undo_tip = crate::i18n::prefixed("Undo", app.session.undo_label().unwrap_or(""));
+            small(ui, app, "undo", None, &undo_tip, "edit.undo", json!({}), false);
+            small(ui, app, "redo", None, "Redo", "edit.redo", json!({}), false);
+        });
+    });
     group(ui, "Clipboard", Some("edit.clipboardPane"), app, |ui, app| {
         menu_button(ui, app, "paste", Some("Paste"), "Paste (⌘V)", true, "edit.paste", |ui, app| {
             mi(ui, app, "Paste", "edit.paste", json!({}));

@@ -35,7 +35,9 @@ pub(crate) fn window<'a>(ctx: &egui::Context, w: egui::Window<'a>) -> egui::Wind
     let style = ctx.global_style();
     let m = style.spacing.window_margin;
     let right = geometry(ctx).width as i8;
-    w.title_frame(egui::Frame::window(&style).inner_margin(Margin { right, ..m }))
+    let mut tf = egui::Frame::window(&style).inner_margin(Margin { right, ..m });
+    tf.stroke = Stroke::NONE;
+    w.title_frame(tf)
 }
 
 /// The box for a window whose outer rect is `window` (frame line included), with a title bar

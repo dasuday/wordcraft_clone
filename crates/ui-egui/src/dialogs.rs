@@ -8,7 +8,7 @@
 
 use std::collections::BTreeSet;
 
-use egui::{Sense, Ui, vec2};
+use egui::{CornerRadius, Rect, Sense, Ui, pos2, vec2};
 use serde::Serialize;
 use serde_json::{Value, json};
 
@@ -16,8 +16,9 @@ use wordcraft_engine::Password;
 use wordcraft_engine::cmd::mailings::{FilterOp, FilterRule, SortKey};
 
 use crate::WordApp;
+use crate::icons;
 use crate::options::MeasureExt;
-use crate::theme::{Tokens, semibold};
+use crate::theme::{Tokens, medium, regular, semibold};
 
 /// The Find and Replace dialog's search options beyond the first row (#543).
 #[derive(Clone, Debug, Default, Serialize)]
@@ -2596,12 +2597,19 @@ fn body(app: &mut WordApp, ui: &mut Ui, d: &mut Dialog) -> bool {
             if *swallow {
                 ui.ctx().input_mut(|i| i.events.retain(|e| !swallow_shortcut_text(swallow, e)));
             }
-            let r = ui.add(egui::TextEdit::singleline(query).hint_text(tl!("Type a command, e.g. \"insert table\"")).desired_width(380.0));
+            ui.add_space(2.0);
+            let r = ui.add(
+                egui::TextEdit::singleline(query)
+                    .hint_text(tl!("Type a command, e.g. \"insert table\""))
+                    .desired_width(480.0)
+                    .margin(egui::Margin::symmetric(10, 7)),
+            );
             r.request_focus();
             let reg = app.session.registry.clone();
             // An empty box suggests a few common commands, as Word's Search does.
             let mut hits: Vec<&wordcraft_engine::CommandSpec> = if query.trim().is_empty() {
-                ui.label(egui::RichText::new(tl!("Suggested")).font(semibold(12.5)));
+                ui.add_space(4.0);
+                ui.label(egui::RichText::new(tl!("Suggested")).font(semibold(12.0)).color(Tokens::get(ui.ctx()).text_dim));
                 SEARCH_SUGGESTIONS.iter().filter_map(|id| reg.get(id)).collect()
             } else {
                 reg.all().iter().filter(|c| command_matches(c, query)).collect()
@@ -2609,10 +2617,9 @@ fn body(app: &mut WordApp, ui: &mut Ui, d: &mut Dialog) -> bool {
             hits.truncate(14);
             let enter = ui.input(|i| i.key_pressed(egui::Key::Enter));
             let mut run: Option<&str> = enter.then(|| hits.first().map(|c| c.id)).flatten();
+            ui.add_space(2.0);
             for c in &hits {
-                let sc = crate::widgets::shortcut_text(app, c.id);
-                let label = format!("{}   —   {}", tl!(c.label), crate::i18n::location(c.location));
-                if ui.add(egui::Button::new(label).shortcut_text(sc).min_size(vec2(380.0, 0.0))).clicked() {
+                if command_palette_row(ui, app, c, 480.0).clicked() {
                     run = Some(c.id);
                 }
             }
@@ -2620,9 +2627,10 @@ fn body(app: &mut WordApp, ui: &mut Ui, d: &mut Dialog) -> bool {
             let text = query.trim().to_string();
             let mut find = false;
             if !text.is_empty() {
+                ui.add_space(4.0);
                 ui.separator();
-                let label = crate::i18n::fmt(tl!("Find “{text}” in the document"), &[("text", &text)]);
-                find = ui.add(egui::Button::new(label).min_size(vec2(380.0, 0.0))).clicked() || (enter && hits.is_empty());
+                ui.add_space(2.0);
+                find = find_in_doc_row(ui, &text, 480.0).clicked() || (enter && hits.is_empty());
             }
             if let Some(id) = run {
                 let _ = app.run(id, json!({}));
@@ -3796,6 +3804,78 @@ fn command_matches(c: &wordcraft_engine::CommandSpec, query: &str) -> bool {
         crate::i18n::lowercase(&crate::i18n::location(c.location))
     );
     query.split_whitespace().all(|w| hay.contains(&w.to_lowercase()) || hay.contains(&crate::i18n::lowercase(w)))
+}
+
+fn command_palette_row(ui: &mut Ui, app: &WordApp, c: &wordcraft_engine::CommandSpec, min_w: f32) -> egui::Response {
+    let t = Tokens::get(ui.ctx());
+    let icon = crate::widgets::command_icon(c.id);
+    let title = tl!(c.label);
+    let loc = crate::i18n::location(c.location);
+    let sc = crate::widgets::shortcut_text(app, c.id);
+    let full_label = format!("{title}   —   {loc}");
+
+    let pad = vec2(10.0, 5.0);
+    let icon_sz = 18.0;
+    let row_h = 32.0;
+    let w = min_w.max(ui.available_width());
+
+    let (rect, resp) = ui.allocate_exact_size(vec2(w, row_h), Sense::click());
+    resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, &full_label));
+
+    if resp.is_pointer_button_down_on() {
+        ui.painter().rect_filled(rect, CornerRadius::same(5), t.pressed);
+    } else if resp.hovered() {
+        ui.painter().rect_filled(rect, CornerRadius::same(5), t.hover);
+    }
+
+    let icon_rect = Rect::from_center_size(pos2(rect.min.x + pad.x + icon_sz / 2.0, rect.center().y), vec2(icon_sz, icon_sz));
+    icons::paint(ui.painter(), icon_rect, icon, t.icon, t.accent);
+
+    let text_x = rect.min.x + pad.x + icon_sz + 8.0;
+    let galley_title = ui.painter().layout_no_wrap(title.to_string(), medium(12.5), t.text);
+    let title_pos = pos2(text_x, rect.center().y - galley_title.size().y / 2.0);
+    ui.painter().galley(title_pos, galley_title.clone(), t.text);
+
+    if !loc.is_empty() {
+        let loc_x = text_x + galley_title.size().x + 10.0;
+        let sep_text = format!("—   {loc}");
+        let galley_loc = ui.painter().layout_no_wrap(sep_text, regular(11.0), t.text_dim);
+        let loc_pos = pos2(loc_x, rect.center().y - galley_loc.size().y / 2.0);
+        ui.painter().galley(loc_pos, galley_loc, t.text_dim);
+    }
+
+    if !sc.is_empty() {
+        let galley_sc = ui.painter().layout_no_wrap(sc, regular(11.0), t.text_dim);
+        let sc_pos = pos2(rect.max.x - pad.x - galley_sc.size().x, rect.center().y - galley_sc.size().y / 2.0);
+        ui.painter().galley(sc_pos, galley_sc, t.text_dim);
+    }
+
+    resp
+}
+
+fn find_in_doc_row(ui: &mut Ui, text: &str, min_w: f32) -> egui::Response {
+    let t = Tokens::get(ui.ctx());
+    let label = crate::i18n::fmt(tl!("Find “{text}” in the document"), &[("text", text)]);
+    let pad = vec2(10.0, 5.0);
+    let icon_sz = 18.0;
+    let row_h = 32.0;
+    let w = min_w.max(ui.available_width());
+
+    let (rect, resp) = ui.allocate_exact_size(vec2(w, row_h), Sense::click());
+    resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, &label));
+
+    if resp.is_pointer_button_down_on() {
+        ui.painter().rect_filled(rect, CornerRadius::same(5), t.pressed);
+    } else if resp.hovered() {
+        ui.painter().rect_filled(rect, CornerRadius::same(5), t.hover);
+    }
+    let icon_rect = Rect::from_center_size(pos2(rect.min.x + pad.x + icon_sz / 2.0, rect.center().y), vec2(icon_sz, icon_sz));
+    icons::paint(ui.painter(), icon_rect, "search", t.icon, t.accent);
+
+    let text_x = rect.min.x + pad.x + icon_sz + 8.0;
+    let galley = ui.painter().layout_no_wrap(label, regular(12.0), t.text);
+    ui.painter().galley(pos2(text_x, rect.center().y - galley.size().y / 2.0), galley, t.text);
+    resp
 }
 
 /// The Find and Replace dialog's Go To tab (#712): a page (a number, or `+2` / `-1` from the

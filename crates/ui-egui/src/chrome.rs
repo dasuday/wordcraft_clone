@@ -20,7 +20,7 @@ fn qat_button(ui: &mut Ui, app: &mut WordApp, icon: &str, tip: &str, id: &str, e
         ui.painter().rect_filled(r, 4.0, t.hover);
     }
     let c = if enabled { t.icon } else { t.text_disabled };
-    icons::paint(ui.painter(), Rect::from_center_size(r.center(), vec2(16.0, 16.0)), icon, c, if enabled { t.accent } else { c });
+    icons::paint(ui.painter(), Rect::from_center_size(r.center(), vec2(18.0, 18.0)), icon, c, if enabled { t.accent } else { c });
     let sc = crate::widgets::shortcut_text(app, id);
     let resp = resp.on_hover_text(if sc.is_empty() { tip.to_string() } else { format!("{tip} ({sc})") });
     if resp.clicked() && enabled {
@@ -74,7 +74,7 @@ fn quick_access(ui: &mut Ui, app: &mut WordApp) {
     if resp.hovered() {
         ui.painter().rect_filled(r, 4.0, t.hover);
     }
-    icons::paint(ui.painter(), Rect::from_center_size(r.center(), vec2(16.0, 16.0)), "more", t.icon, t.accent);
+    icons::paint(ui.painter(), Rect::from_center_size(r.center(), vec2(18.0, 18.0)), "more", t.icon, t.accent);
     let resp = resp.on_hover_text(tl!("Customize Quick Access Toolbar"));
     egui::Popup::menu(&resp).show(|ui| {
         ui.set_min_width(220.0);
@@ -347,7 +347,7 @@ pub fn title_bar(app: &mut WordApp, ui: &mut Ui) {
                     ui.painter().rect(r, 6.0, if resp.hovered() { t.input } else { t.ribbon }, Stroke::new(1.0, t.border), egui::StrokeKind::Inside);
                     icons::paint(
                         ui.painter(),
-                        Rect::from_center_size(pos2(r.min.x + 16.0, r.center().y), vec2(16.0, 16.0)),
+                        Rect::from_center_size(pos2(r.min.x + 16.0, r.center().y), vec2(18.0, 18.0)),
                         "search",
                         t.text_dim,
                         t.accent,
