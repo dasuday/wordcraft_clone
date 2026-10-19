@@ -395,6 +395,13 @@ mod tests {
         assert_eq!(issues[0].lang, crate::ProofLang::El);
         let issues = crate::check_text("Το το σπίτι", &[]);
         assert!(issues.iter().any(|i| i.lang == crate::ProofLang::El && i.kind == crate::IssueKind::Grammar), "{issues:?}");
+        // An English word in that Greek paragraph is still spelled in English.
+        let text = "Το σπίτι και το sentense";
+        let issues = crate::check_text(text, &[]);
+        assert_eq!(issues.len(), 1, "{issues:?}");
+        assert_eq!((&text[issues[0].start..issues[0].end], issues[0].lang), ("sentense", crate::ProofLang::En));
+        let issues = crate::check_text(text, &[(0..text.len(), crate::ProofLang::En)]);
+        assert_eq!(issues.iter().map(|i| i.lang).collect::<Vec<_>>(), [crate::ProofLang::En], "{issues:?}");
         // Elided words with an apostrophe aren't misspelled.
         assert!(crate::check_text("Ήρθε απ' το σπίτι γι' αυτό", &[]).is_empty());
         let opts = crate::Options { ignore_uppercase: false, ..Default::default() };

@@ -756,29 +756,31 @@ pub fn check_text_with(text: &str, spans: &[(Range<usize>, ProofLang)], opts: &O
     }
     // A paragraph typed in Vietnamese under the default English language is Vietnamese, which
     // has no proofing tools: no marks (Word detects the language the same way).
-    let default = if vi::looks_vietnamese(text) {
+    let vietnamese = vi::looks_vietnamese(text);
+    let default = if vietnamese {
         for (_, l) in merged.iter_mut().filter(|(_, l)| *l == ProofLang::En) {
             *l = ProofLang::Other;
         }
         ProofLang::Other
-    } else if el::looks_greek(text) {
-        // Greek typed under English: Greek grammar too (spelling picks Greek per word).
+    } else {
+        ProofLang::En
+    };
+    let mut v: Vec<Issue> = spelling_issues(text, |i| lang_in(&merged, default, i), opts);
+    if !grammar {
+        v.sort_by_key(|i| (i.start, i.end));
+        return v;
+    }
+    // Greek typed under English gets Greek grammar. Spelling above already picks Greek for each
+    // word in Greek letters and keeps English words in English.
+    let default = if !vietnamese && el::looks_greek(text) {
         for (_, l) in merged.iter_mut().filter(|(_, l)| *l == ProofLang::En) {
             *l = ProofLang::El;
         }
         ProofLang::El
     } else {
-        ProofLang::En
+        default
     };
-    let lang_at = |i: usize| -> ProofLang {
-        let k = merged.partition_point(|(r, _)| r.end <= i);
-        merged.get(k).filter(|(r, _)| r.start <= i).map_or(default, |s| s.1)
-    };
-    let mut v: Vec<Issue> = spelling_issues(text, lang_at, opts);
-    if !grammar {
-        v.sort_by_key(|i| (i.start, i.end));
-        return v;
-    }
+    let lang_at = |i: usize| lang_in(&merged, default, i);
     let mut langs: Vec<ProofLang> = merged.iter().map(|s| s.1).collect();
     let mut covered = 0;
     for (r, _) in &merged {
@@ -798,6 +800,13 @@ pub fn check_text_with(text: &str, spans: &[(Range<usize>, ProofLang)], opts: &O
     }
     v.sort_by_key(|i| (i.start, i.end));
     v
+}
+
+/// The language at byte `i`: that of the span holding it, else `default`. `spans` are sorted
+/// and don't overlap.
+fn lang_in(spans: &[(Range<usize>, ProofLang)], default: ProofLang, i: usize) -> ProofLang {
+    let k = spans.partition_point(|(r, _)| r.end <= i);
+    spans.get(k).filter(|(r, _)| r.start <= i).map_or(default, |s| s.1)
 }
 
 /// Grammar issues in a paragraph of English text.

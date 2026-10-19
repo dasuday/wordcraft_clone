@@ -3049,6 +3049,34 @@ mod tests {
         assert_eq!(language_name(Some("el-CY")), "Greek (Cyprus)");
     }
 
+    /// Review › Language › Greek tags the selection `el-GR` and shows checked; text tagged plain
+    /// `el` (as other apps write it) shows Greek checked too.
+    #[test]
+    fn greek_in_the_language_menu_tags_the_selection() {
+        use egui_kittest::kittest::{By, NodeT, Queryable};
+        let checked = |h: &egui_kittest::Harness<'static, WordApp>| -> Vec<String> {
+            h.query_all(By::new().predicate(|n| n.toggled() == Some(egui::accesskit::Toggled::True)))
+                .filter_map(|n| n.accesskit_node().label())
+                .map(|l| l.trim_start_matches('✓').trim().to_string())
+                .collect()
+        };
+        let lang = |h: &mut egui_kittest::Harness<'static, WordApp>| h.state_mut().session.run("format.state", &json!({})).unwrap()["lang"].clone();
+        let mut app = WordApp::new(Session::new(wordcraft_doc::Document::from_text("Καλημέρα")), crate::Services::default());
+        app.run("select.all", json!({})).unwrap();
+        let mut h =
+            egui_kittest::Harness::builder().with_size(vec2(400.0, 400.0)).build_ui_state(|ui, app: &mut WordApp| language_menu(ui, app), app);
+        h.run();
+        assert_eq!(checked(&h), ["English (United States)"]);
+        h.get(By::new().label_contains("Greek")).click();
+        h.run();
+        assert_eq!(lang(&mut h), "el-GR");
+        assert_eq!(checked(&h), ["Greek"]);
+        h.state_mut().run("review.language", json!({"lang": "el"})).unwrap();
+        h.run();
+        assert_eq!(lang(&mut h), "el");
+        assert_eq!(checked(&h), ["Greek"]);
+    }
+
     #[test]
     fn indonesian_has_a_name_in_the_language_menu() {
         assert!(PROOFING_LANGUAGES.contains(&("id-ID", "Indonesian")));
