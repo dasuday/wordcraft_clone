@@ -2623,6 +2623,8 @@ preview	Title	Ukázka
 # Backstage › Recover (#586)
 	Recover	Obnovit
 
+# Ask Agent
+	Ask\nAgent	Zeptat se\nagenta
 # Page Setup › Mirror margins (#1239)
 	Mirror margins	Zrcadlové okraje
 
@@ -2691,3 +2693,4 @@ preview	Title	Ukázka
 	Type a size in any unit, such as 5 cm or 300 px. The other side follows, so the picture keeps its proportions.	Zadejte velikost v libovolné jednotce, například 5 cm nebo 300 px. Druhá strana se přizpůsobí, takže obrázek zachová své proporce.
 
 	Import…	Importovat…
+	Start WordCraft with --control to let an agent connect	Spusťte WordCraft s parametrem --control, aby se mohl připojit agent

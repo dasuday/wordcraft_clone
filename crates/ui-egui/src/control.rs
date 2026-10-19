@@ -21,6 +21,7 @@ use crate::WordApp;
 
 pub struct ControlRequest {
     pub method: String,
+    pub connection: Option<u64>,
     pub params: Value,
     pub reply: Sender<Value>,
 }
@@ -28,7 +29,7 @@ pub struct ControlRequest {
 impl ControlRequest {
     pub fn new(method: impl Into<String>, params: Value) -> (Self, std::sync::mpsc::Receiver<Value>) {
         let (tx, rx) = std::sync::mpsc::channel();
-        (Self { method: method.into(), params, reply: tx }, rx)
+        (Self { method: method.into(), connection: None, params, reply: tx }, rx)
     }
 }
 
@@ -41,7 +42,13 @@ fn ok(v: Value) -> Outcome {
     Outcome::Done(json!({"ok": true, "result": v}))
 }
 fn err(e: impl std::fmt::Display) -> Outcome {
-    Outcome::Done(json!({"ok": false, "error": e.to_string()}))
+    let message = e.to_string();
+    match message.split_once(':') {
+        Some((code, rest)) if !code.is_empty() && code.chars().all(|ch| ch.is_ascii_uppercase() || ch == '_') => {
+            Outcome::Done(json!({"ok": false, "error": rest.trim_start(), "errorCode": code}))
+        }
+        _ => Outcome::Done(json!({"ok": false, "error": message})),
+    }
 }
 
 pub fn inspect(app: &mut WordApp, ctx: &egui::Context) -> Value {
@@ -61,6 +68,7 @@ pub fn inspect(app: &mut WordApp, ctx: &egui::Context) -> Value {
         "focused": app.canvas.focused,
         "title": app.title_stem(),
         "dirty": app.session.dirty,
+        "askAgent": json!({"open": app.ask_agent.open.is_some()}),
         "perf": {"frameMs": app.frame_ms, "renderMs": app.canvas.render_ms, "layoutMs": app.session.layout().ms},
     })
 }
@@ -134,7 +142,8 @@ pub fn handle(app: &mut WordApp, ctx: &egui::Context, req: &ControlRequest) -> O
             if let Some(e) = close_refused(app, id, &params) {
                 return err(e);
             }
-            match app.execute(id, params) {
+            let request = json!({"request": p.get("request").or(params.get("request"))});
+            match crate::ask_agent::as_agent(app, req.connection, id, &request, |app| app.execute(id, params)) {
                 Ok(v) => ok(v),
                 Err(e) => err(e),
             }
@@ -288,7 +297,7 @@ pub fn handle(app: &mut WordApp, ctx: &egui::Context, req: &ControlRequest) -> O
             if let Some(e) = close_refused(app, other, p) {
                 return err(e);
             }
-            match app.execute(other, p.clone()) {
+            match crate::ask_agent::as_agent(app, req.connection, other, p, |app| app.execute(other, p.clone())) {
                 Ok(v) => ok(v),
                 Err(e) => err(e),
             }
@@ -326,4 +335,22 @@ pub fn save_screenshot(image: &egui::ColorImage, path: Option<&str>) -> Value {
         }
     }
     json!({"ok": true, "result": {"path": path, "width": w, "height": h}})
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn err_strips_code_prefix_and_emits_error_code_only_when_uppercase() {
+        let Outcome::Done(v1) = err("NO_REQUEST: no Ask Agent request 5") else { panic!() };
+        assert_eq!(v1["ok"], false);
+        assert_eq!(v1["error"], "no Ask Agent request 5");
+        assert_eq!(v1["errorCode"], "NO_REQUEST");
+
+        let Outcome::Done(v2) = err("no document is open") else { panic!() };
+        assert_eq!(v2["ok"], false);
+        assert_eq!(v2["error"], "no document is open");
+        assert!(v2.get("errorCode").is_none());
+    }
 }
