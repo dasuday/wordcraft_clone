@@ -38,6 +38,30 @@ fn system_locales_map_to_languages() {
     assert_eq!(lang_from_tag("de_AT.UTF-8"), Some(lang("de")));
     assert_eq!(lang_from_tag("de-CH"), Some(lang("de")));
     assert_eq!(lang_from_tag("DE_de.UTF-8@euro"), Some(lang("de")));
+    assert_eq!(lang_from_tag("sk-SK"), Some(lang("sk")));
+    assert_eq!(lang_from_tag("sk_SK.UTF-8"), Some(lang("sk")));
+}
+
+#[test]
+fn slovak_interface_can_be_selected_and_saved_without_changing_the_document_language() {
+    let sk = lang("sk");
+    assert_eq!(sk.name(), "Slovenčina");
+    assert_eq!(sk.editing_lang(), None);
+    assert_eq!(tr(sk, "File"), "Súbor");
+    assert_eq!(tr(sk, "Arabic"), "Arabčina");
+    assert_eq!(trc(sk, "numerals", "Arabic"), "Západné číslice");
+    assert_eq!(trc(sk, "numerals", "Hindi"), "Východoarabské číslice");
+    assert_eq!(trc(sk, "numerals", "Context"), "Podľa okolitého textu");
+    assert_eq!(trc(sk, "numerals", "System"), "Podľa systému");
+    let mut app = crate::WordApp::new(wordcraft_engine::Session::new(wordcraft_doc::Document::new()), Default::default());
+    let before = serde_json::to_value(&app.session.doc).unwrap();
+    let result = app.run("ui.language", serde_json::json!({"value": "SK"})).unwrap();
+    assert_eq!(result["effective"], "sk");
+    assert!(result["available"].as_array().unwrap().iter().any(|l| l["code"] == "sk" && l["name"] == "Slovenčina"));
+    assert_eq!(serde_json::to_value(&app.session.doc).unwrap(), before);
+    let saved = serde_json::to_string(&app.ui).unwrap();
+    let restored: crate::UiState = serde_json::from_str(&saved).unwrap();
+    assert_eq!(Lang::from_pref(&restored.language), sk);
 }
 
 /// A language tag no catalog will ever have: `qaa`–`qtz` are reserved for local use (ISO 639-2),
@@ -992,7 +1016,7 @@ fn polish_covers_every_key_of_every_other_catalog() {
     // pieces of gallery labels. Polish matches every other catalog, including the built-in style
     // names, citation styles and equation gallery. French carries newer strings (paper sizes,
     // bookmarks, printing) the Polish catalog hasn't caught up with yet.
-    for other in Lang::all().filter(|l| *l != Lang::EN && !matches!(l.code(), "pl" | "it" | "hu" | "bg" | "vi" | "sv" | "hr" | "fr")) {
+    for other in Lang::all().filter(|l| *l != Lang::EN && !matches!(l.code(), "pl" | "it" | "hu" | "bg" | "vi" | "sv" | "hr" | "fr" | "sk")) {
         let mut missing: Vec<String> = keys(other.0.source).difference(&polish).cloned().collect();
         missing.sort();
         assert!(missing.is_empty(), "pl lacks {}'s {missing:?}", other.code());
@@ -1509,7 +1533,8 @@ fn vietnamese_covers_existing_catalog_keys_with_an_explicit_preview_fallback() {
     assert_eq!(trc(vi, "preview", "Title"), tr(vi, "Title"));
     // Compare complete (context, source) keys so a contextual entry cannot hide a missing plain
     // translation, or silently satisfy another context's key.
-    for other in Lang::all().filter(|l| *l != Lang::EN && l.code() != "vi") {
+    // The newer Slovak catalog contains strings absent from this Vietnamese catalog.
+    for other in Lang::all().filter(|l| *l != Lang::EN && !matches!(l.code(), "vi" | "sk")) {
         let (entries, errors) = parse_entries(other.0.source);
         assert!(errors.is_empty(), "{}: {errors:?}", other.code());
         let keys: HashSet<_> = entries.into_iter().map(|e| (e.context, e.source)).collect();
