@@ -179,6 +179,38 @@ fn own_margins_and_resize_to_fit_keep_the_text_in_view() {
     assert!(shown >= 1);
 }
 
+#[test]
+fn inline_box_that_resizes_to_fit_takes_its_texts_height() {
+    // #2791: an inline box with Resize shape to fit text, saved 10 cm tall around three short
+    // lines, shrinks to them as in Word; the page break after it stays on the first page.
+    let brk = wordcraft_doc::para::PAGE_BREAK;
+    let doc = |auto_fit: bool| {
+        let filler: Vec<String> = (1..=FILLER).map(|i| format!("Filler line {i}")).collect();
+        let mut d = Document::from_text(&format!("{}\n\n\n{brk}\nSecond page text.", filler.join("\n")));
+        let id = text_box(&mut d, FILLER, "", 453.5, 283.46, TextBody { auto_fit, anchor: VAlign::Center, ..Default::default() });
+        d.parts.get_mut(&id).unwrap().blocks =
+            (1..=3).map(|i| para_block(Paragraph::with_text(&format!("Text box line {i}"), Default::default()))).collect();
+        let l = lay(&d);
+        let r = l.pages.iter().find_map(|p| {
+            p.items.iter().find_map(|it| match it {
+                Placed::Object { rect, text_box: Some(s), .. } if *s == id => Some(*rect),
+                _ => None,
+            })
+        });
+        (l.pages.len(), r.unwrap())
+    };
+    let (pages, r) = doc(true);
+    assert!(r.h > 3.0 * 12.0 && r.h < 80.0, "the box fits its three lines: {r:?}");
+    assert_eq!(pages, 2, "the page break stays on the first page");
+    let (pages, saved) = doc(false);
+    assert_eq!(pages, 3, "a box keeping its 10 cm pushes the page break over");
+    assert!((saved.h - 283.46).abs() < 1.0, "without auto-fit the box keeps its saved height: {saved:?}");
+}
+
+/// Filler paragraphs before the box in [`inline_box_that_resizes_to_fit_takes_its_texts_height`]:
+/// enough that a 10 cm box no longer leaves room for the page break on the first page.
+const FILLER: usize = 22;
+
 fn auto_fit_case(body: TextBody, wrap: Wrap, h: f32) -> (Document, u32) {
     use wordcraft_doc::para::Anchor;
     use wordcraft_doc::props::LineSpacing;
@@ -264,6 +296,189 @@ fn auto_fit_includes_outline() {
         *stroke = Some(Rgb(0, 0, 0));
         *stroke_width = 1.0;
         assert!((frame_of(&lay(&d), id).h - expected).abs() < 0.01);
+    }
+}
+
+fn probe_shape(id: u32, wrap: Wrap) -> InlineObject {
+    InlineObject::Shape {
+        kind: wordcraft_doc::para::ShapeKind::TextBox,
+        w: 180.0,
+        h: 2000.0,
+        fill: None,
+        stroke: None,
+        stroke_width: 0.0,
+        float: Float { wrap, ..Default::default() },
+        story: Some(id),
+        effects: Default::default(),
+        freeform: None,
+        extra: Default::default(),
+    }
+}
+
+fn probe_part(d: &mut Document, text: &str) -> u32 {
+    let id = d.add_part(PartKind::TextBox, Document::from_text(text).body);
+    d.parts.get_mut(&id).unwrap().body.inset = Some([0; 4]);
+    id
+}
+
+fn probe_child(d: &mut Document, parent: u32, para: usize, child: u32, wrap: Wrap) {
+    d.insert_object(&Pos::new(StoryRef::Part(parent), Path::top(para), 0), probe_shape(child, wrap), &Default::default()).unwrap();
+}
+
+fn nested_fit_doc(count: usize, wrap: Wrap) -> (Document, Vec<u32>) {
+    let mut d = Document::from_text("");
+    d.styles.default_chr.font = Some("Source Sans 3".into());
+    let outer = probe_part(&mut d, &"\n".repeat(count.saturating_sub(1)));
+    let mut children = Vec::new();
+    for k in 0..count {
+        let child = probe_part(&mut d, &format!("Child{k:03}"));
+        d.parts.get_mut(&child).unwrap().body.auto_fit = true;
+        probe_child(&mut d, outer, k, child, Wrap::InFrontOfText);
+        children.push(child);
+    }
+    d.insert_object(&Pos::body(0, 0), probe_shape(outer, wrap), &Default::default()).unwrap();
+    (d, children)
+}
+
+fn probe_ink(d: &Document, l: &DocLayout) -> String {
+    l.pages
+        .iter()
+        .flat_map(|p| display::page_display(d, p, &display::DisplayOptions::default()))
+        .filter_map(|item| match item {
+            display::Draw::Glyphs { text, .. } => Some(text),
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn fit_nested_children_visible() {
+    for count in [32, 33, 64, 65] {
+        let (d, children) = nested_fit_doc(count, Wrap::InFrontOfText);
+        let l = lay(&d);
+        let ink = probe_ink(&d, &l);
+        for (k, child) in children.iter().enumerate() {
+            let shown = l
+                .pages
+                .iter()
+                .flat_map(|p| &p.items)
+                .filter(|it| {
+                    matches!(it,
+                Placed::Lines { story: StoryRef::Part(id), l0, l1, .. } if id == child && l1 > l0)
+                })
+                .count();
+            assert_eq!(shown, usize::from(k < wordcraft_doc::BoxBudget::MAX_NESTED), "count={count}, child={k}");
+            assert_eq!(ink.matches(&format!("Child{k:03}")).count(), shown, "each permitted sentinel is painted once");
+        }
+    }
+}
+
+#[test]
+fn fit_inline_probe_keeps_budget() {
+    let (mut d, _) = nested_fit_doc(33, Wrap::Inline);
+    let InlineObject::Shape { story: Some(outer), .. } = d.para(StoryRef::Body, &Path::top(0)).unwrap().objects[0] else { panic!("outer") };
+    // Compare real expansion work, not saved frame height or the number of speculative calls.
+    let fixed = lay(&d).text_boxes;
+    d.parts.get_mut(&outer).unwrap().body.auto_fit = true;
+    let fitted = lay(&d);
+    assert_eq!(fitted.text_boxes, fixed);
+    assert_eq!(fitted.text_boxes, 34);
+}
+
+fn numbered_chain(d: &mut Document, list: u32) -> (u32, u32) {
+    let a = probe_part(d, "Chain sentinel");
+    let b = probe_part(d, "");
+    d.parts.get_mut(&a).unwrap().body.next = Some(b);
+    d.para_mut(StoryRef::Part(a), &Path::top(0)).unwrap().props.numbering = Some(wordcraft_doc::props::NumRef { num: list, level: 0 });
+    (a, b)
+}
+
+fn placed_labels(l: &DocLayout, story: StoryRef) -> Vec<String> {
+    l.pages
+        .iter()
+        .flat_map(|p| &p.items)
+        .filter_map(|it| match it {
+            Placed::Lines { story: s, para, .. } if *s == story => para.label.as_ref().map(|label| label.text.clone()),
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn fit_probe_keeps_link_labels() {
+    for wrap in [Wrap::InFrontOfText, Wrap::Inline] {
+        let mut d = Document::from_text("\nAfter");
+        d.styles.default_chr.font = Some("Source Sans 3".into());
+        let list = d.numbering.add_list(wordcraft_doc::ListKind::Numbered);
+        let outer = probe_part(&mut d, "\n");
+        d.parts.get_mut(&outer).unwrap().body.auto_fit = true;
+        let (a, b) = numbered_chain(&mut d, list);
+        probe_child(&mut d, outer, 0, a, Wrap::InFrontOfText);
+        probe_child(&mut d, outer, 1, b, Wrap::InFrontOfText);
+        d.insert_object(&Pos::body(0, 0), probe_shape(outer, wrap), &Default::default()).unwrap();
+        d.para_mut(StoryRef::Body, &Path::top(1)).unwrap().props.numbering = Some(wordcraft_doc::props::NumRef { num: list, level: 0 });
+        let l = lay(&d);
+        assert_eq!(placed_labels(&l, StoryRef::Part(a)), ["1."]);
+        assert_eq!(placed_labels(&l, StoryRef::Body), ["2."]);
+        assert!(probe_ink(&d, &l).contains("Chain sentinel"), "the linked sentinel text is painted");
+    }
+}
+
+#[test]
+fn fit_probe_keeps_old_flows() {
+    let mut d = Document::from_text("\n\nAfter");
+    let list = d.numbering.add_list(wordcraft_doc::ListKind::Numbered);
+    let (a, b) = numbered_chain(&mut d, list);
+    d.insert_object(&Pos::body(0, 0), probe_shape(a, Wrap::InFrontOfText), &Default::default()).unwrap();
+    d.insert_object(&Pos::body(0, 0), probe_shape(b, Wrap::InFrontOfText), &Default::default()).unwrap();
+    let outer = probe_part(&mut d, "\n\n");
+    d.parts.get_mut(&outer).unwrap().body.auto_fit = true;
+    probe_child(&mut d, outer, 0, a, Wrap::InFrontOfText);
+    let (c, e) = numbered_chain(&mut d, list);
+    probe_child(&mut d, outer, 1, c, Wrap::InFrontOfText);
+    probe_child(&mut d, outer, 2, e, Wrap::InFrontOfText);
+    d.insert_object(&Pos::body(1, 0), probe_shape(outer, Wrap::InFrontOfText), &Default::default()).unwrap();
+    d.para_mut(StoryRef::Body, &Path::top(2)).unwrap().props.numbering = Some(wordcraft_doc::props::NumRef { num: list, level: 0 });
+    let l = lay(&d);
+    assert_eq!(placed_labels(&l, StoryRef::Part(a)), ["1.", "1."]);
+    assert_eq!(placed_labels(&l, StoryRef::Part(c)), ["2."]);
+    assert_eq!(placed_labels(&l, StoryRef::Body), ["3."]);
+}
+
+#[test]
+fn fit_probe_keeps_budget() {
+    let (d, _) = nested_fit_doc(3, Wrap::InFrontOfText);
+    assert_eq!(lay(&d).text_boxes, 4, "only real outer/child expansions are counted");
+}
+
+#[test]
+fn fit_probe_keeps_guards() {
+    let mut d = Document::from_text("");
+    let root = probe_part(&mut d, "Cycle sentinel");
+    d.parts.get_mut(&root).unwrap().body.auto_fit = true;
+    probe_child(&mut d, root, 0, root, Wrap::InFrontOfText);
+    d.insert_object(&Pos::body(0, 0), probe_shape(root, Wrap::InFrontOfText), &Default::default()).unwrap();
+    let l = lay(&d);
+    assert_eq!(l.text_boxes, 1, "a probe keeps the active ancestor guard");
+    assert_eq!(probe_ink(&d, &l).matches("Cycle sentinel").count(), 1);
+
+    let mut d = Document::from_text("");
+    let ids: Vec<_> = (0..6).map(|k| probe_part(&mut d, &format!("Depth{k}"))).collect();
+    for id in &ids {
+        d.parts.get_mut(id).unwrap().body.auto_fit = true;
+    }
+    for pair in ids.windows(2) {
+        probe_child(&mut d, pair[0], 0, pair[1], Wrap::InFrontOfText);
+    }
+    d.insert_object(&Pos::body(0, 0), probe_shape(ids[0], Wrap::InFrontOfText), &Default::default()).unwrap();
+    let l = lay(&d);
+    assert_eq!(l.text_boxes, wordcraft_doc::MAX_TEXT_BOX_DEPTH);
+    for (k, id) in ids.iter().enumerate() {
+        let shown = l.pages.iter().flat_map(|p| &p.items).any(|item| {
+            matches!(item,
+            Placed::Lines { story: StoryRef::Part(s), .. } if s == id)
+        });
+        assert_eq!(shown, k < wordcraft_doc::MAX_TEXT_BOX_DEPTH, "depth={k}");
     }
 }
 
