@@ -108,6 +108,9 @@ pub struct CanvasState {
     /// Paste option currently shown in the document as a hover preview (`edit.paste`, …). Undo
     /// removes it when the pointer leaves; a click keeps that step.
     pub context_paste_preview: Option<String>,
+    /// Screen rects of the three paste choices last frame, so a click elsewhere can drop the
+    /// preview before that click's own command runs.
+    pub context_paste_rects: Vec<egui::Rect>,
     /// Shift+F10 (or `ui.contextMenu`) asked for the context menu at the caret (#821).
     pub context_menu_from_keys: bool,
     /// Where the context menu stands: the right-click point, or below the caret.
@@ -263,6 +266,7 @@ impl Default for CanvasState {
             context_menu_query: String::new(),
             context_menu_focus_search: false,
             context_paste_preview: None,
+            context_paste_rects: Vec::new(),
             context_menu_from_keys: false,
             context_menu_at: None,
             mini_anchor: None,
@@ -4908,6 +4912,105 @@ mod tests {
             assert_eq!(p.props_of_char(7).bold == Some(true), bold, "{choice}: bold");
             assert_eq!(p.props_of_char(7).color, colour, "{choice}: colour");
         }
+    }
+
+    /// A click on another command drops the hover preview first. Copy creates no undo step, so it
+    /// must not undo the edit that came before the preview.
+    #[test]
+    fn another_command_drops_the_paste_preview_without_undoing_earlier_edits() {
+        use egui_kittest::kittest::Queryable;
+        let mut a = WordApp::new(wordcraft_engine::Session::new(wordcraft_doc::Document::from_text("Hello")), Default::default());
+        a.run("caret.docEnd", json!({})).unwrap();
+        a.run("text.insert", json!({"text": "!"})).unwrap();
+        a.run("select.text", json!({"text": "Hello"})).unwrap();
+        a.run("edit.copy", json!({})).unwrap();
+        a.run("caret.docEnd", json!({})).unwrap();
+        let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(1440.0, 900.0)).build_ui_state(
+            |ui, app: &mut WordApp| {
+                let ctx = ui.ctx().clone();
+                app.logic(&ctx);
+                app.ui(ui);
+            },
+            a,
+        );
+        for _ in 0..6 {
+            h.step();
+        }
+        let c = h.state_mut().session.layout().caret(&Pos::body(0, 6)).expect("laid out");
+        let at = page_to_screen(h.state_mut(), c.page, c.x, c.top + c.height / 2.0).expect("on screen");
+        h.event(egui::Event::PointerMoved(at));
+        for pressed in [true, false] {
+            h.event(egui::Event::PointerButton { pos: at, button: egui::PointerButton::Secondary, pressed, modifiers: Default::default() });
+            h.step();
+        }
+        h.step();
+        let paste = h
+            .get_all_by_label("Paste")
+            .map(|n| n.rect())
+            .filter(|r| r.min.y > 80.0)
+            .max_by(|a, b| a.min.y.total_cmp(&b.min.y))
+            .expect("the paste choice");
+        h.event(egui::Event::PointerMoved(paste.center()));
+        h.step();
+        assert_eq!(h.state().session.doc.plain_text(StoryRef::Body), "Hello!Hello", "hovering previews the paste");
+        let copy = h
+            .get_all_by_label("Copy")
+            .map(|n| n.rect())
+            .filter(|r| r.min.y > 80.0)
+            .max_by(|a, b| a.min.y.total_cmp(&b.min.y))
+            .expect("the menu's Copy");
+        h.event(egui::Event::PointerMoved(copy.center()));
+        for pressed in [true, false] {
+            h.event(egui::Event::PointerButton { pos: copy.center(), button: egui::PointerButton::Primary, pressed, modifiers: Default::default() });
+            h.step();
+        }
+        assert_eq!(h.state().session.doc.plain_text(StoryRef::Body), "Hello!", "Copy drops the preview and keeps the earlier edit");
+
+        h.state_mut().canvas.context_menu_open = true;
+        h.state_mut().canvas.context_menu_at = Some(at);
+        h.step();
+        let paste = h
+            .get_all_by_label("Paste")
+            .map(|n| n.rect())
+            .filter(|r| r.min.y > 80.0)
+            .max_by(|a, b| a.min.y.total_cmp(&b.min.y))
+            .expect("the paste choice again");
+        h.event(egui::Event::PointerMoved(paste.center()));
+        h.step();
+        assert_eq!(h.state().session.doc.plain_text(StoryRef::Body), "Hello!Hello");
+        let bold = h.get_all_by_label("Bold").map(|n| n.rect()).filter(|r| r.min.y > 80.0).max_by(|a, b| a.min.y.total_cmp(&b.min.y)).expect("Bold");
+        h.event(egui::Event::PointerMoved(bold.center()));
+        for pressed in [true, false] {
+            h.event(egui::Event::PointerButton { pos: bold.center(), button: egui::PointerButton::Primary, pressed, modifiers: Default::default() });
+            h.step();
+        }
+        assert_eq!(h.state().session.doc.plain_text(StoryRef::Body), "Hello!", "Bold drops the preview");
+        let bold_on = h.state_mut().session.run("format.state", &json!({})).unwrap().get("bold").and_then(|v| v.as_bool());
+        assert_eq!(bold_on, Some(true), "Bold itself stays applied");
+    }
+
+    /// Search lists a command that runs with no parameters, and skips one that would only error.
+    #[test]
+    fn context_search_skips_commands_that_require_parameters() {
+        use egui_kittest::kittest::Queryable;
+        let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(1440.0, 900.0)).build_ui_state(
+            |ui, app: &mut WordApp| {
+                let ctx = ui.ctx().clone();
+                app.logic(&ctx);
+                app.ui(ui);
+            },
+            WordApp::new(wordcraft_engine::Session::new(wordcraft_doc::Document::from_text("Hello")), Default::default()),
+        );
+        for _ in 0..4 {
+            h.step();
+        }
+        h.state_mut().run("ui.contextMenu", json!({})).unwrap();
+        h.state_mut().canvas.context_menu_query = "Set Caret".into();
+        h.step();
+        assert!(h.query_by_label_contains("Set Caret").is_none(), "caret.set needs a position");
+        h.state_mut().canvas.context_menu_query = "Select All".into();
+        h.step();
+        assert!(h.query_by_label_contains("Select All").is_some(), "select.all runs with no parameters");
     }
 
     /// #996: on macOS a Control-click is the right-click (the trackpad's and the one-button

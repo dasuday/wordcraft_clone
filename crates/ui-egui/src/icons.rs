@@ -93,6 +93,18 @@ pub fn paint(p: &Painter, r: Rect, name: &str, c: Color32, accent: Color32) {
             pen.rect(9.0, 8.0, 17.5, 18.5, a);
             pen.lines(10.8, 15.8, &[11.0, 13.5, 16.0]);
         }
+        // Paste choices: source formatting, merged formatting, plain text.
+        "pasteMerge" => {
+            pen.rect(3.0, 4.5, 11.5, 16.5, c);
+            pen.frect(5.2, 3.0, 9.2, 6.0, a);
+            pen.rect(8.0, 7.5, 17.0, 18.0, a);
+            pen.lines(10.0, 15.2, &[11.0, 13.2, 15.6]);
+        }
+        "pasteText" => {
+            pen.rect(4.0, 3.5, 16.0, 17.0, c);
+            pen.frect(7.0, 2.0, 13.0, 5.0, a);
+            pen.text(10.0, 11.5, 9.0, "A", c, false);
+        }
         "cut" => {
             pen.circle(6.0, 15.0, 2.5, c);
             pen.circle(14.0, 15.0, 2.5, c);

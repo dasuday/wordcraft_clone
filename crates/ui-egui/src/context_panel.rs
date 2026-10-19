@@ -34,6 +34,9 @@ pub fn show(app: &mut WordApp, ui: &mut Ui, before: impl FnOnce(&mut Ui, &mut Wo
         // Menu styling removes input borders; the font and size boxes need the document style.
         ui.set_style(ui.ctx().global_style());
         ui.spacing_mut().item_spacing.y = 4.0;
+        // A click on Bold, Copy or another row must undo the preview before that command runs.
+        // Leaving the cleanup until after those rows undoes their step instead of the paste.
+        cancel_preview_before_other_command(app, ui);
         before(ui, app);
         search_field(app, ui, &t);
         let query = app.canvas.context_menu_query.clone();
@@ -62,6 +65,8 @@ pub fn show(app: &mut WordApp, ui: &mut Ui, before: impl FnOnce(&mut Ui, &mut Wo
         if any_match(&query, &["Clipboard", "Cut", "Copy", "Paste", "Merge Formatting", "Keep Text Only"]) {
             ui.add_space(2.0);
             paste_hovered = transfer(app, ui, &t);
+        } else {
+            app.canvas.context_paste_rects.clear();
         }
         if !paste_hovered {
             clear_paste_preview(app);
@@ -173,11 +178,14 @@ fn transfer(app: &mut WordApp, ui: &mut Ui, t: &Tokens) -> bool {
         ui.label(RichText::new(tl!("Clipboard")).small().weak());
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
             for (icon, tip, id) in [("paste", "Paste", "edit.paste"), ("copy", "Copy", "edit.copy"), ("cut", "Cut", "edit.cut")] {
+                let depth = app.session.undo_depth();
                 if widgets::small(ui, app, icon, None, tip, id, json!({}), false).clicked() {
-                    // The button already ran. A hover preview is an earlier undo step: drop both
-                    // and run this command once on the document as it was.
+                    // The button already ran. Undo that step only when it created one (Copy does
+                    // not), then undo the preview and run the command once on the original document.
                     if app.canvas.context_paste_preview.take().is_some() {
-                        let _ = app.run("edit.undo", json!({}));
+                        if app.session.undo_depth() > depth {
+                            let _ = app.run("edit.undo", json!({}));
+                        }
                         let _ = app.run("edit.undo", json!({}));
                         let _ = app.run(id, json!({}));
                     }
@@ -187,14 +195,31 @@ fn transfer(app: &mut WordApp, ui: &mut Ui, t: &Tokens) -> bool {
         });
     });
     let mut hovered = false;
+    app.canvas.context_paste_rects.clear();
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 4.0;
-        let w = (ui.available_width() - 8.0) / 3.0;
-        hovered |= mode_button(ui, app, t, w, "Paste", "edit.paste");
-        hovered |= mode_button(ui, app, t, w, "Merge Formatting", "edit.pasteMerge");
-        hovered |= mode_button(ui, app, t, w, "Keep Text Only", "edit.pasteText");
+        hovered |= mode_button(ui, app, t, "paste", "Paste", "edit.paste");
+        hovered |= mode_button(ui, app, t, "pasteMerge", "Merge Formatting", "edit.pasteMerge");
+        hovered |= mode_button(ui, app, t, "pasteText", "Keep Text Only", "edit.pasteText");
     });
     hovered
+}
+
+/// Undo a hover preview before a different command in this menu runs.
+fn cancel_preview_before_other_command(app: &mut WordApp, ui: &Ui) {
+    if app.canvas.context_paste_preview.is_none() {
+        return;
+    }
+    let (pointer_click, pos, key) =
+        ui.input(|i| (i.pointer.any_click(), i.pointer.interact_pos(), i.key_pressed(egui::Key::Space) || i.key_pressed(egui::Key::Enter)));
+    if !pointer_click && !key {
+        return;
+    }
+    let on_choice = pos.is_some_and(|p| app.canvas.context_paste_rects.iter().any(|r| r.contains(p)));
+    if pointer_click && on_choice {
+        return;
+    }
+    clear_paste_preview(app);
 }
 
 /// Drop a hover preview, undoing the paste it applied. A click clears the marker without undoing.
@@ -220,10 +245,11 @@ fn show_paste_preview(app: &mut WordApp, ui: &Ui, id: &str) {
     }
 }
 
-fn mode_button(ui: &mut Ui, app: &mut WordApp, t: &Tokens, w: f32, label: &str, id: &str) -> bool {
+fn mode_button(ui: &mut Ui, app: &mut WordApp, t: &Tokens, icon: &str, label: &str, id: &str) -> bool {
     let text = tl!(label);
     let on = widgets::enabled(app, id);
-    let (r, resp) = ui.allocate_exact_size(vec2(w, 28.0), Sense::click());
+    let (r, resp) = ui.allocate_exact_size(vec2(26.0, 26.0), Sense::click());
+    app.canvas.context_paste_rects.push(r);
     let fill = if resp.is_pointer_button_down_on() {
         t.pressed
     } else if resp.hovered() {
@@ -234,11 +260,8 @@ fn mode_button(ui: &mut Ui, app: &mut WordApp, t: &Tokens, w: f32, label: &str, 
     ui.painter().rect_filled(r, 4.0, fill);
     ui.painter().rect_stroke(r, 4.0, egui::Stroke::new(1.0, t.border), egui::StrokeKind::Inside);
     let (c, a) = if on { (t.icon, t.accent) } else { (t.text_disabled, t.text_disabled) };
-    let ic = Rect::from_center_size(pos2(r.min.x + 14.0, r.center().y), vec2(14.0, 14.0));
-    icons::paint(ui.painter(), ic, "paste", c, a);
-    let color = if on { t.text } else { t.text_disabled };
-    let shown = shorten(ui, text, (w - 30.0).max(24.0));
-    ui.painter().text(pos2(r.min.x + 26.0, r.center().y), egui::Align2::LEFT_CENTER, &shown, regular(11.0), color);
+    let ic = Rect::from_center_size(r.center(), vec2(16.0, 16.0));
+    icons::paint(ui.painter(), ic, icon, c, a);
     let resp = resp.on_hover_text(text);
     resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, on, text));
     if resp.hovered() && on {
@@ -289,24 +312,6 @@ fn synonyms_row(app: &mut WordApp, ui: &mut Ui, t: &Tokens) {
             synonym_menu(app, ui, &syns);
         }
     });
-}
-
-/// `text` cut to `max` points, with an ellipsis when it does not fit.
-fn shorten(ui: &Ui, text: &str, max: f32) -> String {
-    let font = regular(11.0);
-    let width = |s: &str| ui.painter().layout_no_wrap(s.to_string(), font.clone(), t_placeholder()).size().x;
-    if width(text) <= max {
-        return text.to_string();
-    }
-    let mut out: String = text.chars().take(48).collect();
-    while out.chars().count() > 1 && width(&format!("{out}…")) > max {
-        out.pop();
-    }
-    format!("{out}…")
-}
-
-fn t_placeholder() -> egui::Color32 {
-    egui::Color32::WHITE
 }
 
 fn action_row(ui: &mut Ui, app: &mut WordApp, t: &Tokens, icon: &str, label: &str, id: &str, params: Value) {
@@ -362,12 +367,17 @@ fn search_hits(app: &mut WordApp, ui: &mut Ui, query: &str, t: &Tokens) {
         return;
     }
     let mut shown = 0;
-    let specs: Vec<(&str, &str)> = app.session.registry.all().iter().map(|c| (c.id, c.label)).collect();
-    for (id, label) in specs {
+    let specs: Vec<(&str, &str, &str)> = app.session.registry.all().iter().map(|c| (c.id, c.label, c.params)).collect();
+    for (id, label, params) in specs {
         if shown >= 6 {
             break;
         }
         if primary_command(id) || !matches_query(query, label) {
+            continue;
+        }
+        // `caret.set` and similar commands error on `{}`. Commands that open a dialog for the
+        // missing input stay listed.
+        if requires_params(params) && crate::input_dialog(id, &json!({})).is_none() {
             continue;
         }
         if shown == 0 {
@@ -377,6 +387,37 @@ fn search_hits(app: &mut WordApp, ui: &mut Ui, query: &str, t: &Tokens) {
         shown += 1;
         action_row(ui, app, t, "search", label, id, json!({}));
     }
+}
+
+/// Whether `params` documents a field the command must be given. Optional fields are written
+/// `"name"?:`. A command with only those, or with `{}`, runs from this menu as it stands.
+pub(crate) fn requires_params(params: &str) -> bool {
+    let b = params.as_bytes();
+    let mut i = 0;
+    while i < b.len() {
+        if b[i] != b'"' {
+            i += 1;
+            continue;
+        }
+        i += 1;
+        while i < b.len() && b[i] != b'"' {
+            if b[i] == b'\\' {
+                i += 1;
+            }
+            i += 1;
+        }
+        i += 1;
+        while i < b.len() && b[i].is_ascii_whitespace() {
+            i += 1;
+        }
+        if i < b.len() && b[i] == b'?' {
+            continue;
+        }
+        if i < b.len() && b[i] == b':' {
+            return true;
+        }
+    }
+    false
 }
 
 /// Commands the text menu already draws, so a search does not list them twice.
@@ -407,4 +448,22 @@ fn primary_command(id: &str) -> bool {
             | "ui.dialog"
             | "tools.search"
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::requires_params;
+
+    #[test]
+    fn empty_and_optional_parameter_notes_can_run_from_search() {
+        assert!(!requires_params("{}"));
+        assert!(!requires_params(r#"{"extend"?: bool}"#));
+        assert!(!requires_params(r#"{"as"?: "formatted"|"rtf"|"html"|"picture"|"text"}"#));
+    }
+
+    #[test]
+    fn a_required_parameter_is_not_a_direct_search_hit() {
+        assert!(requires_params(r#"{"pos": Pos, "extend"?: bool} | {"page": n, "x": pt, "y": pt}"#));
+        assert!(requires_params(r#"{"text": string, "occurrence"?: n}"#));
+    }
 }
