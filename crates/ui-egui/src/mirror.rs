@@ -33,6 +33,10 @@ pub struct Mirror {
     /// The other menus, popups and windows on screen (logical): they're flipped with the
     /// interface, and the pointer over one goes to it even where it's drawn over the page.
     floating: Vec<Rect>,
+    /// How many of the frame's shapes are those of menus, popups and windows. They come after
+    /// the page and the panels (egui paints background layers first), and are never the page's
+    /// even where they lie over it: a dialog's text box or check mark there is flipped too.
+    floating_shapes: usize,
     /// The text field being edited (logical), for the pointer.
     field: Option<Rect>,
     /// The window's horizontal extent, from the last frame.
@@ -51,36 +55,34 @@ impl egui::Plugin for Mirror {
             self.span = Some((r.min.x, r.max.x));
         }
         let Some(span) = self.span.filter(|_| self.on) else { return };
-        let mut shifted: Vec<(Rect, f32)> = Vec::new();
-        if let Some(c) = self.canvas {
-            let d = keep_shift(span, c);
-            if let Some(f) = self.field {
-                shifted.push((f, keep_shift(span, f)));
-            }
-            shifted.push((c, d));
-        } else if let Some(f) = self.field {
-            shifted.push((f, keep_shift(span, f)));
-        }
+        // Areas kept unflipped, with how far each moves: the field being edited and the page.
+        let field = self.field.map(|f| (f, keep_shift(span, f)));
+        let canvas = self.canvas.map(|c| (c, keep_shift(span, c)));
+        let shown = |(r, d): (Rect, f32), p: Pos2| r.translate(Vec2::new(d, 0.0)).contains(p);
         let anchored = &self.anchored_rects;
         let floating = &self.floating;
-        let on_floating = |p: Pos2| floating.iter().any(|r| r.contains(Pos2::new(flip_x(span, p.x), p.y)));
+        // Over a menu, popup or window other than the one holding `inside`?
+        let on_floating = |p: Pos2, inside: Option<Rect>| {
+            let q = Pos2::new(flip_x(span, p.x), p.y);
+            floating.iter().any(|r| r.contains(q) && !inside.is_some_and(|i| r.contains_rect(i)))
+        };
         let to_logical = |p: Pos2| -> Pos2 {
             if let Some((_, sum)) = anchored.iter().find(|(r, sum)| flip_rect((0.0, *sum), *r).contains(p)) {
                 return Pos2::new(sum - p.x, p.y);
             }
-            if on_floating(p) {
+            // The field being edited (in a dialog too) is drawn moved, not flipped: so is the pointer.
+            if let Some((_, d)) = field.filter(|&k| shown(k, p) && !on_floating(p, Some(k.0))) {
+                return Pos2::new(p.x - d, p.y);
+            }
+            if on_floating(p, None) {
                 return Pos2::new(flip_x(span, p.x), p.y);
             }
-            match shifted.iter().find(|(r, d)| r.translate(Vec2::new(*d, 0.0)).contains(p)) {
+            match canvas.filter(|&k| shown(k, p)) {
                 Some((_, d)) => Pos2::new(p.x - d, p.y),
                 None => Pos2::new(flip_x(span, p.x), p.y),
             }
         };
-        let over_page = |p: Option<Pos2>| {
-            p.is_some_and(|p| {
-                !on_floating(p) && shifted.last().is_some_and(|(c, d)| self.canvas.is_some() && c.translate(Vec2::new(*d, 0.0)).contains(p))
-            })
-        };
+        let over_page = |p: Option<Pos2>| p.is_some_and(|p| !on_floating(p, None) && canvas.is_some_and(|k| shown(k, p)));
         let flip_wheel = !over_page(self.pointer);
         for event in &mut input.events {
             match event {
@@ -105,11 +107,14 @@ impl egui::Plugin for Mirror {
         self.span = Some(span);
         self.anchored_rects.clear();
         self.floating.clear();
+        self.floating_shapes = 0;
         self.field = None;
         if !self.on {
             return;
         }
         self.field = editing_field(&ctx);
+        let above: Vec<LayerId> = ctx.memory(|m| m.layer_ids().filter(|l| l.order != Order::Background).collect());
+        self.floating_shapes = ctx.graphics(|g| above.iter().filter_map(|l| g.get(*l)).map(|list| list.next_idx().0).sum());
         // Menus, popups and windows (the page is in the background, in the central panel).
         let anchored = &self.anchored;
         let layers: Vec<LayerId> = ctx.memory(|m| {
@@ -155,8 +160,10 @@ impl egui::Plugin for Mirror {
 
     fn output_hook(&mut self, _ctx: &Context, output: &mut FullOutput) {
         let Some(span) = self.span.filter(|_| self.on) else { return };
-        for clipped in &mut output.shapes {
-            mirror_clipped(span, self.canvas, self.field, clipped);
+        let first_floating = output.shapes.len().saturating_sub(self.floating_shapes);
+        for (i, clipped) in output.shapes.iter_mut().enumerate() {
+            let canvas = self.canvas.filter(|_| i < first_floating);
+            mirror_clipped(span, canvas, self.field, clipped);
         }
         if let Some(ime) = &mut output.platform_output.ime {
             let keep: Vec<Rect> = self.field.into_iter().chain(self.canvas).collect();
@@ -243,6 +250,12 @@ fn mirror_shape(span: (f32, f32), shape: &mut Shape) {
         Shape::Circle(c) => fx(&mut c.center),
         Shape::Ellipse(e) => fx(&mut e.center),
         Shape::LineSegment { points, .. } => points.iter_mut().for_each(fx),
+        // A check box's tick keeps its direction, as in right-to-left Windows: it only moves.
+        Shape::Path(p) if !p.closed && is_check_mark(&p.points) => {
+            let r = Rect::from_points(&p.points);
+            let d = flip_x(span, r.max.x) - r.min.x;
+            p.points.iter_mut().for_each(|q| q.x += d);
+        }
         Shape::Path(p) => p.points.iter_mut().for_each(fx),
         Shape::QuadraticBezier(b) => b.points.iter_mut().for_each(fx),
         Shape::CubicBezier(b) => b.points.iter_mut().for_each(fx),
@@ -277,6 +290,14 @@ fn mirror_shape(span: (f32, f32), shape: &mut Shape) {
         }
         Shape::Callback(c) => c.rect = flip_rect(span, c.rect),
     }
+}
+
+/// egui's check box tick: a line from the middle of a square's left side to the middle of its
+/// bottom, then up to its top right corner.
+fn is_check_mark(p: &[Pos2]) -> bool {
+    let [a, b, c] = p else { return false };
+    let close = |x: f32, y: f32| (x - y).abs() < 0.01;
+    a.x < b.x && b.x < c.x && close(b.x - a.x, c.x - b.x) && c.y < a.y && a.y < b.y && close(a.y, (b.y + c.y) / 2.0) && close(c.x - a.x, b.y - c.y)
 }
 
 #[cfg(test)]
@@ -356,5 +377,40 @@ mod tests {
         let mut plain = RawInput { events: vec![Event::PointerMoved(pos2(90.0, 70.0))], ..Default::default() };
         egui::Plugin::input_hook(&mut m, &Context::default(), &mut plain);
         assert!(matches!(plain.events[0], Event::PointerMoved(p) if p == pos2(90.0, 70.0)), "off: untouched");
+    }
+
+    /// A dialog over the page is flipped like the rest of the interface: its shapes (the last of
+    /// the frame) aren't taken for the page's, even where they're clipped inside it.
+    #[test]
+    fn dialogs_over_the_page_are_flipped() {
+        let canvas = Rect::from_min_max(pos2(0.0, 0.0), pos2(60.0, 50.0));
+        let mut m = Mirror { on: true, canvas: Some(canvas), span: Some(SPAN), floating_shapes: 1, ..Default::default() };
+        let r = Rect::from_min_max(pos2(10.0, 10.0), pos2(20.0, 20.0));
+        let mut out = egui::FullOutput::default();
+        for _ in 0..2 {
+            out.shapes.push(ClippedShape { clip_rect: r, shape: Shape::rect_filled(r, 0.0, Color32::BLACK) });
+        }
+        egui::Plugin::output_hook(&mut m, &Context::default(), &mut out);
+        assert_eq!(out.shapes[0].shape.visual_bounding_rect().min.x, 50.0, "the page's: moved with the page");
+        assert_eq!(out.shapes[1].shape.visual_bounding_rect().min.x, 80.0, "the dialog's: flipped");
+        // Its text box being edited is drawn moved, so the pointer goes to it the same way.
+        m.field = Some(Rect::from_min_max(pos2(30.0, 0.0), pos2(50.0, 10.0)));
+        m.floating = vec![Rect::from_min_max(pos2(25.0, 0.0), pos2(55.0, 40.0))];
+        let mut input = RawInput { events: vec![Event::PointerMoved(pos2(52.0, 5.0)), Event::PointerMoved(pos2(52.0, 20.0))], ..Default::default() };
+        egui::Plugin::input_hook(&mut m, &Context::default(), &mut input);
+        assert!(matches!(input.events[0], Event::PointerMoved(p) if p == pos2(32.0, 5.0)), "in the field: moved");
+        assert!(matches!(input.events[1], Event::PointerMoved(p) if p == pos2(48.0, 20.0)), "elsewhere in the dialog: flipped");
+    }
+
+    /// A check box's tick only moves: flipped, it would point the wrong way.
+    #[test]
+    fn check_marks_keep_their_direction() {
+        let tick = vec![pos2(10.0, 15.0), pos2(15.0, 20.0), pos2(20.0, 10.0)];
+        let mut s = Shape::line(tick, Stroke::new(1.0, Color32::BLACK));
+        mirror_shape(SPAN, &mut s);
+        assert!(matches!(&s, Shape::Path(p) if p.points == vec![pos2(80.0, 15.0), pos2(85.0, 20.0), pos2(90.0, 10.0)]));
+        let mut chevron = Shape::line(vec![pos2(10.0, 10.0), pos2(15.0, 15.0), pos2(10.0, 20.0)], Stroke::new(1.0, Color32::BLACK));
+        mirror_shape(SPAN, &mut chevron);
+        assert!(matches!(&chevron, Shape::Path(p) if p.points[1] == pos2(85.0, 15.0) && p.points[0] == pos2(90.0, 10.0)), "other lines flip");
     }
 }
