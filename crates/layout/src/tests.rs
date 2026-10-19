@@ -9477,3 +9477,79 @@ fn narrow_turned_cell_grows() {
         .unwrap();
     assert!(h > 80.0, "the text must fit across the narrow cell: {h}");
 }
+
+#[test]
+fn turned_probe_keeps_box_budget() {
+    use wordcraft_doc::BoxBudget;
+
+    for preferred in [None, Some(4.0)] {
+        let mut d = Document::from_text("Body");
+        let outer = text_box(&mut d, 0, "", 200.0, 200.0, Default::default());
+        let inner = text_box_at(&mut d, &Pos { story: StoryRef::Part(outer), path: Path::top(0), off: 0 }, "I", 20.0, 40.0, Default::default());
+        let blocks = d.parts[&outer].blocks.clone();
+        let mut table = Table::new(1, 1, 10.0);
+        table.props.style = None;
+        table.props.fixed = true;
+        table.props.cell_margins = Some([0.0; 4]);
+        table.rows[0].props.height = preferred;
+        table.rows[0].props.height_rule = wordcraft_doc::props::HeightRule::AtLeast;
+        table.rows[0].cells[0].props.text_direction = TextDirection::Up;
+        table.rows[0].cells[0].blocks = blocks;
+        d.parts.get_mut(&outer).unwrap().blocks = vec![Arc::new(wordcraft_doc::Block::Table(table.clone()))];
+
+        let mut boxes = BoxBudget::default();
+        assert!(boxes.enter(outer));
+        // Two existing passes still fit. An extra discarded probe must not consume their slots.
+        for _ in 0..BoxBudget::MAX_NESTED - 2 {
+            assert!(boxes.enter(inner));
+            boxes.leave();
+        }
+        let before = boxes.total();
+        let mut cache = LayoutCache::new();
+        let opts = LayoutOptions::default();
+        let mut ctx = Ctx {
+            doc: &d,
+            cache: &mut cache,
+            opts: &opts,
+            counters: Default::default(),
+            fields: Default::default(),
+            notes_hash: 0,
+            numbers: Default::default(),
+            eq_count: 0,
+            boxes,
+            chains: Default::default(),
+            grid: Default::default(),
+            hide_deleted: opts.hides_deleted(StoryRef::Part(outer)),
+            uses_totals: false,
+            track_totals: true,
+            pct_base: None,
+            quiet_marks: Vec::new(),
+            mirror: false,
+            table_keys: Vec::new(),
+            pin: None,
+            footer_wraps: Default::default(),
+            header_tables: Default::default(),
+            fitted: Default::default(),
+        };
+        let laid = table::layout_table(&mut ctx, StoryRef::Part(outer), &table, &[0], 200.0, 1);
+        let row = &laid.rows[0];
+        if let Some(height) = preferred {
+            assert!(row.height > height + 0.01, "the preferred-height probe must be rejected");
+        }
+        assert!(
+            row.items.iter().any(|item| matches!(item, Placed::Lines { story: StoryRef::Part(id), l0, l1, .. } if *id == inner && l1 > l0)),
+            "preferred={preferred:?}: final nested text must remain visible"
+        );
+        assert_eq!(ctx.boxes.total(), before + 2, "only the existing natural and final passes consume nested work");
+        assert!(ctx.boxes.inside());
+        assert!(!ctx.boxes.enter(outer), "the active outer story still blocks recursion");
+        assert!(!ctx.boxes.enter(inner), "existing passes still exhaust the nested limit");
+        ctx.boxes.leave();
+        assert!(!ctx.boxes.inside());
+        assert!(ctx.boxes.enter(inner), "a new outer story gets its own nested budget");
+        for id in inner + 1..inner + wordcraft_doc::MAX_TEXT_BOX_DEPTH as u32 {
+            assert!(ctx.boxes.enter(id));
+        }
+        assert!(!ctx.boxes.enter(u32::MAX), "the existing depth limit still bounds expansion");
+    }
+}

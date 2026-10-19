@@ -582,7 +582,7 @@ pub fn layout_table(ctx: &mut Ctx, story: StoryRef, t: &Table, path: &[u32], ava
                 // otherwise the row grows to fit its unwrapped text.
                 let snap = (ctx.counters.clone(), ctx.eq_count);
                 let preferred = row.props.height.filter(|h| h.is_finite() && *h > 0.0).map(|h| h.clamp(4.0, TURNED_LIMIT));
-                let wrapped = preferred.filter(|_| row.props.height_rule != HeightRule::Exact).filter(|h| {
+                let wrapped = preferred.filter(|_| !ctx.boxes.inside() && row.props.height_rule != HeightRule::Exact).filter(|h| {
                     let probe = layout_box(ctx, story, &cell.blocks, &cpath, *h, BoxContext::Cell(text), depth, None);
                     (ctx.counters, ctx.eq_count) = (snap.0.clone(), snap.1);
                     probe.height.max(probe.floats_bottom) <= cw + 0.01

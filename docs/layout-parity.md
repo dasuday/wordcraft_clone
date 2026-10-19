@@ -214,6 +214,7 @@ Page-relative footer tables keep their physical wrap bounds without adding to fo
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-19 | trivial | Skip the preferred-height turned-cell probe inside text boxes to preserve nested-work limits; these tables retain prior natural-growth behavior. Synthetic regression only, no new Word comparison. |
 | 2026-10-19 | trivial | Record turned-cell at-least row wrapping and the remaining narrow-cell growth limit in the assessment. No new Word comparison. |
 | 2026-10-18 | trivial | A word after a slash (" /word") wraps whole instead of splitting between two letters (#2963) |
 | 2026-10-15 | trivial | An at-least table row with less room than its minimum on a page that holds something starts the next page whole, as checked in Word (#1742); the taller-than-a-page case (it then splits from the top of that page) and repeated header rows (they go with it) follow the issue and synthetic tests, not a Word check |
