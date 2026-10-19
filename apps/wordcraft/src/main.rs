@@ -23,6 +23,7 @@ mod print;
 mod region;
 #[cfg(target_os = "macos")]
 mod traffic_lights;
+#[cfg(all(unix, not(target_os = "macos")))]
 mod x11_scale;
 
 use wordcraft_engine::Session;
@@ -372,6 +373,7 @@ fn main() -> eframe::Result {
     }
     // X11: prefer the desktop's DPI (Xft.dpi, then the server screen) over the
     // panel's physical density before winit reads it; explicit user override wins.
+    #[cfg(all(unix, not(target_os = "macos")))]
     x11_scale::apply();
     let mut options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
