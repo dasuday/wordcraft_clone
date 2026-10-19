@@ -254,15 +254,20 @@ pub fn canvas_events(app: &mut WordApp, ctx: &egui::Context) {
     let alt_codes = alt_codes_supported(ctx);
     // `DeleteSurrounding` and the text replacing what it erased arrive in the same frame.
     app.canvas.ime_join_text = None;
+    // Mod held since an earlier frame (its ModifiersChanged went by then).
     let held = ctx.input(|i| i.modifiers);
     if held.command {
         app.canvas.paste_mods = Some(held);
     }
     for e in events {
-        // Which presses reached the canvas, for a Mod+V released Mod first.
+        // Which presses reached the canvas, and the modifiers held with Mod, in event order: Mod
+        // can go down and up within one frame, leaving the frame's modifiers without it.
         match &e {
+            egui::Event::ModifiersChanged(m) if m.command => app.canvas.paste_mods = Some(*m),
             egui::Event::Key { key: Key::V | Key::Paste, pressed: true, .. } => app.canvas.v_pressed = true,
-            egui::Event::Key { key, pressed: true, .. } if !is_modifier_key(*key) => app.canvas.paste_mods = None,
+            egui::Event::Key { key, pressed: true, modifiers, .. } if !is_modifier_key(*key) => {
+                app.canvas.paste_mods = modifiers.command.then_some(*modifiers);
+            }
             egui::Event::WindowFocused(_) => {
                 app.canvas.v_pressed = false;
                 app.canvas.paste_mods = None;
@@ -799,6 +804,24 @@ mod tests {
         let mut a = picture_app();
         mods_frame(&ctx, &mut a, ctrl, vec![]);
         mods_frame(&ctx, &mut a, ctrl, vec![key_event(Key::V, false, ctrl)]);
+        assert_eq!(pictures(&mut a), 1);
+    }
+
+    /// Ctrl down, the kept Mod+V press, Ctrl up and V up can all arrive in one frame: the frame's
+    /// modifiers no longer have Mod, but the ModifiersChanged events in between did.
+    #[test]
+    fn mod_v_within_one_frame_pastes_the_clipboard_picture() {
+        let ctx = egui::Context::default();
+        let mut a = picture_app();
+        let ctrl = Modifiers { ctrl: true, command: true, ..Default::default() };
+        let events = vec![
+            egui::Event::ModifiersChanged(ctrl),
+            key_event(Key::ControlLeft, true, ctrl),
+            egui::Event::ModifiersChanged(Modifiers::NONE),
+            key_event(Key::ControlLeft, false, Modifiers::NONE),
+            key_event(Key::V, false, Modifiers::NONE),
+        ];
+        ctx.run_ui(egui::RawInput { events, ..Default::default() }, |ui| canvas_events(&mut a, ui.ctx())).drop_without_applying_deltas();
         assert_eq!(pictures(&mut a), 1);
     }
 
