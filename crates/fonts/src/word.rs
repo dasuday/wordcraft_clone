@@ -3,7 +3,8 @@
 //! metrics (Windows ascent/descent, which is what Word uses for single line spacing).
 
 use std::collections::HashMap;
-use std::sync::{Mutex, OnceLock};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Mutex, OnceLock, RwLock};
 
 use skrifa::raw::TableProvider;
 
@@ -123,6 +124,30 @@ fn substitutes(family: &str) -> &'static [&'static str] {
         | "aptos serif" => SERIF,
         _ if f.contains("mono") || f.contains("code") => MONO,
         _ if f.contains("serif") && !f.contains("sans") => SERIF,
+        // Book faces known by their family name ("Century Std Book", "Garamond Pro"):
+        // a serif stands in for them, not the sans default.
+        _ if [
+            "century",
+            "garamond",
+            "palatino",
+            "times",
+            "roman",
+            "antiqua",
+            "minion",
+            "caslon",
+            "bodoni",
+            "baskerville",
+            "bookman",
+            "georgia",
+            "cambria",
+        ]
+        .iter()
+        .any(|k| f.contains(k))
+            && !f.contains("sans")
+            && !f.contains("gothic") =>
+        {
+            SERIF
+        }
         _ => SANS,
     }
 }
@@ -310,11 +335,141 @@ fn style_name(bold: bool, italic: bool) -> &'static str {
     }
 }
 
-type Memo = (u64, HashMap<(String, bool, bool), Resolved>);
+/// The family (and styles) to draw a family that isn't available with, in place of the built-in
+/// substitutes: a configured font alias ([`set_aliases`]). "Century Std Book" → a house cut of
+/// Century, "Verdana" → a family the installation provides.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct FontAlias {
+    /// The family drawn instead.
+    pub family: String,
+    /// Its style for text that isn't bold ("Book", "Light"…; `None`: Regular).
+    pub regular: Option<String>,
+    /// Its style for bold text ("Semibold", "Heavy"…; `None`: Bold).
+    pub bold: Option<String>,
+}
+
+impl FontAlias {
+    /// The style to look up for bold and/or italic text: the alias's regular or bold style,
+    /// with "Italic" added for italic text ("Book Italic"; "Italic" for Regular).
+    pub fn style(&self, bold: bool, italic: bool) -> String {
+        let base = if bold { self.bold.as_deref().unwrap_or("Bold") } else { self.regular.as_deref().unwrap_or("Regular") };
+        match (italic, base.eq_ignore_ascii_case("regular")) {
+            (false, _) => base.to_string(),
+            (true, true) => "Italic".to_string(),
+            (true, false) => format!("{base} Italic"),
+        }
+    }
+}
+
+/// The environment variable naming a font alias file ([`parse_aliases`]), read the first time a
+/// font is resolved unless [`set_aliases`] ran first.
+pub const ALIASES_VAR: &str = "WORDCRAFT_FONT_ALIASES";
+
+/// Most aliases a table holds (hostile files).
+const MAX_ALIASES: usize = 10_000;
+
+/// The configured aliases, by lowercase requested family, and a counter bumped when they change.
+fn alias_table() -> &'static RwLock<Option<HashMap<String, FontAlias>>> {
+    static TABLE: RwLock<Option<HashMap<String, FontAlias>>> = RwLock::new(None);
+    &TABLE
+}
+static ALIAS_GEN: AtomicU64 = AtomicU64::new(0);
+
+/// Replace the font alias table: each requested family (matched ignoring case) with what to draw
+/// it with. An alias applies only when the requested family isn't available (installed, added or
+/// embedded in the document), and only when its own family is; otherwise the built-in
+/// substitutes apply as before.
+pub fn set_aliases(aliases: impl IntoIterator<Item = (String, FontAlias)>) {
+    let map: HashMap<String, FontAlias> = aliases.into_iter().take(MAX_ALIASES).map(|(k, v)| (k.trim().to_lowercase(), v)).collect();
+    *alias_table().write().unwrap_or_else(|e| e.into_inner()) = Some(map);
+    ALIAS_GEN.fetch_add(1, Ordering::AcqRel);
+}
+
+/// The configured aliases, sorted by requested family (lowercase).
+pub fn aliases() -> Vec<(String, FontAlias)> {
+    ensure_aliases();
+    let table = alias_table().read().unwrap_or_else(|e| e.into_inner());
+    let mut v: Vec<(String, FontAlias)> = table.iter().flatten().map(|(k, v)| (k.clone(), v.clone())).collect();
+    v.sort_by(|a, b| a.0.cmp(&b.0));
+    v
+}
+
+/// Read a font alias table: one alias per line, `Requested family = Family drawn instead`,
+/// optionally followed by `; regular = Style` and `; bold = Style` (the styles drawn for regular
+/// and bold text). Blank lines and lines starting with `#` are skipped. Errors name the line.
+///
+/// ```text
+/// # House fonts
+/// Century Std Book = Century House
+/// Century Std Light = Century House; regular = Light; bold = Book
+/// Verdana = DejaVu Sans
+/// ```
+pub fn parse_aliases(text: &str) -> Result<Vec<(String, FontAlias)>, String> {
+    let mut out = Vec::new();
+    for (n, line) in text.lines().enumerate() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        if out.len() >= MAX_ALIASES {
+            return Err(format!("more than {MAX_ALIASES} font aliases"));
+        }
+        let mut parts = line.split(';');
+        let head = parts.next().unwrap_or("");
+        let Some((from, to)) = head.split_once('=').map(|(a, b)| (a.trim(), b.trim())).filter(|(a, b)| !a.is_empty() && !b.is_empty()) else {
+            return Err(format!("line {}: expected `Requested family = Family`", n + 1));
+        };
+        let mut alias = FontAlias { family: to.to_string(), ..Default::default() };
+        for opt in parts {
+            let Some((k, v)) = opt.split_once('=').map(|(k, v)| (k.trim().to_ascii_lowercase(), v.trim())).filter(|(_, v)| !v.is_empty()) else {
+                return Err(format!("line {}: expected `regular = Style` or `bold = Style` after `;`", n + 1));
+            };
+            match k.as_str() {
+                "regular" => alias.regular = Some(v.to_string()),
+                "bold" => alias.bold = Some(v.to_string()),
+                _ => return Err(format!("line {}: unknown option `{k}` (regular, bold)", n + 1)),
+            }
+        }
+        out.push((from.to_string(), alias));
+    }
+    Ok(out)
+}
+
+/// Load the alias file named by [`ALIASES_VAR`] once, unless aliases were set already. A file
+/// that can't be read or parsed leaves no aliases and is logged.
+fn ensure_aliases() {
+    if alias_table().read().unwrap_or_else(|e| e.into_inner()).is_some() {
+        return;
+    }
+    let loaded = match std::env::var_os(ALIASES_VAR).filter(|v| !v.is_empty()) {
+        None => Vec::new(),
+        Some(path) => match std::fs::read_to_string(&path).map_err(|e| e.to_string()).and_then(|t| parse_aliases(&t)) {
+            Ok(v) => v,
+            Err(e) => {
+                log::error!("{ALIASES_VAR}={}: {e}", std::path::Path::new(&path).display());
+                Vec::new()
+            }
+        },
+    };
+    let mut table = alias_table().write().unwrap_or_else(|e| e.into_inner());
+    if table.is_none() {
+        *table = Some(loaded.into_iter().map(|(k, v)| (k.trim().to_lowercase(), v)).collect());
+        ALIAS_GEN.fetch_add(1, Ordering::AcqRel);
+    }
+}
+
+/// The configured alias of `family`, if any.
+fn alias_of(family: &str) -> Option<FontAlias> {
+    ensure_aliases();
+    let table = alias_table().read().unwrap_or_else(|e| e.into_inner());
+    table.as_ref()?.get(&family.trim().to_lowercase()).cloned()
+}
+
+type Memo = ((u64, u64), HashMap<(String, bool, bool), Resolved>);
 
 fn resolve_cache() -> &'static Mutex<Memo> {
     static CACHE: OnceLock<Mutex<Memo>> = OnceLock::new();
-    CACHE.get_or_init(|| Mutex::new((0, HashMap::new())))
+    CACHE.get_or_init(|| Mutex::new(((0, 0), HashMap::new())))
 }
 
 const FAMILY_CACHE_MAX: usize = 4096;
@@ -322,11 +477,12 @@ const FAMILY_CACHE_MAX: usize = 4096;
 const FAMILY_KEY_MAX: usize = 256;
 
 /// Resolve `family` with bold/italic to a face (memoised until user fonts are added or removed,
-/// [`FontDb::generation`]).
+/// [`FontDb::generation`], or the aliases change).
 pub fn resolve(family: &str, bold: bool, italic: bool) -> Resolved {
     let cache = resolve_cache();
     let db = FontDb::global();
-    let generation = db.generation();
+    ensure_aliases();
+    let generation = (db.generation(), ALIAS_GEN.load(Ordering::Acquire));
     let cacheable = family.len() <= FAMILY_KEY_MAX;
     let key = (if cacheable { family.to_string() } else { String::new() }, bold, italic);
     {
@@ -338,18 +494,7 @@ pub fn resolve(family: &str, bold: bool, italic: bool) -> Resolved {
             return *r;
         }
     }
-    // Printer-driver Symbol aliases use the same encoding as Symbol.
-    let base = if family.trim().eq_ignore_ascii_case("Symbol (PCL6)") { "Symbol" } else { charset_base_family(family) };
-    let (fam, substituted) = if db.has_family(family) {
-        (family.to_string(), false)
-    } else if base != family && db.has_family(base) {
-        // Windows maps the charset names to the font itself: not a substitution.
-        (base.to_string(), false)
-    } else {
-        (substitute(db, base).unwrap_or(crate::FALLBACK_FAMILY).to_string(), true)
-    };
-    let face = db.face(&fam, style_name(bold, italic));
-    let r = Resolved { synth_bold: bold && face.weight < 600.0, synth_italic: italic && !face.italic, substituted, face: FaceRef::of(&face) };
+    let r = resolve_in(db, family, bold, italic, alias_of(family).as_ref());
     let mut c = cache.lock().unwrap_or_else(|e| e.into_inner());
     if cacheable && c.0 == generation {
         if c.1.len() >= FAMILY_CACHE_MAX {
@@ -358,6 +503,24 @@ pub fn resolve(family: &str, bold: bool, italic: bool) -> Resolved {
         c.1.insert(key, r);
     }
     r
+}
+
+/// [`resolve`] in `db`, with `alias` the configured alias of `family` (not memoised).
+pub fn resolve_in(db: &FontDb, family: &str, bold: bool, italic: bool, alias: Option<&FontAlias>) -> Resolved {
+    // Printer-driver Symbol aliases use the same encoding as Symbol.
+    let base = if family.trim().eq_ignore_ascii_case("Symbol (PCL6)") { "Symbol" } else { charset_base_family(family) };
+    let (fam, style, substituted) = if db.has_family(family) {
+        (family.to_string(), style_name(bold, italic).to_string(), false)
+    } else if base != family && db.has_family(base) {
+        // Windows maps the charset names to the font itself: not a substitution.
+        (base.to_string(), style_name(bold, italic).to_string(), false)
+    } else if let Some(a) = alias.filter(|a| db.has_family(&a.family)) {
+        (a.family.clone(), a.style(bold, italic), true)
+    } else {
+        (substitute(db, base).unwrap_or(crate::FALLBACK_FAMILY).to_string(), style_name(bold, italic).to_string(), true)
+    };
+    let face = db.face(&fam, &style);
+    Resolved { synth_bold: bold && face.weight < 600.0, synth_italic: italic && !face.italic, substituted, face: FaceRef::of(&face) }
 }
 
 /// A line's (ascent, descent) from hhea values, both positive: the line gap goes above the ascent.

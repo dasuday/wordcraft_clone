@@ -593,3 +593,96 @@ fn circle_checks_face_coverage() {
     let primary = db.face("Source Serif 4", "Regular");
     assert_eq!(db.fallback_for('●', primary.id()).unwrap().family, FALLBACK_FAMILY);
 }
+
+/// A folder of [`renamed_to`] faces of `family`: Regular, Semibold and Bold.
+fn family_dir(name: &str, family: &str) -> PathBuf {
+    let dir = std::env::temp_dir().join(format!("dc-fontdir-{}-{name}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    for style in ["Regular", "Semibold", "Bold"] {
+        std::fs::write(dir.join(format!("Face-{style}.ttf")), renamed_to(&format!("SourceSans3-{style}.ttf"), family)).unwrap();
+    }
+    dir
+}
+
+/// A font folder added at run time is searched like the system's: its families are found by name
+/// (a server brings its fonts without installing them or a `HOME`).
+#[test]
+fn a_font_folder_added_at_run_time_is_searched() {
+    let dir = family_dir("added", "Alias Text 01");
+    let db = FontDb::with_font_dirs(Vec::new());
+    assert!(!db.has_family("Alias Text 01"));
+    let before = db.generation();
+    assert_eq!(db.add_font_dir(&dir), 3);
+    assert!(db.generation() > before, "resolutions are memoised by generation");
+    assert!(db.has_family("Alias Text 01"));
+    let r = crate::word::resolve_in(&db, "Alias Text 01", true, false, None);
+    assert_eq!((r.face.family.as_str(), r.face.style.as_str()), ("Alias Text 01", "Bold"));
+    assert!(!r.substituted && !r.synth_bold);
+    // Adding it again changes nothing.
+    assert_eq!(db.add_font_dir(&dir), 3);
+    // The environment variable lists folders like PATH; empty entries are skipped.
+    let joined = std::env::join_paths([dir.as_path(), Path::new(""), Path::new("/x/y")]).unwrap();
+    assert_eq!(font_dirs_from(Some(&joined)), vec![dir.clone(), PathBuf::from("/x/y")]);
+    assert!(font_dirs_from(None).is_empty());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A configured alias draws a family that isn't available with the family it names, in the
+/// styles it names for regular and bold text; italic is matched or synthesized. It doesn't apply
+/// when the requested family is available, nor when its own family isn't.
+#[test]
+fn font_aliases_map_families_weights_and_styles() {
+    use crate::word::{FontAlias, resolve_in};
+    let dir = family_dir("alias", "Alias Text 01");
+    let db = FontDb::with_font_dirs(vec![dir.clone()]);
+    let alias = FontAlias { family: "Alias Text 01".into(), ..Default::default() };
+    let r = resolve_in(&db, "Century Std Book", false, false, Some(&alias));
+    assert_eq!((r.face.family.as_str(), r.face.style.as_str()), ("Alias Text 01", "Regular"));
+    assert!(r.substituted);
+    let b = resolve_in(&db, "Century Std Book", true, false, Some(&alias));
+    assert_eq!(b.face.style, "Bold");
+    assert!(!b.synth_bold);
+    // No italic face: the regular one, slanted.
+    let i = resolve_in(&db, "Century Std Book", false, true, Some(&alias));
+    assert_eq!(i.face.style, "Regular");
+    assert!(i.synth_italic);
+    // Weights named by the alias: bold text in Semibold.
+    let semi = FontAlias { family: "Alias Text 01".into(), regular: Some("Regular".into()), bold: Some("Semibold".into()) };
+    let s = resolve_in(&db, "Verdana", true, false, Some(&semi));
+    assert_eq!(s.face.style, "Semibold");
+    assert!(!s.synth_bold, "Semibold is bold enough");
+    assert_eq!(semi.style(true, true), "Semibold Italic");
+    assert_eq!(alias.style(false, true), "Italic");
+    // The requested family is available: no alias.
+    let own = resolve_in(&db, "Source Serif 4", false, false, Some(&alias));
+    assert_eq!(own.face.family, "Source Serif 4");
+    assert!(!own.substituted);
+    // The alias's family isn't: the built-in substitutes (a serif for a Century).
+    let missing = FontAlias { family: "Not Installed Anywhere".into(), ..Default::default() };
+    let r = resolve_in(&db, "Century Std Book", false, false, Some(&missing));
+    assert!(r.substituted);
+    assert_ne!(r.face.family, "Not Installed Anywhere");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// The alias file: one alias per line, styles after `;`, comments; errors name the line.
+#[test]
+fn font_alias_files_parse() {
+    use crate::word::{FontAlias, parse_aliases};
+    let text =
+        "# House fonts\n\nCentury Std Book = Century House\n  Century Std Light = Century House; regular = Light ; bold=Book\nVerdana=DejaVu Sans\n";
+    let v = parse_aliases(text).unwrap();
+    assert_eq!(v.len(), 3);
+    assert_eq!(v[0], ("Century Std Book".to_string(), FontAlias { family: "Century House".into(), regular: None, bold: None }));
+    assert_eq!(v[1].1, FontAlias { family: "Century House".into(), regular: Some("Light".into()), bold: Some("Book".into()) });
+    assert_eq!(v[2].1.family, "DejaVu Sans");
+    for (bad, line) in [("Verdana", 1), ("x = y\n= DejaVu Sans", 2), ("a = b; weight = 300", 1), ("a = b; bold", 1), ("a =", 1)] {
+        let e = parse_aliases(bad).unwrap_err();
+        assert!(e.starts_with(&format!("line {line}:")), "{bad:?}: {e}");
+    }
+    // Book faces known by name get a serif, not the sans default.
+    let r = crate::word::resolve_in(&FontDb::with_font_dirs(Vec::new()), "Century Std Book", false, false, None);
+    assert!(r.substituted);
+    assert_eq!(r.face.family, "Source Serif 4", "the bundled serif without system fonts");
+}

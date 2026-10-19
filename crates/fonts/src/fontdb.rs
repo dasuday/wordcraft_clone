@@ -343,6 +343,9 @@ pub struct FontDb {
     /// The folders the system font scan reads (the platform's font folders for [`FontDb::global`]).
     #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
     font_dirs: Vec<std::path::PathBuf>,
+    /// Folders added at run time ([`FontDb::add_font_dir`]), scanned with `font_dirs`.
+    #[cfg(not(target_arch = "wasm32"))]
+    extra_dirs: RwLock<Vec<std::path::PathBuf>>,
     /// Set once the font folders have been scanned. Lookups by family name wait for the first
     /// scan, so what they find doesn't depend on what ran before them.
     #[cfg(not(target_arch = "wasm32"))]
@@ -746,13 +749,24 @@ fn mini_font(tables: &[([u8; 4], Vec<u8>)]) -> Vec<u8> {
     font
 }
 
-/// The platform's font folders (the system's and the user's), scanned by [`FontDb::global`].
-/// Empty on wasm.
+/// The environment variable naming extra font folders for the process-wide database
+/// ([`FontDb::global`]), separated like `PATH` (`:` on Unix, `;` on Windows). They are read
+/// with the platform's folders, whatever `HOME` is.
+pub const FONT_DIRS_VAR: &str = "WORDCRAFT_FONT_DIRS";
+
+/// The folders a [`FONT_DIRS_VAR`] value names (empty entries skipped).
+fn font_dirs_from(var: Option<&std::ffi::OsStr>) -> Vec<std::path::PathBuf> {
+    var.map(|v| std::env::split_paths(v).filter(|p| !p.as_os_str().is_empty()).collect()).unwrap_or_default()
+}
+
+/// The font folders [`FontDb::global`] scans: those named by [`FONT_DIRS_VAR`], then the
+/// platform's (the system's and the user's). Empty on wasm.
 pub fn system_font_dirs() -> Vec<std::path::PathBuf> {
     let mut dirs: Vec<std::path::PathBuf> = Vec::new();
     if cfg!(target_arch = "wasm32") {
         return dirs;
     }
+    dirs.extend(font_dirs_from(std::env::var_os(FONT_DIRS_VAR).as_deref()));
     let home = std::env::var_os("HOME").map(std::path::PathBuf::from);
     if cfg!(target_os = "macos") {
         dirs.extend(["/System/Library/Fonts", "/Library/Fonts"].map(Into::into));
@@ -980,6 +994,8 @@ impl FontDb {
             generation: AtomicU64::new(0),
             font_dirs,
             #[cfg(not(target_arch = "wasm32"))]
+            extra_dirs: RwLock::new(Vec::new()),
+            #[cfg(not(target_arch = "wasm32"))]
             cataloged: std::sync::OnceLock::new(),
             #[cfg(not(target_arch = "wasm32"))]
             loading: Mutex::new(()),
@@ -1202,10 +1218,32 @@ impl FontDb {
         first.unwrap_or_else(|| self.scan_font_dirs())
     }
 
+    /// Add a folder of fonts (searched with its subfolders) to the installed fonts, as if it were
+    /// one of the system's font folders: its families are found by name from then on, and their
+    /// files are read when a family is first used. For servers and other processes that bring
+    /// their own fonts without installing them or depending on `HOME` (also
+    /// [`FONT_DIRS_VAR`] for the process-wide database). Returns the number of faces cataloged
+    /// in all the folders. Native only.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn add_font_dir(&self, dir: impl Into<std::path::PathBuf>) -> usize {
+        let dir = dir.into();
+        {
+            let mut extra = self.extra_dirs.write().unwrap_or_else(|e| e.into_inner());
+            if !extra.contains(&dir) {
+                extra.push(dir);
+            }
+        }
+        let n = self.load_system_fonts();
+        // Families may resolve differently now (memoised by generation).
+        self.generation.fetch_add(1, Ordering::AcqRel);
+        n
+    }
+
     #[cfg(not(target_arch = "wasm32"))]
     fn scan_font_dirs(&self) -> usize {
         let mut found = Vec::new();
         let mut stack = self.font_dirs.clone();
+        stack.extend(self.extra_dirs.read().unwrap_or_else(|e| e.into_inner()).iter().cloned());
         // Each folder once, however links lead back to it.
         let mut visited = std::collections::HashSet::new();
         while let Some(d) = stack.pop() {
