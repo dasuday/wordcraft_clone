@@ -2015,4 +2015,47 @@ mod tests {
         assert!(!db.has_family("NotAFont Bold"));
         assert_eq!(db.face("Source Serif 4", "Regular").style, "Regular");
     }
+
+    #[test]
+    fn east_asian_raw_ascent_guard() {
+        // Copy only bundled public-font bytes; no installed face or fixture is changed.
+        for (ascent, descent, gap, win_ascent, expected) in [
+            (-100i16, -1000i16, 0i16, 800u16, (800.0, 200.0)),
+            (0, -1000, 0, 800, (800.0, 200.0)),
+            (900, -300, 0, 800, (1080.0, 480.0)),
+            (1200, -600, 0, 800, (1200.0, 600.0)),
+            (-100, -1000, 200, 800, (100.0, 1000.0)),
+            (-100, -1000, 0, 0, (700.0, 100.0)),
+        ] {
+            let mut bytes = BUNDLED[0].to_vec();
+            let count = u16::from_be_bytes(bytes[4..6].try_into().unwrap()) as usize;
+            let offset = |tag: &[u8; 4]| {
+                let entry = bytes[12..12 + count * 16].as_chunks::<16>().0.iter().find(|e| &e[..4] == tag).unwrap();
+                u32::from_be_bytes(entry[8..12].try_into().unwrap()) as usize
+            };
+            let head = offset(b"head");
+            let hhea = offset(b"hhea");
+            let os2 = offset(b"OS/2");
+            bytes[head + 18..head + 20].copy_from_slice(&1000u16.to_be_bytes());
+            bytes[hhea + 4..hhea + 6].copy_from_slice(&ascent.to_be_bytes());
+            bytes[hhea + 6..hhea + 8].copy_from_slice(&descent.to_be_bytes());
+            bytes[hhea + 8..hhea + 10].copy_from_slice(&gap.to_be_bytes());
+            bytes[os2 + 74..os2 + 76].copy_from_slice(&win_ascent.to_be_bytes());
+            bytes[os2 + 76..os2 + 78].copy_from_slice(&200u16.to_be_bytes());
+            bytes[os2 + 78..os2 + 82].copy_from_slice(&(1u32 << 17).to_be_bytes());
+            let mut face =
+                make_face(FontBytes::Owned(Arc::new(bytes)), 0, "Raw ascent control".into(), "Regular".into(), "Raw ascent control".into(), vec![])
+                    .unwrap();
+            face.ascent = 700.0;
+            face.descent = 100.0;
+            assert!(face.is_east_asian());
+            let fixed = crate::word::fixed_line_metrics(&face);
+            let actual = crate::word::line_metrics(&face);
+            assert_eq!(actual, expected, "raw ascent={ascent}, descent={descent}, gap={gap}, win={win_ascent}");
+            assert_eq!(crate::word::line_metrics(&face), expected, "cached result");
+            if ascent <= 0 || ascent == 1200 {
+                assert_eq!(actual, fixed, "invalid raw metrics or expanded total use the unchanged fallback");
+            }
+        }
+    }
 }

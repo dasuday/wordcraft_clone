@@ -398,7 +398,7 @@ pub fn line_metrics(face: &crate::FontFace) -> (f64, f64) {
     {
         let m = east_asian_line(h.ascender().to_i16(), h.descender().to_i16());
         // Retain the same bound and fallback for hostile or invalid metrics.
-        if m.0 > 0.0 && m.0 + m.1 <= face.upem * 2.0 {
+        if h.ascender().to_i16() > 0 && m.0 > 0.0 && m.0 + m.1 <= face.upem * 2.0 {
             v = m;
         }
     }
