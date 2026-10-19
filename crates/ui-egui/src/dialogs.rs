@@ -3403,7 +3403,8 @@ fn paragraph_dialog(rp: &wordcraft_doc::resolve::ResolvedPara, tab: u8) -> Dialo
     let unit = crate::options::unit().pt_per_unit();
     Dialog::Paragraph {
         rtl: rp.bidi,
-        align: format!("{:?}", rp.align.visual(rp.bidi)).to_lowercase(),
+        // The serde name (`thaiDistribute`), the one `para.setProps` and the combo's choices use.
+        align: serde_json::to_value(rp.align.visual(rp.bidi)).ok().and_then(|v| v.as_str().map(String::from)).unwrap_or_default(),
         left: vl / unit,
         right: vr / unit,
         first: rp.indent_first / unit,
@@ -4300,6 +4301,52 @@ mod tests {
         }
         let _ = app.run("edit.undo", json!({}));
         assert_eq!((0..3).map(|i| para_props(&app, i)).collect::<Vec<_>>(), was, "undo takes all of it back");
+    }
+
+    /// Thai Distributed and Khmer Justify in the Paragraph dialog's Alignment list: each shows by
+    /// name when the paragraph has it, and picking one then OK sets that alignment.
+    #[test]
+    fn paragraph_dialog_offers_thai_distributed_and_khmer_justify() {
+        use egui_kittest::kittest::{NodeT, Queryable};
+        for (label, want) in [("Thai Distributed", Align::ThaiDistribute), ("Khmer Justify", Align::KhmerJustify)] {
+            let mut app = app_with("ខ្មែរ");
+            app.dialog = Dialog::open("paragraph", &mut app);
+            let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(1440.0, 900.0)).build_ui_state(
+                |ui, app: &mut WordApp| {
+                    let ctx = ui.ctx().clone();
+                    app.logic(&ctx);
+                    app.ui(ui);
+                },
+                app,
+            );
+            for _ in 0..4 {
+                h.step();
+            }
+            // The Alignment list is the dialog's only combo box; its text is the node's value.
+            let combo = h.get_by_role(egui::accesskit::Role::ComboBox);
+            assert_eq!(combo.accesskit_node().value().as_deref(), Some("Left"));
+            combo.click();
+            for _ in 0..3 {
+                h.step();
+            }
+            h.get_by_label(label).click();
+            for _ in 0..3 {
+                h.step();
+            }
+            let Some(Dialog::Paragraph { align, .. }) = &h.state().dialog else { panic!("no paragraph dialog") };
+            assert_eq!(align, &serde_json::to_value(want).unwrap().as_str().unwrap().to_string(), "{label}");
+            h.get_by_role_and_label(egui::accesskit::Role::Button, "OK").click();
+            for _ in 0..3 {
+                h.step();
+            }
+            assert!(h.state().dialog.is_none(), "OK closes the dialog");
+            assert_eq!(para_props(h.state(), 0).align, Some(want), "{label}");
+            // Reopened, the dialog shows the paragraph's alignment by name, not a raw token.
+            let mut app = std::mem::replace(h.state_mut(), app_with(""));
+            app.dialog = Dialog::open("paragraph", &mut app);
+            let Some(Dialog::Paragraph { align, .. }) = &app.dialog else { panic!("no paragraph dialog") };
+            assert_eq!(align, &serde_json::to_value(want).unwrap().as_str().unwrap().to_string(), "reopened: {label}");
+        }
     }
 
     /// #1346: a check box the selected paragraphs differ in shows as neither on nor off; a click

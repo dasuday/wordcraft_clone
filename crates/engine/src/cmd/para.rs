@@ -200,7 +200,7 @@ pub fn specs() -> Vec<CommandSpec> {
             fmt(s, &|p| p.outline_level = l)
         }),
         CommandSpec::new("para.set", "Set Paragraph Formatting", "Home › Paragraph › Paragraph", set_props).params(
-            r#"{"props": ParaProps, "onPage"?: {"align"?: "left|center|right|justify|distribute", "left"?: pt, "right"?: pt} (alignment and indents as seen on the page: each paragraph's own direction, after `props`, says which edge is its start)}"#,
+            r#"{"props": ParaProps, "onPage"?: {"align"?: "left|center|right|justify|distribute|thaiDistribute|khmerJustify", "left"?: pt, "right"?: pt} (alignment and indents as seen on the page: each paragraph's own direction, after `props`, says which edge is its start)}"#,
         ),
         CommandSpec::new("para.dialog", "Paragraph Settings", "Home › Paragraph", |s, _| {
             s.ui_requests.push(json!({"open": "paragraph"}));
