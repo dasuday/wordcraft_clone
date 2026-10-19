@@ -2691,3 +2691,31 @@ preview	Title	Ukázka
 	Type a size in any unit, such as 5 cm or 300 px. The other side follows, so the picture keeps its proportions.	Zadejte velikost v libovolné jednotce, například 5 cm nebo 300 px. Druhá strana se přizpůsobí, takže obrázek zachová své proporce.
 
 	Import…	Importovat…
+	Format Selection	Formátovat výběr
+	Current Selection	Aktuální výběr
+	Axis	Osa
+	Axis Titles	Názvy osy
+	Axis Labels	Popisky osy
+	Tick labels	Popisky dílků
+	Axis line	Čára osy
+	Format Axis	Formát osy
+	Format Axis…	Formát osy…
+	Format Series	Formát řady
+	Format Series…	Formát řady…
+	No fill	Bez výplně
+	Markers	Značky
+	Smooth lines	Vyhlazené čáry
+	Series	Řada
+	Data labels	Popisky dat
+	Fill:	Výplň:
+	Major gridlines	Hlavní mřížkové čáry
+	Maximum:	Maximum:
+	Minimum:	Minimum:
+	Number format:	Formát čísel:
+	Width (pt):	Šířka (b):
+	accent	akcent
+	auto	auto
+	linked	propojeno
+	“{text}” isn't a colour (RRGGBB).	„{text}“ není barva (RRGGBB).
+	“{text}” isn't a number.	„{text}“ není číslo.
+	“{text}” isn't a width in points.	„{text}“ není šířka v bodech.

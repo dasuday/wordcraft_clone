@@ -2704,3 +2704,31 @@ preview	Title	Tytuł
 	Type a size in any unit, such as 5 cm or 300 px. The other side follows, so the picture keeps its proportions.	Wpisz rozmiar w dowolnej jednostce, np. 5 cm lub 300 px. Druga strona dopasuje się, więc obraz zachowa proporcje.
 
 	Import…	Importuj…
+	Format Selection	Formatuj zaznaczenie
+	Current Selection	Bieżące zaznaczenie
+	Axis	Oś
+	Axis Titles	Tytuły osi
+	Axis Labels	Etykiety osi
+	Tick labels	Etykiety podziałki
+	Axis line	Linia osi
+	Format Axis	Formatuj oś
+	Format Axis…	Formatuj oś…
+	Format Series	Formatuj serię
+	Format Series…	Formatuj serię…
+	No fill	Bez wypełnienia
+	Markers	Znaczniki
+	Smooth lines	Wygładzone linie
+	Series	Seria
+	Data labels	Etykiety danych
+	Fill:	Wypełnienie:
+	Major gridlines	Główne linie siatki
+	Maximum:	Maksimum:
+	Minimum:	Minimum:
+	Number format:	Format liczb:
+	Width (pt):	Szerokość (pt):
+	accent	akcent
+	auto	auto
+	linked	powiązane
+	“{text}” isn't a colour (RRGGBB).	„{text}” nie jest kolorem (RRGGBB).
+	“{text}” isn't a number.	„{text}” nie jest liczbą.
+	“{text}” isn't a width in points.	„{text}” nie jest szerokością w punktach.
