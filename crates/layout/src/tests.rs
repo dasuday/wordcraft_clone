@@ -9712,6 +9712,7 @@ fn shared_band_grid_spans() {
 
 #[test]
 fn caret_height_ignores_line_spacing() {
+    crate::test_fonts();
     // #2920: extra line spacing is leading below the text; the caret stays the height of the font.
     use wordcraft_doc::props::LineSpacing;
     let caret_height = |spacing: Option<LineSpacing>| {
