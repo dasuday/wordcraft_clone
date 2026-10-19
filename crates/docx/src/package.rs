@@ -251,7 +251,8 @@ impl Package {
     /// [`Package::get`], as the shared bytes themselves: for a part the document keeps whole, which
     /// then costs no copy (a picture document's pictures used to be held twice while it opened).
     pub fn get_shared(&self, name: &str) -> Option<&Arc<Vec<u8>>> {
-        let n = name.trim_start_matches('/');
+        let norm = name.replace('\\', "/");
+        let n = norm.trim_start_matches('/');
         if let Some(v) = self.files.get(n) {
             return Some(v);
         }
@@ -358,7 +359,8 @@ fn split_dir(part: &str) -> (&str, &str) {
 
 /// Resolve a relative target against a source directory into a package path.
 pub fn resolve(dir: &str, target: &str) -> String {
-    let target = target.split('#').next().unwrap_or(target);
+    let norm = target.replace('\\', "/");
+    let target = norm.split('#').next().unwrap_or(&norm);
     let mut parts: Vec<&str> = if target.starts_with('/') { Vec::new() } else { dir.split('/').filter(|s| !s.is_empty()).collect() };
     for seg in target.split('/') {
         match seg {

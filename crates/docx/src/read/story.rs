@@ -576,6 +576,15 @@ impl Reader<'_> {
                 let props = self.run_props_none(ctx);
                 self.read_run_child(sc, pb, k, &props, rels, &mut None, depth + 1);
             }
+            // Third-party generators or conversions may place drawings, picts, footnotes, or text directly under w:p
+            "w:drawing" | "w:pict" | "w:object" | "w:contentPart" | "w:footnoteReference" | "w:endnoteReference" | "w:footnoteRef" | "w:endnoteRef" | "w:t" => {
+                let props = self.run_props_none(ctx);
+                let mut note = None;
+                self.read_run_child(sc, pb, k, &props, rels, &mut note, depth + 1);
+                if let Some((kind, id, custom)) = note.take() {
+                    self.emit_obj(sc, pb, InlineObject::NoteRef { kind, id, custom: custom.unwrap_or_default() }, &props);
+                }
+            }
             _ => {}
         }
     }
@@ -1220,7 +1229,12 @@ impl Reader<'_> {
     fn read_pic(&mut self, pic: &El, rels: &Rels, w: f32, h: f32, alt: String, mut float: Float) -> Option<InlineObject> {
         let blip = pic.find("a:blip")?;
         float.set_spin(xfrm_spin(pic.find("pic:spPr")));
-        let media = blip.attr("r:embed").and_then(|id| self.media_for(rels, id))?;
+        let embed_id = blip
+            .attr("r:embed")
+            .or_else(|| blip.find("asvg:svgBlip").and_then(|s| s.attr("r:embed")))
+            .or_else(|| pic.find("asvg:svgBlip").and_then(|s| s.attr("r:embed")))
+            .or_else(|| blip.attr("r:link"));
+        let media = embed_id.and_then(|id| self.media_for(rels, id))?;
         let mut crop = [0.0f32; 4];
         if let Some(sr) = pic.find("a:srcRect") {
             for (i, n) in ["l", "t", "r", "b"].iter().enumerate() {
