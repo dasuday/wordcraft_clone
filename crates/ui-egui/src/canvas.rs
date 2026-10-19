@@ -101,6 +101,13 @@ pub struct CanvasState {
     pub context_synonyms: Option<serde_json::Value>,
     /// The right-click context menu is open (the mini toolbar stands down while it is).
     pub context_menu_open: bool,
+    /// Text typed in the context menu's search field; cleared when the menu opens or closes.
+    pub context_menu_query: String,
+    /// The search field should take the keyboard on the frame the menu opens.
+    pub context_menu_focus_search: bool,
+    /// Paste option currently shown in the document as a hover preview (`edit.paste`, …). Undo
+    /// removes it when the pointer leaves; a click keeps that step.
+    pub context_paste_preview: Option<String>,
     /// Shift+F10 (or `ui.contextMenu`) asked for the context menu at the caret (#821).
     pub context_menu_from_keys: bool,
     /// Where the context menu stands: the right-click point, or below the caret.
@@ -253,6 +260,9 @@ impl Default for CanvasState {
             erasing: None,
             ink_ui: Default::default(),
             context_menu_open: false,
+            context_menu_query: String::new(),
+            context_menu_focus_search: false,
+            context_paste_preview: None,
             context_menu_from_keys: false,
             context_menu_at: None,
             mini_anchor: None,
@@ -1701,22 +1711,47 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
     } else if secondary_clicked {
         app.canvas.context_menu_at = resp.interact_pointer_pos();
     }
-    let open = if secondary_clicked || from_keys {
-        Some(egui::SetOpenCommand::Bool(true))
-    } else if resp.clicked() {
-        Some(egui::SetOpenCommand::Bool(false))
-    } else {
-        None
-    };
-    let menu = egui::Popup::menu(&resp).open_memory(open);
-    let menu = match app.canvas.context_menu_at {
-        Some(p) => menu.at_position(p),
-        None => menu.at_pointer_fixed(),
-    };
-    menu.show(|ui| context_menu(app, ui));
-    // Stand down while the context menu owns the pointer so the two never double up; the open
-    // state also covers the click that dismisses the menu.
-    app.canvas.context_menu_open = egui::Popup::is_id_open(ui.ctx(), egui::Popup::default_response_id(&resp));
+    // Keep the parent independently of egui's one memory popup: the toolbar's font, size and
+    // colour controls use that slot for their own lists (as in a collapsed ribbon group).
+    let mut open = app.canvas.context_menu_open;
+    if secondary_clicked || from_keys {
+        egui::Popup::close_all(ui.ctx());
+        app.canvas.context_menu_query.clear();
+        app.canvas.context_menu_focus_search = true;
+        open = true;
+    } else if open && ui.input(|i| i.pointer.any_click()) {
+        let layer = ui.input(|i| i.pointer.interact_pos()).and_then(|p| ui.ctx().layer_id_at(p));
+        if !layer.is_some_and(|l| matches!(l.order, egui::Order::Foreground | egui::Order::Tooltip)) {
+            open = false;
+        }
+    }
+    let child_open = egui::Popup::is_any_open(ui.ctx());
+    let mut shown = open;
+    if open {
+        app.escape_free = false;
+    }
+    let menu = egui::Popup::menu(&resp).open_bool(&mut shown);
+    let menu = menu.at_position(app.canvas.context_menu_at.unwrap_or(out.inner_rect.left_top()));
+    let with_toolbar = crate::mini_toolbar::context_menu_visible(app);
+    let menu = if with_toolbar { menu.frame(egui::Frame::NONE).close_behavior(egui::PopupCloseBehavior::IgnoreClicks) } else { menu };
+    menu.show(|ui| {
+        if with_toolbar {
+            crate::context_panel::show(app, ui, |ui, app| context_issue_block(app, ui), |ui, app| context_menu_rest(app, ui));
+        } else {
+            context_menu(app, ui);
+        }
+    });
+    // Escape closes the child list first; a second Escape closes the context menu.
+    if open && !shown && child_open && ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+        shown = true;
+    }
+    // The standalone selection toolbar stands down while the context popup owns the pointer.
+    if !shown {
+        crate::context_panel::clear_paste_preview(app);
+        app.canvas.context_menu_query.clear();
+        app.canvas.context_menu_focus_search = false;
+    }
+    app.canvas.context_menu_open = shown;
     if let Some(c) = crate::ink::cursor(app).filter(|_| resp.hovered() || app.canvas.ink.is_some()) {
         ui.ctx().set_cursor_icon(c);
     } else if resp.hovered() || app.canvas.obj_drag.is_some() {
@@ -3093,14 +3128,27 @@ fn context_menu(app: &mut WordApp, ui: &mut Ui) {
         return equation_menu(app, ui);
     }
     ui.set_min_width(220.0);
-    let item = |ui: &mut Ui, app: &mut WordApp, label: &str, id: &str, params: serde_json::Value| {
-        let sc = crate::widgets::shortcut_text(app, id);
-        let on = crate::widgets::enabled(app, id);
-        if ui.add_enabled(on, egui::Button::new(tl!(label)).shortcut_text(sc)).clicked() {
-            let _ = app.run(id, params);
-            ui.close();
-        }
-    };
+    context_issue_block(app, ui);
+    context_clipboard(app, ui);
+    context_menu_rest(app, ui);
+}
+
+/// A context-menu row. Hidden while the text menu's search field doesn't match `label`.
+pub(crate) fn context_item(ui: &mut Ui, app: &mut WordApp, label: &str, id: &str, params: serde_json::Value) {
+    if !crate::context_panel::matches_query(&app.canvas.context_menu_query, label) {
+        return;
+    }
+    let sc = crate::widgets::shortcut_text(app, id);
+    let on = crate::widgets::enabled(app, id);
+    if ui.add_enabled(on, egui::Button::new(tl!(label)).shortcut_text(sc)).clicked() {
+        let _ = app.run(id, params);
+        ui.close();
+    }
+}
+
+/// Spelling and grammar suggestions for the word under the pointer.
+fn context_issue_block(app: &mut WordApp, ui: &mut Ui) {
+    let item = context_item;
     if let Some(issue) = app.canvas.context_issue.clone() {
         let sugg: Vec<String> = issue
             .get("suggestions")
@@ -3124,39 +3172,46 @@ fn context_menu(app: &mut WordApp, ui: &mut Ui) {
         }
         ui.separator();
     }
+}
+
+/// Cut, copy and the ribbon's paste choices, for object and table menus. The text menu draws
+/// the same commands in its transfer section.
+fn context_clipboard(app: &mut WordApp, ui: &mut Ui) {
+    let item = context_item;
     item(ui, app, "Cut", "edit.cut", json!({}));
     item(ui, app, "Copy", "edit.copy", json!({}));
+    // How to paste, chosen before pasting (#2583): the ribbon's Paste menu, item for item. Paste
+    // keeps the clipboard's formatting (Word's Keep Source Formatting).
     item(ui, app, "Paste", "edit.paste", json!({}));
+    item(ui, app, "Keep Text Only", "edit.pasteText", json!({}));
+    item(ui, app, "Merge Formatting", "edit.pasteMerge", json!({}));
+    item(ui, app, "Paste Special…", "edit.pasteSpecial", json!({}));
     ui.separator();
-    if let Some(syn) = app.canvas.context_synonyms.clone().and_then(|v| v.as_array().cloned()).filter(|a| !a.is_empty()) {
-        ui.menu_button(tl!("Synonyms"), |ui| {
-            for w in syn.iter().filter_map(|x| x.as_str()) {
-                if ui.button(w).clicked() {
-                    let _ = app.run("select.word", json!({}));
-                    let (a, b) = app.session.sel.ordered();
-                    let trimmed = app.session.doc.para_at(&a).and_then(|p| p.text.get(a.off..b.off)).map(|t| t.trim_end().len()).unwrap_or(0);
-                    let end = wordcraft_doc::Pos { off: a.off + trimmed, ..b };
-                    app.session.sel = wordcraft_engine::Selection { anchor: a, focus: end };
-                    let _ = app.run("text.insert", json!({"text": w, "raw": true}));
-                    ui.close();
-                }
-            }
-        });
+}
+
+/// Font, paragraph, link, comments and whatever the click landed on (a field, a table, a picture).
+fn context_menu_rest(app: &mut WordApp, ui: &mut Ui) {
+    let item = context_item;
+    // The text menu draws these itself, with icons. Object and table menus keep the plain rows.
+    if !crate::mini_toolbar::context_menu_visible(app) {
+        if let Some(syn) = app.canvas.context_synonyms.clone().and_then(|v| v.as_array().cloned()).filter(|a| !a.is_empty()) {
+            ui.menu_button(tl!("Synonyms"), |ui| crate::context_panel::synonym_menu(app, ui, &syn));
+        }
+        item(ui, app, "Font…", "ui.dialog", json!({"name": "font"}));
+        item(ui, app, "Paragraph…", "ui.dialog", json!({"name": "paragraph"}));
+        item(ui, app, "Link…", "ui.dialog", json!({"name": "link"}));
+        item(ui, app, "New Comment", "review.newComment", json!({}));
     }
-    item(ui, app, "Font…", "ui.dialog", json!({"name": "font"}));
-    item(ui, app, "Paragraph…", "ui.dialog", json!({"name": "paragraph"}));
-    item(ui, app, "Link…", "ui.dialog", json!({"name": "link"}));
-    item(ui, app, "New Comment", "review.newComment", json!({}));
     if !wordcraft_engine::cmd::fields::selected(&app.session).is_empty() {
         ui.separator();
-        item(ui, app, tl!("Update Field"), "references.updateFields", json!({}));
-        item(ui, app, tl!("Edit Field…"), "fields.setCode", json!({}));
-        item(ui, app, tl!("Toggle Field Codes"), "fields.toggleCode", json!({}));
+        item(ui, app, "Update Field", "references.updateFields", json!({}));
+        item(ui, app, "Edit Field…", "fields.setCode", json!({}));
+        item(ui, app, "Toggle Field Codes", "fields.toggleCode", json!({}));
     } else if wordcraft_engine::cmd::references::caret_in_toc(&app.session) {
         // The TOC field sits in the table's heading; its entries are plain paragraphs.
         ui.separator();
-        item(ui, app, tl!("Update Field"), "references.updateToc", json!({}));
-        item(ui, app, tl!("Remove Table of Contents"), "references.removeToc", json!({}));
+        item(ui, app, "Update Field", "references.updateToc", json!({}));
+        item(ui, app, "Remove Table of Contents", "references.removeToc", json!({}));
     }
     let selected_object = wordcraft_engine::cmd::objects::selected(&app.session).is_some();
     if selected_object || app.session.sel.focus.path.cell().is_some() {
@@ -4769,6 +4824,89 @@ mod tests {
             }
             let text = h.state().session.doc.plain_text(StoryRef::Body);
             assert_eq!(text.matches(&name).count(), 2, "round {round}: the new heading is listed: {text}");
+        }
+    }
+
+    /// #2583: the text context menu's three paste choices. Paste keeps the copied bold and colour
+    /// (Word's Keep Source Formatting), Merge Formatting keeps only the bold, Keep Text Only neither.
+    /// Hovering a choice previews it in the document and leaves it unchanged until the click.
+    #[test]
+    fn context_menu_offers_the_ribbons_paste_items() {
+        use egui_kittest::kittest::Queryable;
+        use wordcraft_doc::props::{Rgb, TextColor};
+        let red = Some(TextColor::Rgb(Rgb(0xC0, 0, 0)));
+        let items = [("Paste", "edit.paste"), ("Keep Text Only", "edit.pasteText"), ("Merge Formatting", "edit.pasteMerge")];
+        for (choice, pasted) in [("Paste", Some((true, red))), ("Merge Formatting", Some((true, None))), ("Keep Text Only", Some((false, None)))] {
+            let mut a = WordApp::new(wordcraft_engine::Session::new(wordcraft_doc::Document::from_text("Bold\nTarget")), Default::default());
+            a.session
+                .doc
+                .format_range(&Pos::body(0, 0), &Pos::body(0, 4), &|c| {
+                    c.bold = Some(true);
+                    c.color = red;
+                })
+                .unwrap();
+            a.session.relayout();
+            a.run("select.text", json!({"text": "Bold"})).unwrap();
+            a.run("edit.copy", json!({})).unwrap();
+            let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(1440.0, 900.0)).build_ui_state(
+                |ui, app: &mut WordApp| {
+                    let ctx = ui.ctx().clone();
+                    app.logic(&ctx);
+                    app.ui(ui);
+                },
+                a,
+            );
+            for _ in 0..6 {
+                h.step();
+            }
+            let c = h.state_mut().session.layout().caret(&Pos::body(1, 6)).expect("laid out");
+            let at = page_to_screen(h.state_mut(), c.page, c.x, c.top + c.height / 2.0).expect("on screen");
+            h.event(egui::Event::PointerMoved(at));
+            for pressed in [true, false] {
+                h.event(egui::Event::PointerButton { pos: at, button: egui::PointerButton::Secondary, pressed, modifiers: Default::default() });
+                h.step();
+            }
+            h.step();
+            assert!(h.query_by_label_contains("Paste Special").is_none(), "the text menu has no Paste Special");
+            for (name, _) in items {
+                assert!(h.query_all_by_label_contains(name).next().is_some(), "{choice}: {name} is offered");
+            }
+            let target = h
+                .get_all_by_label(choice)
+                .map(|n| n.rect())
+                .filter(|r| r.min.y > 80.0)
+                .max_by(|a, b| a.min.y.total_cmp(&b.min.y))
+                .unwrap_or_else(|| panic!("{choice}: no menu control"));
+            // Hover previews the paste; the click keeps that one step.
+            h.event(egui::Event::PointerMoved(target.center()));
+            h.step();
+            let (bold, colour) = pasted.expect("a paste result");
+            let doc = &h.state().session.doc;
+            assert_eq!(doc.plain_text(StoryRef::Body), "Bold\nTargetBold", "{choice}: hovering previews the paste");
+            let p = doc.para_at(&Pos::body(1, 0)).expect("the target paragraph");
+            assert_eq!(p.props_of_char(7).bold == Some(true), bold, "{choice}: preview bold");
+            assert_eq!(p.props_of_char(7).color, colour, "{choice}: preview colour");
+            h.event(egui::Event::PointerMoved(egui::pos2(8.0, 8.0)));
+            h.step();
+            assert_eq!(h.state().session.doc.plain_text(StoryRef::Body), "Bold\nTarget", "{choice}: leaving the option restores the document");
+            h.event(egui::Event::PointerMoved(target.center()));
+            for pressed in [true, false] {
+                h.event(egui::Event::PointerButton {
+                    pos: target.center(),
+                    button: egui::PointerButton::Primary,
+                    pressed,
+                    modifiers: Default::default(),
+                });
+                h.step();
+            }
+            for _ in 0..3 {
+                h.step();
+            }
+            let doc = &h.state().session.doc;
+            assert_eq!(doc.plain_text(StoryRef::Body), "Bold\nTargetBold", "{choice}: the click keeps the preview");
+            let p = doc.para_at(&Pos::body(1, 0)).expect("the target paragraph");
+            assert_eq!(p.props_of_char(7).bold == Some(true), bold, "{choice}: bold");
+            assert_eq!(p.props_of_char(7).color, colour, "{choice}: colour");
         }
     }
 

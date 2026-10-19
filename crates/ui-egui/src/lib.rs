@@ -30,6 +30,7 @@ pub mod caret_glide;
 pub mod chrome;
 pub mod colors;
 pub mod content_controls;
+pub mod context_panel;
 pub mod control;
 pub mod credits;
 pub mod crop;
