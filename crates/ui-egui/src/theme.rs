@@ -792,6 +792,7 @@ mod tests {
 
     /// Ink of a line of interface text at 1.45x (a 145 % desktop) in `appearance`, drawn in the
     /// palette's text colour extremes (black on white, white on black) so the two compare.
+    #[cfg(all(unix, not(target_os = "macos")))]
     fn interface_text_ink(appearance: super::Appearance) -> u64 {
         let dark = matches!(appearance, super::Appearance::Dark);
         let (fg, bg) = if dark { (egui::Color32::WHITE, egui::Color32::BLACK) } else { (egui::Color32::BLACK, egui::Color32::WHITE) };
