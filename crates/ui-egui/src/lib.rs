@@ -238,6 +238,8 @@ pub struct UiState {
     #[serde(skip)]
     pub print: print_page::PrintSettings,
     pub ribbon_collapsed: bool,
+    /// Show ribbon commands in one row; independent of the collapsed state.
+    pub single_line_ribbon: bool,
     /// The Quick Access Toolbar shows in the title bar (#1945). Its menu's Hide Quick Access
     /// Toolbar takes it away; Show Quick Access Toolbar (the ribbon's right-click menu, Customize
     /// Ribbon › Quick Access Toolbar) brings it back. Kept between runs.
@@ -361,6 +363,7 @@ impl Default for UiState {
             backstage_page: "home".into(),
             print: print_page::PrintSettings::default(),
             ribbon_collapsed: false,
+            single_line_ribbon: false,
             quick_access_toolbar: true,
             recent: Vec::new(),
             recent_symbols: Vec::new(),
@@ -1522,6 +1525,14 @@ impl WordApp {
                 self.ui.ribbon_collapsed = !self.ui.ribbon_collapsed;
                 json!({"collapsed": self.ui.ribbon_collapsed})
             }
+            "ui.singleLineRibbon" => {
+                self.ui.single_line_ribbon = match p.get("value") {
+                    None => !self.ui.single_line_ribbon,
+                    Some(Value::Bool(value)) => *value,
+                    Some(_) => return Some(Err("`value` must be true or false".into())),
+                };
+                json!({"singleLineRibbon": self.ui.single_line_ribbon})
+            }
             "ui.quickAccessToolbar" => {
                 // Hide Quick Access Toolbar (its menu) and Show Quick Access Toolbar (the ribbon's
                 // right-click menu, Customize Ribbon), #1945: `value` true shows the toolbar in
@@ -2604,6 +2615,7 @@ pub(crate) fn works_without_document(id: &str) -> bool {
             | "ui.dialog"
             | "ui.closeDialog"
             | "ui.collapseRibbon"
+            | "ui.singleLineRibbon"
             | "ui.quickAccessToolbar"
             | "ui.keytips"
             | "ui.dark"
@@ -2944,6 +2956,25 @@ mod tests {
             },
             a,
         )
+    }
+
+    /// The layout command is saved independently of collapse, validates parameters, and works empty.
+    #[test]
+    fn single_line_ribbon_is_optional_and_persisted() {
+        let mut a = app();
+        assert!(!a.ui.single_line_ribbon);
+        a.run("ui.collapseRibbon", json!({})).unwrap();
+        assert_eq!(a.run("ui.singleLineRibbon", json!({"value": true})).unwrap()["singleLineRibbon"], true);
+        assert!(a.ui.ribbon_collapsed, "layout never expands the ribbon");
+        let saved = serde_json::to_value(&a.ui).unwrap();
+        let restored: UiState = serde_json::from_value(saved).unwrap();
+        assert!(restored.single_line_ribbon && restored.ribbon_collapsed);
+        for value in [json!(null), json!("true"), json!(1)] {
+            assert!(a.run("ui.singleLineRibbon", json!({"value": value})).is_err());
+            assert!(a.ui.single_line_ribbon);
+        }
+        a.run("file.close", json!({})).unwrap();
+        assert_eq!(a.run("ui.singleLineRibbon", json!({})).unwrap()["singleLineRibbon"], false);
     }
 
     /// #766: started with nothing to open, the app shows File › Home (the Start screen) as Word
