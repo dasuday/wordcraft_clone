@@ -2615,6 +2615,10 @@ preview	Title	Título
 # Reading Mode column widths (#1040)
 	Narrow	Estrecha
 	Medium	Media
+# Table Design › Borders: the border pen (#1740)
+	Line Style	Estilo de línea
+	Line Weight	Grosor de línea
+	Pen Color	Color de pluma
 # Split Cells and Convert Text to Table (#2592)
 	Merge cells before split	Combinar celdas antes de dividir
 	Table size	Tamaño de la tabla

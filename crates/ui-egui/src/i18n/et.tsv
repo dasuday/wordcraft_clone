@@ -2283,6 +2283,10 @@
 # Reading Mode column widths (#1040)
 	Narrow	Kitsas
 	Medium	Keskmine
+# Table Design › Borders: the border pen (#1740)
+	Line Style	Joone laad
+	Line Weight	Joone paksus
+	Pen Color	Pliiatsi värv
 # Split Cells and Convert Text to Table (#2592)
 	Merge cells before split	Ühenda lahtrid enne tükeldamist
 	Table size	Tabeli suurus

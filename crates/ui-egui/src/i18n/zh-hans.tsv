@@ -2261,6 +2261,10 @@
 # Reading Mode column widths (#1040)
 	Narrow	窄
 	Medium	中等
+# Table Design › Borders: the border pen (#1740)
+	Line Style	线型
+	Line Weight	线条粗细
+	Pen Color	笔颜色
 # Split Cells and Convert Text to Table (#2592)
 	Merge cells before split	拆分前合并单元格
 	Table size	表格尺寸

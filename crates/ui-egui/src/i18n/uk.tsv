@@ -2261,6 +2261,10 @@
 # Reading Mode column widths (#1040)
 	Narrow	Вузька
 	Medium	Середня
+# Table Design › Borders: the border pen (#1740)
+	Line Style	Стиль лінії
+	Line Weight	Товщина лінії
+	Pen Color	Колір пера
 # Split Cells and Convert Text to Table (#2592)
 	Merge cells before split	Об'єднати клітинки перед розділенням
 	Table size	Розмір таблиці
