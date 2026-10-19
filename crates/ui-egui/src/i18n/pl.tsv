@@ -2654,6 +2654,7 @@ preview	Title	Tytuł
 # Reading Mode column widths (#1040)
 	Narrow	Wąska
 	Medium	Średnia
+	EPUB (*.epub)	EPUB (*.epub)
 # Split Cells and Convert Text to Table (#2592)
 	Merge cells before split	Scal komórki przed podziałem
 	Table size	Rozmiar tabeli

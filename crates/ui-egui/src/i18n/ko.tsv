@@ -2498,6 +2498,7 @@ preview	Title	제목
 	Bottom Right Cell	오른쪽 아래 셀
 	Inside Horizontal Border	안쪽 가로 테두리
 	Inside Vertical Border	안쪽 세로 테두리
+	EPUB (*.epub)	EPUB (*.epub)
 # Mail merge: recipient list search (#1576)
 	Find in list:	목록에서 찾기:
 	Any field	모든 필드

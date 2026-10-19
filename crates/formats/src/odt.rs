@@ -791,7 +791,7 @@ fn join_deleted_marks(blocks: &[FBlock]) -> Option<(Vec<FBlock>, HashMap<usize, 
 }
 
 /// Now, as an `xsd:dateTime` (UTC).
-fn now_iso() -> String {
+pub(crate) fn now_iso() -> String {
     let t = now_unix();
     let (days, secs) = (t.div_euclid(86_400), t.rem_euclid(86_400));
     // Days since 1970-01-01 → civil date (Howard Hinnant's algorithm).

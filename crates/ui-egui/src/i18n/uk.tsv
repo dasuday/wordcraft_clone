@@ -2261,6 +2261,7 @@
 # Reading Mode column widths (#1040)
 	Narrow	Вузька
 	Medium	Середня
+	EPUB (*.epub)	EPUB (*.epub)
 # Split Cells and Convert Text to Table (#2592)
 	Merge cells before split	Об'єднати клітинки перед розділенням
 	Table size	Розмір таблиці
