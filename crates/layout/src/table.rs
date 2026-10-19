@@ -705,8 +705,7 @@ pub fn layout_table(ctx: &mut Ctx, story: StoryRef, t: &Table, path: &[u32], ava
         let exact = t.rows.get(ri).is_some_and(|r| r.props.height_rule == HeightRule::Exact && r.props.height.is_some_and(|h| h > 0.0));
         let Carry { mut items, lead, cells: run_on } = carry.get_mut(ri).map(std::mem::take).unwrap_or_default();
         let carried = items.len();
-        let mut parts: Vec<CellPart> = run_on.into_iter().map(|(_, p)| p).collect();
-        parts.reserve(cells.len());
+        let mut parts: Vec<CellPart> = Vec::with_capacity(cells.len() + run_on.len());
         let mut open = Vec::new();
         for (ci, c) in cells.into_iter().enumerate() {
             let first = items.len();
@@ -837,6 +836,8 @@ pub fn layout_table(ctx: &mut Ctx, story: StoryRef, t: &Table, path: &[u32], ava
             let top = c.margins[0] + c.borders.top.filter(Border::is_visible).map_or(0.0, |b| b.width.clamp(0.0, 12.0));
             parts.push(CellPart { top, items: first..items.len(), end: end.filter(|(band, _)| *band == 0).map(|(_, e)| e) });
         }
+        // The row's own cells come first: `row_keeps_next` reads the first cell's paragraph.
+        parts.extend(run_on.into_iter().map(|(_, p)| p));
         out.push(RowLayout { height: rh, items, bottom: bottoms.get(ri).copied().unwrap_or(0.0), cells: parts, carried, lead, open });
     }
     TableLayout { x, width: total, rows: out }
