@@ -206,6 +206,7 @@ fn paste_release_modifiers(released: Modifiers, press_seen: bool, held: Option<M
     if released.command || press_seen { released } else { held.unwrap_or(released) }
 }
 
+/// Whether `key` is a Shift, Ctrl, Alt or Super key, whose own presses don't end a Mod+V.
 fn is_modifier_key(key: Key) -> bool {
     matches!(
         key,
@@ -746,6 +747,7 @@ mod tests {
         assert!(!is_paste_special_release(Key::V, m(true, true, true)) && !is_paste_special_release(Key::V, m(true, false, false)));
     }
 
+    /// An empty document whose clipboard holds a 4 × 4 picture.
     fn picture_app() -> WordApp {
         use crate::paste_picture::ClipboardPicture;
         let services = crate::Services {
@@ -755,15 +757,18 @@ mod tests {
         WordApp::new(wordcraft_engine::Session::new(wordcraft_doc::Document::new()), services)
     }
 
+    /// How many pictures the document holds (the Selection Pane's list).
     fn pictures(a: &mut WordApp) -> usize {
         a.session.run("arrange.selectionPane", &json!({})).unwrap().as_array().map(|x| x.len()).unwrap_or(0)
     }
 
+    /// One canvas frame with `modifiers` held, then `events`.
     fn mods_frame(ctx: &egui::Context, a: &mut WordApp, modifiers: Modifiers, events: Vec<egui::Event>) {
         let events = std::iter::once(egui::Event::ModifiersChanged(modifiers)).chain(events).collect();
         ctx.run_ui(egui::RawInput { events, ..Default::default() }, |ui| canvas_events(a, ui.ctx())).drop_without_applying_deltas();
     }
 
+    /// A press or release of `key` with `modifiers`.
     fn key_event(key: Key, pressed: bool, modifiers: Modifiers) -> egui::Event {
         egui::Event::Key { key, physical_key: Some(key), pressed, repeat: false, modifiers }
     }
@@ -825,6 +830,7 @@ mod tests {
         assert_eq!(pictures(&mut a), 1);
     }
 
+    /// A V release keeps its own modifiers unless Mod went up first and no V press arrived.
     #[test]
     fn paste_release_modifiers_fall_back_to_those_held_with_mod() {
         let ctrl = Modifiers { ctrl: true, command: true, ..Default::default() };
