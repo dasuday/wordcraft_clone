@@ -160,6 +160,14 @@ fn font_effect_removal_suppresses_inherited_decorations_after_docx_roundtrip() {
     let mut reopened = Session::new(wordcraft_docx::read(&wordcraft_docx::write(&s.doc).unwrap()).unwrap());
     run(&mut reopened, "select.all", json!({}));
     assert_eq!(super::cmd::format::state(&reopened)["textEffects"], state["textEffects"]);
+    // Automatic inherits; No Outline suppresses the style instead.
+    run(&mut reopened, "format.set", json!({"props":{},"effects":{"outline":null}}));
+    assert!(super::cmd::format::state(&reopened)["textEffects"].get("outline").is_some());
+    run(&mut reopened, "format.set", json!({"props":{},"effects":{"outline":"none"}}));
+    assert!(super::cmd::format::state(&reopened)["textEffects"].get("outline").is_none());
+    let mut no_outline = Session::new(wordcraft_docx::read(&wordcraft_docx::write(&reopened.doc).unwrap()).unwrap());
+    run(&mut no_outline, "select.all", json!({}));
+    assert!(super::cmd::format::state(&no_outline)["textEffects"].get("outline").is_none());
     run(&mut reopened, "format.set", json!({"props":{},"effects":{"clear":true}}));
     let mut cleared = Session::new(wordcraft_docx::read(&wordcraft_docx::write(&reopened.doc).unwrap()).unwrap());
     run(&mut cleared, "select.all", json!({}));

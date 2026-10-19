@@ -139,6 +139,7 @@ Imported Word 97–2003 `.doc`/`.dot` files now ask for a supported DOCX target 
 - 2026-10-15: Find opens Navigation on Results; editing the query restores Results after manual Headings/Pages navigation. Typed and selected-text searches retain document contents (#2096).
 
 | Date | What landed |
+| 2026-10-18 | Clarified Text Outline API semantics: null is Automatic and restores style inheritance; "none" suppresses inherited outlines. The existing effect-removal regression now checks both and No Outline after DOCX save/reopen. |
 | 2026-10-18 | Set As Default preserves stored text effects when selection effects are absent or mixed; explicit effects patches merge into each defaults store, and an explicit API null still clears its effects. Covered by engine and dialog regressions. |
 | 2026-10-18 | Reconciled Font dialog parity with current main: reuse upstream ligature flags and mixed kerning controls, retain saved ligature-name compatibility, preserve symbol fonts and colour-only underlines, and keep nested Cancel with native close controls. Proofing-language persistence remains separate (#2882). Full CI passes with four test workers: 3,430 passed, three ignored. |
 | 2026-10-18 | Clearing a font query with no matches keeps Recently Used Fonts visible at the top of a scrollable list. The initial scroll position no longer skips its heading; measured keyboard scrolling is unchanged (#2068). |
@@ -513,6 +514,7 @@ Footer page-table height and body wrapping are corrected. Other pagination gaps 
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-18 | minor | Clarified Text Outline API semantics: null is Automatic and restores style inheritance; "none" suppresses inherited outlines. The existing effect-removal regression now checks both and No Outline after DOCX save/reopen. |
 | 2026-10-18 | minor | Set As Default preserves stored text effects when selection effects are absent or mixed; explicit effects patches merge into each defaults store, and an explicit API null still clears its effects. Covered by engine and dialog regressions. |
 | 2026-10-18 | minor | Reconciled Font dialog parity with current main: reuse upstream ligature flags and mixed kerning controls, retain saved ligature-name compatibility, preserve symbol fonts and colour-only underlines, and keep nested Cancel with native close controls. Proofing-language persistence remains separate (#2882). Full CI passes with four test workers: 3,430 passed, three ignored. |
 | 2026-10-15 | minor | Reconciled Font dialog work with current main, preserving installed-font loading, localized family names, the strikethrough shortcut and new renderer background metadata. Font labels cover all 22 catalogs; the emoji fixture explicitly requests its color font on Windows. Full CI passes with four test workers: 2,770 passed, two ignored. |

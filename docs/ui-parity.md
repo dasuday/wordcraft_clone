@@ -80,6 +80,7 @@ Footnote and endnote editing keeps body and note text at normal opacity, on ligh
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-18 | minor | Clarified Text Outline API semantics: null is Automatic and restores style inheritance; "none" suppresses inherited outlines. The existing effect-removal regression now checks both and No Outline after DOCX save/reopen. |
 | 2026-10-18 | minor | Set As Default preserves stored text effects when selection effects are absent or mixed; explicit effects patches merge into each defaults store, and an explicit API null still clears its effects. Covered by engine and dialog regressions. |
 | 2026-10-18 | minor | Reconciled Font dialog parity with current main: reuse upstream ligature flags and mixed kerning controls, retain saved ligature-name compatibility, preserve symbol fonts and colour-only underlines, and keep nested Cancel with native close controls. Proofing-language persistence remains separate (#2882). Full CI passes with four test workers: 3,430 passed, three ignored. |
 | 2026-10-15 | minor | Reconciled Font dialog work with current main, preserving installed-font loading, localized family names, the strikethrough shortcut and new renderer background metadata. Font labels cover all 22 catalogs; the emoji fixture explicitly requests its color font on Windows. Full CI passes with four test workers: 2,770 passed, two ignored. |
