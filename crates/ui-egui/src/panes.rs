@@ -361,9 +361,11 @@ fn outline(app: &mut WordApp, ui: &mut Ui) {
             dropped = true;
         }
     }
-    // Where the dragged section would land, drawn as a line while it is still in the air.
+    // Where the dragged section would land, drawn as a line while it is still in the air. Only a
+    // pointer inside the pane counts: released elsewhere, the drag ends without moving anything.
+    let viewport = ui.clip_rect();
     let pointer = ui.input(|i| i.pointer.interact_pos().or(i.pointer.latest_pos()));
-    let landing = app.ui.nav_drag.as_ref().and(pointer).and_then(|p| landing(&items, &rows, p));
+    let landing = app.ui.nav_drag.as_ref().and(pointer).and_then(|p| landing(&items, &rows, viewport, p));
     if let Some((_, y)) = &landing
         && let (Some((_, r0)), Some((_, r1))) = (rows.first(), rows.last())
     {
@@ -472,8 +474,14 @@ fn outline_skeleton(document: u64, items: &[(Path, u8, String)]) -> u64 {
 /// path `nav.move` wants (`null` for the end of the container), and the height the drop line is
 /// drawn at. Dropping on a row's upper half lands before that heading; the lower half lands after
 /// its whole section, in front of the next heading at its level or above — or at the end of the
-/// container when that was the last section in it. `None` only when there are no rows.
-fn landing(items: &[(Path, u8, String)], rows: &[(usize, Rect)], pos: Pos2) -> Option<(serde_json::Value, f32)> {
+/// container when that was the last section in it. A release outside `viewport` — over the
+/// document, the ribbon, another pane — is not a drop at all: the end-of-container target below
+/// the last row would otherwise let a drag released anywhere on the page reorder the document.
+/// `None` when it is outside, and when there are no rows.
+fn landing(items: &[(Path, u8, String)], rows: &[(usize, Rect)], viewport: Rect, pos: Pos2) -> Option<(serde_json::Value, f32)> {
+    if !viewport.contains(pos) {
+        return None;
+    }
     let (top, bottom) = (rows.first()?.1, rows.last()?.1);
     if pos.y < top.min.y {
         return rows.first().map(|(i, r)| (json!(items[*i].0.0), r.min.y));
@@ -1242,7 +1250,9 @@ mod navigation_tests {
         let (items, rows) = tree();
         let at_row = |i: usize, frac: f32| rows[i].1.min.y + ROW_H * frac;
         let path = |v: &Value| v.as_array().map(|a| a.iter().filter_map(Value::as_u64).collect::<Vec<_>>());
-        let land = |y: f32| landing(&items, &rows, pos2(10.0, y)).map(|(at, line)| (path(&at), line));
+        // The pane: the rows (0–60) plus its padding above and the empty space below them.
+        let viewport = Rect::from_min_max(pos2(0.0, -10.0), pos2(200.0, 200.0));
+        let land = |y: f32| landing(&items, &rows, viewport, pos2(10.0, y)).map(|(at, line)| (path(&at), line));
         // Above the first row: the very top of the outline.
         assert_eq!(land(-5.0), Some((Some(vec![0]), rows[0].1.min.y)));
         // The upper half of a row is in front of it; the lower half is past it.
@@ -1253,6 +1263,11 @@ mod navigation_tests {
         // still lands there rather than doing nothing.
         assert_eq!(land(at_row(2, 0.75)), Some((None, rows[2].1.max.y)));
         assert_eq!(land(rows[2].1.max.y + 5.0), Some((None, rows[2].1.max.y)));
+        // A release outside the pane is not a drop: released over the document, the ribbon, or
+        // below the pane, the section stays where it is.
+        assert_eq!(land(300.0), None, "released below the outline");
+        assert_eq!(landing(&items, &rows, viewport, pos2(-30.0, at_row(0, 0.75))), None, "released over the document");
+        assert_eq!(landing(&items, &rows, viewport, pos2(10.0, -20.0)), None, "released over the tab strip");
     }
 
     /// Folded headings belong to the outline they were folded on: another document, or a heading
@@ -1277,6 +1292,7 @@ mod navigation_tests {
     /// An empty outline has nowhere to drop, and the pane must not index into nothing.
     #[test]
     fn a_drop_into_an_empty_outline_lands_nowhere() {
-        assert!(landing(&[], &[], pos2(0.0, 0.0)).is_none());
+        let pane = Rect::from_min_size(pos2(0.0, 0.0), vec2(200.0, 100.0));
+        assert!(landing(&[], &[], pane, pos2(0.0, 0.0)).is_none());
     }
 }
