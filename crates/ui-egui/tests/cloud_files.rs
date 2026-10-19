@@ -5,6 +5,7 @@
 //! before the next one. Everything else is the shipping code: the Backstage pages, `WordApp::run`,
 //! the Save Changes prompt, the conflict modal and the docx path.
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 use egui_kittest::kittest::Queryable as _;
@@ -175,8 +176,7 @@ fn document_bytes(name: &str, text: &str) -> Vec<u8> {
 }
 
 fn locked_bytes(name: &str, text: &str) -> Vec<u8> {
-    use wordcraft_engine::cmd::file::ExportOptions;
-    wordcraft_engine::io::save_bytes_with(name, &Document::from_text(text), Some("sesame"), &ExportOptions::default()).unwrap()
+    wordcraft_engine::io::save_bytes_with(name, &Document::from_text(text), Some("sesame"), &wordcraft_engine::io::ExportOptions::default()).unwrap()
 }
 
 struct Fake {
@@ -200,7 +200,16 @@ impl CloudBackend for Service {
 ///
 /// The share dialog is a craft-ui control with its own tests. This exists so the window has
 /// somewhere to share to. That is what decides whether the title bar draws a split button at all.
-struct Sharing;
+struct Sharing {
+    /// Document ids the dialog asked `Access` for, in order.
+    access: Arc<Mutex<Vec<String>>>,
+}
+
+impl Sharing {
+    fn idle() -> Self {
+        Self { access: Arc::new(Mutex::new(Vec::new())) }
+    }
+}
 
 impl craft_ui::share::ShareBackend for Sharing {
     fn submit(&self, request: craft_ui::share::Request, reply: craft_ui::share::Replier) {
@@ -234,26 +243,35 @@ impl craft_ui::share::ShareBackend for Sharing {
                 let want = query.to_lowercase();
                 reply.answer(Answer::Lookup(everybody.into_iter().filter(|c| c.name.to_lowercase().contains(&want)).collect()));
             }
-            Request::Access { .. } => reply.answer(Answer::Access(vec![
-                Share {
-                    id: "s1".to_owned(),
-                    target: ShareTarget::User("dana".to_owned()),
-                    display: Some("Dana Okafor".to_owned()),
-                    permission: Permission::Edit,
-                    url: None,
-                    note: None,
-                    created: None,
-                },
-                Share {
-                    id: "s2".to_owned(),
-                    target: ShareTarget::Link,
-                    display: None,
-                    permission: Permission::View,
-                    url: Some("https://cloud.example/s/abc123".to_owned()),
-                    note: None,
-                    created: None,
-                },
-            ])),
+            Request::Access { id } => {
+                self.access.lock().unwrap().push(id);
+                reply.answer(Answer::Access(vec![
+                    Share {
+                        id: "s1".to_owned(),
+                        target: ShareTarget::User("dana".to_owned()),
+                        display: Some("Dana Okafor".to_owned()),
+                        permission: Permission::Edit,
+                        url: None,
+                        note: None,
+                        created: None,
+                    },
+                    Share {
+                        id: "s2".to_owned(),
+                        target: ShareTarget::Link,
+                        display: None,
+                        permission: Permission::View,
+                        url: Some("https://cloud.example/s/abc123".to_owned()),
+                        note: None,
+                        created: None,
+                    },
+                ]));
+            }
+            Request::Destinations => reply.answer(Answer::Destinations(vec![craft_ui::share::Destination {
+                id: "cloud".to_owned(),
+                name: "Cloud".to_owned(),
+                account: Some("Ada Lovelace".to_owned()),
+                linked: true,
+            }])),
             other => reply.refuse(format!("{other:?} is not offered here")),
         }
     }
@@ -291,7 +309,7 @@ fn build(state: State, rendering: bool) -> (Harness, Fake) {
             // Only a render wants one. A behaviour test that asked for capabilities it never uses
             // would answer a question nobody put.
             if rendering {
-                app.share.connect(Sharing);
+                app.share.connect(Sharing::idle());
             }
             app
         },
@@ -738,6 +756,53 @@ fn a_document_opened_as_opendocument_is_written_back_as_opendocument() {
     assert!(stored.windows(odf.len()).any(|w| w == odf), "the bytes are an ODF package, not a Word one");
     let reread = wordcraft_engine::io::open_bytes("Minutes.odt", &stored).unwrap();
     assert!(reread.plain_text(StoryRef::Body).starts_with("Apologies. Attending"));
+}
+
+/// A share save that lands, then another cloud file opens, before the dialog is told the id.
+///
+/// The save is submitted for the untitled document. The completion frame opens `Report.docx`
+/// after the worker's answer is applied and before the dialog reads the result. The dialog must
+/// be told the new file's id, not `Report.docx`.
+#[test]
+fn a_share_save_reports_the_document_that_was_saved() {
+    let access = Arc::new(Mutex::new(Vec::new()));
+    let watching = access.clone();
+    let opened_report = Arc::new(AtomicBool::new(false));
+    let switch = opened_report.clone();
+    let store = Arc::new(Mutex::new(furnished()));
+    let services = Services::default();
+    let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(1440.0, 980.0)).build_ui_state(
+        move |ui, app: &mut WordApp| {
+            let ctx = ui.ctx().clone();
+            app.logic(&ctx);
+            // `poll` has applied the save. Opening here is the gap before `share_save` reports.
+            if app.cloud.sharing_save && app.cloud.busy.is_none() && !switch.swap(true, Ordering::SeqCst) {
+                let entry = file_entry("/Report.docx", Some("application/vnd.openxmlformats-officedocument.wordprocessingml.document"));
+                cloud::open_entry(app, entry, None);
+                cloud::poll(app, &ctx);
+            }
+            app.ui(ui);
+        },
+        {
+            let mut app = WordApp::new(Session::new(Document::from_text("Draft")), services);
+            app.cloud.connect(Service(store.clone()));
+            app.share.connect(Sharing { access: watching });
+            app
+        },
+    );
+    h.run_steps(4);
+    assert!(h.state().share.available(), "the share service answered capabilities");
+    h.state_mut().share.open("", "Draft");
+    h.run_steps(2);
+    h.get_by_label("Cloud").click();
+    h.run_steps(1);
+    h.get_by_role_and_label(egui::accesskit::Role::Button, "Save and share").click();
+    h.run_steps(3);
+
+    assert!(opened_report.load(Ordering::SeqCst), "the completion frame opened the other cloud file");
+    assert!(h.state().session.doc.plain_text(StoryRef::Body).contains("Forty two"), "that open replaced the document");
+    let asked = access.lock().unwrap().clone();
+    assert_eq!(asked, vec!["/Draft.docx".to_owned()], "the dialog is told the file the share save created, not the one opened afterwards");
 }
 
 /// Writes one PNG per state to the directory in `WORDCRAFT_CLOUD_RENDERS`.

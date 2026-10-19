@@ -530,6 +530,10 @@ pub struct WordApp {
     /// offers the same one. Inert until the host connects a backend, and unavailable until that
     /// service says sharing exists.
     pub share: craft_ui::share::ShareDialog,
+    /// The document a share save was submitted for, and the cloud entry it already belonged to.
+    /// The result is read from that document, so opening another file before the transfer
+    /// finishes cannot hand the dialog the new file's id.
+    share_save_for: Option<(u64, Option<String>)>,
     /// Who else is in this document. Draws nothing when nobody is.
     pub presence: craft_ui::presence::PresenceBar,
     /// The Colors dialog (More Colors…), shown above any other dialog (#606).
@@ -691,6 +695,7 @@ impl WordApp {
             cloud_opening: None,
             cloud_open_entry: None,
             share: craft_ui::share::ShareDialog::new(),
+            share_save_for: None,
             presence: craft_ui::presence::PresenceBar::new().badges_only(),
             colors: None,
             restrict: Default::default(),
@@ -1146,8 +1151,7 @@ impl WordApp {
             // runs once that has saved, on a later frame with the non-blocking dialog (#94). A
             // document that came from the cloud has a destination already, so it goes the ordinary way.
             SaveChoice::Save
-                if self.services.download.is_none()
-                    && (self.legacy_word_path() || (self.session.path.is_none() && !cloud::has_target(self))) =>
+                if self.services.download.is_none() && (self.legacy_word_path() || (self.session.path.is_none() && !cloud::has_target(self))) =>
             {
                 return match self.save_as(file_dialogs::AfterSave::Continue { then, params, document }) {
                     file_dialogs::Asked::Done(r) => r,
@@ -2633,19 +2637,33 @@ fn share_save(app: &mut WordApp) {
         // One destination today. `request.destination` names which, and is carried through so a
         // second provider needs no change here.
         let _ = request.destination;
+        // Comment text still being typed is written first. This call does not go through
+        // `WordApp::run`, so the flush list on save commands does not cover it.
+        let _ = panes::flush_comment_drafts(app);
         // The name the copy is saved under is also the format it is written in (see
         // `cloud::target_name`), so the pages hold it while the bytes are made.
         app.cloud.save_name = request.name.clone();
+        let uid = app.session.document_id();
+        let previous = app.cloud.origins.get(&uid).map(|origin| origin.entry.id.clone());
         match cloud::save_as(app, "/", &request.name) {
-            Ok(_) => app.cloud.sharing_save = true,
+            Ok(_) => {
+                app.cloud.sharing_save = true;
+                app.share_save_for = Some((uid, previous));
+            }
             Err(reason) => app.share.save_failed(reason),
         }
     }
 
-    // The worker reports by clearing `busy`. A new origin means it landed.
+    // The worker reports by clearing `busy`. Success is a new origin on the document that was
+    // saved, not whatever document is active when this runs.
     if app.cloud.sharing_save && app.cloud.busy.is_none() {
         app.cloud.sharing_save = false;
-        match cloud::origin(app) {
+        let pending = app.share_save_for.take();
+        let landed = pending.as_ref().and_then(|(uid, previous)| {
+            let origin = app.cloud.origins.get(uid)?;
+            (previous.as_deref() != Some(origin.entry.id.as_str())).then_some(origin)
+        });
+        match landed {
             Some(origin) => {
                 let (id, name) = (origin.entry.id.clone(), origin.entry.name.clone());
                 app.share.saved(id, name);
@@ -2814,6 +2832,8 @@ fn flushes_comment_drafts(id: &str, params: &Value) -> bool {
         "file.save"
             | "file.saveAs"
             | "file.saveTemplate"
+            | "cloud.save"
+            | "cloud.saveAs"
             | "file.open"
             | "file.exportPdf"
             | "file.exportPng"
