@@ -1143,4 +1143,31 @@ mod tests {
         let g = wordcraft_engine::cmd::smart_art::selected_smart_art(&a.session).expect("still there");
         assert_eq!(g.items[0].text, "Ada", "one undo step for the typing");
     }
+
+    /// Ctrl+Tab inside a table cell reaches `text.insertTab` through the real key-event path
+    /// (`dispatch`'s generic keymap lookup, via `combo`'s literal "Ctrl+" prefix), not just the
+    /// command directly (#3137).
+    #[test]
+    fn ctrl_tab_inserts_a_tab_character_through_the_real_key_event() {
+        let ctx = egui::Context::default();
+        let mut a = WordApp::new(wordcraft_engine::Session::new(wordcraft_doc::Document::new()), crate::Services::default());
+        a.run("insert.table", json!({"rows": 1, "cols": 2})).unwrap();
+        a.run("text.insert", json!({"text": "A"})).unwrap();
+        // egui's own contract (`Modifiers::command`): "On Windows and Linux, set this to the
+        // same value as `ctrl`." Only macOS keeps a literal Ctrl press from also setting
+        // `command` (Cmd+Tab is the OS app switcher there, so WordApp's own binding is
+        // `mac_or("Ctrl+Tab", "Mod+Tab")`, see cmd/text.rs); this must match a real keypress on
+        // each platform, not just the bound key string, or it stops testing the dispatch path.
+        let ctrl = if cfg!(target_os = "macos") {
+            Modifiers { ctrl: true, ..Default::default() }
+        } else {
+            Modifiers { ctrl: true, command: true, ..Default::default() }
+        };
+        ctx.run_ui(egui::RawInput { events: vec![key_event(Key::Tab, true, ctrl)], ..Default::default() }, |ui| canvas_events(&mut a, ui.ctx()))
+            .drop_without_applying_deltas();
+        let (_, r, c) = a.session.sel.focus.path.cell().expect("caret stayed in a cell");
+        assert_eq!((r, c), (0, 0), "Ctrl+Tab stayed in the first cell");
+        let text = a.session.doc.para_at(&a.session.sel.focus).expect("caret in a paragraph").plain_text();
+        assert_eq!(text, "A\t");
+    }
 }

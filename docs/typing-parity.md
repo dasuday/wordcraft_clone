@@ -250,6 +250,9 @@ again.
   right), as in Word, so Tab moves to the cell on the left (the next one in reading order) and
   Shift+Tab back; in a left-to-right table Tab still moves right (#2634,
   `tab_in_a_table_inserted_in_right_to_left_text_moves_left`).
+- Ctrl+Tab inserts a literal tab character inside a table cell: plain Tab there always moves to
+  the next cell, as in Word, so it can't insert one (#3137,
+  `ctrl_tab_inserts_a_tab_character_inside_a_table_cell`).
 - Text typed or inserted (links, fields, symbols, pasted text with merged formatting) takes its
   direction from its own letters, not from the run around the caret, keeping only that run's
   bidi language: Latin typed into Hebrew from a reopened file is saved as left-to-right text, and

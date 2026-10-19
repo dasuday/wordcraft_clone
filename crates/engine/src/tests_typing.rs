@@ -1399,6 +1399,25 @@ fn tab_in_a_table_inserted_in_right_to_left_text_moves_left() {
     }
 }
 
+/// Ctrl+Tab inserts a literal tab character inside a table cell, as in Word, where plain Tab
+/// always moves to the next cell and so can't (#3137).
+#[test]
+fn ctrl_tab_inserts_a_tab_character_inside_a_table_cell() {
+    let mut s = s();
+    run(&mut s, "insert.table", json!({"rows": 1, "cols": 2}));
+    typ(&mut s, "A");
+    run(&mut s, "text.insertTab", json!({}));
+    typ(&mut s, "B");
+    let (_, r, c) = s.sel.focus.path.cell().expect("caret in a cell");
+    assert_eq!((r, c), (0, 0), "Ctrl+Tab stayed in the first cell");
+    let para = s.doc.para_at(&s.sel.focus).expect("caret in a paragraph");
+    assert_eq!(para.plain_text(), "A\tB");
+    // Plain Tab is unaffected: it still moves to the next cell instead of inserting a tab.
+    typ(&mut s, "\t");
+    let (_, r, c) = s.sel.focus.path.cell().expect("caret in a cell");
+    assert_eq!((r, c), (0, 1), "Tab still moves to the next cell");
+}
+
 /// A .docx of two paragraphs in two sections, as Word writes it: the first section's properties
 /// in the first paragraph's mark (portrait), the last section's in the body (landscape, starting
 /// as `kind`).

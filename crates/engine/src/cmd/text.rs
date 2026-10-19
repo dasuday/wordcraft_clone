@@ -17,6 +17,14 @@ pub fn specs() -> Vec<CommandSpec> {
         CommandSpec::new("text.columnBreak", "Column Break", "Layout › Breaks", |s, _| ins_char(s, COLUMN_BREAK)).key("Mod+Shift+Enter"),
         CommandSpec::new("text.tab", "Tab", "Editing", tab).key("Tab"),
         CommandSpec::new("text.backTab", "Shift+Tab", "Editing", back_tab).key("Shift+Tab"),
+        // Plain Tab moves between table cells; Ctrl+Tab always inserts a tab character, as in
+        // Word, so a cell can hold one (#3137). On Windows/Linux, egui mirrors a literal Ctrl
+        // press into `command` too (so `combo()` reads it as "Mod+"), so the binding there is
+        // "Mod+Tab" (which is physical Ctrl+Tab, since Mod there is Ctrl); on macOS it's the
+        // literal "Ctrl" modifier, kept distinct from Cmd so Cmd+Tab (the OS app switcher) is
+        // untouched.
+        CommandSpec::new("text.insertTab", "Insert Tab Character", "Editing", |s, _| ins_char(s, '\t'))
+            .key(super::mac_or("Ctrl+Tab", "Mod+Tab")),
         CommandSpec::new("text.backspace", "Backspace", "Editing", backspace).key("Backspace"),
         CommandSpec::new("text.delete", "Delete", "Editing", delete).key("Delete"),
         CommandSpec::new("text.deleteWordBack", "Delete Previous Word", "Editing", delete_word_back).key("Mod+Backspace / Alt+Backspace"),
