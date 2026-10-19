@@ -519,6 +519,7 @@ fn widow_control_moves_a_three_line_paragraph_whole() {
 
 #[test]
 fn footer_border_limits_body() {
+    crate::test_fonts();
     use wordcraft_doc::props::{Border, Borders, HeightRule};
     let mut d = Document::from_text(&"Body line\n".repeat(40));
     d.last_section.page_h = 400.0;
@@ -548,6 +549,7 @@ fn footer_border_limits_body() {
 /// number format is known, isn't taken for the page's own footer.
 #[test]
 fn a_roman_page_number_in_the_footer_stays_roman_with_the_page_count_in_the_body() {
+    crate::test_fonts();
     let field = |instr: &str| InlineObject::Field {
         instr: instr.into(),
         result: String::new(),

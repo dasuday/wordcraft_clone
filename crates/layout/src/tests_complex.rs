@@ -136,6 +136,7 @@ fn cluster_faces(text: &str, font: Option<&str>) -> Vec<(usize, wordcraft_fonts:
 
 #[test]
 fn a_missing_thai_font_draws_the_whole_run_in_one_thai_face() {
+    crate::test_fonts();
     if !thai_font_installed() {
         eprintln!("skipped: no Thai font installed");
         return;
@@ -158,6 +159,7 @@ fn a_missing_thai_font_draws_the_whole_run_in_one_thai_face() {
 
 #[test]
 fn a_thai_substitute_without_latin_hands_the_run_to_one_face_covering_it() {
+    crate::test_fonts();
     if !thai_font_installed() {
         eprintln!("skipped: no Thai font installed");
         return;
@@ -181,6 +183,7 @@ fn a_thai_substitute_without_latin_hands_the_run_to_one_face_covering_it() {
 
 #[test]
 fn latin_text_in_a_missing_latin_font_stays_in_its_substitute_beside_thai() {
+    crate::test_fonts();
     if !thai_font_installed() {
         eprintln!("skipped: no Thai font installed");
         return;
@@ -212,6 +215,7 @@ fn latin_text_in_a_missing_latin_font_stays_in_its_substitute_beside_thai() {
 
 #[test]
 fn thai_in_an_installed_latin_font_keeps_the_latin_face_for_latin() {
+    crate::test_fonts();
     if !thai_font_installed() {
         eprintln!("skipped: no Thai font installed");
         return;
@@ -227,6 +231,7 @@ fn thai_in_an_installed_latin_font_keeps_the_latin_face_for_latin() {
 
 #[test]
 fn a_missing_latin_font_with_a_thai_complex_script_font_keeps_both() {
+    crate::test_fonts();
     if !thai_font_installed() {
         eprintln!("skipped: no Thai font installed");
         return;
@@ -248,6 +253,7 @@ fn a_missing_latin_font_with_a_thai_complex_script_font_keeps_both() {
 
 #[test]
 fn a_missing_roman_thai_font_is_not_drawn_in_cambria() {
+    crate::test_fonts();
     // Word draws a missing font the font table classes as roman in Cambria, but a missing Thai
     // font keeps its Thai substitute: the same face whether or not the table calls it roman.
     let db = wordcraft_fonts::FontDb::global();

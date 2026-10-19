@@ -374,6 +374,7 @@ mod tests {
     /// #2534: the legacy font effects become text effects, under any WordArt effects.
     #[test]
     fn legacy_font_effects_are_drawn_as_text_effects() {
+        crate::test_fonts();
         use wordcraft_doc::CharProps;
         let rc = |c: CharProps| wordcraft_doc::styles::StyleSheet::default().resolve_char(None, &CharProps { size: Some(20.0), ..c });
         let red = Rgb(200, 0, 0);
@@ -405,6 +406,7 @@ mod tests {
     /// #2534: synthetic bold widens the outline, or adds one in the fill's colour.
     #[test]
     fn embolden_widens_or_adds_the_outline() {
+        crate::test_fonts();
         let red = Rgb(200, 0, 0);
         let mut plain = TextEffects::default();
         embolden(&mut plain, red, 20.0);
@@ -429,6 +431,7 @@ mod tests {
     /// draws its glyphs plainly.
     #[test]
     fn effects_on_tracked_and_turned_text() {
+        crate::test_fonts();
         use crate::display::{DisplayOptions, Draw, InsertMark, page_display};
         use wordcraft_doc::props::TextDirection;
         use wordcraft_doc::{CharProps, Document, Paragraph, Revision, RevisionKind, para_block};

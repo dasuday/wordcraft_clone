@@ -113,6 +113,7 @@ mod tests {
 
     #[test]
     fn auto_space_pairs() {
+        crate::test_fonts();
         assert_eq!(auto_space('院', '9', true, true), Some(AsianSide::Left));
         assert_eq!(auto_space('A', 'カ', true, true), Some(AsianSide::Right));
         assert_eq!(auto_space('院', '9', true, false), None);

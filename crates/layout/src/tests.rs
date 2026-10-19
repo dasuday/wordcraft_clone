@@ -757,6 +757,7 @@ fn page_break_char_starts_new_page() {
 /// beating `w:default`); a drop-down shows its selected entry whatever result was saved.
 #[test]
 fn legacy_form_fields_are_drawn() {
+    crate::test_fonts();
     let field = |form: &str| InlineObject::Field {
         instr: "FORMCHECKBOX".into(),
         result: String::new(),
@@ -996,6 +997,7 @@ fn ptab(align: wordcraft_doc::para::PTabAlign, relative_to: wordcraft_doc::para:
 /// the gap.
 #[test]
 fn right_positional_tab_ends_text_on_the_right_margin() {
+    crate::test_fonts();
     use wordcraft_doc::para::{PTabAlign, PTabBase};
     let d = ptab_doc("Left", "Right", ptab(PTabAlign::Right, PTabBase::Margin, wordcraft_doc::props::TabLeader::Dot), (0.0, 36.0));
     let l = lay(&d);
@@ -1009,6 +1011,7 @@ fn right_positional_tab_ends_text_on_the_right_margin() {
 /// and right indents, not between the margins.
 #[test]
 fn center_positional_tab_relative_to_indents_centres_between_them() {
+    crate::test_fonts();
     use wordcraft_doc::para::{PTabAlign, PTabBase};
     let d = ptab_doc("a", "Mid", ptab(PTabAlign::Center, PTabBase::Indent, wordcraft_doc::props::TabLeader::None), (36.0, 108.0));
     let l = lay(&d);
@@ -1022,6 +1025,7 @@ fn center_positional_tab_relative_to_indents_centres_between_them() {
 /// that place.
 #[test]
 fn positional_tab_behind_the_text_moves_to_the_next_line() {
+    crate::test_fonts();
     use wordcraft_doc::para::{PTabAlign, PTabBase};
     let before = "word ".repeat(14);
     let d = ptab_doc(&before, "X", ptab(PTabAlign::Left, PTabBase::Margin, wordcraft_doc::props::TabLeader::None), (0.0, 0.0));
@@ -1036,6 +1040,7 @@ fn positional_tab_behind_the_text_moves_to_the_next_line() {
 /// doesn't leave it blank to go to the next line, even when its place is behind the indent.
 #[test]
 fn positional_tab_after_only_a_bookmark_stays_on_its_line() {
+    crate::test_fonts();
     use wordcraft_doc::para::{PTabAlign, PTabBase};
     let mut d = ptab_doc("", "X", ptab(PTabAlign::Left, PTabBase::Margin, wordcraft_doc::props::TabLeader::None), (36.0, 0.0));
     d.insert_object(&Pos::body(0, 0), InlineObject::BookmarkStart { name: "top".into() }, &Default::default()).unwrap();
@@ -1048,6 +1053,7 @@ fn positional_tab_after_only_a_bookmark_stays_on_its_line() {
 
 #[test]
 fn narrow_cells_keep_their_width() {
+    crate::test_fonts();
     let mut p = wordcraft_doc::Paragraph::with_text("WW", wordcraft_doc::CharProps { size: Some(6.0), ..Default::default() });
     p.props.space_before = Some(0.0);
     p.props.space_after = Some(0.0);
@@ -1256,6 +1262,7 @@ fn symbol_font_bullet_without_the_font_draws_a_bullet() {
 
 #[test]
 fn pcl6_symbol_draws_greater_equal() {
+    crate::test_fonts();
     let mut d = Document::from_text("\u{F0B3}");
     d.format_range(&Pos::body(0, 0), &Pos::body(0, 3), &|c| c.font = Some("Symbol (PCL6)".into())).unwrap();
     let l = lay(&d);
@@ -1267,6 +1274,7 @@ fn pcl6_symbol_draws_greater_equal() {
 
 #[test]
 fn private_use_bullet_no_font_draws_shows_the_levels_default_bullet() {
+    crate::test_fonts();
     // #1683: a level-2 bullet stored as a private-use code in a font that isn't installed was
     // drawn from an installed icon font (U+F081 is the Twitter logo in Font Awesome).
     let mut d = Document::from_text("one");
@@ -1584,6 +1592,7 @@ fn headers_and_page_fields() {
 /// typed after them wraps to the next line. Same in the body and in a header.
 #[test]
 fn caret_after_hanging_spaces_stays_at_the_margin() {
+    crate::test_fonts();
     let spaces = format!("a{}", " ".repeat(200));
     for header in [false, true] {
         for text in [spaces.clone(), format!("{spaces}b")] {
@@ -2604,6 +2613,7 @@ fn a_split_row_keeps_its_bottom_margin_and_widow_control() {
 /// as usual.
 #[test]
 fn a_cell_emptied_by_widow_control_takes_its_row_to_the_next_page() {
+    crate::test_fonts();
     use wordcraft_doc::props::LineSpacing;
     // Letter, 1 inch margins: 648 pt of text. `filler` lines of exactly 14 pt, then a row whose
     // second cell holds one paragraph of `lines` lines, 14 pt each.
@@ -2694,6 +2704,7 @@ fn row_content_pieces(text: &str, props: ParaProps, room: f32) -> Vec<(usize, us
 
 #[test]
 fn row_split_ignores_afterspace() {
+    crate::test_fonts();
     let two = ["Top", "Bottom"].join(&wordcraft_doc::para::LINE_BREAK.to_string());
     for (text, room, expected) in [("Label", 18.0, vec![(0, 1), (1, 3)]), (two.as_str(), 32.0, vec![(0, 2), (2, 2)])] {
         let props = ParaProps { space_after: Some(8.0), widow_control: Some(true), ..Default::default() };
@@ -2703,6 +2714,7 @@ fn row_split_ignores_afterspace() {
 
 #[test]
 fn row_split_respects_widows() {
+    crate::test_fonts();
     let two = ["Top", "Bottom"].join(&wordcraft_doc::para::LINE_BREAK.to_string());
     let three = ["Top", "Middle", "Bottom"].join(&wordcraft_doc::para::LINE_BREAK.to_string());
     for (text, widow, room, expected) in [
@@ -3085,6 +3097,7 @@ fn drop_cap_layout(set: impl Fn(&mut wordcraft_doc::props::ParaProps)) -> std::s
 /// letter left of it, the distance away; the letter takes the chosen font.
 #[test]
 fn drop_cap_options_place_the_letter() {
+    crate::test_fonts();
     let x0 = |pl: &crate::para::ParaLayout, k: usize| pl.lines.get(k).and_then(|l| l.xs.first().copied()).unwrap_or(f32::NAN);
     let letter_x = |pl: &crate::para::ParaLayout| x0(pl, 0) + pl.glyphs.first().map(|g| g.dx).unwrap_or(f32::NAN);
 
@@ -3938,6 +3951,7 @@ fn exact_rows_add_only_the_bottom_margin() {
 
 #[test]
 fn exact_row_moves_whole() {
+    crate::test_fonts();
     use wordcraft_doc::props::HeightRule;
     let lines: Vec<String> = (1..=200).map(|i| format!("Filler {i}")).collect();
     let one_page = lay(&Document::from_text(&lines.join("\n"))).pages[0].items.iter().filter(|i| matches!(i, Placed::Lines { .. })).count();
@@ -3949,7 +3963,7 @@ fn exact_row_moves_whole() {
         p.insert_object(0, picture(30.0, height, Default::default()), &Default::default()).unwrap();
         t.rows[0].cells[0].blocks.push(wordcraft_doc::para_block(p));
     }
-    let mut d = Document::from_text(&lines[..one_page - 2].join("\n"));
+    let mut d = Document::from_text(&lines[..one_page - 1].join("\n"));
     let end = d.body.len();
     d.insert_block(StoryRef::Body, &Path::top(end), wordcraft_doc::Block::Table(t)).unwrap();
     let l = lay(&d);
@@ -4179,6 +4193,7 @@ fn floats_in_headers_and_table_cells_are_drawn() {
 /// its own keeps it (Word, observed with synthetic documents).
 #[test]
 fn automatic_text_in_a_styled_text_box_takes_the_box_s_colour() {
+    crate::test_fonts();
     let glyph_colors = |auto_color: Option<Rgb>| {
         let mut d = Document::from_text("Body");
         let id = text_box(&mut d, 4, "Auto", 200.0, 60.0, page_float(100.0, 300.0));
@@ -4209,6 +4224,7 @@ fn automatic_text_in_a_styled_text_box_takes_the_box_s_colour() {
 /// stays there.
 #[test]
 fn header_cell_float_placed_on_the_page() {
+    crate::test_fonts();
     use wordcraft_doc::para::{Anchor, Float, FloatAlign, Wrap};
     let mut d = Document::from_text(&"Body text of the contract. ".repeat(400));
     let wm = |outside_cell: bool| Float {
@@ -4627,6 +4643,7 @@ fn no_line_break_right_after_a_slash() {
 /// "and/or" whole), so the slash word had no break before it and split between two letters.
 #[test]
 fn a_word_after_a_slash_wraps_whole() {
+    crate::test_fonts();
     let (head, slash, tail) = ("ЖСН енгізілмеген жағдайда толтырылады", " /", "заполняется в случае неприсвоения ИИН");
     let text = format!("{head}{slash}{tail}");
     let italic = wordcraft_doc::CharProps { italic: Some(true), ..Default::default() };
@@ -4671,6 +4688,7 @@ fn a_word_after_a_slash_wraps_whole() {
 /// #2963 happened in a fixed-width table cell: the cell's own width is the line width there.
 #[test]
 fn a_word_after_a_slash_wraps_whole_in_a_fixed_cell() {
+    crate::test_fonts();
     let (head, slash, tail) = ("ЖСН енгізілмеген жағдайда толтырылады", " /", "заполняется в случае неприсвоения ИИН");
     let text = format!("{head}{slash}{tail}");
     let italic = wordcraft_doc::CharProps { italic: Some(true), ..Default::default() };
@@ -4718,6 +4736,7 @@ fn a_word_after_a_slash_wraps_whole_in_a_fixed_cell() {
 /// slash keeps it on the line.
 #[test]
 fn a_no_break_space_before_a_slash_still_holds() {
+    crate::test_fonts();
     let starts = |nb: char| -> (usize, usize) {
         // Varying word lengths, so the lines end at different places in the pattern.
         let text: String = (0..80).map(|i| format!("caption{nb}/word {} ", "w".repeat(1 + i % 5))).collect();
@@ -5078,6 +5097,7 @@ fn inline_picture_wider_than_the_text_keeps_its_size() {
 /// the anchor an empty line of its own above it (Word).
 #[test]
 fn a_float_anchor_does_not_push_a_wide_picture_to_a_second_line() {
+    crate::test_fonts();
     let lines_of = |with_anchor: bool| {
         let mut d = Document::from_text("");
         let mut at = Pos::body(0, 0);
@@ -5306,6 +5326,7 @@ fn lines_in_cell(n: usize, what: &str) -> Vec<std::sync::Arc<wordcraft_doc::Bloc
 
 #[test]
 fn an_at_least_row_with_no_room_starts_the_next_page_whole_either_way_breaking_is_set() {
+    crate::test_fonts();
     use wordcraft_doc::props::HeightRule;
     // Word for Mac 16.113, A4 with about 2.6 cm (74 pt) left: row 2, at least 8 cm (226.8 pt),
     // starts page 2 whole and row 1 stays on page 1, whether the row may break across pages or not.
@@ -5321,6 +5342,7 @@ fn an_at_least_row_with_no_room_starts_the_next_page_whole_either_way_breaking_i
 
 #[test]
 fn an_at_least_row_with_centred_lines_moves_whole_and_centres_them_in_its_height() {
+    crate::test_fonts();
     use wordcraft_doc::props::{HeightRule, VAlign};
     // Word: 10 short lines, centred vertically, in an "at least 8 cm" row with 2.6 cm left. The
     // lines would split there, but the whole row goes to page 2 and they sit in the middle of it.
@@ -5349,6 +5371,7 @@ fn an_at_least_row_with_centred_lines_moves_whole_and_centres_them_in_its_height
 
 #[test]
 fn an_at_least_row_taller_than_a_page_splits_from_the_top_of_the_next_page() {
+    crate::test_fonts();
     use wordcraft_doc::props::HeightRule;
     // A row at least 700 pt tall (the body is 648 pt) holding 80 lines: it can't fit on any page,
     // so it splits, but it starts on a fresh page rather than in the 200 pt left under the text.
@@ -5363,13 +5386,14 @@ fn an_at_least_row_taller_than_a_page_splits_from_the_top_of_the_next_page() {
 
 #[test]
 fn an_at_least_row_at_the_top_of_a_page_splits_instead_of_moving_on() {
+    crate::test_fonts();
     use wordcraft_doc::props::HeightRule;
     // At the top of a page (or under the header rows repeated there) moving on gains nothing: a
     // row taller than the room splits, and pagination ends.
     let (_, pages) = at_least_rows(648.0, 1, |t| {
         t.rows[0].props.height = Some(700.0);
         t.rows[0].props.height_rule = HeightRule::AtLeast;
-        t.rows[0].cells[0].blocks = lines_in_cell(80, "Line");
+        t.rows[0].cells[0].blocks = lines_in_cell(60, "Line");
     });
     assert!(pages.len() >= 2 && pages.iter().all(|p| p == &vec![0]), "{pages:?}");
     // A 100 pt header row, then a row at least 600 pt with 80 lines: under the header only 548 pt
@@ -5391,6 +5415,7 @@ fn an_at_least_row_at_the_top_of_a_page_splits_instead_of_moving_on() {
 
 #[test]
 fn repeated_header_moves_with_a_first_row_that_moves_on_whole() {
+    crate::test_fonts();
     use wordcraft_doc::props::HeightRule;
     // A 20 pt header, then a row at least 200 pt holding eight lines, with 100 pt left: the row
     // moves on whole, so the header goes with it rather than staying alone at the foot of page 1.
@@ -6425,6 +6450,7 @@ fn hyphenation_and_proofing_follow_each_runs_language() {
 /// style's; a paragraph that switches the style's list off (`num: 0`) is plain again.
 #[test]
 fn list_item_first_word_gets_no_capital_squiggle() {
+    crate::test_fonts();
     use wordcraft_doc::props::NumRef;
     let opts = LayoutOptions { proofing: true, ..LayoutOptions::default() };
     let grammar_squiggles = |d: &Document| -> usize {
@@ -6485,6 +6511,7 @@ fn unproofed_languages_and_no_proof_runs_are_not_marked() {
 /// ignored), on every page, like the same fields in the footer.
 #[test]
 fn shared_section_page_totals() {
+    crate::test_fonts();
     use wordcraft_doc::props::LineSpacing;
     use wordcraft_doc::section::{SectionProps, SectionStart};
     #[derive(Clone, Copy)]
@@ -6864,6 +6891,7 @@ fn a_text_frame_in_a_cell_floats_beside_the_text() {
 /// were drawn over each other (#2357).
 #[test]
 fn a_frame_inside_a_text_box_flows_with_its_text() {
+    crate::test_fonts();
     use wordcraft_doc::props::TextFrame;
     let mut d = Document::from_text("Body");
     let id = text_box(&mut d, 0, "", 150.0, 120.0, Default::default());
@@ -7115,6 +7143,7 @@ fn keep_with_next_carries_the_heading_when_keep_lines_moves_the_next_paragraph()
 
 #[test]
 fn section_mark_hidden_styles() {
+    crate::test_fonts();
     use wordcraft_doc::props::LineSpacing;
     use wordcraft_doc::section::{SectionProps, SectionStart};
     use wordcraft_doc::{CharProps, Style, StyleKind};
@@ -7160,6 +7189,7 @@ fn section_mark_hidden_styles() {
 
 #[test]
 fn empty_page_section_keeps_line() {
+    crate::test_fonts();
     use wordcraft_doc::section::{SectionProps, SectionStart};
     let mut doc = Document::from_text("\nAfter empty section\n\nReference prefix\n\nAfter middle mark");
     for index in 0..6 {
@@ -7412,6 +7442,7 @@ fn kerning_follows_kerning_for_fonts_like_word() {
 /// turned them off. Without a value WordCraft keeps its default, standard and contextual.
 #[test]
 fn ligatures_follow_w14_ligatures() {
+    crate::test_fonts();
     use wordcraft_doc::props::{CharProps, Ligatures};
     use wordcraft_doc::styles::{Style, StyleKind};
     let text = "office affinity";
@@ -7450,6 +7481,7 @@ fn ligatures_follow_w14_ligatures() {
 /// historical `hlig`, discretional `dlig`.
 #[test]
 fn ligature_flags_map_to_opentype_features() {
+    crate::test_fonts();
     use wordcraft_doc::props::Ligatures;
     let f = |t: &[u8; 4], v: u32| wordcraft_fonts::feature_value(t, v);
     let hd = Ligatures { historical: true, discretional: true, ..Default::default() };
@@ -8498,6 +8530,7 @@ fn justified_multi_column_pages_stay_at_the_top() {
 /// it, and a deletion that isn't left out keeps its line.
 #[test]
 fn a_paragraph_left_out_whole_takes_no_room() {
+    crate::test_fonts();
     let mut d = Document::from_text("One\nGone\nThree");
     d.format_range(&Pos::body(1, 0), &Pos::body(2, 0), &|c| c.del = Some(0)).unwrap();
     let three_top =
@@ -8517,6 +8550,7 @@ fn a_paragraph_left_out_whole_takes_no_room() {
 /// lines across the page at its zero height).
 #[test]
 fn a_paragraph_left_out_whole_draws_no_borders_or_shading() {
+    crate::test_fonts();
     let mut d = Document::from_text("One\nGone\nThree");
     let line = Some(Border::single(1.0));
     d.format_paragraphs(&Pos::body(1, 0), &Pos::body(1, 0), &|p| {
@@ -8566,6 +8600,7 @@ fn row_nil_overrides_style() {
 /// Continued text keeps the cell's border inset, as on its first fragment.
 #[test]
 fn split_cell_reuses_top_inset() {
+    crate::test_fonts();
     use wordcraft_doc::props::{HeightRule, LineSpacing};
     for (width, margin) in [(0.0, 0.0), (0.5, 0.0), (2.0, 0.0), (0.0, 6.0), (0.5, 6.0), (2.0, 6.0)] {
         for spacing in [LineSpacing::Exactly(10.0), LineSpacing::AtLeast(10.0)] {
@@ -8617,6 +8652,7 @@ fn split_cell_reuses_top_inset() {
 /// Images and their floating hit areas move together without changing size or crop.
 #[test]
 fn split_cell_moves_image_frame() {
+    crate::test_fonts();
     use crate::table::{CellPart, RowLayout, split_row};
     use wordcraft_doc::para::Wrap;
     for top in [0.0, 0.5, 6.5, 8.0] {
@@ -8725,6 +8761,7 @@ fn row_keep_pages(d: &Document) -> Vec<usize> {
 
 #[test]
 fn kept_row_moves_with_next() {
+    crate::test_fonts();
     for rule in [wordcraft_doc::props::HeightRule::AtLeast, wordcraft_doc::props::HeightRule::Exact] {
         let mut d = row_keep_doc();
         d.table_mut(StoryRef::Body, &Path::top(1)).unwrap().rows[1].props.height_rule = rule;
@@ -8737,6 +8774,7 @@ fn kept_row_moves_with_next() {
 
 #[test]
 fn kept_row_allows_next_split() {
+    crate::test_fonts();
     let mut d = row_keep_doc();
     let t = d.table_mut(StoryRef::Body, &Path::top(1)).unwrap();
     t.rows[1].props.height = None;
@@ -8749,6 +8787,7 @@ fn kept_row_allows_next_split() {
 
 #[test]
 fn kept_rows_move_as_chain() {
+    crate::test_fonts();
     let mut d = row_keep_doc();
     d.para_mut(StoryRef::Body, &Path::top(0)).unwrap().props.line_spacing = Some(wordcraft_doc::props::LineSpacing::Exactly(170.0));
     let t = d.table_mut(StoryRef::Body, &Path::top(1)).unwrap();
@@ -8766,6 +8805,7 @@ fn kept_rows_move_as_chain() {
 
 #[test]
 fn oversized_kept_rows_finish() {
+    crate::test_fonts();
     let mut d = row_keep_doc();
     d.table_mut(StoryRef::Body, &Path::top(1)).unwrap().rows[1].props.height = Some(400.0);
     let l = lay(&d);
@@ -8775,6 +8815,7 @@ fn oversized_kept_rows_finish() {
 
 #[test]
 fn kept_row_can_split_itself() {
+    crate::test_fonts();
     let mut d = row_keep_doc();
     let t = d.table_mut(StoryRef::Body, &Path::top(1)).unwrap();
     t.rows[0].props.height = None;
@@ -8790,6 +8831,7 @@ fn kept_row_can_split_itself() {
 
 #[test]
 fn first_cell_controls_keep() {
+    crate::test_fonts();
     for (first, last, pages) in [(true, false, [1, 1]), (false, true, [0, 1]), (true, true, [1, 1]), (false, false, [0, 1])] {
         let mut d = row_keep_doc();
         let t = d.table_mut(StoryRef::Body, &Path::top(1)).unwrap();
@@ -8809,6 +8851,7 @@ fn first_cell_controls_keep() {
 
 #[test]
 fn first_para_controls_row_keep() {
+    crate::test_fonts();
     let mut d = row_keep_doc();
     let mut p = Paragraph::with_text("Last paragraph", Default::default());
     p.props = d.para(StoryRef::Body, &Path(vec![1, 0, 0, 0])).unwrap().props.clone();
@@ -8822,6 +8865,7 @@ fn first_para_controls_row_keep() {
 
 #[test]
 fn nested_keep_leaves_outer_row() {
+    crate::test_fonts();
     let mut d = row_keep_doc();
     let t = d.table_mut(StoryRef::Body, &Path::top(1)).unwrap();
     t.rows[0].props.height = Some(60.0);
@@ -8835,6 +8879,7 @@ fn nested_keep_leaves_outer_row() {
 
 #[test]
 fn kept_prefix_stays_together() {
+    crate::test_fonts();
     let mut d = row_keep_doc();
     let t = d.table_mut(StoryRef::Body, &Path::top(1)).unwrap();
     t.rows[1].props.height = Some(400.0);
@@ -8849,6 +8894,7 @@ fn kept_prefix_stays_together() {
 /// even when its anchor paragraph has no inline picture (synthetic two-cell probe).
 #[test]
 fn cell_frame_centres_empty() {
+    crate::test_fonts();
     use wordcraft_doc::para::{Anchor, Float, Wrap};
     use wordcraft_doc::props::{HeightRule, VAlign};
     let mut d = Document::new();
@@ -8882,6 +8928,7 @@ fn cell_frame_centres_empty() {
 
 #[test]
 fn section_start_summed_spacing() {
+    crate::test_fonts();
     for summed in [false, true] {
         let mut d = Document::from_text("Section end\nSection start");
         d.settings.sum_paragraph_spacing = summed;
@@ -8906,6 +8953,7 @@ fn section_start_summed_spacing() {
 
 #[test]
 fn partial_margins_inherit() {
+    crate::test_fonts();
     let height = |top, bottom| {
         let mut table = Table::new(1, 1, 200.0);
         table.props.style = None;
@@ -8937,6 +8985,7 @@ fn partial_margins_inherit() {
 /// Exact line pitch keeps the text baseline even when an equation has a deep denominator.
 #[test]
 fn exact_math_keeps_run_baseline() {
+    crate::test_fonts();
     use wordcraft_doc::props::LineSpacing;
     for display in [false, true] {
         for spacing in [LineSpacing::Exactly(12.0), LineSpacing::AtLeast(12.0), LineSpacing::Multiple(1.0)] {
@@ -8989,6 +9038,7 @@ fn exact_math_keeps_run_baseline() {
 
 #[test]
 fn float_font_keeps_line_height() {
+    crate::test_fonts();
     use wordcraft_doc::CharProps;
     use wordcraft_doc::para::{Float, Wrap};
 
@@ -9013,6 +9063,7 @@ fn float_font_keeps_line_height() {
 /// Native ink inside a group is drawn as drawing-level ink is: its fallback picture, in its place.
 #[test]
 fn ink_member_of_a_group_draws_its_fallback_picture() {
+    crate::test_fonts();
     use crate::display::Draw;
     use std::sync::Arc;
     use wordcraft_doc::graphic::{Graphic, GraphicItem, GraphicKind};
@@ -9060,6 +9111,7 @@ fn ink_member_of_a_group_draws_its_fallback_picture() {
 /// again without clearing the cache.
 #[test]
 fn the_word_being_typed_has_no_spelling_squiggle() {
+    crate::test_fonts();
     let d = Document::from_text("helo wrld\nfine text here");
     let rev = d.para(StoryRef::Body, &Path::top(0)).unwrap().rev;
     let marks = |l: &DocLayout, grammar: bool| -> Vec<String> {
@@ -9122,6 +9174,7 @@ fn cell_break_doc(text: &str) -> Document {
 
 #[test]
 fn cell_breaks_take_no_height() {
+    crate::test_fonts();
     let height = |d: &Document| {
         lay(d).pages[0]
             .items
@@ -9162,6 +9215,7 @@ fn cell_breaks_take_no_height() {
 
 #[test]
 fn cell_break_cache_is_scoped() {
+    crate::test_fonts();
     let mut d = cell_break_doc("\u{000c}Heading");
     let Block::Table(t) = &*d.body[0] else { panic!("table") };
     let p = t.rows[0].cells[0].blocks[0].clone();
@@ -9171,6 +9225,7 @@ fn cell_break_cache_is_scoped() {
 
 #[test]
 fn cell_breaks_with_bookmarks() {
+    crate::test_fonts();
     for offset in [0, 1, 3] {
         let mut d = cell_break_doc("\u{000c}\u{000c}\u{000c}Heading");
         let Block::Table(t) = Arc::make_mut(&mut d.body[0]) else { panic!("table") };
@@ -9197,6 +9252,7 @@ fn cell_breaks_with_bookmarks() {
 
 #[test]
 fn cell_break_only_is_marker() {
+    crate::test_fonts();
     let d = cell_break_doc("\u{000c}");
     let l = lay(&d);
     let para = l.pages[0]
@@ -9212,6 +9268,7 @@ fn cell_break_only_is_marker() {
 
 #[test]
 fn subpoint_grid_keeps_widths() {
+    crate::test_fonts();
     for gap in [0.05, 0.5, 1.0, 3.0] {
         let mut d = Document::new();
         let mut table = Table::new(1, 3, 300.0);
@@ -9240,6 +9297,7 @@ fn subpoint_grid_keeps_widths() {
 
 #[test]
 fn invalid_grid_keeps_fallback() {
+    crate::test_fonts();
     for width in [0.0, -1.0, f32::NAN, f32::INFINITY] {
         let mut d = Document::new();
         let mut table = Table::new(1, 2, 300.0);
@@ -9265,6 +9323,7 @@ fn invalid_grid_keeps_fallback() {
 
 #[test]
 fn tiny_grid_scales_to_width() {
+    crate::test_fonts();
     for unit in [0.05, 0.25, 0.5, f32::MIN_POSITIVE, f32::from_bits(1)] {
         for ratio in [1.0, 3.0] {
             let mut d = Document::new();
@@ -9311,6 +9370,7 @@ fn absolute_footer(text: &str, height: f32) -> Document {
 
 #[test]
 fn footer_absolute_height() {
+    crate::test_fonts();
     let mut base = absolute_footer("", 20.0);
     let id = base.last_section.footers.default.unwrap();
     base.parts.get_mut(&id).unwrap().blocks.remove(1);
@@ -9347,6 +9407,7 @@ fn footer_absolute_height() {
 
 #[test]
 fn footer_float_wraps_body() {
+    crate::test_fonts();
     use wordcraft_doc::props::LineSpacing;
     const FLOAT_TOP: f32 = 100.0;
     const FLOAT_RIGHT: f32 = 468.0;
@@ -9390,6 +9451,7 @@ fn footer_float_wraps_body() {
 
 #[test]
 fn footer_table_wrap_bounds() {
+    crate::test_fonts();
     use wordcraft_doc::para::Anchor;
     use wordcraft_doc::props::{HeightRule, LineSpacing, TableFloat};
     const FLOAT_TOP: f32 = 100.0;
@@ -9420,6 +9482,7 @@ fn footer_table_wrap_bounds() {
 
 #[test]
 fn header_table_collision() {
+    crate::test_fonts();
     use wordcraft_doc::para::Anchor;
     use wordcraft_doc::props::{HeightRule, TableFloat};
 
@@ -9485,6 +9548,7 @@ fn band_row_table(top: Option<Border>) -> Table {
 
 #[test]
 fn shared_band_row_minimum() {
+    crate::test_fonts();
     let hidden = Border { style: BorderStyle::None, width: 0.0, color: None, space: 0.0 };
     let shown = Border { style: BorderStyle::Single, width: SHARED_BAND, color: None, space: 0.0 };
     // The previous row already paints the shared edge. Its band still clears the next cell.
@@ -9506,6 +9570,7 @@ fn shared_band_row_minimum() {
 
 #[test]
 fn shared_band_carries_heading() {
+    crate::test_fonts();
     use wordcraft_doc::props::{HeightRule, LineSpacing};
     for (page_height, heading_page) in [(150.0, 1), (156.0, 0)] {
         let mut doc = Document::new();
@@ -9545,6 +9610,7 @@ fn shared_band_carries_heading() {
 
 #[test]
 fn shared_band_exact_rows() {
+    crate::test_fonts();
     let mut table = band_row_table(None);
     for row in &mut table.rows {
         row.props.height_rule = wordcraft_doc::props::HeightRule::Exact;
@@ -9565,6 +9631,7 @@ fn shared_band_exact_rows() {
 
 #[test]
 fn shared_band_borderless() {
+    crate::test_fonts();
     let mut table = band_row_table(None);
     for row in &mut table.rows {
         row.cells[0].props.borders = Some(Borders::default());
@@ -9586,6 +9653,7 @@ fn shared_band_borderless() {
 
 #[test]
 fn shared_band_merge_boundary() {
+    crate::test_fonts();
     use wordcraft_doc::props::VMerge;
     let mut table = band_row_table(None);
     table.rows[0].cells[0].props.vmerge = VMerge::Restart;
@@ -9606,6 +9674,7 @@ fn shared_band_merge_boundary() {
 
 #[test]
 fn shared_band_grid_spans() {
+    crate::test_fonts();
     let mut table = band_row_table(None);
     table.rows.truncate(2);
     table.grid = vec![100.0; 3];

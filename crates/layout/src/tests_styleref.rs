@@ -210,6 +210,7 @@ fn field_char_xs(d: &Document) -> Vec<(String, Vec<f32>)> {
 /// also in a right-to-left header paragraph.
 #[test]
 fn hebrew_styleref_result_reads_right_to_left() {
+    crate::test_fonts();
     let d = doc(&[("Heading1", "פרק א", false), ("Normal", "Text.", false)], &[r#"STYLEREF "Heading 1""#]);
     let got = field_char_xs(&d);
     let (text, xs) = &got[0];
@@ -278,6 +279,7 @@ fn rtl_header(d: &mut Document) {
 /// Hebrew word in brackets in a left-to-right result draws its brackets the right way round.
 #[test]
 fn field_results_mirror_brackets_with_their_bidi_runs() {
+    crate::test_fonts();
     let mut got = Vec::new();
     // The field-code view of a PAGE field in a right-to-left header.
     let mut d = doc(&[("Normal", "Text.", false)], &["PAGE"]);

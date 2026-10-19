@@ -3173,6 +3173,7 @@ mod tests {
 
     #[test]
     fn symbols_ignore_roman_hint() {
+        crate::test_fonts();
         let mut d = Document::new();
         d.settings.roman_fonts = vec!["Symbol (PCL6)".into(), "Wingdings".into(), "No Such Roman Font".into()];
         for family in ["Symbol (PCL6)", "Wingdings"] {

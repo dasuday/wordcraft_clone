@@ -2169,6 +2169,7 @@ mod tests {
     /// drawn from a fallback font, not as a missing-glyph box.
     #[test]
     fn characters_the_math_font_lacks_fall_back() {
+        crate::test_fonts();
         let (face, _) = wordcraft_fonts::math::resolve_math("Cambria Math");
         let Some(c) =
             ['⨌', '⫿', '⟅', 'ア', '中', '가'].into_iter().find(|c| !face.covers(*c) && FontDb::global().fallback_for(*c, face.id()).is_some())
