@@ -880,7 +880,7 @@ impl Reader<'_> {
         if !sheet.styles.iter().any(|s| s.quick) {
             sheet.add_default_gallery();
         }
-        self.doc.styles = sheet;
+        self.doc.styles = Arc::new(sheet);
         Ok(())
     }
 
@@ -991,8 +991,8 @@ impl Reader<'_> {
                 a.levels = levels;
             }
         }
-        self.doc.numbering.abstracts = abstracts;
-        self.doc.numbering.nums = nums;
+        Arc::make_mut(&mut self.doc.numbering).abstracts = abstracts;
+        Arc::make_mut(&mut self.doc.numbering).nums = nums;
         Ok(())
     }
 
