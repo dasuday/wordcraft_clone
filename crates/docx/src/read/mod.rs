@@ -1128,6 +1128,16 @@ impl Reader<'_> {
                     };
                     s.zoom = Some(Zoom { percent, fit }).filter(|z| z.percent != 100 || z.fit.is_some());
                 }
+                "w:themeFontLang" => {
+                    let tfl = wordcraft_doc::ThemeFontLang {
+                        val: k.attr("w:val").filter(|v| !v.is_empty() && v.len() < 64).map(str::to_string),
+                        east_asia: k.attr("w:eastAsia").filter(|v| !v.is_empty() && v.len() < 64).map(str::to_string),
+                        bidi: k.attr("w:bidi").filter(|v| !v.is_empty() && v.len() < 64).map(str::to_string),
+                    };
+                    if !tfl.is_empty() {
+                        s.theme_font_lang = Some(tfl);
+                    }
+                }
                 _ => {}
             }
         }
@@ -1344,6 +1354,7 @@ impl Reader<'_> {
                 "dcterms:created" => c.created = t,
                 "dcterms:modified" => c.modified = t,
                 "cp:category" => c.category = t,
+                "dc:language" => c.language = t,
                 _ => {}
             }
         }

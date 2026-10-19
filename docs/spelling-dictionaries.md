@@ -1,12 +1,12 @@
 # Installing spelling dictionaries
 
-> **Last reviewed:** 2026-10-16 · **Last updated:** 2026-10-18 · **Change:** trivial (ISO 8859-1 dictionaries are read, #2824; previously major: first version)
+> **Last reviewed:** 2026-10-18 · **Last updated:** 2026-10-18 · **Change:** minor (Spanish proofing and distro package naming, #1222; previously trivial: ISO 8859-1 dictionaries, #2824)
 
-English spelling works out of the box. Polish, Russian, Portuguese, Czech, Italian, Croatian and
+English spelling works out of the box. Polish, Russian, Portuguese, Spanish, Czech, Italian, Croatian and
 Turkish spelling use a standard **Hunspell** dictionary (an `.aff` and a `.dic` file) that
 WordCraft reads at runtime. These dictionaries are not bundled: they are large, and several are
 GPL or LGPL licensed. Without one, the language isn't checked. The status bar then shows the
-language with **(no dictionary)**, for example *Português (Brasil) (no dictionary)*.
+language with **(no dictionary)**, for example *Português (Brasil) (no dictionary)* or *Español (España) (no dictionary)*.
 
 If a dictionary is installed but can't be read (an unsupported `SET` encoding, a file over the
 size limit, a parse error), the language isn't checked either, and the status bar shows
@@ -25,6 +25,7 @@ WordCraft looks for the first of these file names (each name means a `<name>.aff
 | Polish | `pl_PL`, `pl-PL`, `pl` | SJP.PL |
 | Russian | `ru_RU`, `ru-RU`, `ru` | LibreOffice `dict-ru` |
 | Portuguese (Brazil and Portugal) | `pt_BR`, `pt-BR`, `pt` | VERO (LibreOffice `dict-pt-BR`) |
+| Spanish (Spain, Mexico, Latin America) | `es_ES`, `es_MX`, `es` | LibreOffice `dict-es`, Arch `hunspell-es_es` / `hunspell-es_mx` |
 | Czech | `cs_CZ`, `cs-CZ`, `cs` | LibreOffice `dict-cs` |
 | Italian | `it_IT`, `it_CH`, `it-IT`, `it` | LibreOffice `dict-it` |
 | Croatian | `hr_HR`, `hr-HR`, `hr` | LibreOffice `dict-hr` |
@@ -91,7 +92,16 @@ curl -fLO https://raw.githubusercontent.com/LibreOffice/dictionaries/master/pt_B
 From the distribution's packages:
 
 ```sh
-sudo apt install hunspell-pt-br   # Debian, Ubuntu
+# Debian, Ubuntu
+sudo apt install hunspell-es      # Spanish
+sudo apt install hunspell-pt-br   # Portuguese (Brazil)
+
+# Fedora
+sudo dnf install hunspell-es
+
+# Arch Linux
+sudo pacman -S hunspell-es_es     # Spanish (Spain)
+sudo pacman -S hunspell-es_mx     # Spanish (Mexico)
 ```
 
 Or, without root, into your own folder:
@@ -127,6 +137,7 @@ Never commit dictionary files to this repository: they stay on the user's system
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-18 | minor | Spanish proofing (`es_ES`, `es_MX`, `es`), distro package names in status hint (including `hunspell-es_es` on Arch), and Review › Language parity (#1222) |
 | 2026-10-18 | trivial | ISO 8859-1 (`SET ISO8859-1`) dictionaries are read, so the original VERO `pt_BR` works without converting it to UTF-8 (#2824) |
 | 2026-10-18 | minor | An installed dictionary that can't be read shows **(dictionary unreadable)** in the status bar, with the file and reason in its tooltip and in File › Options › Proofing (#2830) |
 | 2026-10-16 | major | First version: the file names per language, the search order and folders on Windows, macOS and Linux, installing `pt_BR` on each, and how to check it works |

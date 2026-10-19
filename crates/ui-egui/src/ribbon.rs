@@ -673,9 +673,12 @@ fn mi_text(ui: &mut Ui, app: &mut WordApp, text: &str, id: &str, params: Value) 
 }
 
 /// The proofing languages the Language menu offers: tag and English name (translated when drawn).
-pub(crate) const PROOFING_LANGUAGES: [(&str, &str); 10] = [
+pub(crate) const PROOFING_LANGUAGES: [(&str, &str); 13] = [
     ("en-US", "English (United States)"),
     ("en-GB", "English (United Kingdom)"),
+    ("es-ES", "Spanish (Spain)"),
+    ("es-MX", "Spanish (Mexico)"),
+    ("es-419", "Spanish (Latin America)"),
     ("pl-PL", "Polish"),
     ("pt-BR", "Portuguese (Brazil)"),
     ("it-IT", "Italian"),
@@ -719,6 +722,7 @@ pub(crate) fn language_name(tag: Option<&str>) -> String {
             wordcraft_engine::proof::ProofLang::Pl => "Polish".into(),
             wordcraft_engine::proof::ProofLang::Hr => "Croatian".into(),
             wordcraft_engine::proof::ProofLang::Pt => "Portuguese (Brazil)".into(),
+            wordcraft_engine::proof::ProofLang::Es => "Spanish (Spain)".into(),
             wordcraft_engine::proof::ProofLang::It => "Italian".into(),
             wordcraft_engine::proof::ProofLang::Tr => "Turkish".into(),
             wordcraft_engine::proof::ProofLang::Ru => "Russian".into(),
@@ -841,6 +845,7 @@ pub(crate) fn language_menu(ui: &mut Ui, app: &mut WordApp) {
         current.eq_ignore_ascii_case(tag)
             || (tag == "pl-PL" && current.eq_ignore_ascii_case("pl"))
             || (tag == "pt-BR" && current.eq_ignore_ascii_case("pt"))
+            || (tag == "es-ES" && current.eq_ignore_ascii_case("es"))
             || (tag == "it-IT" && current.eq_ignore_ascii_case("it"))
             || (tag == "hr-HR" && current.eq_ignore_ascii_case("hr"))
             || (tag == "tr-TR" && current.eq_ignore_ascii_case("tr"))
@@ -3067,6 +3072,17 @@ mod tests {
         assert_eq!(language_name(Some("tr-TR")), "Turkish");
         assert_eq!(language_name(Some("tr")), "Turkish");
         assert_eq!(language_name(Some("TR-TR")), "Turkish");
+    }
+
+    #[test]
+    fn spanish_has_a_name_in_the_language_menu() {
+        assert!(PROOFING_LANGUAGES.contains(&("es-ES", "Spanish (Spain)")));
+        assert!(PROOFING_LANGUAGES.contains(&("es-MX", "Spanish (Mexico)")));
+        assert!(PROOFING_LANGUAGES.contains(&("es-419", "Spanish (Latin America)")));
+        assert_eq!(language_name(Some("es-ES")), "Spanish (Spain)");
+        assert_eq!(language_name(Some("es")), "Spanish (Spain)");
+        assert_eq!(language_name(Some("es-MX")), "Spanish (Mexico)");
+        assert_eq!(language_name(Some("es-419")), "Spanish (Latin America)");
     }
 
     #[test]
