@@ -9463,3 +9463,37 @@ fn page_border_offset_measures_from_page_or_text() {
     assert_eq!(frames(false, true)[1], page[1]);
     assert_eq!(frames(true, true)[1], (54.0 - 24.0, 72.0 - 24.0, w - 90.0 + 24.0, h - 72.0 + 24.0));
 }
+
+/// #3076: page borders on the section's first page only, or on every page but the first
+/// (`w:display`); with mirrored margins the text still moves exactly as with borders everywhere.
+#[test]
+fn page_border_display_picks_the_pages() {
+    // Per page: how many border rules it has, and where its first line of text starts.
+    let pages = |display: Option<&str>, mirror: bool| -> Vec<(usize, Option<f32>)> {
+        let mut d = Document::from_text(&"line\n".repeat(130));
+        d.settings.mirror_margins = mirror;
+        d.last_section.margin_left = 90.0;
+        d.last_section.page_borders = Some(Borders::box_(Border { space: 24.0, ..Border::single(1.0) }));
+        d.last_section.page_borders_display = display.map(str::to_string);
+        lay(&d)
+            .pages
+            .iter()
+            .map(|p| {
+                let rules = p.items.iter().filter(|i| matches!(i, Placed::Rule { .. })).count();
+                let x = p.items.iter().find_map(|i| if let Placed::Lines { x, .. } = i { Some(*x) } else { None });
+                (rules, x)
+            })
+            .collect()
+    };
+    for mirror in [false, true] {
+        let all = pages(None, mirror);
+        assert!(all.len() >= 3 && all.iter().all(|(n, _)| *n == 4), "{all:?}");
+        let first = pages(Some("firstPage"), mirror);
+        let rest = pages(Some("notFirstPage"), mirror);
+        assert_eq!(first.iter().map(|p| p.0).collect::<Vec<_>>(), [4].into_iter().chain(vec![0; all.len() - 1]).collect::<Vec<_>>());
+        assert_eq!(rest.iter().map(|p| p.0).collect::<Vec<_>>(), [0].into_iter().chain(vec![4; all.len() - 1]).collect::<Vec<_>>());
+        let text = |v: &[(usize, Option<f32>)]| v.iter().map(|p| p.1).collect::<Vec<_>>();
+        assert_eq!(text(&first), text(&all), "mirror {mirror}");
+        assert_eq!(text(&rest), text(&all), "mirror {mirror}");
+    }
+}

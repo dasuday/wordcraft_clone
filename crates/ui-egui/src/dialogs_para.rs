@@ -473,8 +473,9 @@ pub struct BordersForm {
     /// Borders apply to the selected text (a character border) instead of the paragraphs.
     pub to_text: bool,
     pub page: LineForm,
-    /// Page borders apply to the whole document instead of this section.
-    pub whole_doc: bool,
+    /// Where page borders go: `design.pageBorders`' `applyTo` (`document`, `section`,
+    /// `firstPage`, `notFirstPage`).
+    pub page_apply: String,
     /// Fill `RRGGBB`, empty for none.
     pub fill: String,
     pub fill_to_text: bool,
@@ -492,7 +493,12 @@ impl BordersForm {
             para: LineForm::read(rp.borders.as_ref()),
             to_text: false,
             page: LineForm::read(sect.page_borders.as_ref()),
-            whole_doc: true,
+            page_apply: match sect.page_borders_display.as_deref() {
+                Some("firstPage") => "firstPage",
+                Some("notFirstPage") => "notFirstPage",
+                _ => "document",
+            }
+            .to_string(),
             fill: rp.shading.map(Rgb::hex).unwrap_or_default(),
             fill_to_text: false,
             basis: None,
@@ -518,9 +524,8 @@ impl BordersForm {
                 out.push(("para.borders", json!({"sides": self.para.sides_param()})));
             }
         }
-        if self.page != b.page || self.whole_doc != b.whole_doc {
-            let apply = if self.whole_doc { "document" } else { "section" };
-            out.push(("design.pageBorders", json!({"sides": self.page.sides_param(), "applyTo": apply})));
+        if self.page != b.page || self.page_apply != b.page_apply {
+            out.push(("design.pageBorders", json!({"sides": self.page.sides_param(), "applyTo": self.page_apply})));
         }
         if self.fill != b.fill || self.fill_to_text != b.fill_to_text {
             let color = Rgb::parse(&self.fill).map(|c| json!(c.hex())).unwrap_or(Value::Null);
@@ -565,8 +570,18 @@ pub fn borders(app: &mut WordApp, ui: &mut Ui, f: &mut BordersForm) -> bool {
             lines(ui, "page", &mut f.page, &theme, None, Target::Page);
             ui.horizontal(|ui| {
                 ui.label(tl!("Apply to:"));
-                ui.radio_value(&mut f.whole_doc, true, tl!("Whole document"));
-                ui.radio_value(&mut f.whole_doc, false, tl!("This section"));
+                let options = [
+                    ("document", "Whole document"),
+                    ("section", "This section"),
+                    ("firstPage", "This section – first page only"),
+                    ("notFirstPage", "This section – all except first page"),
+                ];
+                let shown = options.iter().find(|(v, _)| *v == f.page_apply).map(|(_, l)| *l).unwrap_or("Whole document");
+                egui::ComboBox::from_id_salt("page_apply").selected_text(tl!(shown)).width(220.0).show_ui(ui, |ui| {
+                    for (v, l) in options {
+                        ui.selectable_value(&mut f.page_apply, v.to_string(), tl!(l));
+                    }
+                });
             });
         }
         _ => {
@@ -809,6 +824,25 @@ mod tests {
         assert_eq!(LineForm::read(Some(&pb)).setting, Setting::Shadow);
         // Unchanged, OK runs nothing.
         let f = BordersForm::read(&app, 0).unwrap_or_else(|| panic!("form"));
+        assert!(f.commands().is_empty());
+    }
+
+    /// #3076: Apply to offers this section's first page only (and all but the first page), and
+    /// reads back what the section has.
+    #[test]
+    fn page_border_apply_to_first_page_only() {
+        let mut app = app_with("Cover");
+        let mut f = BordersForm::read(&app, 1).unwrap_or_else(|| panic!("form"));
+        assert_eq!(f.page_apply, "document");
+        f.page.apply_setting(Setting::Box);
+        f.page_apply = "firstPage".into();
+        let cmds = f.commands();
+        assert_eq!(cmds.len(), 1);
+        assert_eq!((cmds[0].0, &cmds[0].1["applyTo"]), ("design.pageBorders", &json!("firstPage")));
+        f.apply(&mut app);
+        assert_eq!(app.session.doc.last_section.page_borders_display.as_deref(), Some("firstPage"));
+        let f = BordersForm::read(&app, 1).unwrap_or_else(|| panic!("form"));
+        assert_eq!(f.page_apply, "firstPage");
         assert!(f.commands().is_empty());
     }
 

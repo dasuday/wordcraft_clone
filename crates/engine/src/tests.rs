@@ -4966,6 +4966,28 @@ fn border_sides_apply_exactly() {
     assert!(s.doc.last_section.page_borders.is_none());
 }
 
+/// #3076: page borders on this section's first page only, or on all its pages but the first;
+/// "section" and "document" put them back on every page.
+#[test]
+fn page_borders_apply_to_the_first_page_or_the_rest() {
+    let mut s = s();
+    run(&mut s, "text.insert", json!({"text": "Cover"}));
+    let display = |s: &Session| s.doc.last_section.page_borders_display.clone();
+    run(&mut s, "design.pageBorders", json!({"kind": "box", "applyTo": "firstPage"}));
+    assert!(s.doc.last_section.page_borders.is_some());
+    assert_eq!(display(&s).as_deref(), Some("firstPage"));
+    run(&mut s, "design.pageBorders", json!({"kind": "box", "applyTo": "notFirstPage"}));
+    assert_eq!(display(&s).as_deref(), Some("notFirstPage"));
+    run(&mut s, "design.pageBorders", json!({"kind": "box"}));
+    assert_eq!(display(&s), None);
+    run(&mut s, "design.pageBorders", json!({"kind": "box", "applyTo": "firstPage"}));
+    run(&mut s, "design.pageBorders", json!({"kind": "box", "applyTo": "document"}));
+    assert_eq!(display(&s), None);
+    run(&mut s, "edit.undo", json!({}));
+    assert_eq!(display(&s).as_deref(), Some("firstPage"), "undo restores first page only");
+    assert!(s.run("design.pageBorders", &json!({"kind": "box", "applyTo": "evenPages"})).is_err());
+}
+
 /// Encrypt with Password (#55): a document saved with a password opens only with it, keeps it
 /// for the next save, and saves unencrypted once the password is removed.
 #[cfg(not(target_arch = "wasm32"))]

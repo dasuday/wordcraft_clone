@@ -1835,7 +1835,8 @@ impl NoteBox {
 
 /// Page borders, measured from the page edge (the Page Borders dialog's choice), so they
 /// surround the header, footer and line numbers, or from the text margins when the section says
-/// so (`w:offsetFrom="text"`). The first items of every printed page.
+/// so (`w:offsetFrom="text"`). The first items of every printed page; [`page_border_display`]
+/// takes them off the pages the section's `w:display` leaves out.
 fn page_border_rules(s: &SectionProps) -> Vec<Placed> {
     let mut v = Vec::new();
     if let Some(b) = &s.page_borders {
@@ -2511,6 +2512,9 @@ fn layout_pass(
         if doc.settings.mirror_margins {
             mirror_even_pages(&mut pages, &sections);
         }
+    }
+    if !web {
+        page_border_display(&mut pages, &sections);
     }
     // Evict paragraph layouts that weren't used this pass if the cache grew large.
     if ctx.cache.paras.len() + ctx.cache.measures.len() > 4 * ctx.cache.used.len().max(1024) {
@@ -4555,6 +4559,27 @@ fn headers_footers(ctx: &mut Ctx, pages: &mut [Page], sections: &[(usize, &Secti
         }
     }
     ctx.fields.styleref = None;
+}
+
+/// Page borders on the first page of their section only, or on all its pages but the first
+/// (`w:display`): the border rules, the first items of each page, come off the other pages. Runs
+/// after [`mirror_even_pages`], which counts them.
+fn page_border_display(pages: &mut [Page], sections: &[(usize, &SectionProps)]) {
+    let mut seen = HashSet::new();
+    for page in pages.iter_mut() {
+        let first = seen.insert(page.section);
+        let Some((_, s)) = sections.get(page.section) else { continue };
+        let shown = match s.page_borders_display.as_deref() {
+            Some("firstPage") => first,
+            Some("notFirstPage") => !first,
+            _ => continue,
+        };
+        if !shown {
+            let n = page_border_rules(s).len();
+            let rules = page.items.iter().take(n).take_while(|it| matches!(it, Placed::Rule { .. })).count();
+            page.items.drain(..rules);
+        }
+    }
 }
 
 /// Mirrored margins: even pages have the inside margin (and gutter) on the right, so their
