@@ -225,6 +225,88 @@ fn paste_target(canvas_focused: bool, backstage: bool, dialog: bool) -> bool {
     canvas_focused && !backstage && !dialog
 }
 
+/// Display settings kept between runs: show/hide toggles and the panes that do not depend on a
+/// selection. The page view and zoom have their own change (#2044), and Check Spelling as You
+/// Type has its own (#1792).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct ViewPrefs {
+    pub ruler: bool,
+    pub marks: bool,
+    pub gridlines: bool,
+    pub table_gridlines: bool,
+    pub hide_white_space: bool,
+    pub field_codes: bool,
+    pub hide_ink: bool,
+    pub show_markup: bool,
+    pub numeral: wordcraft_engine::layout::NumeralMode,
+    pub styles_pane: bool,
+    pub style_inspector: bool,
+    pub comments_pane: bool,
+    pub clipboard_pane: bool,
+    pub track_changes_pane: bool,
+}
+
+impl Default for ViewPrefs {
+    fn default() -> Self {
+        let v = wordcraft_engine::ViewState::default();
+        Self {
+            ruler: v.ruler,
+            marks: v.marks,
+            gridlines: v.gridlines,
+            table_gridlines: v.table_gridlines,
+            hide_white_space: v.hide_white_space,
+            field_codes: v.field_codes,
+            hide_ink: v.hide_ink,
+            show_markup: v.show_markup,
+            numeral: v.numeral,
+            styles_pane: v.styles_pane,
+            style_inspector: v.style_inspector,
+            comments_pane: v.comments_pane,
+            clipboard_pane: v.clipboard_pane,
+            track_changes_pane: v.track_changes_pane,
+        }
+    }
+}
+
+impl ViewPrefs {
+    fn from_view(v: &wordcraft_engine::ViewState) -> Self {
+        Self {
+            ruler: v.ruler,
+            marks: v.marks,
+            gridlines: v.gridlines,
+            table_gridlines: v.table_gridlines,
+            hide_white_space: v.hide_white_space,
+            field_codes: v.field_codes,
+            hide_ink: v.hide_ink,
+            show_markup: v.show_markup,
+            numeral: v.numeral,
+            styles_pane: v.styles_pane,
+            style_inspector: v.style_inspector,
+            comments_pane: v.comments_pane,
+            clipboard_pane: v.clipboard_pane,
+            track_changes_pane: v.track_changes_pane,
+        }
+    }
+
+    fn apply_to(&self, v: &mut wordcraft_engine::ViewState) {
+        v.ruler = self.ruler;
+        v.marks = self.marks;
+        v.gridlines = self.gridlines;
+        v.table_gridlines = self.table_gridlines;
+        v.hide_white_space = self.hide_white_space;
+        v.field_codes = self.field_codes;
+        v.hide_ink = self.hide_ink;
+        v.show_markup = self.show_markup;
+        v.numeral = self.numeral;
+        v.styles_pane = self.styles_pane;
+        v.style_inspector = self.style_inspector;
+        v.comments_pane = self.comments_pane;
+        v.clipboard_pane = self.clipboard_pane;
+        v.track_changes_pane = self.track_changes_pane;
+    }
+}
+
 /// UI state that persists between runs (and that agents can read and set).
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
@@ -301,6 +383,8 @@ pub struct UiState {
     /// View › Switch Modes: show pages dark (white text on black), kept between runs. Only the
     /// pages: the interface follows [`UiState::theme`] (#312).
     pub dark_page: bool,
+    /// Display settings and pane visibility, kept between runs.
+    pub view: ViewPrefs,
     /// File › Options › Advanced › Animation: the caret glides to its new place and its blink
     /// fades, as Word's does on Windows (on, the default), or it jumps and blinks on and off
     /// (off).
@@ -386,6 +470,7 @@ impl Default for UiState {
             alt_pressed: false,
             alt_chord_used: false,
             dark_page: false,
+            view: ViewPrefs::default(),
             caret_animation: true,
             keyboard: wordcraft_engine::KeyMap::default(),
             ribbon: wordcraft_engine::RibbonLayout::default(),
@@ -762,6 +847,7 @@ impl WordApp {
         ui.read_aloud_skip_citations = self.session.read_aloud.skip_citations;
         ui.dark_page = self.session.view.dark_mode;
         ui.nav_pane = self.session.view.nav_pane;
+        ui.view = ViewPrefs::from_view(&self.session.view);
         ui.keyboard = self.session.keymap.clone();
         ui.ribbon = self.session.ribbon.clone();
         ui.ink_pens = self.session.view.draw.pens.clone();
@@ -807,6 +893,7 @@ impl WordApp {
         self.session.read_aloud.skip_citations = self.ui.read_aloud_skip_citations;
         self.session.view.dark_mode = self.ui.dark_page;
         self.session.view.nav_pane = self.ui.nav_pane;
+        self.ui.view.apply_to(&mut self.session.view);
         // Keys for commands this version doesn't have are dropped.
         self.session.keymap = std::mem::take(&mut self.ui.keyboard);
         let reg = self.session.registry.clone();
@@ -6638,6 +6725,51 @@ mod tests {
         let mut old = app();
         old.apply_prefs(serde_json::from_str(r#"{"navTab": "headings"}"#).unwrap());
         assert!(!old.session.view.nav_pane, "no saved value: closed");
+    }
+
+    #[test]
+    fn view_display_preferences_survive_restart() {
+        let mut first = app();
+        assert!(first.session.view.ruler, "rulers start shown");
+        first.run("view.ruler", json!({"value": false})).unwrap();
+        first.session.view.marks = true;
+        first.session.view.gridlines = true;
+        first.session.view.table_gridlines = false;
+        first.session.view.hide_white_space = true;
+        first.session.view.field_codes = true;
+        first.session.view.hide_ink = true;
+        first.session.view.show_markup = false;
+        first.session.view.numeral = wordcraft_engine::layout::NumeralMode::Hindi;
+        first.session.view.styles_pane = true;
+        first.session.view.style_inspector = true;
+        first.session.view.comments_pane = true;
+        first.session.view.clipboard_pane = true;
+        first.session.view.track_changes_pane = true;
+        let saved = serde_json::to_vec(&first.prefs()).unwrap();
+        assert!(String::from_utf8_lossy(&saved).contains(r#""view":{"ruler":false"#), "the view group is saved under view");
+
+        let mut second = app();
+        second.apply_prefs(serde_json::from_slice(&saved).unwrap());
+        assert!(!second.session.view.ruler, "a hidden ruler stays hidden");
+        assert!(second.session.view.marks, "formatting marks stay on");
+        assert!(second.session.view.gridlines, "gridlines stay on");
+        assert!(!second.session.view.table_gridlines, "table gridlines stay off");
+        assert!(second.session.view.hide_white_space, "hidden white space stays hidden");
+        assert!(second.session.view.field_codes, "field codes stay on");
+        assert!(second.session.view.hide_ink, "hidden ink stays hidden");
+        assert!(!second.session.view.show_markup, "hidden markup stays hidden");
+        assert_eq!(second.session.view.numeral, wordcraft_engine::layout::NumeralMode::Hindi);
+        assert!(second.session.view.styles_pane, "the Styles pane stays open");
+        assert!(second.session.view.style_inspector, "the Style Inspector stays open");
+        assert!(second.session.view.comments_pane, "the Comments pane stays open");
+        assert!(second.session.view.clipboard_pane, "the Clipboard pane stays open");
+        assert!(second.session.view.track_changes_pane, "the Track Changes pane stays open");
+
+        let mut old = app();
+        old.apply_prefs(serde_json::from_str(r#"{"navTab": "headings"}"#).unwrap());
+        assert!(old.session.view.ruler, "no saved view: rulers shown");
+        assert!(!old.session.view.marks, "no saved view: marks off");
+        assert!(!old.session.view.comments_pane, "no saved view: panes closed");
     }
 
     #[test]
