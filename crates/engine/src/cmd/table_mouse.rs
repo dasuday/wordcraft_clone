@@ -384,8 +384,13 @@ fn select_at(s: &mut Session, v: &Value) -> CmdResult {
         };
         let picked: BTreeSet<(usize, usize)> =
             if removing { before.difference(&here).copied().collect() } else { before.union(&here).copied().collect() };
-        // Taking out every cell leaves the selection as it is.
+        // Taking out every cell leaves the selection as it is; its drag starts from this click's
+        // cells, not an earlier click's, so it can't bring back cells taken out since.
         if picked.is_empty() {
+            if let Some(range) = s.column.as_mut().and_then(|c| c.cells.as_mut()) {
+                range.base = before.into_iter().collect();
+                range.removing = removing;
+            }
             return sel_result(s);
         }
         return table::select_set(s, story, &geom.table, &picked, before.into_iter().collect(), removing);
@@ -906,6 +911,23 @@ mod tests {
         click(&mut s, r0, false);
         click(&mut s, r0, true);
         assert_eq!(picked(&s), row_cells(&[0], 3));
+    }
+
+    /// A Ctrl/Cmd+click that would take out the only cells selected leaves them, and a jiggle
+    /// while the button is down doesn't bring back cells taken out by an earlier click.
+    #[test]
+    fn a_drag_after_taking_out_every_cell_restores_nothing() {
+        let mut s = table_session(4, 3);
+        fill(&mut s);
+        let (r0, r2) = (row_area(&mut s, 0), row_area(&mut s, 2));
+        click(&mut s, r0, false);
+        click(&mut s, r2, true);
+        click(&mut s, r0, true);
+        assert_eq!(picked(&s), row_cells(&[2], 3));
+        click(&mut s, r2, true);
+        assert_eq!(picked(&s), row_cells(&[2], 3));
+        s.run("table.selectAt", &json!({"page": 0, "x": r2.0, "y": r2.1, "toX": r2.0 + 0.5, "toY": r2.1, "add": true})).unwrap();
+        assert_eq!(picked(&s), row_cells(&[2], 3), "row 0 stays out");
     }
 
     /// The insert buttons add a row or column at their border, one undo step, and select it (as
