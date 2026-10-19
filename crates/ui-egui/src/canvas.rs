@@ -760,6 +760,10 @@ fn view_key(app: &WordApp, dim_body: bool, hidden: Option<&Pos>) -> u64 {
 /// Fingerprint of what one placed item draws: everything about it that changes a pixel of the
 /// page raster. `None` for the items that draw nothing themselves (`Cell` and `Object` are there
 /// for hit testing, handles and wrapping), which no raster can show.
+///
+/// A paragraph, freeform or graphic is named by its `Arc`'s address, which identifies it only
+/// while it lives: [`PageBands`] holds every such `Arc` it fingerprints, so a texture tag can
+/// never compare against an address the allocator has since given to other content.
 fn item_fingerprint(it: &Placed) -> Option<u64> {
     let mut h = std::collections::hash_map::DefaultHasher::new();
     match it {
@@ -801,14 +805,31 @@ const BAND_PAD_PT: f32 = 32.0;
 /// instead: a band that big saves nothing.
 const BAND_MAX_PAGE_PCT: usize = 75;
 
+/// An `Arc` an item fingerprint names by address, kept alive as long as the snapshot that holds
+/// it is. The layout cache may evict a paragraph layout between a page's render and the next
+/// edit; without this reference the allocator could hand its address to different content and a
+/// texture tag would accept the stale pixels.
+// The arcs are never read: holding them until the snapshot drops is the whole job.
+#[allow(dead_code)]
+enum Held {
+    Para(std::sync::Arc<wordcraft_layout::ParaLayout>),
+    Freeform(std::sync::Arc<wordcraft_doc::freeform::Freeform>),
+    Graphic(std::sync::Arc<wordcraft_doc::graphic::Graphic>),
+}
+
 /// What a page's texture holds, for re-rendering only the bands an edit changed (#1109): the
-/// page size, and one band per drawn item in page order. Built from the same walk that
-/// fingerprints a page's content — once per page and layout, never once a frame (#811).
+/// page size, one band per drawn item in page order, and the layouts those items' fingerprints
+/// name by address. Built from the same walk that fingerprints a page's content — once per page
+/// and layout, never once a frame (#811).
 #[derive(Default)]
 pub(crate) struct PageBands {
     w: f32,
     h: f32,
     items: Vec<ItemBand>,
+    /// Every address [`item_fingerprint`] can name, so none is freed while this snapshot (and
+    /// the texture tagged with it) may still be compared against it. Released on retag.
+    #[allow(dead_code)] // Only `Drop` reads it; retaining the layouts is the point.
+    held: Vec<Held>,
 }
 
 impl PageBands {
@@ -824,8 +845,15 @@ impl PageBands {
             }
         }
         let mut items = Vec::with_capacity(page.items.len() + page.header.len() + page.footer.len());
+        let mut held = Vec::new();
         for it in page.items.iter().chain(&page.header).chain(&page.footer) {
             let Some(id) = item_fingerprint(it) else { continue };
+            match it {
+                Placed::Lines { para, .. } => held.push(Held::Para(para.clone())),
+                Placed::Shape { freeform: Some(freeform), .. } => held.push(Held::Freeform(freeform.clone())),
+                Placed::Graphic { graphic, .. } => held.push(Held::Graphic(graphic.clone())),
+                _ => {}
+            }
             let (mut top, mut bottom) = item_band(it, page.h);
             if let Placed::Lines { story: StoryRef::Part(story), .. } = it
                 && let Some((f_top, f_bottom)) = frames.get(story)
@@ -835,7 +863,7 @@ impl PageBands {
             }
             items.push(ItemBand { id, top, bottom });
         }
-        PageBands { w: page.w, h: page.h, items }
+        PageBands { w: page.w, h: page.h, items, held }
     }
 
     /// Fingerprint of a page's laid-out content. A layout never changes once made, so this is
@@ -3857,7 +3885,7 @@ mod tests {
     }
 
     fn bands(w: f32, h: f32, items: Vec<ItemBand>) -> PageBands {
-        PageBands { w, h, items }
+        PageBands { w, h, items, held: Vec::new() }
     }
 
     /// #1109: an edit re-renders the rows its changed lines ink, plus a pad, and nothing else.
@@ -4028,6 +4056,66 @@ mod tests {
         }
         assert_eq!(drawn, snapshot.items.len());
         assert_eq!(snapshot.changed_rows(&snapshot, 2.0, (h * 2.0) as usize), Some(0..0));
+    }
+
+    /// #2635 review: a texture tag names paragraph layouts, graphics and freeforms by `Arc`
+    /// address. The layout cache can evict one and the allocator can then give its address to
+    /// different content, which a tag holding only the hash would accept as the same page. Every
+    /// named `Arc` is held by the snapshot instead, so no address it compares against is reused
+    /// until the tag itself is replaced.
+    #[test]
+    fn a_texture_tag_keeps_every_layout_its_fingerprint_names_alive() {
+        let mut session = wordcraft_engine::Session::new(wordcraft_doc::Document::from_text("A band of text"));
+        let layout = session.layout();
+        let lines =
+            layout.pages.iter().flat_map(|page| &page.items).find(|it| matches!(it, Placed::Lines { .. })).cloned().expect("the text is laid out");
+        let Placed::Lines { para, .. } = &lines else { panic!("the found item is a line") };
+        let para = std::sync::Arc::downgrade(para);
+        drop(session);
+        drop(layout);
+
+        let freeform = std::sync::Arc::new(wordcraft_doc::freeform::Freeform::default());
+        let graphic = std::sync::Arc::new(wordcraft_doc::graphic::Graphic::default());
+        let (freeform_weak, graphic_weak) = (std::sync::Arc::downgrade(&freeform), std::sync::Arc::downgrade(&graphic));
+        let page = Page {
+            w: 612.0,
+            h: 792.0,
+            items: vec![
+                lines,
+                Placed::Shape {
+                    rect: wordcraft_geom::Rect::new(10.0, 10.0, 40.0, 40.0),
+                    kind: Default::default(),
+                    fill: None,
+                    stroke: None,
+                    stroke_width: 1.0,
+                    freeform: Some(freeform),
+                    effects: Default::default(),
+                    spin: Default::default(),
+                    extra: Default::default(),
+                    object: None,
+                },
+                Placed::Graphic {
+                    rect: wordcraft_geom::Rect::new(60.0, 10.0, 40.0, 40.0),
+                    graphic,
+                    story: StoryRef::Body,
+                    path: Default::default(),
+                    off: 0,
+                    spin: Default::default(),
+                },
+            ],
+            ..Default::default()
+        };
+        let bands = PageBands::of(&page);
+        drop(page);
+
+        assert!(para.upgrade().is_some(), "the tag dropped the paragraph whose address it fingerprints");
+        assert!(freeform_weak.upgrade().is_some(), "the tag dropped the freeform whose address it fingerprints");
+        assert!(graphic_weak.upgrade().is_some(), "the tag dropped the graphic whose address it fingerprints");
+        // Held only as long as a texture may be compared against them: no leak after the retag.
+        drop(bands);
+        assert!(para.upgrade().is_none(), "the snapshot keeps a paragraph alive after it is dropped");
+        assert!(freeform_weak.upgrade().is_none(), "the snapshot keeps a freeform alive after it is dropped");
+        assert!(graphic_weak.upgrade().is_none(), "the snapshot keeps a graphic alive after it is dropped");
     }
 
     /// How a band re-render of `rows` at `row0` of a page's raster disagrees with the whole-page
