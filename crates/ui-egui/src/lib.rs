@@ -30,6 +30,7 @@ pub mod caret_glide;
 pub mod chrome;
 pub mod colors;
 pub mod content_controls;
+pub mod context_panel;
 pub mod control;
 pub mod credits;
 pub mod crop;
@@ -2492,7 +2493,7 @@ pub fn keeps_everything(name: &str) -> bool {
 /// data, Insert Merge Field without a field, Find Recipient without text, the If and Skip
 /// Record If rules (or Rules with no rule at all) without a field, Table Properties without
 /// settings, Symbol and Field without a character or code, and Enclose Characters without a shape.
-fn input_dialog(id: &str, params: &Value) -> Option<&'static str> {
+pub(crate) fn input_dialog(id: &str, params: &Value) -> Option<&'static str> {
     let has = |k: &str| params.get(k).is_some_and(|v| !v.is_null());
     let rule = params.get("rule").and_then(Value::as_str).map(str::to_ascii_uppercase);
     match id {
