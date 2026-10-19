@@ -1095,6 +1095,8 @@ impl WordApp {
             return;
         }
         self.font_generation = generation;
+        // The chosen interface family may have just been added or removed: resolve it again.
+        self.interface_font = None;
         self.session.relayout();
         self.previews.fonts_changed(ctx, db.user_fonts().iter().flat_map(|f| f.families()));
         ctx.request_repaint();
@@ -7742,12 +7744,19 @@ mod tests {
         a.services.inbox = Some(inbox.clone());
         let ctx = egui::Context::default();
         assert!(!a.previews.families().iter().any(|f| f == FAMILY));
+        // #2817: a chosen interface family resolves once its font arrives and falls back to Inter
+        // when it is removed again.
+        a.ui.interface_font = theme::InterfaceFont::Family(FAMILY.into());
+        a.install_ui_fonts(&ctx, i18n::Lang::EN);
+        assert!(a.interface_faces.is_none(), "the family is not installed yet");
         a.run("font.add", json!({})).unwrap();
         assert_eq!(*asked.borrow(), "font");
         inbox.lock().unwrap().push(("Uifont-Regular.ttf".into(), font.clone()));
         a.drain_inbox();
         a.watch_fonts(&ctx);
         assert!(a.previews.families().iter().any(|f| f == FAMILY), "listed in the font menu at once");
+        a.install_ui_fonts(&ctx, i18n::Lang::EN);
+        assert_eq!(a.interface_faces.as_ref().map(|f| f.label.as_str()), Some(FAMILY), "the added family draws the interface");
         assert_eq!(*kept.borrow(), vec![("Uifont-Regular.ttf".to_string(), font.len())]);
         assert!(body_text(&a).contains(UNSAVED), "the document stays open");
         // Junk named like a font is refused, and nothing is kept.
@@ -7756,6 +7765,9 @@ mod tests {
         assert_eq!(kept.borrow().len(), 1);
         a.run("font.remove", json!({"family": FAMILY})).unwrap();
         a.watch_fonts(&ctx);
+        assert!(a.interface_font.is_none(), "the removed family is resolved again");
+        a.install_ui_fonts(&ctx, i18n::Lang::EN);
+        assert!(a.interface_faces.is_none(), "the removed family falls back to Inter");
         assert!(kept.borrow().is_empty());
         assert!(!a.previews.families().iter().any(|f| f == FAMILY));
     }
