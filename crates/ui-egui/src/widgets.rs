@@ -205,10 +205,10 @@ pub(crate) fn bg(ui: &Ui, r: Rect, resp: &Response, checked: bool, t: &Tokens) {
 
 /// Runs a ribbon button's command, then hands keyboard focus back to the document so typing
 /// continues without another click, as in Word (#686). Interface commands (`ui.*`) open dialogs,
-/// panes and tabs that take focus themselves, so they keep it.
+/// panes and tabs that take focus themselves, so they keep it. Search and input dialogs keep it too.
 pub(crate) fn run_from_ribbon(app: &mut WordApp, id: &str, params: Value) {
     let _ = app.run(id, params);
-    if !id.starts_with("ui.") {
+    if !id.starts_with("ui.") && app.dialog.is_none() && !app.nav_search_focus {
         app.canvas.want_focus = true;
     }
 }

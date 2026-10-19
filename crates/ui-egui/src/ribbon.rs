@@ -246,6 +246,7 @@ pub fn in_table_public(app: &WordApp) -> bool {
     app.session.sel.focus.path.cell().is_some()
 }
 
+/// Draw the tabs and pinned ribbon, or temporarily overlay commands for a collapsed tab.
 pub fn show(app: &mut WordApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
     if app.session.view.read_mode {
@@ -295,8 +296,10 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
             app.ui.tab = next.to_string();
         }
     }
+    let collapsed = app.ui.ribbon_collapsed;
+    let preview = collapsed && app.ribbon_preview;
     // Tab strip.
-    egui::Panel::top("tabs")
+    let tabs = egui::Panel::top("tabs")
         .exact_size(30.0)
         .frame(egui::Frame::NONE.fill(t.tab_strip).inner_margin(egui::Margin { left: 8, right: 10, top: 0, bottom: 0 }))
         .show(ui, |ui| {
@@ -316,7 +319,7 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
                     let editing = crate::widgets::icon_text_button_width(ui, editing_label, regular(12.0), true, labels);
                     let comment = crate::widgets::icon_text_button_width(ui, comments, regular(12.0), false, labels);
                     // The gaps (6 + 4 + 8) and the strip's margin.
-                    spaced(share_button) + spaced(editing) + spaced(comment) + 18.0 + 12.0
+                    spaced(share_button) + spaced(editing) + spaced(comment) + 18.0 + 12.0 + if collapsed { 24.0 } else { 0.0 }
                 };
                 let button_levels = [button_widths(0), button_widths(1), button_widths(2)];
                 let labels: Vec<&str> = tabs.iter().map(|(tab, custom)| if *custom { tab.as_str() } else { tl!(tab) }).collect();
@@ -332,6 +335,10 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
                     .collect();
                 let plan = plan_strip(&specs, button_levels, ui.available_width(), MORE_TABS_W + 2.0);
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if collapsed && !preview {
+                        let (_, rect) = ui.allocate_space(vec2(22.0, 22.0));
+                        ribbon_toggle(app, ui, rect);
+                    }
                     // No document open (#1129): nothing to share, edit or comment on — but only
                     // these buttons. Disabling the whole line took the tab strip with it: the
                     // tabs took clicks that did nothing, so the empty window had no way back to
@@ -472,15 +479,18 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
                 });
             });
         });
-    if app.ui.ribbon_collapsed {
+    if collapsed && !preview {
         return;
     }
-    egui::Panel::top("ribbon")
-        .exact_size(CONTENT_H + LABEL_H + 10.0)
-        .frame(
-            egui::Frame::NONE.fill(t.ribbon).inner_margin(egui::Margin { left: 8, right: 8, top: 4, bottom: 4 }).stroke(Stroke::new(1.0, t.border)),
-        )
-        .show(ui, |ui| {
+    let frame =
+        egui::Frame::NONE.fill(t.ribbon).inner_margin(egui::Margin { left: 8, right: 8, top: 4, bottom: 4 }).stroke(Stroke::new(1.0, t.border));
+    let child_open = egui::Popup::is_any_open(ui.ctx());
+    let content = |ui: &mut Ui| {
+        let rect = ui.max_rect();
+        ribbon_toggle(app, ui, Rect::from_min_size(rect.right_bottom() - vec2(22.0, 22.0), vec2(22.0, 22.0)));
+        // Keep groups, launchers and overflow arrows out of the toggle's gutter.
+        let content_rect = Rect::from_min_max(rect.min, pos2((rect.right() - 24.0).max(rect.left()), rect.bottom()));
+        ui.scope_builder(egui::UiBuilder::new().max_rect(content_rect), |ui| {
             // Right-click on the ribbon (outside a button): Customize Ribbon. Registered first, so
             // the buttons drawn over it keep their own clicks.
             // No document open (#1129): every command is greyed out but Help's.
@@ -554,6 +564,71 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
                 state.store(ui.ctx(), scroll.id);
             }
         });
+    };
+    let panel = egui::Panel::top("ribbon").exact_size(CONTENT_H + LABEL_H + 10.0).frame(frame);
+    if preview {
+        let preview_layer = egui::LayerId::new(egui::Order::Foreground, egui::Id::new("ribbon_preview"));
+        // egui clears focus at frame start on Escape, before the field cancels its edit.
+        let field_was_focused = ui.data(|d| d.get_temp::<bool>(preview_layer.id)).unwrap_or(false);
+        let outside = ui.input(|i| i.pointer.any_pressed())
+            && ui.input(|i| i.pointer.press_origin()).is_some_and(|p| {
+                !tabs.response.rect.contains(p)
+                    && !ui.ctx().layer_id_at(p).is_some_and(|l| matches!(l.order, egui::Order::Foreground | egui::Order::Tooltip))
+            });
+        // Commit deferred field edits before the page press can move the document's caret.
+        if outside
+            && let Some(id) = ui.ctx().memory(|m| m.focused()).filter(|id| ui.ctx().read_response(*id).is_some_and(|r| r.layer_id == preview_layer))
+        {
+            ui.ctx().memory_mut(|m| m.surrender_focus(id));
+        }
+        egui::Area::new(egui::Id::new("ribbon_preview")).order(egui::Order::Foreground).fixed_pos(tabs.response.rect.left_bottom()).show(
+            ui.ctx(),
+            |ui| {
+                ui.set_width(tabs.response.rect.width());
+                ui.set_height(CONTENT_H + LABEL_H + 10.0);
+                panel.show(ui, content);
+            },
+        );
+        let field_focused = ui.ctx().memory(|m| m.focused()).and_then(|id| ui.ctx().read_response(id)).is_some_and(|r| r.layer_id == preview_layer);
+        ui.data_mut(|d| d.insert_temp(preview_layer.id, app.ribbon_preview && field_focused));
+        let drag_stopped = ui
+            .ctx()
+            .drag_stopped_id()
+            .and_then(|id| ui.ctx().read_response(id))
+            .is_some_and(|r| r.layer_id == preview_layer && r.sense.senses_click());
+        // Fields, lists and collapsed groups own Escape before the temporary ribbon does.
+        let child_open = child_open || field_was_focused || field_focused || !app.escape_free || egui::Popup::is_any_open(ui.ctx());
+        app.escape_free = false;
+        let escape = !child_open && ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape));
+        if outside || escape || drag_stopped {
+            app.ribbon_preview = false;
+            if escape || drag_stopped {
+                app.canvas.want_focus = true;
+            }
+        }
+    } else {
+        ui.data_mut(|d| d.remove::<bool>(egui::Id::new("ribbon_preview")));
+        panel.show(ui, content);
+    }
+}
+
+/// The ribbon's persistent toggle: bottom-right when expanded, on the tab strip when collapsed.
+fn ribbon_toggle(app: &mut WordApp, ui: &mut Ui, rect: Rect) {
+    let (label, icon) = if app.ribbon_preview {
+        (tl!("Pin ribbon"), "pin")
+    } else if app.ui.ribbon_collapsed {
+        (tl!("Expand ribbon"), "chevronDown")
+    } else {
+        (tl!("Collapse ribbon"), "chevronUp")
+    };
+    let response = ui.interact(rect, egui::Id::new("ribbon_toggle"), Sense::click());
+    response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), label));
+    let style = crate::widgets::drawn_state(ui, &response, false);
+    ui.painter().rect_filled(rect, 4.0, style.fill);
+    icons::paint(ui.painter(), Rect::from_center_size(rect.center(), vec2(14.0, 14.0)), icon, style.text, style.text);
+    if response.on_hover_text(label).clicked() {
+        let _ = app.run("ui.collapseRibbon", json!({}));
+    }
 }
 
 /// Custom groups (Customize Ribbon, #379): up to three commands as large buttons, more as small
@@ -1626,6 +1701,7 @@ fn columns_items(ui: &mut Ui, app: &mut WordApp) {
     mi(ui, app, "More Columns…", "ui.dialog", json!({"name": "columns"}));
 }
 
+/// Page setup, paragraph indentation and spacing, and object arrangement on the Layout tab.
 fn layout(app: &mut WordApp, ui: &mut Ui) {
     group(ui, "Page Setup", Some("layout.pageSetup"), app, |ui, app| {
         // Text Direction works on what the caret is in: table cells, a text box, else the section.
@@ -1700,22 +1776,42 @@ fn layout(app: &mut WordApp, ui: &mut Ui) {
             let mut l = rp.indent_left / k;
             let mut b = rp.space_before;
             ui.label(egui::RichText::new(tl!("Left:")).small());
-            if ui.add_sized(FIELD, egui::DragValue::new(&mut l).speed(3.6 / k).range(-792.0 / k..=1584.0 / k).measure(u).max_decimals(2)).changed() {
+            let left = ui.add_sized(
+                FIELD,
+                egui::DragValue::new(&mut l).speed(3.6 / k).range(-792.0 / k..=1584.0 / k).measure(u).max_decimals(2).update_while_editing(false),
+            );
+            let cancelled = esc_cancelled(ui, &left, egui::Id::new(("layout_para_field", "left")));
+            if left.changed() && l != rp.indent_left / k && !cancelled {
                 let _ = app.run("para.indents", json!({"left": l * k}));
             }
             spaced(ui, egui::RichText::new(tl!("Before:")).small());
-            if ui.add_sized(FIELD, egui::DragValue::new(&mut b).speed(1.0).range(0.0..=1584.0).suffix(format!(" {}", tl!("pt")))).changed() {
+            let before = ui.add_sized(
+                FIELD,
+                egui::DragValue::new(&mut b).speed(1.0).range(0.0..=1584.0).suffix(format!(" {}", tl!("pt"))).update_while_editing(false),
+            );
+            let cancelled = esc_cancelled(ui, &before, egui::Id::new(("layout_para_field", "before")));
+            if before.changed() && b != rp.space_before && !cancelled {
                 let _ = app.run("para.spacing", json!({"before": b}));
             }
             ui.end_row();
             let mut r = rp.indent_right / k;
             let mut a = rp.space_after;
             ui.label(egui::RichText::new(tl!("Right:")).small());
-            if ui.add_sized(FIELD, egui::DragValue::new(&mut r).speed(3.6 / k).range(-792.0 / k..=1584.0 / k).measure(u).max_decimals(2)).changed() {
+            let right = ui.add_sized(
+                FIELD,
+                egui::DragValue::new(&mut r).speed(3.6 / k).range(-792.0 / k..=1584.0 / k).measure(u).max_decimals(2).update_while_editing(false),
+            );
+            let cancelled = esc_cancelled(ui, &right, egui::Id::new(("layout_para_field", "right")));
+            if right.changed() && r != rp.indent_right / k && !cancelled {
                 let _ = app.run("para.indents", json!({"right": r * k}));
             }
             spaced(ui, egui::RichText::new(tl!("After:")).small());
-            if ui.add_sized(FIELD, egui::DragValue::new(&mut a).speed(1.0).range(0.0..=1584.0).suffix(format!(" {}", tl!("pt")))).changed() {
+            let after = ui.add_sized(
+                FIELD,
+                egui::DragValue::new(&mut a).speed(1.0).range(0.0..=1584.0).suffix(format!(" {}", tl!("pt"))).update_while_editing(false),
+            );
+            let cancelled = esc_cancelled(ui, &after, egui::Id::new(("layout_para_field", "after")));
+            if after.changed() && a != rp.space_after && !cancelled {
                 let _ = app.run("para.spacing", json!({"after": a}));
             }
             ui.end_row();
@@ -2926,6 +3022,249 @@ fn table_layout(app: &mut WordApp, ui: &mut Ui) {
 mod tests {
     use super::*;
     use wordcraft_engine::Session;
+
+    /// The chevron stays reachable in both states, including narrow windows and an empty editor.
+    #[test]
+    fn ribbon_chevron_collapses_and_expands_without_overlapping_controls() {
+        use egui_kittest::kittest::Queryable;
+        for width in [300.0, 1280.0] {
+            for empty in [false, true] {
+                let mut app = WordApp::new(Session::new(wordcraft_doc::Document::new()), crate::Services::default());
+                if empty {
+                    app.run("file.close", json!({})).unwrap();
+                }
+                let mut h = egui_kittest::Harness::builder().with_size(vec2(width, 600.0)).build_ui_state(
+                    |ui, app: &mut WordApp| {
+                        app.logic(ui.ctx());
+                        app.ui(ui);
+                    },
+                    app,
+                );
+                h.run_steps(3);
+                let up = h.get_by_label("Collapse ribbon").rect();
+                assert!(up.right() <= width && up.left() >= width - 50.0, "{width}: {up:?}");
+                h.get_by_label("Collapse ribbon").click();
+                h.run_steps(3);
+                assert!(h.state().ui.ribbon_collapsed);
+                let down = h.get_by_label("Expand ribbon").rect();
+                assert!(down.right() <= width && down.bottom() < up.top(), "{width}: {down:?} {up:?}");
+                for label in ["File", "Home", "Comments", "Editing", "Share"] {
+                    if let Some(node) = h.query_by_label(label) {
+                        assert!(!node.rect().intersects(down), "{width}: {label} overlaps {down:?}");
+                    }
+                }
+                h.get_by_label("Expand ribbon").click();
+                h.run_steps(3);
+                assert!(!h.state().ui.ribbon_collapsed);
+                assert!(h.query_by_label("Collapse ribbon").is_some());
+            }
+        }
+    }
+
+    /// Desktop Word: a collapsed tab opens over the page, dismisses after use, and can be pinned.
+    #[test]
+    fn collapsed_ribbon_temporarily_reveals_tabs_without_moving_the_page() {
+        use egui_kittest::kittest::Queryable;
+        let app = WordApp::new(Session::new(wordcraft_doc::Document::from_text("Text")), crate::Services::default());
+        let mut h = egui_kittest::Harness::builder().with_size(vec2(1280.0, 600.0)).build_ui_state(
+            |ui, app: &mut WordApp| {
+                app.logic(ui.ctx());
+                app.ui(ui);
+            },
+            app,
+        );
+        h.run_steps(3);
+        h.get_by_label("Collapse ribbon").click();
+        h.run_steps(3);
+        let page = h.state().canvas.canvas_rect;
+        h.get_by_label("Home").click();
+        h.run_steps(4);
+        assert!(h.state().ribbon_preview && h.state().ui.ribbon_collapsed);
+        assert_eq!(h.state().canvas.canvas_rect, page, "the temporary ribbon overlays the page");
+        h.get_by_label("Change Case").click();
+        h.run_steps(3);
+        assert!(h.state().ribbon_preview && egui::Popup::is_any_open(&h.ctx));
+        h.key_press(egui::Key::Escape);
+        h.run_steps(3);
+        assert!(h.state().ribbon_preview, "Escape dismisses the dropdown before the ribbon");
+        h.get_by_label("Bold").click();
+        h.run_steps(3);
+        assert!(!h.state().ribbon_preview && h.state().ui.ribbon_collapsed);
+        h.event(egui::Event::Text("!".into()));
+        h.run_steps(3);
+        assert!(h.state().session.doc.plain_text(wordcraft_doc::StoryRef::Body).contains('!'), "typing returns to the page");
+        h.get_by_label("Insert").click();
+        h.run_steps(4);
+        assert!(h.state().ribbon_preview);
+        h.key_press(egui::Key::Escape);
+        h.run_steps(3);
+        assert!(!h.state().ribbon_preview && h.state().ui.ribbon_collapsed);
+        h.get_by_label("Home").click();
+        h.run_steps(4);
+        let pos = h.state().canvas.canvas_rect.unwrap().center();
+        for (pos, pressed) in [(pos, true), (pos + vec2(30.0, 0.0), false)] {
+            h.event(egui::Event::PointerMoved(pos));
+            h.run_steps(1);
+            h.event(egui::Event::PointerButton { pos, button: egui::PointerButton::Primary, pressed, modifiers: Default::default() });
+            h.run_steps(1);
+            assert!(!h.state().ribbon_preview, "a page press dismisses the ribbon even when it becomes a drag");
+        }
+        h.run_steps(3);
+        assert!(!h.state().ribbon_preview && h.state().ui.ribbon_collapsed);
+        h.get_by_label("Home").click();
+        h.run_steps(4);
+        assert!(h.query_by_label("Expand ribbon").is_none(), "temporary reveal offers pinning, not an expand arrow");
+        h.get_by_label("Pin ribbon").click();
+        h.run_steps(3);
+        assert!(!h.state().ribbon_preview && !h.state().ui.ribbon_collapsed);
+        h.get_by_label("Collapse ribbon").click();
+        h.run_steps(3);
+        assert!(h.state().ui.ribbon_collapsed && !h.state().ribbon_preview);
+        h.get_by_label("Layout").click();
+        h.run_steps(4);
+        let revision = h.state().session.rev();
+        let indent = h.state().session.doc.para_at(&h.state().session.sel.focus).unwrap().props.indent_left;
+        for field in 0..4 {
+            h.get_all_by_role(egui::accesskit::Role::SpinButton).nth(field).unwrap().click();
+            h.run_steps(3);
+            h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::A);
+            h.event(egui::Event::Text("5".into()));
+            h.run_steps(3);
+            assert_eq!(h.state().session.rev(), revision, "typing waits for a committed value");
+            h.key_press(egui::Key::Escape);
+            h.run_steps(3);
+            assert!(h.state().ribbon_preview, "Escape cancels the field before dismissing the ribbon");
+            assert_eq!(h.state().session.rev(), revision, "Escape does not change the document");
+            assert_eq!(h.state().session.doc.para_at(&h.state().session.sel.focus).unwrap().props.indent_left, indent);
+        }
+        h.key_press(egui::Key::Escape);
+        h.run_steps(3);
+        assert!(!h.state().ribbon_preview, "the next Escape dismisses the ribbon");
+        h.get_by_label("Layout").click();
+        h.run_steps(4);
+        h.get_all_by_role(egui::accesskit::Role::SpinButton).next().unwrap().click();
+        h.run_steps(3);
+        h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::A);
+        h.event(egui::Event::Text("1".into()));
+        h.key_press(egui::Key::Enter);
+        h.run_steps(3);
+        let indent = h.state().session.doc.para_at(&h.state().session.sel.focus).unwrap().props.indent_left.unwrap();
+        assert!((indent - crate::options::unit().pt_per_unit()).abs() < 0.1, "Enter applies the indentation");
+        assert!(!h.state().ribbon_preview, "committing the command dismisses the preview");
+    }
+
+    /// A numeric field keeps its preview through intermediate drag commands and closes on release.
+    #[test]
+    fn preview_field_drag_applies_multiple_steps_before_closing() {
+        use egui_kittest::kittest::Queryable;
+        let mut app = WordApp::new(Session::new(wordcraft_doc::Document::from_text("Text")), crate::Services::default());
+        app.ui.ribbon_collapsed = true;
+        let mut h = egui_kittest::Harness::builder().with_size(vec2(1440.0, 900.0)).build_ui_state(
+            |ui, app: &mut WordApp| {
+                app.logic(ui.ctx());
+                app.ui(ui);
+            },
+            app,
+        );
+        h.run_steps(3);
+        h.get_by_label("Layout").click();
+        h.run_steps(4);
+        let mut pos = h.get_all_by_role(egui::accesskit::Role::SpinButton).next().unwrap().rect().center();
+        h.event(egui::Event::PointerMoved(pos));
+        h.run_steps(1);
+        h.event(egui::Event::PointerButton { pos, button: egui::PointerButton::Primary, pressed: true, modifiers: Default::default() });
+        h.run_steps(1);
+        let mut values = Vec::new();
+        for _ in 0..3 {
+            pos.x += 10.0;
+            h.event(egui::Event::PointerMoved(pos));
+            h.run_steps(2);
+            assert!(h.state().ribbon_preview, "intermediate drag commands keep the preview open");
+            values.push(h.state().session.doc.para_at(&h.state().session.sel.focus).unwrap().props.indent_left.unwrap_or(0.0));
+        }
+        assert!(values[2] > values[1] && values[1] > values[0], "each drag step changes indentation: {values:?}");
+        h.event(egui::Event::PointerButton { pos, button: egui::PointerButton::Primary, pressed: false, modifiers: Default::default() });
+        h.run_steps(3);
+        assert!(!h.state().ribbon_preview && h.state().ui.ribbon_collapsed, "releasing the field closes the temporary ribbon");
+        h.event(egui::Event::Text("!".into()));
+        h.run_steps(3);
+        assert!(h.state().session.doc.plain_text(wordcraft_doc::StoryRef::Body).contains('!'), "typing returns to the page after release");
+    }
+
+    /// Pressing the page commits a deferred field edit before dismissing its preview.
+    #[test]
+    fn preview_field_commits_when_pressing_the_page() {
+        use egui_kittest::kittest::Queryable;
+        let mut app = WordApp::new(Session::new(wordcraft_doc::Document::from_text("Text\nNext")), crate::Services::default());
+        app.ui.ribbon_collapsed = true;
+        let mut h = egui_kittest::Harness::builder().with_size(vec2(1440.0, 900.0)).build_ui_state(
+            |ui, app: &mut WordApp| {
+                app.logic(ui.ctx());
+                app.ui(ui);
+            },
+            app,
+        );
+        h.run_steps(3);
+        h.get_by_label("Layout").click();
+        h.run_steps(4);
+        h.get_all_by_role(egui::accesskit::Role::SpinButton).next().unwrap().click();
+        h.run_steps(3);
+        h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::A);
+        h.event(egui::Event::Text("2".into()));
+        h.run_steps(3);
+        assert!(h.state().ribbon_preview, "typing a deferred value keeps the preview open");
+        assert_eq!(h.state().session.doc.plain_text(wordcraft_doc::StoryRef::Body), "Text\nNext", "typing belongs to the field");
+        let edited = h.state().session.sel.focus.clone();
+        let pos = h.state().canvas.canvas_rect.unwrap().center();
+        for pressed in [true, false] {
+            h.event(egui::Event::PointerMoved(pos));
+            h.event(egui::Event::PointerButton { pos, button: egui::PointerButton::Primary, pressed, modifiers: Default::default() });
+            h.run_steps(3);
+        }
+        let indent = h.state().session.doc.para_at(&edited).unwrap().props.indent_left.unwrap_or(0.0);
+        assert!((indent - 2.0 * crate::options::unit().pt_per_unit()).abs() < 0.1, "pressing the page commits the indentation: {indent}");
+        assert_eq!(
+            h.state().session.doc.para_at(&h.state().session.sel.focus).unwrap().props.indent_left.unwrap_or(0.0),
+            0.0,
+            "the clicked paragraph is unchanged"
+        );
+        assert!(!h.state().ribbon_preview && h.state().ui.ribbon_collapsed);
+    }
+
+    /// Find keeps typing in navigation search when its ribbon command dismisses a temporary preview.
+    #[test]
+    fn preview_find_keeps_navigation_search_focus() {
+        use egui_kittest::kittest::Queryable;
+        let mut app = WordApp::new(Session::new(wordcraft_doc::Document::from_text("Text")), crate::Services::default());
+        app.ui.ribbon_collapsed = true;
+        let mut h = egui_kittest::Harness::builder().with_size(vec2(1440.0, 900.0)).build_ui_state(
+            |ui, app: &mut WordApp| {
+                app.logic(ui.ctx());
+                app.ui(ui);
+            },
+            app,
+        );
+        h.run_steps(3);
+        h.get_by_label("Home").click();
+        h.run_steps(4);
+        assert!(h.state().ribbon_preview);
+        h.get_by_label("Find").click();
+        h.run_steps(3);
+        let shortcut = crate::widgets::shortcut_text(h.state(), "edit.find");
+        h.get_by_label_contains(&shortcut).click();
+        h.run_steps(3);
+        assert!(!h.state().ribbon_preview);
+        h.event(egui::Event::Text("needle".into()));
+        h.run_steps(3);
+        assert_eq!(h.ctx.data(|d| d.get_temp::<String>(egui::Id::new("nav_query"))).as_deref(), Some("needle"));
+        assert_eq!(h.state().session.doc.plain_text(wordcraft_doc::StoryRef::Body), "Text");
+        let app = h.state_mut();
+        app.ribbon_preview = true;
+        app.canvas.want_focus = false;
+        app.run("para.dialog", json!({})).unwrap();
+        assert!(app.dialog.is_some());
+        assert!(!app.canvas.want_focus, "a dialog keeps focus when the preview closes");
+    }
 
     /// Two clicks arm and disarm the painter; the double-click handling then leaves it sticky (#2785).
     #[test]

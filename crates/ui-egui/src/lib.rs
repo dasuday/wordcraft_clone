@@ -498,6 +498,8 @@ fn migrate_units(v: &mut Value) {
 pub struct WordApp {
     pub session: Session,
     pub ui: UiState,
+    /// A collapsed ribbon temporarily opened by selecting a tab; never persisted.
+    ribbon_preview: bool,
     pub services: Services,
     pub printing: printing::State,
     print_feedback_seen: Option<printing::Feedback>,
@@ -645,6 +647,7 @@ impl SaveChoice {
 }
 
 impl WordApp {
+    /// Create an editor for a session with fresh transient view and interaction state.
     pub fn new(session: Session, services: Services) -> Self {
         // Numeral › System follows the system locale, found here rather than in layout.
         if let Some(tag) = sys_locale::get_locale() {
@@ -672,6 +675,7 @@ impl WordApp {
             synthetic: Vec::new(),
             control_click: false,
             keytip_rects: Vec::new(),
+            ribbon_preview: false,
             nav_search_focus: false,
             styled: false,
             fonts_hans: false,
@@ -844,6 +848,21 @@ impl WordApp {
     /// Close, Envelopes, Labels and Finish & Merge on a document with unsaved changes first ask
     /// Save / Don't Save / Cancel, and the command runs once that is answered (`ui.saveChanges`).
     pub fn run(&mut self, id: &str, params: Value) -> Result<Value, String> {
+        // Numeric fields dispatch intermediate values while the pointer is still dragging.
+        let dragging = self.ctx.as_ref().is_some_and(|ctx| ctx.dragged_id().is_some());
+        let dismiss_preview = self.ribbon_preview && !dragging && !matches!(id, "ui.tab" | "ui.collapseRibbon");
+        if dismiss_preview {
+            self.ribbon_preview = false;
+        }
+        let result = self.run_user_command(id, params);
+        if dismiss_preview && self.dialog.is_none() && !self.nav_search_focus {
+            self.canvas.want_focus = true;
+        }
+        result
+    }
+
+    /// Dispatch a user command, opening input or save dialogs when needed.
+    fn run_user_command(&mut self, id: &str, params: Value) -> Result<Value, String> {
         // Comment text still being typed is written first, so a save or export has it and a
         // close, New or Open counts it as a change (#1348). A draft the document refuses is not
         // part of it: saving and exporting go on without it (the refusal stays on the status
@@ -1459,6 +1478,7 @@ impl WordApp {
         Some(Ok(match id {
             "ui.tab" => {
                 let tab = s("tab").unwrap_or("Home").to_string();
+                self.ribbon_preview = self.ui.ribbon_collapsed && tab != "File";
                 if tab == "File" {
                     self.ui.backstage = true;
                 } else {
@@ -1520,6 +1540,7 @@ impl WordApp {
             }
             "ui.collapseRibbon" => {
                 self.ui.ribbon_collapsed = !self.ui.ribbon_collapsed;
+                self.ribbon_preview = false;
                 json!({"collapsed": self.ui.ribbon_collapsed})
             }
             "ui.quickAccessToolbar" => {
