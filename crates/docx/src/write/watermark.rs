@@ -6,11 +6,22 @@ use wordcraft_doc::{SectionProps, Watermark};
 
 use crate::xml::esc;
 
-/// The shape type the watermark shape uses: two straight subpaths, the box's top and bottom
-/// edges, between which the `v:textpath` text is stretched to fit the shape (`fitshape`). A single
-/// path gives the text no height, and Word draws nothing.
+/// The shape type the watermark shape uses: VML's plain text shape (`o:spt="136"`), whose two
+/// subpaths — the box's top and bottom edges, placed by its adjust value through the formulas —
+/// stretch the `v:textpath` text to fit the shape (`fitshape`). Word for Mac draws the text only
+/// from the shape type in full (adjust value, formulas, handle, connection points, lock); with two
+/// bare subpaths it drew the two edges and no text (checked in Word for Mac). A single path gives
+/// the text no height, and Word draws nothing.
 const SHAPETYPE_ID: &str = "_x0000_t136";
-const SHAPETYPE_PATH: &str = "m0,0l21600,0m0,21600l21600,21600e";
+const SHAPETYPE: &str = concat!(
+    r#"<v:shapetype id="_x0000_t136" coordsize="21600,21600" o:spt="136" adj="10800" path="m@7,l@8,m@5,21600l@6,21600e">"#,
+    r#"<v:formulas><v:f eqn="sum #0 0 10800"/><v:f eqn="prod #0 2 1"/><v:f eqn="sum 21600 0 @1"/><v:f eqn="sum 0 0 @2"/>"#,
+    r#"<v:f eqn="sum 21600 0 @3"/><v:f eqn="if @0 @3 0"/><v:f eqn="if @0 21600 @1"/><v:f eqn="if @0 0 @2"/><v:f eqn="if @0 @4 21600"/>"#,
+    r#"<v:f eqn="mid @5 @6"/><v:f eqn="mid @8 @5"/><v:f eqn="mid @7 @8"/><v:f eqn="mid @6 @7"/><v:f eqn="sum @6 0 @5"/></v:formulas>"#,
+    r#"<v:path textpathok="t" o:connecttype="custom" o:connectlocs="@9,0;@10,10800;@11,21600;@12,10800" o:connectangles="270,180,90,0"/>"#,
+    r##"<v:textpath on="t" fitshape="t"/><v:handles><v:h position="#0,bottomRight" xrange="6629,14971"/></v:handles>"##,
+    r#"<o:lock v:ext="edit" text="t" shapetype="t"/></v:shapetype>"#
+);
 
 /// The watermark text as written: what the reader accepts (non-blank, at most 200 characters).
 pub(super) fn text(wm: &Watermark) -> Option<String> {
@@ -33,22 +44,21 @@ pub(super) fn run(wm: &Watermark, n: usize, page: &SectionProps) -> Option<Strin
     let font = if font.trim().is_empty() { Watermark::default().font } else { font };
     let rotation = if wm.diagonal { "rotation:315;" } else { "" };
     let style = format!(
-        "position:absolute;margin-left:0;margin-top:0;width:{width:.1}pt;height:{height:.1}pt;{rotation}z-index:-251654144;\
+        "position:absolute;margin-left:0;margin-top:0;width:{width:.1}pt;height:{height:.1}pt;{rotation}z-index:-251654144;mso-wrap-edited:f;\
          mso-position-horizontal:center;mso-position-horizontal-relative:margin;\
          mso-position-vertical:center;mso-position-vertical-relative:margin"
     );
     let fill = if wm.semitransparent { r#"<v:fill opacity=".5"/>"# } else { "" };
     Some(format!(
         concat!(
-            r#"<w:r><w:rPr><w:noProof/></w:rPr><w:pict>"#,
-            r#"<v:shapetype id="{st}" coordsize="21600,21600" o:spt="136" path="{path}">"#,
-            r#"<v:path textpathok="t"/><v:textpath on="t" fitshape="t"/></v:shapetype>"#,
-            r##"<v:shape id="PowerPlusWaterMarkObject{n}" type="#{st}" style="{style}" o:allowincell="f" fillcolor="#{color}" stroked="f">"##,
-            r#"{fill}<v:textpath style="{tstyle}" string="{text}"/></v:shape></w:pict></w:r>"#
+            r#"<w:r><w:rPr><w:noProof/></w:rPr><w:pict>{shapetype}"#,
+            r##"<v:shape id="PowerPlusWaterMarkObject{n}" o:spid="_x0000_s{spid}" type="#{st}" style="{style}" o:allowincell="f" fillcolor="#{color}" stroked="f">"##,
+            r#"{fill}<v:textpath style="{tstyle}" string="{text}"/><w10:wrap anchorx="margin" anchory="margin"/></v:shape></w:pict></w:r>"#
         ),
+        shapetype = SHAPETYPE,
         st = SHAPETYPE_ID,
-        path = SHAPETYPE_PATH,
         n = n,
+        spid = 2049usize.saturating_add(n),
         style = esc(&style),
         color = wm.color.hex(),
         fill = fill,

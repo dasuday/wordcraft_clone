@@ -1531,8 +1531,10 @@ fn watermark_without_header_gains_one() {
     let hdr = part_xml(&bytes, "word/header1.xml");
     assert_eq!(hdr.matches("<v:shape ").count(), 1);
     assert!(hdr.contains(r#"id="PowerPlusWaterMarkObject1""#) && hdr.contains("rotation:315") && hdr.contains(r#"<v:fill opacity=".5"/>"#));
-    // The text sits between the top and bottom edges: on one line Word gives it no height.
-    assert!(hdr.contains(r#"path="m0,0l21600,0m0,21600l21600,21600e""#));
+    // The text sits between the top and bottom edges: on one line Word gives it no height. The
+    // edges come from the full text shape type (adjust value and formulas; at 10800 the same
+    // geometry as two bare subpaths), which Word for Mac needs to draw the text.
+    assert!(hdr.contains(r#"o:spt="136" adj="10800" path="m@7,l@8,m@5,21600l@6,21600e""#));
     assert!(part_xml(&bytes, "word/document.xml").contains(r#"<w:headerReference w:type="default""#));
     let r = wordcraft_docx::read(&bytes).unwrap();
     assert_eq!(r.settings.watermark, d.settings.watermark);
@@ -1548,6 +1550,29 @@ fn watermark_without_header_gains_one() {
     assert_eq!(r2.settings.watermark, d.settings.watermark);
     assert_eq!(header_ids(&r2).len(), 1);
     assert_eq!(r2.parts[&header_ids(&r2)[0]].blocks.len(), 1);
+}
+
+/// Word for Mac draws a watermark's text only from VML's text shape type in full (the adjust
+/// value, its formulas and handle, the text path's connection points, the lock) with the shape's
+/// spid and wrap; with a shape type of two bare subpaths it drew the box's two edges and no text.
+#[test]
+fn watermark_shape_type_is_the_full_text_shape_word_draws() {
+    let mut d = doc_with(vec![Paragraph::with_text("Body", CharProps::default())]);
+    d.settings.watermark = Some(Watermark { text: "DRAFT".into(), diagonal: true, ..Watermark::default() });
+    let hdr = part_xml(&wordcraft_docx::write(&d).unwrap(), "word/header1.xml");
+    for part in [
+        r#"o:spt="136" adj="10800" path="m@7,l@8,m@5,21600l@6,21600e""#,
+        r#"<v:f eqn="sum #0 0 10800"/>"#,
+        r#"<v:f eqn="sum @6 0 @5"/></v:formulas>"#,
+        r#"o:connectlocs="@9,0;@10,10800;@11,21600;@12,10800""#,
+        r##"<v:handles><v:h position="#0,bottomRight" xrange="6629,14971"/></v:handles>"##,
+        r#"<o:lock v:ext="edit" text="t" shapetype="t"/>"#,
+        r#"o:spid="_x0000_s"#,
+        r#"<w10:wrap anchorx="margin" anchory="margin"/>"#,
+    ] {
+        assert!(hdr.contains(part), "{part} missing in {hdr}");
+    }
+    assert!(hdr.contains(r#"xmlns:w10="urn:schemas-microsoft-com:office:word""#), "w10 declared in the header");
 }
 
 /// #1290: a header keeps its own text, and the watermark goes into its first paragraph (no extra
