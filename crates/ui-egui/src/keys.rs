@@ -215,9 +215,14 @@ fn is_modifier_key(key: Key) -> bool {
     )
 }
 
+/// Whether `modifiers` ask for Paste Special: Mod+Alt+V, or Mod+Ctrl+V on macOS.
+fn is_paste_special_modifiers(modifiers: Modifiers) -> bool {
+    modifiers.alt || (cfg!(target_os = "macos") && modifiers.ctrl)
+}
+
 /// Whether releasing `key` with `modifiers` is Paste Special: Mod+Alt+V, or Mod+Ctrl+V on macOS.
 fn is_paste_special_release(key: Key, modifiers: egui::Modifiers) -> bool {
-    key == Key::V && modifiers.command && !modifiers.shift && (modifiers.alt || (cfg!(target_os = "macos") && modifiers.ctrl))
+    key == Key::V && modifiers.command && !modifiers.shift && is_paste_special_modifiers(modifiers)
 }
 
 /// Events for the focused canvas: text, editing keys, clipboard, IME. While keytips are showing
@@ -266,12 +271,16 @@ pub fn canvas_events(app: &mut WordApp, ctx: &egui::Context) {
         // can go down and up within one frame, leaving the frame's modifiers without it.
         match &e {
             egui::Event::ModifiersChanged(m) if m.command => app.canvas.paste_mods = Some(*m),
-            egui::Event::Key { key: Key::V | Key::Paste, pressed: true, .. } => app.canvas.v_pressed = true,
+            egui::Event::Key { key: Key::V | Key::Paste, pressed: true, modifiers, .. } => {
+                app.canvas.v_pressed = true;
+                app.canvas.v_press_mods = Some(*modifiers);
+            }
             egui::Event::Key { key, pressed: true, modifiers, .. } if !is_modifier_key(*key) => {
                 app.canvas.paste_mods = modifiers.command.then_some(*modifiers);
             }
             egui::Event::WindowFocused(_) => {
                 app.canvas.v_pressed = false;
+                app.canvas.v_press_mods = None;
                 app.canvas.paste_mods = None;
             }
             _ => {}
@@ -298,10 +307,18 @@ pub fn canvas_events(app: &mut WordApp, ctx: &egui::Context) {
         if alt_codes && app.session.math.is_none() && alt_code_event(app, &e) {
             continue;
         }
+        // A paste event reads the modifiers of the V press that caused it: a modifier can go up
+        // before the event arrives, and ⌘⌃V is still Paste Special (#2905).
+        let paste_press_mods = match &e {
+            egui::Event::Paste(_) => app.canvas.v_press_mods.take(),
+            _ => None,
+        };
         if let egui::Event::Paste(t) = &e {
             app.canvas.pasted = true;
-            // Copied picture files arrive as their paths: insert the pictures (#45).
-            if app.session.math.is_none() && !ctx.input(|i| i.modifiers.alt) && crate::paste_picture::paste_named_files(app, t) {
+            let m = paste_press_mods.unwrap_or_else(|| ctx.input(|i| i.modifiers));
+            // Copied picture files arrive as their paths: insert the pictures (#45), unless this
+            // is Paste Special, which lists them instead.
+            if app.session.math.is_none() && !is_paste_special_modifiers(m) && crate::paste_picture::paste_named_files(app, t) {
                 continue;
             }
         }
@@ -311,7 +328,11 @@ pub fn canvas_events(app: &mut WordApp, ctx: &egui::Context) {
         // pastes: a release with no V press seen was Mod+V.
         if let egui::Event::Key { key: key @ (Key::V | Key::Paste), pressed: false, modifiers, .. } = &e {
             let press_seen = std::mem::take(&mut app.canvas.v_pressed);
-            let modifiers = &paste_release_modifiers(*modifiers, press_seen, app.canvas.paste_mods.take());
+            // The V press's modifiers, not the release's: a modifier released in between (⌘⌃V
+            // with Ctrl up first) must not turn Paste Special into plain Paste.
+            let pressed_mods = app.canvas.v_press_mods.take();
+            let released_mods = paste_release_modifiers(*modifiers, press_seen, app.canvas.paste_mods.take());
+            let modifiers = &pressed_mods.unwrap_or(released_mods);
             let paste_keys = is_paste_release(*key, *modifiers);
             let pasted = std::mem::take(&mut app.canvas.pasted);
             if !pasted && paste_keys && app.session.math.is_none() && app.services.clipboard_picture.is_some() {
@@ -373,12 +394,16 @@ pub fn canvas_events(app: &mut WordApp, ctx: &egui::Context) {
                 }
             }
             egui::Event::Paste(t) => {
-                // Mod+Alt+V arrives as a paste too (the shell reads the clipboard): Paste Special.
-                let m = ctx.input(|i| i.modifiers);
-                let id = match (m.alt, m.shift) {
-                    (true, true) => "edit.pasteText",
-                    (true, false) => "edit.pasteSpecial",
-                    _ => "edit.paste",
+                // Mod+Alt+V arrives as a paste too (the shell reads the clipboard): Paste
+                // Special, as does Mod+Ctrl+V on macOS. The V press's modifiers say which, even
+                // when a modifier went up before the event.
+                let m = paste_press_mods.unwrap_or_else(|| ctx.input(|i| i.modifiers));
+                let id = if m.alt && m.shift {
+                    "edit.pasteText"
+                } else if is_paste_special_modifiers(m) {
+                    "edit.pasteSpecial"
+                } else {
+                    "edit.paste"
                 };
                 let _ = app.run(id, json!({"text": t}));
             }
@@ -882,6 +907,58 @@ mod tests {
         ];
         ctx.run_ui(egui::RawInput { events, ..Default::default() }, |ui| canvas_events(&mut a, ui.ctx())).drop_without_applying_deltas();
         assert_eq!(pictures(&mut a), 1);
+    }
+
+    /// ⌘⌃V opens Paste Special. Ctrl going up before V must not turn the release into ⌘V and
+    /// paste the clipboard's picture under the dialog (#2905).
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn paste_special_v_release_does_not_paste_after_ctrl_goes_up() {
+        let ctx = egui::Context::default();
+        let mut a = picture_app();
+        let cmd_ctrl = Modifiers { ctrl: true, ..mod_key() };
+        mods_frame(&ctx, &mut a, cmd_ctrl, vec![key_event(Key::V, true, cmd_ctrl)]);
+        assert_eq!(a.dialog.as_ref().map(|d| d.name()), Some("pasteSpecial"), "⌘⌃V opens Paste Special");
+
+        let cmd = mod_key();
+        mods_frame(&ctx, &mut a, cmd, vec![key_event(Key::ControlLeft, false, cmd)]);
+        mods_frame(&ctx, &mut a, cmd, vec![key_event(Key::V, false, cmd)]);
+        assert_eq!(pictures(&mut a), 0, "the V release adds no picture");
+        assert_eq!(a.session.doc.plain_text(wordcraft_doc::StoryRef::Body), "", "the picture is not in the document");
+        assert_eq!(a.dialog.as_ref().map(|d| d.name()), Some("pasteSpecial"), "Paste Special stays open");
+        assert_eq!(a.canvas.v_press_mods, None, "the snapshot is cleared on the V release");
+    }
+
+    /// The winit text path sends no V press (egui-winit turns ⌘⌃V into a paste event), so the
+    /// event's own modifiers must still make it Paste Special rather than Paste (#2905).
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn paste_event_with_ctrl_still_down_is_paste_special() {
+        let ctx = egui::Context::default();
+        let mut a = picture_app();
+        let cmd_ctrl = Modifiers { ctrl: true, ..mod_key() };
+        mods_frame(&ctx, &mut a, cmd_ctrl, vec![egui::Event::Paste("Hello".into())]);
+        assert_eq!(a.session.doc.plain_text(wordcraft_doc::StoryRef::Body), "", "the paste does not reach the document");
+        assert_eq!(a.dialog.as_ref().map(|d| d.name()), Some("pasteSpecial"), "the paste opens Paste Special");
+    }
+
+    /// ⌘⌃V can arrive as a paste event after Ctrl went up: the V press's modifiers still make
+    /// it Paste Special, and the snapshot is cleared once the paste is handled (#2905).
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn paste_event_uses_the_v_press_modifiers() {
+        let ctx = egui::Context::default();
+        let mut a = picture_app();
+        let cmd_ctrl = Modifiers { ctrl: true, ..mod_key() };
+        mods_frame(&ctx, &mut a, cmd_ctrl, vec![key_event(Key::V, true, cmd_ctrl)]);
+        a.dialog = None;
+
+        let cmd = mod_key();
+        mods_frame(&ctx, &mut a, cmd, vec![key_event(Key::ControlLeft, false, cmd)]);
+        mods_frame(&ctx, &mut a, cmd, vec![egui::Event::Paste("Hello".into())]);
+        assert_eq!(a.session.doc.plain_text(wordcraft_doc::StoryRef::Body), "", "the paste does not reach the document");
+        assert_eq!(a.dialog.as_ref().map(|d| d.name()), Some("pasteSpecial"), "the paste opens Paste Special");
+        assert_eq!(a.canvas.v_press_mods, None, "the snapshot is cleared when the paste arrives");
     }
 
     /// A V release keeps its own modifiers unless Mod went up first and no V press arrived.
