@@ -1184,7 +1184,14 @@ impl Writer<'_> {
         } else {
             let d = emu(float.dist.clamp(0.0, 1584.0));
             let (dt, db) = (emu(float.dist_top.clamp(0.0, 1584.0)), emu(float.dist_bottom.clamp(0.0, 1584.0)));
-            self.z += 1;
+            // A stacking order read from a file is kept; objects made here go above those.
+            let z = match float.z {
+                Some(z) => self.zmap.get(&z).copied().unwrap_or(z),
+                None => {
+                    self.z = self.z.saturating_add(1);
+                    self.z
+                }
+            };
             let behind = if float.wrap == Wrap::BehindText { "1" } else { "0" };
             w.open(
                 "wp:anchor",
@@ -1194,7 +1201,7 @@ impl Writer<'_> {
                     ("distL", &d),
                     ("distR", &d),
                     ("simplePos", "0"),
-                    ("relativeHeight", &self.z.to_string()),
+                    ("relativeHeight", &z.to_string()),
                     ("behindDoc", behind),
                     ("locked", "0"),
                     ("layoutInCell", if float.outside_cell { "0" } else { "1" }),
