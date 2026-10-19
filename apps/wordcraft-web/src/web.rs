@@ -68,6 +68,11 @@ pub fn start() {
                     // Preferences from an earlier visit (#2132), as the desktop app reads `ui.json`.
                     let stored = stored_prefs();
                     crate::prefs::restore(&mut app, stored.as_deref());
+                    if sample {
+                        // The handbook in the interface language, now that the saved preference is known.
+                        let lang = wordcraft_ui_egui::i18n::Lang::from_pref(&app.ui.language);
+                        app.session.set_document(wordcraft_engine::sample::sample_document_in(lang.code()));
+                    }
                     // A region chosen in File › Options replaces the browser's for the first blank
                     // document too (#838).
                     if !sample && app.session.prefs.region.is_some() {

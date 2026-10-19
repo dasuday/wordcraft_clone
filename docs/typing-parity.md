@@ -113,7 +113,7 @@ Applied when a word is finished by a space, punctuation **or Enter** (`enter_fin
 
 - First letter of a sentence (paragraph or list item start, after `. ! ?`) is capitalised; not
   after abbreviations (`e.g.`, `Dr.`, …) or initials (`J.`), and not for mixed-case words
-  (`iPhone`) or single-letter labels (`a.`). `teh`→`the`, `i`→`I`, `(c)`→`©`, `(tm)`→`™`,
+  (`iPhone`), single-letter labels (`a.`) or Georgian, which has no sentence capitals. `teh`→`the`, `i`→`I`, `(c)`→`©`, `(tm)`→`™`,
   `wait...`→`wait…`, smart quotes (`autocorrect_as_you_type`); a quote opens after a space,
   an opening bracket, a dash, `«` `‹` `„` `‚`, or the other kind of opening quote, so nested
   quotes curl correctly (`smart_quotes_nested_and_opening_delimiters`).
@@ -341,6 +341,7 @@ again.
 | 2026-10-16 | trivial | Smart quotes in Hebrew follow logical order; ” (not gershayim) in acronyms, as Word does (#1670) |
 | 2026-10-15 | trivial | Paste: plain text from another program pastes as Keep Text Only does. Every line takes the formatting of the paragraph it lands in (a right-to-left paragraph stays right-to-left), and empty lines stay empty paragraphs |
 | 2026-10-15 | trivial | Spelling as you type: the word being typed, apostrophes and hyphens included, is not marked until the caret leaves it; F7 and the Spelling pane still report it (#1552) |
+| 2026-10-13 | minor | AutoCorrect: Georgian sentences aren't capitalised (Mtavruli is only for all-caps text) |
 | 2026-10-14 | trivial | Shift+Delete cuts the selection, and does nothing without one, on macOS and Linux too, as in Word for Windows (#1669); Shift+Backspace already erased (#707) |
 | 2026-10-13 | trivial | Select All then Delete or Backspace removes a table the document starts with (#1198) |
 | 2026-10-12 | trivial | Editing keys: Down and Up from the start of a line beside a table go into it instead of skipping it (#1007) |

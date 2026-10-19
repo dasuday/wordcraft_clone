@@ -992,7 +992,7 @@ fn polish_covers_every_key_of_every_other_catalog() {
     // pieces of gallery labels. Polish matches every other catalog, including the built-in style
     // names, citation styles and equation gallery. French carries newer strings (paper sizes,
     // bookmarks, printing) the Polish catalog hasn't caught up with yet.
-    for other in Lang::all().filter(|l| *l != Lang::EN && !matches!(l.code(), "pl" | "it" | "hu" | "bg" | "vi" | "sv" | "hr" | "fr")) {
+    for other in Lang::all().filter(|l| *l != Lang::EN && !matches!(l.code(), "pl" | "it" | "hu" | "bg" | "vi" | "sv" | "hr" | "fr" | "ka")) {
         let mut missing: Vec<String> = keys(other.0.source).difference(&polish).cloned().collect();
         missing.sort();
         assert!(missing.is_empty(), "pl lacks {}'s {missing:?}", other.code());
@@ -1559,4 +1559,40 @@ fn bundled_interface_fonts_cover_vietnamese_letters() {
         }
     }
     assert!(!lang("vi").uses_cjk());
+}
+
+#[test]
+fn georgian_covers_the_entire_existing_interface_catalog() {
+    use std::collections::HashSet;
+    let keys = |source| parse_entries(source).0.into_iter().map(|e| e.source).collect::<HashSet<_>>();
+    // Every key of the reference catalogs, plus the built-in style names the gallery and Styles pane show.
+    let ka = lang("ka");
+    for reference in ["zh-hans", "ru", "bg"] {
+        let missing: Vec<_> = keys(lang(reference).0.source).difference(&keys(ka.0.source)).cloned().collect();
+        assert!(missing.is_empty(), "{reference}: {missing:?}");
+    }
+    assert!(parse_entries(ka.0.source).1.is_empty());
+    assert_eq!(ka.name(), "ქართული");
+    assert_eq!(tr(ka, "Home"), "მთავარი");
+    assert_eq!(tr(ka, "Save"), "შენახვა");
+    assert_eq!(tr(ka, "Paste"), "ჩასმა");
+    assert_eq!(tr(ka, "unknown future label"), "unknown future label");
+    // Georgian nouns stay singular after a numeral, so "noun: n" reads right for every count.
+    for count in [0, 1, 2, 5, 11, 21, 100] {
+        let words = count.to_string();
+        assert_eq!(fmt(tr(ka, "{words} words"), &[("words", &words)]), format!("სიტყვა: {count}"));
+    }
+    for tag in ["ka", "ka-GE", "ka_GE.UTF-8"] {
+        assert_eq!(lang_from_tag(tag), Some(ka), "{tag}");
+    }
+}
+
+#[test]
+fn georgian_translations_have_no_sentence_capitals() {
+    // Georgian has no capitals in running text: no Mtavruli (U+1C90–U+1CBF) anywhere, not even
+    // UPPERCASE in Change Case (the reviewer chose the plain word მთავრული).
+    let (entries, _) = parse_entries(lang("ka").0.source);
+    let mtavruli = |c: char| ('\u{1C90}'..='\u{1CBF}').contains(&c);
+    let caps: Vec<_> = entries.iter().filter(|e| e.translation.chars().any(mtavruli)).map(|e| e.source.as_str()).collect();
+    assert!(caps.is_empty(), "{caps:?}");
 }
