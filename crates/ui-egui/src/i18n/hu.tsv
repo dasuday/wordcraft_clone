@@ -1456,6 +1456,7 @@
 	AutoSave only keeps .docx, .odt and .rtf files; {name} can't keep all formatting. Save as .docx to turn on AutoSave.	Az automatikus mentés csak .docx, .odt és .rtf fájlt tart naprakészen; ez a formátum ({name}) nem őriz meg minden formázást. Az automatikus mentéshez mentsd .docx formátumban.
 	Save the document to turn on AutoSave (a file you have only opened isn't rewritten until you save it)	Az automatikus mentéshez mentsd a dokumentumot (a csak megnyitott fájlt a program addig nem írja felül, amíg nem mented)
 	Add Object to Selection	Objektum hozzáadása a kijelöléshez
+	Add to Selection	Hozzáadás a kijelöléshez
 	Add space between Asian and Latin text	Térköz az ázsiai és a latin betűs szöveg között
 	Add space between Asian text and numbers	Térköz az ázsiai szöveg és a számok között
 	Allow hanging punctuation	Kilógó írásjelek engedélyezése

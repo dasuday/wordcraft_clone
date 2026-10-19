@@ -98,7 +98,7 @@ fn make(s: &mut Session, a: Pos, b: Pos, xa: f32, xb: f32) {
     let l = s.layout();
     let segments = l.column_segments(&s.doc, &a, &b, left, right, s.page_hint, MAX_LINES);
     s.sel = Selection { anchor: a, focus: b };
-    s.column = Some(ColumnBlock { sel: s.sel.clone(), anchor_x: xa, focus_x: xb, segments, cells: None });
+    s.column = Some(ColumnBlock { sel: s.sel.clone(), anchor_x: xa, focus_x: xb, segments, cells: None, ranges: Vec::new() });
     s.pending = None;
 }
 
@@ -159,6 +159,10 @@ pub(crate) fn dispatch(s: &mut Session, id: &str, mutates: bool, run: fn(&mut Se
         }
         return super::sel_result(s);
     }
+    // Pieces selected with Ctrl/⌘ held: what they do differently from a column block.
+    if let Some(r) = super::multi::dispatch(s, id, mutates, run, v) {
+        return r;
+    }
     // Backspace over whole rows, whole columns or the whole table deletes them, as in Word
     // (Delete only clears them, as for any other cells).
     if id == "text.backspace"
@@ -200,7 +204,7 @@ pub(crate) fn dispatch(s: &mut Session, id: &str, mutates: bool, run: fn(&mut Se
 }
 
 /// Copy: one paragraph per block row (formatting kept); the plain text joins rows with newlines.
-fn copy(s: &mut Session, segs: &[(Pos, Pos)]) -> CmdResult {
+pub(crate) fn copy(s: &mut Session, segs: &[(Pos, Pos)]) -> CmdResult {
     let mut blocks = Vec::new();
     let mut parts = std::collections::BTreeMap::new();
     let mut rows = Vec::new();
