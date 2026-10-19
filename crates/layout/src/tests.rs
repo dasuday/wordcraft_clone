@@ -8638,7 +8638,7 @@ fn footer_wrap_reserves_body() {
             row.props.cant_split = true;
         }
         d.body = vec![std::sync::Arc::new(Block::Table(table))];
-        let float = Float { wrap, h_rel: Anchor::Page, v_rel: Anchor::Page, x: 72.0, y: 650.0, ..Default::default() };
+        let float = Float { wrap, h_rel: Anchor::Page, v_rel: Anchor::Page, x: 72.0, y: 700.0, ..Default::default() };
         let mut p = wordcraft_doc::Paragraph::new();
         p.insert_object(0, rect_shape(468.0, 40.0, float), &Default::default()).unwrap();
         let id = d.add_part(wordcraft_doc::PartKind::Footer, vec![wordcraft_doc::para_block(p)]);
@@ -8646,10 +8646,10 @@ fn footer_wrap_reserves_body() {
         let l = lay(&d);
         let bottom = l.pages[0].items.iter().map(v_span).map(|(_, bottom)| bottom).fold(0.0, f32::max);
         if wrap == Wrap::TopAndBottom {
-            assert!(bottom <= 650.01, "table bottom {bottom} crosses wrapping footer");
+            assert!(bottom <= 700.01, "table bottom {bottom} crosses wrapping footer");
             assert!(l.pages.len() > 1);
         } else {
-            assert!(bottom > 650.0, "nonwrapping footer must not reserve body space");
+            assert!(bottom > 700.0, "nonwrapping footer must not reserve body space");
         }
     }
 }
@@ -9482,8 +9482,8 @@ fn even_footer_reserves_body() {
                 .unwrap();
                 doc.add_part(wordcraft_doc::PartKind::Footer, vec![wordcraft_doc::para_block(para)])
             };
-            let even_id = footer(650.0);
-            let first_id = footer(600.0);
+            let even_id = footer(710.0);
+            let first_id = footer(700.0);
             doc.last_section.footers.even = Some(even_id);
             doc.last_section.footers.first = Some(first_id);
             let laid = lay(&doc);
@@ -9498,9 +9498,9 @@ fn even_footer_reserves_body() {
                 };
                 assert_eq!(page.footer_story, selected);
                 let limit = if wrap == Wrap::TopAndBottom && selected == Some(first_id) {
-                    600.0
+                    700.0
                 } else if wrap == Wrap::TopAndBottom && selected == Some(even_id) {
-                    650.0
+                    710.0
                 } else {
                     doc.last_section.page_h - doc.last_section.margin_bottom
                 };
@@ -9578,21 +9578,32 @@ fn pinned_footer_reserves_body() {
                 table.rows[0].cells[0].blocks = vec![wordcraft_doc::para_block(para)];
                 doc.add_part(wordcraft_doc::PartKind::Footer, vec![Arc::new(Block::Table(table))])
             };
-            let default_id = footer(660.0);
-            let even_id = footer(640.0);
-            let first_id = footer(620.0);
+            let default_id = footer(710.0);
+            let even_id = footer(700.0);
+            let first_id = footer(690.0);
             doc.last_section.footers.default = Some(default_id);
             doc.last_section.footers.even = Some(even_id);
             doc.last_section.footers.first = Some(first_id);
             let laid = lay(&doc);
             assert!(laid.pages.len() >= 3);
+            let mut rows: Vec<_> = laid
+                .pages
+                .iter()
+                .flat_map(|page| page.items.iter())
+                .filter_map(|item| match item {
+                    Placed::Lines { story: StoryRef::Body, path, .. } if path.0.len() == 4 => Some(path.0[1]),
+                    _ => None,
+                })
+                .collect();
+            rows.sort_unstable();
+            assert_eq!(rows, (0..80).collect::<Vec<_>>(), "every body row appears exactly once");
             for (index, page) in laid.pages.iter().enumerate() {
                 let (selected, y) = if title && index == 0 {
-                    (first_id, 620.0)
+                    (first_id, 690.0)
                 } else if even_odd && page.number.is_multiple_of(2) {
-                    (even_id, 640.0)
+                    (even_id, 700.0)
                 } else {
-                    (default_id, 660.0)
+                    (default_id, 710.0)
                 };
                 assert_eq!(page.footer_story, Some(selected));
                 let objects: Vec<_> =
@@ -9603,6 +9614,122 @@ fn pinned_footer_reserves_body() {
                 assert!((page.body.bottom() - limit).abs() < 0.01, "{wrap:?}, page {}: body bottom {} vs {limit}", page.number, page.body.bottom());
                 let bottom = page.items.iter().map(v_span).map(|(_, bottom)| bottom).fold(0.0, f32::max);
                 assert!(bottom <= limit + 0.01, "body {bottom} crosses footer bound {limit}");
+            }
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+enum FooterDrawingPlace {
+    Paragraph,
+    Cell,
+}
+
+#[derive(Clone, Copy, Debug)]
+enum FooterBodyFlow {
+    Paragraphs,
+    Rows,
+}
+
+fn footer_drawing_doc(place: FooterDrawingPlace, flow: FooterBodyFlow, wrap: Wrap, y: f32) -> Document {
+    use wordcraft_doc::props::LineSpacing;
+    let mut doc = Document::new();
+    doc.styles.default_chr.font = Some(GEOMETRY_FONT.into());
+    let paragraphs: Vec<_> = (0..24)
+        .map(|i| {
+            let mut p = Paragraph::with_text(&format!("Midpage control {i}"), Default::default());
+            p.props =
+                ParaProps { space_before: Some(0.0), space_after: Some(0.0), line_spacing: Some(LineSpacing::Exactly(20.0)), ..Default::default() };
+            wordcraft_doc::para_block(p)
+        })
+        .collect();
+    doc.body = match flow {
+        FooterBodyFlow::Paragraphs => paragraphs,
+        FooterBodyFlow::Rows => {
+            let mut table = Table::new(paragraphs.len(), 1, 468.0);
+            table.props.style = None;
+            table.props.borders = Some(Borders::default());
+            table.props.cell_margins = Some([0.0; 4]);
+            for (row, paragraph) in table.rows.iter_mut().zip(paragraphs) {
+                row.props.cant_split = true;
+                row.cells[0].blocks = vec![paragraph];
+            }
+            vec![Arc::new(Block::Table(table))]
+        }
+    };
+    let mut p = Paragraph::new();
+    let float = Float {
+        wrap,
+        outside_cell: matches!(place, FooterDrawingPlace::Cell),
+        h_rel: Anchor::Page,
+        v_rel: Anchor::Page,
+        x: 72.0,
+        y,
+        dist_top: 8.0,
+        dist_bottom: 6.0,
+        ..Default::default()
+    };
+    p.insert_object(0, rect_shape(200.0, 40.0, float), &Default::default()).unwrap();
+    let blocks = match place {
+        FooterDrawingPlace::Paragraph => vec![wordcraft_doc::para_block(p)],
+        FooterDrawingPlace::Cell => {
+            let mut table = Table::new(1, 1, 468.0);
+            table.props.style = None;
+            table.props.cell_margins = Some([0.0; 4]);
+            table.rows[0].cells[0].blocks = vec![wordcraft_doc::para_block(p)];
+            vec![Arc::new(Block::Table(table))]
+        }
+    };
+    let id = doc.add_part(wordcraft_doc::PartKind::Footer, blocks);
+    doc.last_section.footers.default = Some(id);
+    doc
+}
+
+/// Mid-page footer drawings leave body flow on both sides, not a page-wide cutoff.
+#[test]
+fn footer_midpage_flow() {
+    for place in [FooterDrawingPlace::Paragraph, FooterDrawingPlace::Cell] {
+        for flow in [FooterBodyFlow::Paragraphs, FooterBodyFlow::Rows] {
+            for wrap in [Wrap::TopAndBottom, Wrap::BehindText, Wrap::InFrontOfText] {
+                let doc = footer_drawing_doc(place, flow, wrap, 300.0);
+                let laid = lay(&doc);
+                assert_eq!(laid.pages.len(), 1, "{place:?}, {flow:?}, {wrap:?}: body fits above and below the drawing");
+                let page = &laid.pages[0];
+                let bottom = doc.last_section.page_h - doc.last_section.margin_bottom;
+                assert!((page.body.bottom() - bottom).abs() < 0.01);
+                let mut seen = Vec::new();
+                let mut above = false;
+                let mut below = false;
+                for item in &page.items {
+                    let Placed::Lines { story: StoryRef::Body, path, para, l0, l1, y, .. } = item else { continue };
+                    let source = doc.para(StoryRef::Body, path).unwrap();
+                    if let Some(index) = source.text.strip_prefix("Midpage control ") {
+                        seen.push(index.parse::<usize>().unwrap());
+                    }
+                    let base = para.lines[*l0].top;
+                    for line in &para.lines[*l0..*l1] {
+                        let top = y + line.top - base;
+                        let bottom = top + line.height;
+                        above |= bottom <= 292.01;
+                        below |= top >= 345.99;
+                        if wrap == Wrap::TopAndBottom {
+                            assert!(bottom <= 292.01 || top >= 345.99, "{place:?}, {flow:?}: body line {top}..{bottom} overlaps wrap292..346");
+                        }
+                    }
+                }
+                seen.sort_unstable();
+                assert_eq!(seen, (0..24).collect::<Vec<_>>(), "every body paragraph appears exactly once");
+                assert!(above && below, "{place:?}, {flow:?}, {wrap:?}: flow continues on the same page");
+                let objects: Vec<_> = page
+                    .footer
+                    .iter()
+                    .filter_map(|it| match it {
+                        Placed::Object { rect, .. } => Some(*rect),
+                        _ => None,
+                    })
+                    .collect();
+                assert_eq!(objects.len(), 1);
+                assert!((objects[0].y - 300.0).abs() < 0.01 && (objects[0].h - 40.0).abs() < 0.01);
             }
         }
     }
