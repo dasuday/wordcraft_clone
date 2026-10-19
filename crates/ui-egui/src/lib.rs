@@ -1553,7 +1553,9 @@ impl WordApp {
                     return Some(Err(why.into()));
                 }
                 log::info!("diagram: opening the editor for picture {media}");
-                self.diagram.request(media.clone(), at);
+                // The editor is bound to the document that is open now: a file.open or file.new
+                // replaces it, and the media key and position name nothing there.
+                self.diagram.request(media.clone(), at, self.session.document_id());
                 json!({"pending": "editDiagram", "media": media})
             }
             // The page's context menu at the caret, as Shift+F10 or the Menu key opens it (#821).
@@ -2232,6 +2234,15 @@ impl WordApp {
     /// a host with no such window (the browser) calls it never, and nothing is opened.
     pub fn diagram_frame(&mut self, window: &impl raw_window_handle::HasWindowHandle) {
         use crate::diagram::editor::{Event, Window};
+        // `file.open` and `file.new` replace the document under a pending request or an open
+        // editor, without a word to it: media keys and positions are document-local, and the
+        // replacement can hold the same key at the same place. The editor is bound to the
+        // document it was opened on, so a replacement puts the whole session away.
+        if self.diagram.belongs_to_another_document(self.session.document_id()) {
+            log::info!("diagram: the document was replaced; the editor is closed with it");
+            self.diagram.close();
+            self.status(tl!("The diagram was left as it was: the document it belongs to isn't open any more."));
+        }
         // Open: the request waited for a frame that has the window, which is this one.
         if let Some(media) = self.diagram.pending().map(str::to_owned) {
             match self.session.doc.media.get(&media).cloned() {
@@ -2255,11 +2266,18 @@ impl WordApp {
                 Event::Exported(png) => {
                     let media = self.diagram.media_key().map(str::to_owned);
                     let at = self.diagram.at().cloned();
+                    let replaced = self.diagram.belongs_to_another_document(self.session.document_id());
                     self.diagram.close();
                     // Without the key there is nothing to put the picture back into: applying it
                     // to whatever is selected now would be an edit the user never asked for.
+                    // The document check is belt and braces — the frame's head already put the
+                    // editor away when the document was replaced, so this poll shouldn't see it.
                     match media {
-                        Some(media) => diagram::apply(self, png, &media, at.as_ref()),
+                        Some(media) if !replaced => diagram::apply(self, png, &media, at.as_ref()),
+                        Some(_) => {
+                            log::warn!("diagram: an export arrived after the document was replaced; it is dropped");
+                            self.status(tl!("The diagram was left as it was: the document it belongs to isn't open any more."));
+                        }
                         None => log::warn!("diagram: an export arrived with no picture to put it back into"),
                     }
                     // The editor closed with this event, so nothing else in this poll is still

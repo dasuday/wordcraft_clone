@@ -62,6 +62,10 @@ pub struct Diagram {
     /// occurrence: a copied picture shares the media key, and the selection can move on while the
     /// editor is open.
     at: Option<wordcraft_doc::Pos>,
+    /// The document the request or the open editor was made on (`session.document_id()`). Media
+    /// keys and positions are document-local, and `file.open`/`file.new` replace the document
+    /// without a word to this state, so it must not outlive the document it was made on.
+    document: Option<u64>,
     editor: Option<Editor>,
     /// Whether it has been put in place yet. It starts hidden, so it never flashes at a spot it
     /// isn't meant to be at.
@@ -91,17 +95,28 @@ impl Diagram {
     pub fn at(&self) -> Option<&wordcraft_doc::Pos> {
         self.at.as_ref()
     }
+    /// The document the pending request or open editor was made on.
+    pub fn document_id(&self) -> Option<u64> {
+        self.document
+    }
+    /// Whether that document isn't the one open now: `file.open`/`file.new` replaced it, and a
+    /// media key or position can name another picture in the replacement.
+    pub fn belongs_to_another_document(&self, current: u64) -> bool {
+        self.document.is_some_and(|document| document != current)
+    }
 
     /// Edit the picture whose media key is `media` — where it is in the document, when the caller
-    /// knows — on the frame the window is at hand.
-    pub fn request(&mut self, media: String, at: Option<wordcraft_doc::Pos>) {
+    /// knows — on the frame the window is at hand, in the document `document` that is open now.
+    pub fn request(&mut self, media: String, at: Option<wordcraft_doc::Pos>, document: u64) {
         self.request = Some(media);
         self.at = at;
+        self.document = Some(document);
     }
     /// Drop a request that can't be served (the picture is gone).
     pub fn cancel(&mut self) {
         self.request = None;
         self.at = None;
+        self.document = None;
     }
 
     /// Open draw.io over `png`, inside `window`.
@@ -146,13 +161,16 @@ impl Diagram {
         }
     }
 
-    /// Put the editor away.
+    /// Put the editor away. This ends the whole editing session: a pending request goes too, so
+    /// a document replaced under it can't open it on a picture of its own.
     pub fn close(&mut self) {
+        self.request = None;
         self.editor = None;
         self.saving = false;
         self.placed = false;
         self.media = None;
         self.at = None;
+        self.document = None;
         self.rect = None;
     }
 
@@ -282,5 +300,28 @@ fn picture_at<'a>(app: &'a WordApp, at: &wordcraft_doc::Pos) -> Option<&'a str> 
     match para.object_at(at.off) {
         Some(wordcraft_doc::para::InlineObject::Image { media, .. }) => Some(media.as_str()),
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Diagram;
+
+    /// A request is bound to the document it was made on: `file.open` and `file.new` replace the
+    /// document without telling the diagram state, and media keys and positions are
+    /// document-local, so the replacement must not inherit the session — its same-looking pair of
+    /// key and position would take the export or open the editor.
+    #[test]
+    fn an_editor_belongs_to_the_document_it_was_made_on() {
+        let mut d = Diagram::default();
+        assert!(d.document_id().is_none());
+        d.request("media".into(), None, 7);
+        assert_eq!(d.document_id(), Some(7));
+        assert!(!d.belongs_to_another_document(7));
+        assert!(d.belongs_to_another_document(9), "a replaced document is another one");
+        // The session ends with the document: no pending request comes back to open on the
+        // replacement, and no export is addressed anywhere.
+        d.close();
+        assert!(d.pending().is_none() && d.document_id().is_none() && d.at().is_none());
     }
 }
