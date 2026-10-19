@@ -269,7 +269,10 @@ again.
 ## Layout
 
 - No line break right after a slash (`and/or`, URLs) unless the word can't fit a line
-  (`layout::tests::no_line_break_right_after_a_slash`).
+  (`layout::tests::no_line_break_right_after_a_slash`). A slash that opens a word after a
+  space (`Kazakh /Russian` captions) travels with it: the break is before the slash, so
+  `/заполняется` moves to the next line whole and is never split between its letters (#2963,
+  `layout::tests::a_word_after_a_slash_wraps_whole`, also in a fixed table cell and not after a no-break space).
 
 ## Complex scripts
 
