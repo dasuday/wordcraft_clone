@@ -2638,6 +2638,7 @@
 # Reading Mode column widths (#1040)
 	Narrow	Тясна
 	Medium	Средна
+	Norwegian (Nynorsk)	Норвежки (нюнорск)
 # Split Cells and Convert Text to Table (#2592)
 	Merge cells before split	Обединяване на клетките преди разделяне
 	Table size	Размер на таблицата

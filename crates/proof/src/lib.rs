@@ -52,6 +52,7 @@ pub mod hyphen;
 pub mod id;
 pub mod it;
 pub mod lang;
+pub mod norwegian;
 pub mod patterns;
 pub mod pl;
 pub mod pt;
@@ -150,6 +151,8 @@ pub fn set_dictionaries_folder(dir: Option<std::path::PathBuf>) {
     it::reload_dictionary();
     hr::reload_dictionary();
     tr::reload_dictionary();
+    norwegian::reload_dictionary(ProofLang::Nb);
+    norwegian::reload_dictionary(ProofLang::Nn);
     id::reload_dictionary();
     DICTIONARY_GENERATION.fetch_add(1, Ordering::Relaxed);
 }
@@ -163,6 +166,8 @@ pub fn installed_dictionaries() -> Vec<(ProofLang, Option<std::path::PathBuf>)> 
         (ProofLang::It, it::installed_path()),
         (ProofLang::Hr, hr::installed_path()),
         (ProofLang::Tr, tr::installed_path()),
+        (ProofLang::Nb, norwegian::installed_path(ProofLang::Nb)),
+        (ProofLang::Nn, norwegian::installed_path(ProofLang::Nn)),
         (ProofLang::Id, id::installed_path()),
     ]
 }
@@ -396,6 +401,7 @@ pub fn missing_dictionary(lang: Option<&str>) -> Option<&'static str> {
     match ProofLang::from_tag(lang) {
         ProofLang::Pl => dictionary_needed(ProofLang::Pl, pl::has_dictionary()),
         ProofLang::Pt => dictionary_needed(ProofLang::Pt, pt::has_dictionary()),
+        lang @ (ProofLang::Nb | ProofLang::Nn) => dictionary_needed(lang, norwegian::has_dictionary(lang)),
         _ => None,
     }
 }
@@ -408,6 +414,7 @@ pub fn unreadable_dictionary(lang: Option<&str>) -> Option<(&'static str, std::p
     let (proof_lang, loaded) = match ProofLang::from_tag(lang) {
         ProofLang::Pl => (ProofLang::Pl, pl::has_dictionary()),
         ProofLang::Pt => (ProofLang::Pt, pt::has_dictionary()),
+        lang @ (ProofLang::Nb | ProofLang::Nn) => (lang, norwegian::has_dictionary(lang)),
         _ => return None,
     };
     let name = dictionary_needed(proof_lang, false)?;
@@ -417,12 +424,14 @@ pub fn unreadable_dictionary(lang: Option<&str>) -> Option<(&'static str, std::p
     hunspell::load_error(name).map(|(file, reason)| (name, file, reason))
 }
 
-/// The Hunspell name `lang` needs when `installed` is false; only Polish and Portuguese use one.
+/// The Hunspell name `lang` needs when `installed` is false; Norwegian, Polish and Portuguese use one.
 fn dictionary_needed(lang: ProofLang, installed: bool) -> Option<&'static str> {
     match lang {
         _ if installed => None,
         ProofLang::Pl => Some("pl_PL"),
         ProofLang::Pt => Some("pt_BR"),
+        ProofLang::Nb => Some("nb_NO"),
+        ProofLang::Nn => Some("nn_NO"),
         _ => None,
     }
 }
@@ -638,6 +647,8 @@ fn spelling_issue(text: &str, a: usize, b: usize, lang: ProofLang, opts: &Option
         ProofLang::Pl => "Możliwy błąd pisowni",
         ProofLang::Hr => "Moguća pravopisna pogreška",
         ProofLang::Pt => "Possível erro de ortografia",
+        ProofLang::Nb => "Mulig stavefeil",
+        ProofLang::Nn => "Mogleg stavefeil",
         ProofLang::It => "Possibile errore di ortografia",
         ProofLang::Tr => "Olası yazım hatası",
         ProofLang::Ru => "Возможна орфографическая ошибка",
@@ -660,6 +671,7 @@ pub fn is_correct_in_with(word: &str, lang: ProofLang, opts: &Options) -> bool {
         ProofLang::Pl => accepted_by_options(word, opts) || pl::is_correct(word),
         ProofLang::Hr => accepted_by_options(word, opts) || hr::is_correct(word),
         ProofLang::Pt => accepted_by_options(word, opts) || pt::is_correct(word),
+        ProofLang::Nb | ProofLang::Nn => accepted_by_options(word, opts) || norwegian::is_correct(word, lang),
         ProofLang::It => accepted_by_options(word, opts) || it::is_correct(word),
         ProofLang::Tr => accepted_by_options(word, opts) || tr::is_correct(word),
         ProofLang::Ru => accepted_by_options(word, opts) || ru::is_correct(word),
@@ -676,6 +688,7 @@ pub fn suggest_in(word: &str, max: usize, lang: ProofLang) -> Vec<String> {
         ProofLang::Pl => pl::suggest(word, max),
         ProofLang::Hr => hr::suggest(word, max),
         ProofLang::Pt => pt::suggest(word, max),
+        ProofLang::Nb | ProofLang::Nn => norwegian::suggest(word, max, lang),
         ProofLang::It => it::suggest(word, max),
         ProofLang::Tr => tr::suggest(word, max),
         ProofLang::Ru => ru::suggest(word, max),
@@ -705,6 +718,7 @@ fn grammar_in(text: &str, lang: ProofLang, capital_first: bool) -> Vec<Issue> {
         ProofLang::Ru => ru::grammar::check_with(text, capital_first),
         // Czech has no sentence-capital rule, so a list item needs no exception.
         ProofLang::Cs => cs::grammar::check(text),
+        ProofLang::Nb | ProofLang::Nn => Vec::new(),
         ProofLang::Id => id::grammar::check(text),
         ProofLang::Bg | ProofLang::Other => Vec::new(),
     }
@@ -921,18 +935,34 @@ mod tests {
             ("pt_BR", pt::test_dict::AFF, pt::test_dict::DIC),
             ("it_IT", it::test_dict::AFF, it::test_dict::DIC),
             ("hr_HR", hr::test_dict::AFF, hr::test_dict::DIC),
+            ("nb_NO", "SET UTF-8\nCOMPOUNDFLAG z\nCOMPOUNDMIN 4\n", "3\njeg\nstavekontroll/z\nfelt/z\n"),
+            ("nn_NO", "SET UTF-8\nCOMPOUNDFLAG z\nCOMPOUNDMIN 4\n", "3\neg\nstavekontroll/z\nfelt/z\n"),
             ("id_ID", id::test_dict::AFF, id::test_dict::DIC),
         ] {
             std::fs::write(dir.join(format!("{name}.aff")), aff).unwrap();
             std::fs::write(dir.join(format!("{name}.dic")), dic).unwrap();
         }
+        norwegian::install_dictionary(ProofLang::Nb, "SET UTF-8", "1\nforeldet\n").unwrap();
+        norwegian::install_dictionary(ProofLang::Nn, "SET UTF-8", "1\nforelda\n").unwrap();
         let before = dictionary_generation();
         set_dictionaries_folder(Some(dir.clone()));
         assert!(dictionary_generation() > before, "cached checks are dropped");
-        // Turkish has no test dictionary to put in the folder; Indonesian is listed after it.
+        // Turkish has no test dictionary to put in the folder; it remains in the list.
         let found = installed_dictionaries();
-        assert_eq!(found.get(4).map(|(lang, _)| *lang), Some(ProofLang::Tr));
-        assert_eq!(found.last(), Some(&(ProofLang::Id, Some(dir.join("id_ID.dic")))));
+        assert!(found.iter().any(|(lang, _)| *lang == ProofLang::Tr));
+        assert_eq!(norwegian::installed_path(ProofLang::Nb), Some(dir.join("nb_NO.dic")));
+        assert_eq!(norwegian::installed_path(ProofLang::Nn), Some(dir.join("nn_NO.dic")));
+        assert!(found.contains(&(ProofLang::Nb, Some(dir.join("nb_NO.dic")))));
+        assert!(found.contains(&(ProofLang::Nn, Some(dir.join("nn_NO.dic")))));
+        assert!(is_correct_in("jeg", ProofLang::Nb) && !is_correct_in("eg", ProofLang::Nb));
+        assert!(is_correct_in("eg", ProofLang::Nn) && !is_correct_in("jeg", ProofLang::Nn));
+        assert!(!is_correct_in("foreldet", ProofLang::Nb), "changing folder replaces the cached dictionary");
+        assert!(!is_correct_in("forelda", ProofLang::Nn), "changing folder replaces the cached dictionary");
+        assert_eq!(missing_dictionary(Some("nb-NO")), None);
+        assert_eq!(missing_dictionary(Some("nn-NO")), None);
+        assert_eq!(dictionary_needed(ProofLang::Nb, false), Some("nb_NO"));
+        assert_eq!(dictionary_needed(ProofLang::Nn, false), Some("nn_NO"));
+        assert!(found.contains(&(ProofLang::Id, Some(dir.join("id_ID.dic")))));
         assert_eq!(
             found[..4],
             [

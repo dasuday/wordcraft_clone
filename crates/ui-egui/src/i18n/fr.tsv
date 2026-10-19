@@ -2256,6 +2256,7 @@
 # Reading Mode column widths (#1040)
 	Narrow	Étroite
 	Medium	Moyenne
+	Norwegian (Nynorsk)	Norvégien (nynorsk)
 # Split Cells and Convert Text to Table (#2592)
 	Merge cells before split	Fusionner les cellules avant le fractionnement
 	Table size	Taille du tableau

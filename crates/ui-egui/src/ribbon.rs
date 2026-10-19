@@ -673,7 +673,7 @@ fn mi_text(ui: &mut Ui, app: &mut WordApp, text: &str, id: &str, params: Value) 
 }
 
 /// The proofing languages the Language menu offers: tag and English name (translated when drawn).
-pub(crate) const PROOFING_LANGUAGES: [(&str, &str); 10] = [
+pub(crate) const PROOFING_LANGUAGES: [(&str, &str); 12] = [
     ("en-US", "English (United States)"),
     ("en-GB", "English (United Kingdom)"),
     ("pl-PL", "Polish"),
@@ -683,6 +683,8 @@ pub(crate) const PROOFING_LANGUAGES: [(&str, &str); 10] = [
     ("tr-TR", "Turkish"),
     ("ru-RU", "Russian"),
     ("cs-CZ", "Czech"),
+    ("nb-NO", "Norwegian (Bokmål)"),
+    ("nn-NO", "Norwegian (Nynorsk)"),
     ("id-ID", "Indonesian"),
 ];
 
@@ -716,6 +718,8 @@ pub(crate) fn language_name(tag: Option<&str>) -> String {
         }
         // A bare language subtag ("pt", "pl"): the variant WordCraft proofs.
         None => match wordcraft_engine::proof::ProofLang::from_tag(Some(tag)) {
+            wordcraft_engine::proof::ProofLang::Nb => "Norwegian (Bokmål)".into(),
+            wordcraft_engine::proof::ProofLang::Nn => "Norwegian (Nynorsk)".into(),
             wordcraft_engine::proof::ProofLang::Pl => "Polish".into(),
             wordcraft_engine::proof::ProofLang::Hr => "Croatian".into(),
             wordcraft_engine::proof::ProofLang::Pt => "Portuguese (Brazil)".into(),

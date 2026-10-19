@@ -35,6 +35,10 @@ pub enum ProofLang {
     /// Czech (`cs`, `cs-CZ`): the installed Hunspell dictionary, dictionary-driven suggestions
     /// and generic punctuation checks. Hyphenation keeps the fallback English patterns.
     Cs,
+    /// Norwegian Bokmål, using an installed Hunspell nb_NO dictionary.
+    Nb,
+    /// Norwegian Nynorsk, using an installed Hunspell nn_NO dictionary.
+    Nn,
     /// Indonesian (`id`, `id-ID`; also the old `in` and ISO 639-2 `ind`): the installed Hunspell
     /// `id_ID` dictionary, dictionary-driven suggestions and generic checks with Indonesian
     /// messages. Hyphenation keeps the fallback English patterns.
@@ -48,13 +52,28 @@ pub enum ProofLang {
 
 impl ProofLang {
     /// Every language with a spelling dictionary, in display order.
-    pub const PROOFED: [ProofLang; 9] =
-        [ProofLang::En, ProofLang::Pl, ProofLang::Pt, ProofLang::It, ProofLang::Hr, ProofLang::Tr, ProofLang::Ru, ProofLang::Cs, ProofLang::Id];
+    pub const PROOFED: [ProofLang; 11] = [
+        ProofLang::En,
+        ProofLang::Pl,
+        ProofLang::Pt,
+        ProofLang::It,
+        ProofLang::Hr,
+        ProofLang::Tr,
+        ProofLang::Ru,
+        ProofLang::Cs,
+        ProofLang::Nb,
+        ProofLang::Nn,
+        ProofLang::Id,
+    ];
 
     /// The proofing language of a BCP 47 tag (`pl-PL`, `en_GB`, `PL`…). Only the primary subtag
     /// counts. No tag (or an empty one) is English, WordCraft's default editing language.
     pub fn from_tag(tag: Option<&str>) -> ProofLang {
         let Some(tag) = tag.map(str::trim).filter(|t| !t.is_empty()) else { return ProofLang::En };
+        let normalized = tag.split(['.', '@']).next().unwrap_or(tag).replace('_', "-").to_ascii_lowercase();
+        if normalized == "no-nn" {
+            return ProofLang::Nn;
+        }
         let primary = tag.split(['-', '_']).next().unwrap_or("");
         if primary.eq_ignore_ascii_case("en") || primary.eq_ignore_ascii_case("eng") {
             ProofLang::En
@@ -74,6 +93,14 @@ impl ProofLang {
             ProofLang::Ru
         } else if primary.eq_ignore_ascii_case("cs") || primary.eq_ignore_ascii_case("ces") || primary.eq_ignore_ascii_case("cze") {
             ProofLang::Cs
+        } else if primary.eq_ignore_ascii_case("nn") || primary.eq_ignore_ascii_case("nno") {
+            ProofLang::Nn
+        } else if primary.eq_ignore_ascii_case("nb")
+            || primary.eq_ignore_ascii_case("nob")
+            || primary.eq_ignore_ascii_case("no")
+            || primary.eq_ignore_ascii_case("nor")
+        {
+            ProofLang::Nb
         } else if primary.eq_ignore_ascii_case("id") || primary.eq_ignore_ascii_case("ind") || primary.eq_ignore_ascii_case("in") {
             ProofLang::Id
         } else {
@@ -93,6 +120,8 @@ impl ProofLang {
             ProofLang::Tr => "tr",
             ProofLang::Ru => "ru",
             ProofLang::Cs => "cs",
+            ProofLang::Nb => "nb",
+            ProofLang::Nn => "nn",
             ProofLang::Id => "id",
             ProofLang::Other => "",
         }
