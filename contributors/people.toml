@@ -164,3 +164,6 @@ sync_github_name = true
 [people.maxm11]
 real_name = "Max Murphy"
 sync_github_name = true
+
+[people.SlavenDj]
+sync_github_name = true
