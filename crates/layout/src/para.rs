@@ -2084,8 +2084,13 @@ fn break_lines(pl: &mut ParaLayout, env: &ParaEnv, mark_style: u32, level: Optio
         let mut pending_tab: Option<(usize, TabStop, f32)> = None; // tab cluster, stop, x where tab started
         let mut space_w = 0.0f32; // width of the spaces so far on this line
         let mut has_tab = false;
+        let mut seen_content = false;
         while j < n {
             let Some(c) = pl.clusters.get(j).cloned() else { break };
+            // Whether something that takes room precedes this cluster on the line (tracked, not
+            // rescanned: a long run of markers before many tabs would otherwise cost their product).
+            let content = seen_content;
+            seen_content |= c.kind != ClKind::Marker && !(matches!(c.kind, ClKind::Object(_)) && c.adv == 0.0 && c.obj_h == 0.0);
             match c.kind {
                 ClKind::LineBreak | ClKind::PageBreak | ClKind::ColumnBreak => {
                     resolve_tab(pl, &mut pending_tab, &mut xs, c0, x, &mut x);
@@ -2105,18 +2110,33 @@ fn break_lines(pl: &mut ParaLayout, env: &ParaEnv, mark_style: u32, level: Optio
                     let stop = ptab.unwrap_or_else(|| next_tab(x, &rp.tabs, default_tab, hanging_at));
                     // A positional tab whose place the text has passed goes there on the next line
                     // (ECMA-376 §17.3.3.23); a line with nothing but markers on it is empty.
-                    if ptab.is_some() && stop.pos < x - 0.01 && (c0..j).any(|k| pl.clusters.get(k).is_some_and(|c| c.kind != ClKind::Marker)) {
+                    if ptab.is_some() && stop.pos < x - 0.01 && content {
                         end = LineEnd::Wrap;
                         break;
                     }
                     xs.push(x);
-                    if ptab.is_none() && stop.pos > right_edge + 0.01 && j > c0 && stop.align == TabAlign::Left {
+                    // A tab whose text doesn't fit moves to the next line with it (Word), where it
+                    // starts again from the indent: the break is before the tab. Not when only
+                    // markers precede it (that would leave an empty line), nor at the first line's
+                    // hanging-indent stop (a label such as "[1]" keeps its tab).
+                    let at_hanging = first && hanging_at.is_some_and(|h| (stop.pos - h).abs() < 0.01);
+                    let past = ptab.is_none() && stop.pos > right_edge + 0.01 && j > c0 && stop.align == TabAlign::Left;
+                    // shortcut: a custom stop past the right indent keeps its tab on the line (Word sends
+                    // the text after it past the margin); upgrade when that overflow is drawn.
+                    let custom_past = past && rp.tabs.iter().any(|t| (t.pos - stop.pos).abs() < 0.01);
+                    let tab_break = if content && !at_hanging && !custom_past {
+                        last_plain = Some((j - 1, x));
+                        j - 1
+                    } else {
+                        j
+                    };
+                    if past {
                         // Tab past the right indent wraps (Word moves it to the next line).
                         if let Some(c) = pl.clusters.get_mut(j) {
                             c.adv = 0.0;
                         }
                         x = right_edge.max(x);
-                        last_break = Some(j);
+                        last_break = Some(tab_break);
                         j += 1;
                         continue;
                     }
@@ -2132,13 +2152,17 @@ fn break_lines(pl: &mut ParaLayout, env: &ParaEnv, mark_style: u32, level: Optio
                             x += w;
                         }
                         _ => {
+                            // A tab laid out again after a wrap keeps no width from the line before.
+                            if let Some(c) = pl.clusters.get_mut(j) {
+                                c.adv = 0.0;
+                            }
                             pending_tab = Some((j, stop, x));
                             if stop.leader != TabLeader::None {
                                 leaders.push((j, stop.leader));
                             }
                         }
                     }
-                    last_break = Some(j);
+                    last_break = Some(tab_break);
                     j += 1;
                     continue;
                 }
@@ -2146,7 +2170,7 @@ fn break_lines(pl: &mut ParaLayout, env: &ParaEnv, mark_style: u32, level: Optio
             }
             // A display equation sits on a line of its own.
             let is_display = pl.displays.iter().any(|(ci, _)| *ci == j);
-            if is_display && (c0..j).any(|k| pl.clusters.get(k).is_some_and(|c| c.kind != ClKind::Marker)) {
+            if is_display && content {
                 end = LineEnd::Wrap;
                 break;
             }
@@ -2166,8 +2190,7 @@ fn break_lines(pl: &mut ParaLayout, env: &ParaEnv, mark_style: u32, level: Optio
             // (a content control's start, a bookmark) and floating objects' anchors take no room
             // and don't count (Word: a picture a little wider than the line, after an anchor,
             // stays on the first line rather than leaving the anchor a line of its own).
-            let takes_room = |c: &Cluster| c.kind != ClKind::Marker && !(matches!(c.kind, ClKind::Object(_)) && c.adv == 0.0 && c.obj_h == 0.0);
-            if !fits && (c0..j).any(|k| pl.clusters.get(k).is_some_and(takes_room)) {
+            if !fits && content {
                 // Wrap: back up to the last break opportunity on this line.
                 end = LineEnd::Wrap;
                 // Hyphenate only when the plain break leaves more than the hyphenation zone empty.
@@ -2180,6 +2203,11 @@ fn break_lines(pl: &mut ParaLayout, env: &ParaEnv, mark_style: u32, level: Optio
                     last_break = Some(pj);
                 }
                 if let Some(bk) = last_break.filter(|bk| *bk >= c0) {
+                    // A centre/right tab after the break goes to the next line: nothing to finish here.
+                    if pending_tab.is_some_and(|(tj, _, _)| tj > bk) {
+                        pending_tab = None;
+                    }
+                    leaders.retain(|(k, _)| *k <= bk);
                     xs.truncate(bk + 1 - c0);
                     j = bk + 1;
                     // Recompute x for the kept clusters.
