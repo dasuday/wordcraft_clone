@@ -1289,6 +1289,11 @@ fn layout_box(
                 }
                 // Automatic space after: none after the last paragraph of a cell or box.
                 let after = if pl.rp.after_auto && i + 1 == blocks.len() { 0.0 } else { pl.rp.space_after };
+                // The empty paragraph that must end a cell after a nested table takes no room
+                // (Word for Windows: the cell ends with the table).
+                if in_cell && i + 1 == blocks.len() && cell_end_mark_after_table(blocks, p) {
+                    continue;
+                }
                 y += pl.height + after;
                 prev_after = after;
                 prev_after_auto = pl.rp.after_auto;
@@ -1345,6 +1350,16 @@ fn layout_box(
     let floats_bottom = float_tables.iter().map(|r| r.bottom()).fold(0.0, f32::max);
     ctx.hide_deleted = outer_hide;
     BoxLayout { items, height: y.max(0.0), floats_bottom, last_top: last_top.max(0.0), table_areas, page_table_wraps }
+}
+
+/// Whether `p`, the last block of a cell's `blocks`, is the empty paragraph a cell must end with
+/// after a nested table (in the text flow): measured in Word for Windows, it takes no room, so a
+/// row of nested tables is as tall as its tables (a report export nests hundreds of them, each
+/// followed by one).
+fn cell_end_mark_after_table(blocks: &Blocks, p: &Paragraph) -> bool {
+    let after_table =
+        blocks.len().checked_sub(2).and_then(|i| blocks.get(i)).is_some_and(|b| matches!(&**b, Block::Table(t) if t.props.float.is_none()));
+    after_table && only_markers(p, 0..p.text.len())
 }
 
 /// The width a text frame without one takes: its widest line, with the paragraph's indents.

@@ -9423,3 +9423,149 @@ fn caret_height_ignores_line_spacing() {
         assert!((single - wide).abs() < 0.01, "{spacing:?}: single {single}, wide {wide}");
     }
 }
+
+/// A one-line cell paragraph.
+fn cell_line(text: &str) -> Arc<Block> {
+    let mut p = wordcraft_doc::Paragraph::with_text(text, Default::default());
+    p.props.space_before = Some(0.0);
+    p.props.space_after = Some(0.0);
+    wordcraft_doc::para_block(p)
+}
+
+/// A table of `rows` one-line entries (`Entry <tag> <n>`) in its first column.
+fn entry_table(rows: usize, tag: &str) -> Table {
+    let mut t = Table::new(rows, 2, 300.0);
+    for (i, r) in t.rows.iter_mut().enumerate() {
+        r.cells[0].blocks = vec![cell_line(&format!("Entry {tag} {i}"))];
+    }
+    t
+}
+
+/// The text of every placed body line, page by page, in placing order.
+fn placed_text(l: &DocLayout, d: &Document) -> Vec<Vec<String>> {
+    l.pages
+        .iter()
+        .map(|pg| {
+            pg.items
+                .iter()
+                .filter_map(|it| match it {
+                    Placed::Lines { path, para, l0, l1, .. } if *l1 > *l0 => {
+                        let text = d.para(StoryRef::Body, path).map(|p| p.text.clone()).unwrap_or_default();
+                        let (a, b) = (para.lines.get(*l0)?.c0, para.lines.get(*l1 - 1)?.c1);
+                        Some(text.get(a..b).unwrap_or("").trim().to_string())
+                    }
+                    _ => None,
+                })
+                .filter(|s| !s.is_empty())
+                .collect()
+        })
+        .collect()
+}
+
+/// Every placed line of a page is on its paper, and no two lines of a page overlap.
+fn assert_lines_on_pages(l: &DocLayout) {
+    for (pi, pg) in l.pages.iter().enumerate() {
+        let mut boxes: Vec<(f32, f32, f32)> = Vec::new();
+        for it in &pg.items {
+            if let Placed::Lines { para, l0, l1, x, y, .. } = it {
+                let base = para.lines.get(*l0).map_or(0.0, |l| l.top);
+                for ln in para.lines.get(*l0..*l1).unwrap_or(&[]) {
+                    let top = y + ln.top - base;
+                    assert!(top >= 0.0 && top + ln.height <= pg.h + 0.01, "page {pi}: a line at {top} is off the page");
+                    if ln.c1 > ln.c0 {
+                        boxes.push((*x + para.rp.indent_left, top, top + ln.height));
+                    }
+                }
+            }
+        }
+        for (i, a) in boxes.iter().enumerate() {
+            for b in boxes.iter().skip(i + 1) {
+                let same_column = (a.0 - b.0).abs() < 1.0;
+                assert!(!(same_column && a.1 < b.2 - 0.5 && b.1 < a.2 - 0.5), "page {pi}: lines overlap: {a:?} {b:?}");
+            }
+        }
+    }
+}
+
+/// The top of the first placed body line with text `s`.
+fn line_top(l: &DocLayout, d: &Document, s: &str) -> Option<(usize, f32)> {
+    l.pages.iter().enumerate().find_map(|(pi, pg)| {
+        pg.items.iter().find_map(|it| match it {
+            Placed::Lines { path, para, l0, l1, y, .. } if *l1 > *l0 => {
+                let text = d.para(StoryRef::Body, path).map(|p| p.text.clone()).unwrap_or_default();
+                (text == s).then_some((pi, *y))
+            }
+            _ => None,
+        })
+    })
+}
+
+/// A cell must end with a paragraph, so a cell holding a nested table ends with an empty one
+/// after it. Measured in Word for Windows, that paragraph takes no room: the row is as tall as
+/// the nested table. Report exports nest hundreds of tables this way, and each closing mark used
+/// to add a blank line (a table Word lays out on 3 pages took 5).
+#[test]
+fn a_cells_closing_mark_after_a_nested_table_takes_no_room() {
+    let after_table = |last: Option<&str>| {
+        let mut d = Document::from_text("Before");
+        let mut t = Table::new(1, 1, 400.0);
+        t.rows[0].cells[0].blocks = vec![Arc::new(Block::Table(entry_table(3, "n")))];
+        t.rows[0].cells[0].blocks.extend(last.map(cell_line));
+        d.insert_block(StoryRef::Body, &Path::top(1), Block::Table(t)).unwrap();
+        d.insert_block(StoryRef::Body, &Path::top(2), Block::Para(wordcraft_doc::Paragraph::with_text("After", Default::default()))).unwrap();
+        let l = lay(&d);
+        line_top(&l, &d, "After").map(|(_, y)| y).unwrap()
+    };
+    let bare = after_table(None);
+    // The empty closing paragraph: no room.
+    assert!((after_table(Some("")) - bare).abs() < 0.01, "{} vs {bare}", after_table(Some("")));
+    // A paragraph with text after the nested table keeps its line.
+    assert!(after_table(Some("Note")) > bare + 8.0);
+    // An empty paragraph after text (not a table) keeps its line too.
+    let mut d = Document::from_text("Before");
+    let mut t = Table::new(1, 1, 400.0);
+    t.rows[0].cells[0].blocks = vec![cell_line("Text"), cell_line("")];
+    d.insert_block(StoryRef::Body, &Path::top(1), Block::Table(t)).unwrap();
+    d.insert_block(StoryRef::Body, &Path::top(2), Block::Para(wordcraft_doc::Paragraph::with_text("After", Default::default()))).unwrap();
+    let l = lay(&d);
+    let (_, text) = line_top(&l, &d, "Text").unwrap();
+    let (_, after) = line_top(&l, &d, "After").unwrap();
+    assert!(after - text > 2.0 * 10.0, "{text} {after}");
+}
+
+/// Nested tables each closed by an empty paragraph, in a cell taller than a page (a report
+/// export's layout): wherever the page breaks fall, the pages hold the same lines as without the
+/// closing paragraphs (an empty line left below a cut never makes a blank continuation of its
+/// own), and nothing is lost.
+#[test]
+fn closing_marks_after_nested_tables_paginate_like_none() {
+    let doc = |marks: bool, before: f32| {
+        let mark = || marks.then(|| cell_line(""));
+        let mut d = Document::from_text("Before");
+        if let Some(Block::Para(p)) = d.body.first_mut().map(Arc::make_mut) {
+            p.props.space_before = Some(before);
+        }
+        let mut level2 = Table::new(30, 2, 400.0);
+        for (i, r) in level2.rows.iter_mut().enumerate() {
+            r.cells[0].blocks = vec![cell_line(&format!("Member {i}"))];
+            r.cells[1].blocks = vec![Arc::new(Block::Table(entry_table(3, &format!("m{i}"))))];
+            r.cells[1].blocks.extend(mark());
+        }
+        let mut outer = Table::new(1, 1, 440.0);
+        outer.rows[0].cells[0].blocks = vec![Arc::new(Block::Table(level2))];
+        outer.rows[0].cells[0].blocks.extend(mark());
+        d.insert_block(StoryRef::Body, &Path::top(1), Block::Table(outer)).unwrap();
+        d.insert_block(StoryRef::Body, &Path::top(2), Block::Para(wordcraft_doc::Paragraph::with_text("After the table", Default::default())))
+            .unwrap();
+        d
+    };
+    for step in 0..12 {
+        let before = step as f32 * 3.5;
+        let (with, without) = (doc(true, before), doc(false, before));
+        let (lw, lo) = (lay(&with), lay(&without));
+        assert!(lw.pages.len() >= 2, "{} pages", lw.pages.len());
+        assert_eq!(placed_text(&lw, &with), placed_text(&lo, &without), "space before {before}");
+        assert_eq!(placed_text(&lw, &with).iter().flatten().filter(|s| s.starts_with("Entry")).count(), 90);
+        assert_lines_on_pages(&lw);
+    }
+}
