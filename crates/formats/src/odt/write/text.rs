@@ -115,8 +115,9 @@ fn pieces(p: &Paragraph) -> Vec<(Piece<'_>, &CharProps)> {
 
 /// `s` as ODF text: runs of spaces (and a leading one) as `text:s`, tabs and line breaks as
 /// elements. `prev_space` says whether the text before ended with a space (or the paragraph
-/// starts here), and is updated.
-fn chars(s: &str, prev_space: &mut bool) -> String {
+/// starts here), and is updated. `last`: nothing follows in the paragraph, so trailing spaces
+/// are all `text:s` (the reader drops a literal space at a paragraph's end).
+fn chars(s: &str, prev_space: &mut bool, last: bool) -> String {
     let mut out = String::new();
     let mut spaces = 0usize;
     let flush = |out: &mut String, spaces: &mut usize, prev: bool| {
@@ -155,7 +156,7 @@ fn chars(s: &str, prev_space: &mut bool) -> String {
         }
     }
     if spaces > 0 {
-        flush(&mut out, &mut spaces, *prev_space);
+        flush(&mut out, &mut spaces, *prev_space || last);
         *prev_space = true;
     }
     out
@@ -261,7 +262,7 @@ fn runs(ctx: &mut Ctx, items: &[(Piece<'_>, &CharProps)], tag: &Tag<'_>, prev_sp
                 break;
             }
             match pc {
-                Piece::Text(t) => inner.push_str(&chars(t, prev_space)),
+                Piece::Text(t) => inner.push_str(&chars(t, prev_space, at_end(items, i))),
                 Piece::Tab => {
                     inner.push_str("<text:tab/>");
                     // Spaces after a tab are written as `<text:s/>` (the reader collapses them).
@@ -278,6 +279,12 @@ fn runs(ctx: &mut Ctx, items: &[(Piece<'_>, &CharProps)], tag: &Tag<'_>, prev_sp
         span(ctx, props, &inner, out);
     }
     close_link(&mut link, out);
+}
+
+/// Whether nothing but empty pieces follows item `i` before the paragraph ends or a break
+/// splits it.
+fn at_end(items: &[(Piece<'_>, &CharProps)], i: usize) -> bool {
+    items.get(i + 1..).unwrap_or(&[]).iter().find(|(pc, _)| !ends(pc)).is_none_or(|(pc, _)| matches!(pc, Piece::Break(_)))
 }
 
 /// Whether `pc` adds nothing to the line it is on: an empty text, a marker.
@@ -298,7 +305,7 @@ fn object(ctx: &mut Ctx, o: &InlineObject, props: &CharProps, prev_space: &mut b
             }
             let Some(href) = ctx.picture(media) else {
                 // A picture whose bytes are missing leaves its description.
-                let t = chars(alt, prev_space);
+                let t = chars(alt, prev_space, false);
                 span(ctx, props, &t, out);
                 return;
             };
@@ -315,7 +322,7 @@ fn object(ctx: &mut Ctx, o: &InlineObject, props: &CharProps, prev_space: &mut b
             *prev_space = false;
         }
         InlineObject::Field { instr, result, .. } => {
-            let shown = chars(result, prev_space);
+            let shown = chars(result, prev_space, false);
             let f = match instr.split_whitespace().next().map(str::to_ascii_uppercase).as_deref() {
                 Some("PAGE") => format!("<text:page-number text:select-page=\"current\">{shown}</text:page-number>"),
                 Some("NUMPAGES") => format!("<text:page-count>{shown}</text:page-count>"),
@@ -325,7 +332,7 @@ fn object(ctx: &mut Ctx, o: &InlineObject, props: &CharProps, prev_space: &mut b
         }
         InlineObject::Equation { linear, math, .. } => {
             let linear = if linear.is_empty() { wordcraft_doc::math::to_linear(&math.nodes) } else { linear.clone() };
-            out.push_str(&chars(&linear, prev_space));
+            out.push_str(&chars(&linear, prev_space, false));
         }
         InlineObject::BookmarkStart { name } => out.push_str(&format!("<text:bookmark-start text:name=\"{}\"/>", x(name))),
         InlineObject::BookmarkEnd { name } => out.push_str(&format!("<text:bookmark-end text:name=\"{}\"/>", x(name))),
@@ -340,7 +347,7 @@ fn object(ctx: &mut Ctx, o: &InlineObject, props: &CharProps, prev_space: &mut b
             *prev_space = true;
         }
         InlineObject::Opaque { text, .. } => {
-            let t = chars(text, prev_space);
+            let t = chars(text, prev_space, false);
             span(ctx, props, &t, out);
         }
         // todo: notes, comments and drawings without a picture. The marks of complex fields and
