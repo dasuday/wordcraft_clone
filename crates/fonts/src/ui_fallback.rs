@@ -244,7 +244,7 @@ fn same_family_face(
     cache: &mut std::collections::HashMap<std::path::PathBuf, Arc<Vec<u8>>>,
 ) -> Option<SystemUiFont> {
     let (actual, bytes) = read_fc_face(path, index, cache)?;
-    actual.eq_ignore_ascii_case(family).then(|| SystemUiFont { family: actual, bytes, index })
+    actual.eq_ignore_ascii_case(family).then_some(SystemUiFont { family: actual, bytes, index })
 }
 
 /// The family of the face at `index`, when the file has a face with outlines (a bitmap-only face
