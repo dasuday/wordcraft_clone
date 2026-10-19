@@ -50,9 +50,15 @@ pub fn export_with(doc: &Document, opts: &EpubOptions) -> Result<Vec<u8>, String
     let title = book_title(doc, opts, &flow.blocks);
     let mut ctx = Ctx::default();
     let ranges = chapter_ranges(&flow.blocks);
+    // Internal links name a bookmark, not the file that will hold it; EPUB splits the book into
+    // one document per Heading 1, so record where each bookmark lands before rendering any body.
+    for (index, (start, end)) in ranges.iter().copied().enumerate() {
+        let file = format!("chapter{}.xhtml", index + 1);
+        collect_anchors(flow.blocks.get(start..end).unwrap_or_default(), &file, &mut ctx.anchors, 0);
+    }
     let mut chapters = Vec::new();
-    for (start, end) in ranges {
-        let file = format!("chapter{}.xhtml", chapters.len() + 1);
+    for (index, (start, end)) in ranges.iter().copied().enumerate() {
+        let file = format!("chapter{}.xhtml", index + 1);
         let chapter_title = chapter_title(&flow.blocks[start..end]).unwrap_or_else(|| title.clone());
         let mut body = String::new();
         render_blocks(&flow.blocks[start..end], &mut ctx, &file, &mut body, 0);
@@ -156,6 +162,8 @@ struct Ctx {
     nav: Vec<NavEntry>,
     omitted: Omitted,
     next_heading: usize,
+    /// Every bookmark target in the book, mapped to the content document that carries it.
+    anchors: BTreeMap<String, String>,
 }
 
 struct Chapter {
@@ -418,6 +426,29 @@ fn heading_level(kind: Kind) -> Option<u8> {
     }
 }
 
+/// Record where every bookmark in `blocks` will be written: the first chapter that carries it.
+fn collect_anchors(blocks: &[FBlock], chapter: &str, anchors: &mut BTreeMap<String, String>, depth: usize) {
+    for block in blocks {
+        match block {
+            FBlock::Para(p) => {
+                for inline in &p.inlines {
+                    if let Inline::Anchor(name) = inline {
+                        anchors.entry(anchor_id(name)).or_insert_with(|| chapter.to_string());
+                    }
+                }
+            }
+            FBlock::Table(table) if depth < MAX_DEPTH => {
+                for row in &table.rows {
+                    for cell in row {
+                        collect_anchors(&cell.blocks, chapter, anchors, depth + 1);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
 fn render_blocks(blocks: &[FBlock], ctx: &mut Ctx, chapter: &str, out: &mut String, depth: usize) {
     let mut i = 0;
     while let Some(block) = blocks.get(i) {
@@ -428,10 +459,16 @@ fn render_blocks(blocks: &[FBlock], ctx: &mut Ctx, chapter: &str, out: &mut Stri
                 }
                 i += 1;
             }
-            FBlock::Para(p) if p.list.is_some() => {
-                // Nested lists from consecutive list paragraphs, as in the HTML writer.
+            FBlock::Para(p) if p.list.is_some() && heading_level(p.kind).is_none() => {
+                // Nested lists from consecutive list paragraphs, as in the HTML writer. A heading
+                // keeps its heading markup even when the document numbers it; the flow model
+                // carries only the list membership, not the generated label, so the heading is
+                // written without a list marker.
                 let mut stack: Vec<(bool, bool)> = Vec::new(); // (ordered, open <li>)
                 while let Some(FBlock::Para(q)) = blocks.get(i) {
+                    if heading_level(q.kind).is_some() {
+                        break;
+                    }
                     let Some(list) = q.list else { break };
                     let level = list.level.min(8) as usize;
                     while stack.len() > level + 1 {
@@ -457,7 +494,7 @@ fn render_blocks(blocks: &[FBlock], ctx: &mut Ctx, chapter: &str, out: &mut Stri
                         top.1 = true;
                     }
                     out.push_str(&format!("<li{}>", para_attrs(q)));
-                    render_inlines(&q.inlines, ctx, out);
+                    render_inlines(&q.inlines, ctx, chapter, out);
                     i += 1;
                 }
                 while !stack.is_empty() {
@@ -488,7 +525,7 @@ fn render_blocks(blocks: &[FBlock], ctx: &mut Ctx, chapter: &str, out: &mut Stri
                         break;
                     }
                     out.push_str(&format!("<p{}>", para_attrs(q)));
-                    render_inlines(&q.inlines, ctx, out);
+                    render_inlines(&q.inlines, ctx, chapter, out);
                     out.push_str("</p>\n");
                     i += 1;
                 }
@@ -516,14 +553,14 @@ fn render_blocks(blocks: &[FBlock], ctx: &mut Ctx, chapter: &str, out: &mut Stri
                     };
                     let id_attr = id.map(|id| format!(" id=\"{}\"", xml_attr(&id))).unwrap_or_default();
                     out.push_str(&format!("<h{level}{id_attr}{}>", para_attrs(p)));
-                    render_inlines(&p.inlines, ctx, out);
+                    render_inlines(&p.inlines, ctx, chapter, out);
                     out.push_str(&format!("</h{level}>\n"));
                 } else {
                     out.push_str(&format!("<p{}>", para_attrs(p)));
                     if p.inlines.is_empty() {
                         out.push_str("&#160;");
                     } else {
-                        render_inlines(&p.inlines, ctx, out);
+                        render_inlines(&p.inlines, ctx, chapter, out);
                     }
                     out.push_str("</p>\n");
                 }
@@ -580,16 +617,16 @@ fn render_cell(cell: &Cell, ctx: &mut Ctx, chapter: &str, out: &mut String, dept
         && p.list.is_none()
         && !p.page_break
     {
-        render_inlines(&p.inlines, ctx, out);
+        render_inlines(&p.inlines, ctx, chapter, out);
     } else {
         render_blocks(&cell.blocks, ctx, chapter, out, depth + 1);
     }
 }
 
-fn render_inlines(inlines: &[Inline], ctx: &mut Ctx, out: &mut String) {
+fn render_inlines(inlines: &[Inline], ctx: &mut Ctx, chapter: &str, out: &mut String) {
     for inline in inlines {
         match inline {
-            Inline::Text(text, fmt) => render_text(text, fmt, out),
+            Inline::Text(text, fmt) => render_text(text, fmt, ctx, chapter, out),
             Inline::Image(img) => match ctx.images.add(img) {
                 Some(name) => {
                     let alt = xml_attr(&img.alt);
@@ -634,11 +671,11 @@ fn render_inlines(inlines: &[Inline], ctx: &mut Ctx, out: &mut String) {
     }
 }
 
-fn render_text(text: &str, fmt: &Fmt, out: &mut String) {
+fn render_text(text: &str, fmt: &Fmt, ctx: &Ctx, chapter: &str, out: &mut String) {
     let mut open = String::new();
     let mut close: Vec<&'static str> = Vec::new();
-    if let Some(link) = fmt.link.as_deref().filter(|l| wordcraft_doc::link::is_safe_href(l)) {
-        open.push_str(&format!("<a href=\"{}\">", xml_attr(&link_href(link))));
+    if let Some(href) = fmt.link.as_deref().filter(|l| wordcraft_doc::link::is_safe_href(l)).and_then(|link| link_href(link, chapter, &ctx.anchors)) {
+        open.push_str(&format!("<a href=\"{}\">", xml_attr(&href)));
         close.push("</a>");
     }
     let mut tag = |o: &str, c: &'static str| {
@@ -742,10 +779,17 @@ fn pixels(points: f32) -> Option<u32> {
     if px.is_finite() && px >= 1.0 { Some(px.clamp(1.0, 10_000.0) as u32) } else { None }
 }
 
-fn link_href(href: &str) -> String {
+/// The `href` for a link written in `here`: internal fragments name the content document that
+/// carries the bookmark. `None` when a fragment names no bookmark in the book, so the link is
+/// written as plain text.
+fn link_href(href: &str, here: &str, anchors: &BTreeMap<String, String>) -> Option<String> {
     match href.strip_prefix('#') {
-        Some(fragment) => format!("#{}", anchor_id(fragment)),
-        None => href.to_string(),
+        Some(fragment) => {
+            let id = anchor_id(fragment);
+            let file = anchors.get(&id)?;
+            Some(if file == here { format!("#{id}") } else { format!("{file}#{id}") })
+        }
+        None => Some(href.to_string()),
     }
 }
 

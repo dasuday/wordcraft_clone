@@ -860,6 +860,57 @@ fn epub_starts_a_chapter_at_each_heading_one() {
 }
 
 #[test]
+fn epub_keeps_numbered_headings_as_headings() {
+    let mut d = Document::new();
+    let mut blocks = Vec::new();
+    blocks.push(para_block(Paragraph::with_text("Chapter", CharProps::default()).styled("Heading1")));
+    let bullets = d.numbering.add_list(wordcraft_doc::ListKind::Bullet);
+    let numbers = d.numbering.add_list(wordcraft_doc::ListKind::Numbered);
+    // A bullet list directly followed by a numbered Heading 2: the list must end before the
+    // heading, and the heading must still be written as a heading (with its navigation entry).
+    let mut item = Paragraph::with_text("Before", CharProps::default()).styled("ListParagraph");
+    item.props.numbering = Some(wordcraft_doc::props::NumRef { num: bullets, level: 0 });
+    blocks.push(para_block(item));
+    let mut heading = Paragraph::with_text("Numbered Section", CharProps::default()).styled("Heading2");
+    heading.props.numbering = Some(wordcraft_doc::props::NumRef { num: numbers, level: 0 });
+    blocks.push(para_block(heading));
+    let mut item = Paragraph::with_text("After", CharProps::default()).styled("ListParagraph");
+    item.props.numbering = Some(wordcraft_doc::props::NumRef { num: bullets, level: 0 });
+    blocks.push(para_block(item));
+    d.body = blocks;
+
+    let (_, parts) = epub_parts(&crate::epub::export(&d).unwrap());
+    let content = epub_text(&parts, "OEBPS/chapter1.xhtml");
+    assert!(content.contains("<h2 id=\"wc-heading-2\">Numbered Section</h2>"), "{content}");
+    assert!(!content.contains("<li>Numbered Section"), "{content}");
+    assert!(content.contains("<li>Before</li>") && content.contains("<li>After</li>"), "{content}");
+    assert!(epub_text(&parts, "OEBPS/nav.xhtml").contains("Numbered Section"), "heading missing from navigation");
+    assert_xml(&content);
+}
+
+#[test]
+fn epub_links_to_bookmarks_in_other_chapters() {
+    // A Word-style table of contents links to a `_Toc…` bookmark on a heading in a later chapter.
+    let html = "<h1>Contents</h1>\n\
+<p><a href=\"#_Toc2\">Chapter Two</a></p>\n\
+<p><a id=\"here\"></a>In chapter one. <a href=\"#here\">Same chapter</a> and <a href=\"#missing\">missing target</a>.</p>\n\
+<h1>Chapter Two</h1>\n\
+<p><a id=\"_Toc2\"></a>In chapter two.</p>\n";
+    let d = import("html", html.as_bytes()).unwrap().unwrap();
+    let (_, parts) = epub_parts(&crate::epub::export(&d).unwrap());
+    let first = epub_text(&parts, "OEBPS/chapter1.xhtml");
+    let second = epub_text(&parts, "OEBPS/chapter2.xhtml");
+    assert!(first.contains("<a href=\"chapter2.xhtml#_Toc2\">Chapter Two</a>"), "{first}");
+    assert!(second.contains("<a id=\"_Toc2\"></a>"), "{second}");
+    assert!(first.contains("<a href=\"#here\">Same chapter</a>"), "{first}");
+    assert!(first.contains("<a id=\"here\"></a>"), "{first}");
+    // A fragment no chapter carries is written as plain text, not as a broken link.
+    assert!(first.contains("missing target") && !first.contains("href=\"#missing\""), "{first}");
+    assert_xml(&first);
+    assert_xml(&second);
+}
+
+#[test]
 fn epub_reports_content_the_flow_cannot_carry() {
     use wordcraft_doc::{Comment, PartKind};
     let mut d = sample();
