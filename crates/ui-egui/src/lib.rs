@@ -3869,6 +3869,9 @@ mod tests {
         };
         let before = a.canvas.scale;
         frame(&mut a, vec![wheel]);
+        // The wheel's own frame already starts the zoom, unhinted.
+        assert_ne!(a.canvas.scale, before, "the zoom starts in the wheel's frame");
+        assert!(!platform || !a.canvas.pages_hinted, "the wheel's frame is unhinted");
         let (mut eased, mut unhinted) = (0, 0);
         let mut last = a.canvas.scale;
         for _ in 0..60 {
