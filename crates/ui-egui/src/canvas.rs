@@ -124,6 +124,8 @@ pub struct CanvasState {
     pub(crate) ink_ui: crate::ink::InkUi,
     /// Wheel/touchpad scrolling (smooth notches, touchpad momentum).
     pub(crate) wheel: crate::scroll::CanvasScroll,
+    /// One-finger touch gestures: pan, tap and long-press selection (#1503, #2155).
+    pub(crate) touch: crate::touch::TouchDrag,
     /// Middle-click scrolling (#1065).
     pub(crate) auto_scroll: crate::autoscroll::AutoScroll,
     /// The scroll offset and its maximum at the end of last frame.
@@ -192,6 +194,17 @@ impl CanvasState {
         self.dragging = false;
         self.column_drag = None;
         self.unit_drag = None;
+    }
+
+    /// The press belongs to a finger: no pointer drag it started may go on — not text
+    /// selection, an object move or crop, or a table border or selection-area drag (#1503,
+    /// #2155). A web press is cleaned here when its `Touch Start` adopts it a frame later.
+    pub(crate) fn cancel_pointer_drags(&mut self) {
+        self.cancel_text_drag();
+        self.obj_drag = None;
+        self.crop_drag = None;
+        self.table_resize = None;
+        self.table_drag = None;
     }
 
     /// The object a drag has taken off its page: which page, and which object. `None` unless an
@@ -271,6 +284,7 @@ impl Default for CanvasState {
             alt_code: String::new(),
             alt_code_echo: None,
             wheel: Default::default(),
+            touch: Default::default(),
             auto_scroll: Default::default(),
             scroll_offset: egui::Vec2::ZERO,
             scroll_max: egui::Vec2::ZERO,
@@ -647,6 +661,22 @@ fn read_wheel_turns(events: &[egui::Event], hovered: bool, accum: &mut f32) -> i
         }
     }
     turns.clamp(-5, 5)
+}
+
+/// A finger's horizontal travel turns reading columns like a touchpad's pixels: 55 points a
+/// column, discarding the excess so a long swipe doesn't turn several at once on the next move.
+fn read_touch_turns(dx: f32, accum: &mut f32) -> i32 {
+    if !dx.is_finite() {
+        return 0;
+    }
+    *accum = (*accum + dx).clamp(-300.0, 300.0);
+    if accum.abs() >= 55.0 {
+        let turns = -accum.signum() as i32;
+        *accum = 0.0;
+        turns
+    } else {
+        0
+    }
 }
 
 pub fn geometry(app: &WordApp, l: &DocLayout, avail: egui::Vec2) -> Geometry {
@@ -1091,11 +1121,47 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
     // momentum, wheel notches eased in (or all at once with animation effects off). Applied
     // before drawing, so it shows this frame. In reading mode, wheel and touchpad events turn
     // whole columns instead.
+    // Touch first: a finger produces pointer events, not wheel events. eframe's web runner also
+    // runs a frame inside pointerdown, before touchstart, so adopt a press when the finger's
+    // Touch Start arrives a frame later (#1503).
+    let touch_start = ui.input(|i| {
+        i.events.iter().find_map(|e| match e {
+            egui::Event::Touch { phase: egui::TouchPhase::Start, pos, .. } => Some(*pos),
+            _ => None,
+        })
+    });
+    if let Some(pos) = touch_start
+        && app.canvas.touch.adopt(pos, ui.input(|i| i.time))
+    {
+        // The pointerdown frame may have started a text, object or table drag: the finger owns
+        // the gesture now (#1503, #2155).
+        app.canvas.cancel_pointer_drags();
+    }
+    let reading = app.session.view.read_mode;
+    let long_press = opts.max_click_duration;
+    let mut touch_delta = ui.input(|i| app.canvas.touch.advance(i, i.unstable_dt, long_press, !reading));
+    if let Some(before) = app.canvas.touch.take_restore() {
+        app.session.sel = before;
+        // A pan (or a pinch) is not the first tap of a double-tap.
+        app.canvas.last_press = None;
+    }
     // Read Mode's centred columns leave margins at the sides; the wheel turns pages over them too.
     let wheel_area = if app.session.view.read_mode { full } else { area };
     let hovered = wheel_hovered(ui.rect_contains_pointer(wheel_area), ui.ctx().dragged_id().is_some(), app.canvas.drag_selecting());
     let notch = crate::scroll::notch_px(app.canvas.scale / PX_PER_PT);
     let wheel_delta = if app.session.view.read_mode {
+        // A finger's horizontal travel turns reading columns like a touchpad's — but a dialog
+        // owns the pointer, and a swipe must not turn the page behind it.
+        if app.dialog.is_some() {
+            app.canvas.touch.cancel();
+            touch_delta = egui::Vec2::ZERO;
+        } else if touch_delta != egui::Vec2::ZERO {
+            let turns = read_touch_turns(touch_delta.x, &mut app.canvas.read_wheel_accum);
+            for _ in 0..turns.unsigned_abs() {
+                turn_read_page(app, turns.signum() as f32);
+            }
+            touch_delta = egui::Vec2::ZERO;
+        }
         let turns = ui.input(|i| read_wheel_turns(&i.events, hovered, &mut app.canvas.read_wheel_accum));
         for _ in 0..turns.unsigned_abs() {
             turn_read_page(app, turns.signum() as f32);
@@ -1141,11 +1207,16 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
     // Middle-click scrolling (#1065): Print Layout and the other editing views, not Read Mode.
     let middle_delta = if app.session.view.read_mode || app.dialog.is_some() {
         app.canvas.auto_scroll.cancel();
+        if app.dialog.is_some() {
+            // A modal dialog owns the pointer; a finger that was panning must not scroll the
+            // document behind it.
+            app.canvas.touch.cancel();
+        }
         egui::Vec2::ZERO
     } else {
         app.canvas.auto_scroll.update(ui, area)
     };
-    let delta = wheel_delta + auto_delta + middle_delta;
+    let delta = wheel_delta + touch_delta + auto_delta + middle_delta;
     let mut scroll_area = egui::ScrollArea::both()
         .id_salt("canvas_scroll")
         .auto_shrink([false, false])
@@ -1164,8 +1235,9 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
             None if app.session.view.read_mode => snapped.clamp(egui::Vec2::ZERO, app.canvas.scroll_max),
             None => clamped_scroll(before, delta, app.canvas.scroll_max),
         };
-        if after == before && wheel_delta != egui::Vec2::ZERO {
+        if after == before && (wheel_delta != egui::Vec2::ZERO || touch_delta != egui::Vec2::ZERO) {
             app.canvas.wheel.hit_edge();
+            app.canvas.touch.cancel_momentum();
         }
         if auto_delta != egui::Vec2::ZERO && after != before {
             // The scroll keeps going without new input.
@@ -1173,7 +1245,7 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
         }
         scroll_area = scroll_area.scroll_offset(after);
     }
-    if app.canvas.wheel.is_animating() {
+    if app.canvas.wheel.is_animating() || app.canvas.touch.is_animating() {
         ui.ctx().request_repaint();
     }
     let out = scroll_area.show_viewport(&mut ui_area, |ui, viewport| {
@@ -2301,26 +2373,78 @@ fn clamped_scroll(before: egui::Vec2, delta: egui::Vec2, max: egui::Vec2) -> egu
 }
 
 fn mouse(app: &mut WordApp, ui: &Ui, resp: &egui::Response, rects: &[Rect], layout: &DocLayout, scale: f32) {
+    // A finger lifted: end a selection it started, and let the format painter apply as it does
+    // on a mouse release.
+    let touch_release = app.canvas.touch.take_release();
+    if touch_release.is_some() {
+        if app.canvas.dragging {
+            app.canvas.cancel_text_drag();
+            if app.session.painter.is_some() && !app.session.sel.is_collapsed() {
+                let _ = app.run("edit.pasteFormat", json!({}));
+            }
+        }
+        // A double-tap still selects a word (and a triple-tap a paragraph); every other finger
+        // release ends here.
+        if !resp.double_clicked() && !resp.triple_clicked() {
+            return;
+        }
+    }
+    // A finger owns the page: it pans, or waits for a long press. Never start a text drag from
+    // it (#1503, #2155). A pointer release may arrive a frame before the finger's `Touch End`
+    // (the web runner runs a frame inside `pointerup`), so let that frame through: its click or
+    // double-click is what a tap ends with.
+    let releasing = ui.input(|i| i.pointer.primary_released());
+    if app.canvas.touch.panning() || app.canvas.touch.pinching() || (app.canvas.touch.down() && !app.canvas.touch.selecting() && !releasing) {
+        return;
+    }
     // A pen or the eraser (Draw tab) owns the pointer.
     if crate::ink::pointer(app, ui, resp, rects, layout, scale) {
         return;
     }
-    let pointer = resp.interact_pointer_pos().or_else(|| resp.hover_pos());
+    let pointer = if app.canvas.touch.selecting() {
+        // egui's long-touch is a click, not a drag: it stops reporting an interaction position
+        // after the flag fired, but the finger's position is still what the selection follows.
+        ui.input(|i| i.pointer.latest_pos())
+    } else {
+        resp.interact_pointer_pos().or_else(|| resp.hover_pos()).or_else(|| {
+            // egui-winit sends `PointerGone` with a touch's end, so a double-tap's click has no
+            // pointer position left by the time the word is selected.
+            if resp.double_clicked() || resp.triple_clicked() { touch_release } else { None }
+        })
+    };
     // An object (or crop handle) drag follows the pointer anywhere until it's released.
     let dragging = app.canvas.obj_drag.is_some() || app.canvas.crop_drag.is_some();
     let object_pointer = pointer.or_else(|| dragging.then(|| ui.input(|i| i.pointer.latest_pos())).flatten());
-    if let Some(at) = object_pointer
-        && crate::objects::pointer(app, ui, resp, rects, layout, scale, at)
-    {
-        return;
+    // A finger press owns the page before any object or table handler can take the same press
+    // and start a drag from it: a swipe must pan, not move an object or resize a table (#1503,
+    // #2155). Arm first, before any branch below can return: eframe's web runner runs a frame
+    // inside pointerdown, before touchstart, and the finger's `Touch Start` next frame adopts
+    // the press and undoes the drag it started (#1503).
+    let pressed = ui.input(|i| i.pointer.primary_pressed()) && resp.contains_pointer() && pointer.is_some_and(|at| !over_balloon(app, at));
+    let finger = ui.input(|i| i.any_touches());
+    let finger_press = pressed && finger && !app.canvas.touch.down() && !app.canvas.touch.pinching();
+    if pressed && let Some(p) = pointer {
+        let now = ui.input(|i| i.time);
+        app.canvas.touch.arm(p, now, app.session.sel.clone());
+        if finger_press {
+            app.canvas.cancel_pointer_drags();
+            app.canvas.touch.press(p, app.session.sel.clone());
+        }
     }
-    // A press on a table border (or the table's resize handle) drags it instead of the caret.
-    if crate::table_resize::pointer(app, ui, resp, rects, layout, scale) {
-        return;
-    }
-    // A press on a table's selection area, insert button or move handle.
-    if crate::table_mouse::pointer(app, ui, resp, rects, layout, scale) {
-        return;
+    if !finger_press {
+        if let Some(at) = object_pointer
+            && crate::objects::pointer(app, ui, resp, rects, layout, scale, at)
+        {
+            return;
+        }
+        // A press on a table border (or the table's resize handle) drags it instead of the caret.
+        if crate::table_resize::pointer(app, ui, resp, rects, layout, scale) {
+            return;
+        }
+        // A press on a table's selection area, insert button or move handle.
+        if crate::table_mouse::pointer(app, ui, resp, rects, layout, scale) {
+            return;
+        }
     }
     let Some(p) = pointer else { return };
     // While drag-selecting, the pointer may sit past the viewport's edge (or the window's):
@@ -2335,6 +2459,17 @@ fn mouse(app: &mut WordApp, ui: &Ui, resp: &egui::Response, rects: &[Rect], layo
         p
     };
     let Some((page, x, y)) = page_at(rects, layout, scale, p) else { return };
+    // A long press starts a selection where the finger rests; moving now extends it (below).
+    if app.canvas.touch.selecting() && !app.canvas.touch.selection_started() {
+        app.canvas.touch.mark_selection_started();
+        app.canvas.last_press = None;
+        if let Some(pos) = layout.hit(page, x, y, app.session.sel.focus.story) {
+            app.session.sel = wordcraft_engine::Selection::caret(pos);
+            app.session.page_hint = page;
+        }
+        app.canvas.dragging = true;
+        return;
+    }
     let mods = ui.input(|i| i.modifiers);
     let story = app.session.sel.focus.story;
     // Inside an equation, clicks place the caret in it (and double-clicks don't select words).
@@ -2410,7 +2545,6 @@ fn mouse(app: &mut WordApp, ui: &Ui, resp: &egui::Response, rects: &[Rect], layo
         let _ = app.run("select.paragraph", json!({}));
         return;
     }
-    let pressed = ui.input(|i| i.pointer.primary_pressed()) && resp.contains_pointer() && !over_balloon(app, p);
     if pressed {
         let now = ui.input(|i| i.time);
         let (delay, dist) = ui.ctx().options(|o| (o.input_options.max_double_click_delay, o.input_options.max_click_dist));
@@ -2481,8 +2615,12 @@ fn mouse(app: &mut WordApp, ui: &Ui, resp: &egui::Response, rects: &[Rect], layo
                 let (start, end) = app.session.sel.ordered();
                 (unit, start, end)
             };
-            app.canvas.unit_drag = Some(UnitDrag { unit, clicks, start, end, last: line });
-            app.canvas.dragging = true;
+            // A finger selects the line on a tap, but its gesture owns the movement: never
+            // start a mouse drag-select from it.
+            if !finger {
+                app.canvas.unit_drag = Some(UnitDrag { unit, clicks, start, end, last: line });
+                app.canvas.dragging = true;
+            }
             return;
         }
         let Some(pos) = layout.hit(page, x, y, story) else { return };
@@ -2504,11 +2642,21 @@ fn mouse(app: &mut WordApp, ui: &Ui, resp: &egui::Response, rects: &[Rect], layo
         }
         let pj = serde_json::to_value(&pos).unwrap_or_default();
         // Alt+drag selects a column (block) of text.
-        if mods.alt && !mods.shift && !mods.command {
+        if mods.alt && !mods.shift && !mods.command && !finger {
             let _ = app.run("caret.set", json!({"pos": pj}));
             app.session.page_hint = page;
             app.canvas.column_drag = Some(((page, x, y), (page, x, y)));
             app.canvas.dragging = true;
+            return;
+        }
+        // A finger: the press above began its gesture; a tap places the caret, a drag pans (the
+        // gesture owns the movement above), and a long press selects (above). Never start a
+        // mouse drag-select here (#1503, #2155).
+        if finger {
+            if finger_press {
+                let _ = app.run("caret.set", json!({"pos": pj}));
+                app.session.page_hint = page;
+            }
             return;
         }
         app.canvas.column_drag = None;
@@ -6068,6 +6216,389 @@ mod tests {
             h.step();
         }
         assert_eq!(ime_interrupted(&h), Some(true), "a click still interrupts composition");
+    }
+
+    /// A long document (many pages) in a 1440×900 window, ready for pointer input.
+    fn long_document() -> H {
+        let text = vec!["A line of text in a long document."; 400].join("\n");
+        let a = WordApp::new(wordcraft_engine::Session::new(wordcraft_doc::Document::from_text(&text)), Default::default());
+        let mut h: H = egui_kittest::Harness::builder().with_size(egui::vec2(1440.0, 900.0)).with_step_dt(1.0 / 60.0).build_ui_state(
+            |ui, app: &mut WordApp| {
+                let ctx = ui.ctx().clone();
+                app.logic(&ctx);
+                app.ui(ui);
+            },
+            a,
+        );
+        h.run_steps(6);
+        h
+    }
+
+    fn touch(id: u64, phase: egui::TouchPhase, pos: Pos2) -> egui::Event {
+        egui::Event::Touch { device_id: egui::TouchDeviceId(0), id: egui::TouchId(id), phase, pos, force: None }
+    }
+
+    fn primary(pos: Pos2, pressed: bool) -> egui::Event {
+        egui::Event::PointerButton { pos, button: egui::PointerButton::Primary, pressed, modifiers: Default::default() }
+    }
+
+    /// #1503 / #2155: a finger drag pans the page instead of selecting text. egui-winit sends
+    /// the `Touch` first, then the pointer events it synthesizes.
+    #[test]
+    fn a_touch_drag_pans_the_page_instead_of_selecting() {
+        let mut h = long_document();
+        let start = screen(&mut h, 300.0, 400.0);
+        h.event(touch(0, egui::TouchPhase::Start, start));
+        h.event(primary(start, true));
+        h.step();
+        let mut at = start;
+        for k in 1..=10 {
+            at = start - vec2(0.0, 30.0 * k as f32);
+            h.event(egui::Event::PointerMoved(at));
+            h.event(touch(0, egui::TouchPhase::Move, at));
+            h.step();
+        }
+        h.event(primary(at, false));
+        h.event(touch(0, egui::TouchPhase::End, at));
+        h.run_steps(5);
+        assert!(h.state().canvas.scroll_offset.y > 100.0, "the page followed the finger: {:?}", h.state().canvas.scroll_offset);
+        assert!(h.state().session.sel.is_collapsed(), "a pan must not select: {:?}", h.state().session.sel);
+    }
+
+    /// #1503 / #2155: the left margin is the selection bar for a mouse, but a finger swipe that
+    /// starts there pans the page instead of selecting lines.
+    #[test]
+    fn a_touch_drag_from_the_selection_bar_pans_the_page() {
+        let mut h = long_document();
+        let start = screen(&mut h, 30.0, 300.0);
+        assert!(h.state_mut().session.layout().selection_bar_at(0, 30.0, 300.0).is_some(), "the drag starts in the selection bar");
+        h.event(touch(0, egui::TouchPhase::Start, start));
+        h.event(primary(start, true));
+        h.step();
+        let mut at = start;
+        for k in 1..=10 {
+            at = start - vec2(0.0, 30.0 * k as f32);
+            h.event(egui::Event::PointerMoved(at));
+            h.event(touch(0, egui::TouchPhase::Move, at));
+            h.step();
+        }
+        h.event(primary(at, false));
+        h.event(touch(0, egui::TouchPhase::End, at));
+        h.run_steps(5);
+        assert!(h.state().canvas.scroll_offset.y > 100.0, "the page followed the finger: {:?}", h.state().canvas.scroll_offset);
+        assert!(h.state().session.sel.is_collapsed(), "a pan from the margin must not select: {:?}", h.state().session.sel);
+    }
+
+    /// A long document with a floating picture over its first page, and its position.
+    fn floating_picture_document() -> (H, Pos) {
+        let mut h = long_document();
+        let mut png = Vec::new();
+        let img = image::RgbaImage::from_pixel(40, 20, image::Rgba([200, 30, 30, 255]));
+        image::DynamicImage::ImageRgba8(img).write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png).unwrap();
+        h.state_mut().run("insert.picture", json!({"data": wordcraft_engine::cmd::insert::base64_encode(&png), "width": 160})).unwrap();
+        let pos = wordcraft_engine::cmd::objects::selected(&h.state().session).unwrap().0;
+        h.state_mut().run("arrange.bounds", json!({"page": 0, "x": 120, "y": 120})).unwrap();
+        h.state_mut().run("arrange.wrap", json!({"wrap": "inFrontOfText"})).unwrap();
+        h.state_mut().run("select.collapse", json!({})).unwrap();
+        h.run_steps(6);
+        (h, pos)
+    }
+
+    /// #1503 / #2155: a finger swipe that starts on a floating picture pans the page; the
+    /// picture is not dragged, resized or selected as the same mouse press would do.
+    #[test]
+    fn a_touch_drag_from_a_floating_picture_pans_without_moving_it() {
+        let (mut h, pos) = floating_picture_document();
+        let before = h.state_mut().session.layout().object(&pos, 0).expect("the floating picture is laid out").rect;
+        let start = crate::frame::to_screen(h.state().canvas.page_rects[0], h.state().canvas.scale, before).center();
+        h.event(touch(0, egui::TouchPhase::Start, start));
+        h.event(primary(start, true));
+        h.step();
+        swipe(&mut h, start);
+        assert!(h.state().canvas.scroll_offset.y > 100.0, "the page followed the finger: {:?}", h.state().canvas.scroll_offset);
+        assert!(h.state().canvas.obj_drag.is_none(), "the picture is not being dragged");
+        let after = h.state_mut().session.layout().object(&pos, 0).expect("the picture is still laid out").rect;
+        assert_eq!(after, before, "the picture stayed where it was");
+    }
+
+    /// The web's pointerdown-first order: that frame starts an object drag, and the finger's
+    /// `Touch Start` takes it back so the swipe pans (#1503, #2155).
+    #[test]
+    fn a_web_touch_drag_from_a_floating_picture_takes_back_the_object_drag() {
+        let (mut h, pos) = floating_picture_document();
+        let before = h.state_mut().session.layout().object(&pos, 0).expect("the floating picture is laid out").rect;
+        let start = crate::frame::to_screen(h.state().canvas.page_rects[0], h.state().canvas.scale, before).center();
+        h.event(primary(start, true));
+        h.step();
+        assert!(h.state().canvas.obj_drag.is_some(), "the pointerdown frame starts an object drag");
+        h.event(touch(0, egui::TouchPhase::Start, start));
+        h.step();
+        assert!(h.state().canvas.obj_drag.is_none(), "the Touch Start takes the object drag back");
+        swipe(&mut h, start);
+        assert!(h.state().canvas.scroll_offset.y > 100.0, "the page followed the finger: {:?}", h.state().canvas.scroll_offset);
+        let after = h.state_mut().session.layout().object(&pos, 0).expect("the picture is still laid out").rect;
+        assert_eq!(after, before, "the picture stayed where it was");
+    }
+
+    /// Swipe a finger up from `start` and lift it, panning the page.
+    fn swipe(h: &mut H, start: Pos2) {
+        let mut at = start;
+        for k in 1..=10 {
+            at = start - vec2(0.0, 30.0 * k as f32);
+            h.event(egui::Event::PointerMoved(at));
+            h.event(touch(0, egui::TouchPhase::Move, at));
+            h.step();
+        }
+        h.event(primary(at, false));
+        h.event(touch(0, egui::TouchPhase::End, at));
+        h.run_steps(5);
+    }
+
+    /// The same through the web's pointerdown-first order: that frame selects a line, and the
+    /// finger's `Touch Start` takes the line drag back so the swipe pans.
+    #[test]
+    fn a_web_touch_drag_from_the_selection_bar_pans_and_keeps_the_selection() {
+        let mut h = long_document();
+        h.state_mut().run("select.text", json!({"text": "A line of text"})).unwrap();
+        let before = h.state().session.sel.clone();
+        let start = screen(&mut h, 30.0, 300.0);
+        h.event(primary(start, true));
+        h.step();
+        assert!(h.state().canvas.dragging, "the pointerdown frame starts a line drag");
+        assert!(!h.state().session.sel.is_collapsed(), "the pointerdown frame selected a line");
+        h.event(touch(0, egui::TouchPhase::Start, start));
+        h.step();
+        assert!(!h.state().canvas.dragging, "the Touch Start takes the line drag back");
+        let mut at = start;
+        for k in 1..=10 {
+            at = start - vec2(0.0, 30.0 * k as f32);
+            h.event(egui::Event::PointerMoved(at));
+            h.event(touch(0, egui::TouchPhase::Move, at));
+            h.step();
+        }
+        h.event(primary(at, false));
+        h.event(touch(0, egui::TouchPhase::End, at));
+        h.run_steps(5);
+        assert!(h.state().canvas.scroll_offset.y > 100.0, "the page followed the finger: {:?}", h.state().canvas.scroll_offset);
+        assert_eq!(h.state().session.sel, before, "panning puts back the selection it found");
+    }
+
+    /// A finger tap in the selection bar still selects the line, as a mouse click there does;
+    /// only a drag pans.
+    #[test]
+    fn a_touch_tap_in_the_selection_bar_selects_the_line() {
+        let mut h = long_document();
+        let at = screen(&mut h, 30.0, 300.0);
+        h.event(touch(0, egui::TouchPhase::Start, at));
+        h.event(primary(at, true));
+        h.step();
+        h.event(primary(at, false));
+        h.event(touch(0, egui::TouchPhase::End, at));
+        h.run_steps(3);
+        assert!(!h.state().session.sel.is_collapsed(), "a tap in the selection bar selects the line: {:?}", h.state().session.sel);
+        assert_eq!(h.state().canvas.scroll_offset.y, 0.0, "a tap must not scroll");
+    }
+
+    /// The web runner runs a frame inside `pointerdown`, before `touchstart`: the press starts a
+    /// text drag, which the finger's `Touch Start` must take back (#1503).
+    #[test]
+    fn a_web_touch_drag_adopts_the_pointerdown_frame_and_keeps_the_selection() {
+        let mut h = long_document();
+        h.state_mut().run("select.text", json!({"text": "long document"})).unwrap();
+        let before = h.state().session.sel.clone();
+        let start = screen(&mut h, 300.0, 400.0);
+
+        h.event(primary(start, true));
+        h.step();
+        assert!(h.state().canvas.dragging, "the pointerdown frame starts a plain text drag");
+        h.event(touch(0, egui::TouchPhase::Start, start));
+        h.step();
+        assert!(!h.state().canvas.dragging, "the Touch Start takes the drag back");
+
+        let mut at = start;
+        for k in 1..=10 {
+            at = start - vec2(0.0, 30.0 * k as f32);
+            h.event(egui::Event::PointerMoved(at));
+            h.event(touch(0, egui::TouchPhase::Move, at));
+            h.step();
+        }
+        h.event(primary(at, false));
+        h.event(touch(0, egui::TouchPhase::End, at));
+        h.run_steps(5);
+        assert!(h.state().canvas.scroll_offset.y > 100.0, "the page followed the finger: {:?}", h.state().canvas.scroll_offset);
+        assert_eq!(h.state().session.sel, before, "panning puts back the selection it found");
+    }
+
+    /// A tap still places the caret; it is not a pan.
+    #[test]
+    fn a_touch_tap_places_the_caret_and_scrolls_nothing() {
+        let mut h = long_document();
+        h.state_mut().run("caret.docStart", json!({})).unwrap();
+        let before = h.state().session.sel.focus.clone();
+        let at = screen(&mut h, 300.0, 300.0);
+        h.event(touch(0, egui::TouchPhase::Start, at));
+        h.event(primary(at, true));
+        h.step();
+        h.event(primary(at, false));
+        h.event(touch(0, egui::TouchPhase::End, at));
+        h.run_steps(3);
+        assert!(h.state().session.sel.is_collapsed(), "a tap is a caret");
+        assert_ne!(h.state().session.sel.focus, before, "the tap moved the caret");
+        assert_eq!(h.state().canvas.scroll_offset.y, 0.0, "a tap must not scroll");
+    }
+
+    /// Holding a finger still starts a selection (Word's model); dragging then extends it and
+    /// never scrolls the page.
+    #[test]
+    fn a_long_press_starts_a_selection_and_dragging_extends_it() {
+        let mut h = long_document();
+        let start = screen(&mut h, 300.0, 300.0);
+        h.event(touch(0, egui::TouchPhase::Start, start));
+        h.event(primary(start, true));
+        h.step();
+        h.run_steps(60);
+        assert!(h.state().canvas.dragging, "a long press starts a selection");
+        let at = start + vec2(0.0, 120.0);
+        h.event(egui::Event::PointerMoved(at));
+        h.event(touch(0, egui::TouchPhase::Move, at));
+        h.run_steps(2);
+        assert!(!h.state().session.sel.is_collapsed(), "dragging after a long press selects");
+        assert!(h.state().canvas.scroll_offset.y < 1.0, "a selection must not pan: {:?}", h.state().canvas.scroll_offset);
+    }
+
+    /// A double-tap still selects a word, like a mouse double-click.
+    #[test]
+    fn a_touch_double_tap_selects_a_word() {
+        let mut h = long_document();
+        let at = screen(&mut h, 100.0, 300.0);
+        for _ in 0..2 {
+            h.event(touch(0, egui::TouchPhase::Start, at));
+            h.event(primary(at, true));
+            h.step();
+            h.event(primary(at, false));
+            h.event(touch(0, egui::TouchPhase::End, at));
+            h.step();
+            h.step();
+        }
+        assert!(!h.state().session.sel.is_collapsed(), "a double-tap selects a word: {:?}", h.state().session.sel);
+    }
+
+    /// The web order — pointerdown, touchstart, pointerup, touchend, each in its own frame —
+    /// still gives a tap a caret and a double-tap a word.
+    #[test]
+    fn a_web_tap_places_the_caret_and_a_double_tap_selects_a_word() {
+        let mut h = long_document();
+        let at = screen(&mut h, 100.0, 300.0);
+        let tap = |h: &mut H| {
+            h.event(primary(at, true));
+            h.step();
+            h.event(touch(0, egui::TouchPhase::Start, at));
+            h.step();
+            h.event(primary(at, false));
+            h.step();
+            h.event(touch(0, egui::TouchPhase::End, at));
+            h.step();
+            h.step();
+        };
+        tap(&mut h);
+        assert!(h.state().session.sel.is_collapsed(), "a web tap is a caret");
+        tap(&mut h);
+        assert!(!h.state().session.sel.is_collapsed(), "a web double-tap selects a word");
+    }
+
+    /// egui-winit sends `PointerGone` in the same frame as a touch's release; a double-tap must
+    /// still find the word from the finger's last position.
+    #[test]
+    fn a_native_double_tap_selects_a_word_even_when_the_release_sends_pointer_gone() {
+        let mut h = long_document();
+        let at = screen(&mut h, 100.0, 300.0);
+        for _ in 0..2 {
+            h.input_mut().events.extend([touch(0, egui::TouchPhase::Start, at), primary(at, true)]);
+            h.step();
+            h.input_mut().events.extend([touch(0, egui::TouchPhase::End, at), primary(at, false), egui::Event::PointerGone]);
+            h.step();
+            h.step();
+        }
+        assert!(!h.state().session.sel.is_collapsed(), "a double-tap selects a word: {:?}", h.state().session.sel);
+    }
+
+    /// A mouse drag is unchanged: it selects, it does not pan.
+    #[test]
+    fn a_mouse_drag_still_selects_text() {
+        let mut h = long_document();
+        let start = screen(&mut h, 300.0, 300.0);
+        h.event(egui::Event::PointerMoved(start));
+        h.event(primary(start, true));
+        h.step();
+        let end = start + vec2(0.0, 160.0);
+        h.event(egui::Event::PointerMoved(end));
+        h.run_steps(2);
+        h.event(primary(end, false));
+        h.run_steps(2);
+        assert!(!h.state().session.sel.is_collapsed(), "a mouse drag still selects");
+        assert!(h.state().canvas.scroll_offset.y < 1.0, "a mouse drag does not pan");
+    }
+
+    /// Two fingers zoom (the old pinch path) and neither selects nor pans.
+    #[test]
+    fn a_pinch_zooms_without_selecting() {
+        let mut h = long_document();
+        h.state_mut().run("select.text", json!({"text": "long document"})).unwrap();
+        let before = h.state().session.sel.clone();
+        let scale = h.state().canvas.scale;
+        let center = screen(&mut h, 300.0, 400.0);
+        let left = center - vec2(50.0, 0.0);
+        let right = center + vec2(50.0, 0.0);
+        h.event(touch(0, egui::TouchPhase::Start, left));
+        h.event(touch(1, egui::TouchPhase::Start, right));
+        h.event(primary(left, true));
+        h.step();
+        h.event(touch(0, egui::TouchPhase::Move, left - vec2(50.0, 0.0)));
+        h.event(touch(1, egui::TouchPhase::Move, right + vec2(50.0, 0.0)));
+        h.event(egui::Event::PointerMoved(left - vec2(50.0, 0.0)));
+        h.step();
+        h.run_steps(2);
+        assert!(h.state().canvas.scale > scale * 1.05, "the pinch zoomed: {scale} -> {}", h.state().canvas.scale);
+        assert_eq!(h.state().session.sel, before, "a pinch must not change the selection");
+        assert!(!h.state().canvas.touch.panning(), "a pinch must not pan");
+    }
+
+    /// A dialog owns the pointer: a swipe in Read Mode must not turn the columns behind it.
+    #[test]
+    fn a_finger_does_not_turn_reading_columns_behind_a_dialog() {
+        let mut h = long_document();
+        h.state_mut().run("view.readMode", json!({})).unwrap();
+        h.state_mut().dialog = Some(crate::dialogs::Dialog::WordCount { stats: json!({}) });
+        h.run_steps(6);
+        assert!(h.state().session.view.read_mode, "Read Mode");
+        let before = h.state().canvas.scroll_offset;
+        // Clear of the dialog, which is centred, but still over the canvas.
+        let start = pos2(150.0, 400.0);
+        h.event(touch(0, egui::TouchPhase::Start, start));
+        h.event(primary(start, true));
+        h.step();
+        let at = start - vec2(120.0, 0.0);
+        h.event(egui::Event::PointerMoved(at));
+        h.event(touch(0, egui::TouchPhase::Move, at));
+        h.step();
+        h.event(primary(at, false));
+        h.event(touch(0, egui::TouchPhase::End, at));
+        h.run_steps(30);
+        assert_eq!(h.state().canvas.scroll_offset, before, "the columns stayed where they were");
+        assert!(h.state().canvas.read_target_page.is_none(), "no page turn was queued");
+    }
+
+    /// A finger's horizontal travel turns reading columns, 55 points a column.
+    #[test]
+    fn a_finger_turns_one_reading_column_per_55_points() {
+        let mut accum = 0.0;
+        for _ in 0..2 {
+            assert_eq!(read_touch_turns(-20.0, &mut accum), 0);
+        }
+        assert_eq!(read_touch_turns(-20.0, &mut accum), 1, "a left swipe goes to the next column");
+        assert_eq!(read_touch_turns(60.0, &mut accum), -1, "a right swipe goes back");
+        assert_eq!(read_touch_turns(f32::NAN, &mut accum), 0);
+        assert!(accum.is_finite());
     }
 
     fn page_at_index(rects: &[Rect], p: Pos2) -> Option<usize> {
