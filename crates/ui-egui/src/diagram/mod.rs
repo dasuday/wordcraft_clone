@@ -58,6 +58,10 @@ pub struct Diagram {
     /// The picture the editor was opened for: what its export goes back into, whatever is
     /// selected by the time draw.io answers.
     media: Option<String>,
+    /// Where that picture was — story, paragraph and offset — so the export goes back to *that*
+    /// occurrence: a copied picture shares the media key, and the selection can move on while the
+    /// editor is open.
+    at: Option<wordcraft_doc::Pos>,
     editor: Option<Editor>,
     /// Whether it has been put in place yet. It starts hidden, so it never flashes at a spot it
     /// isn't meant to be at.
@@ -83,14 +87,21 @@ impl Diagram {
     pub fn media_key(&self) -> Option<&str> {
         self.media.as_deref()
     }
+    /// Where that picture was in the document, when the caller knew.
+    pub fn at(&self) -> Option<&wordcraft_doc::Pos> {
+        self.at.as_ref()
+    }
 
-    /// Edit the picture whose media key is `media`, on the frame the window is at hand.
-    pub fn request(&mut self, media: String) {
+    /// Edit the picture whose media key is `media` — where it is in the document, when the caller
+    /// knows — on the frame the window is at hand.
+    pub fn request(&mut self, media: String, at: Option<wordcraft_doc::Pos>) {
         self.request = Some(media);
+        self.at = at;
     }
     /// Drop a request that can't be served (the picture is gone).
     pub fn cancel(&mut self) {
         self.request = None;
+        self.at = None;
     }
 
     /// Open draw.io over `png`, inside `window`.
@@ -141,6 +152,7 @@ impl Diagram {
         self.saving = false;
         self.placed = false;
         self.media = None;
+        self.at = None;
         self.rect = None;
     }
 
@@ -243,17 +255,32 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
 
 /// An `Exported` PNG, put back where the picture is (base64, as every command carries bytes).
 ///
-/// `media` is the picture the editor was opened for: `diagram.update` works on the selection, so
-/// applying the export anywhere else would put it over another picture — there is no way to call
-/// this without saying which picture the edit belongs to.
-pub fn apply(app: &mut WordApp, png: Vec<u8>, media: &str) {
+/// `media` is the picture the editor was opened for and `at` where it was: `diagram.update` works
+/// on the selection, so the picture is selected again first. The selection can move on while
+/// draw.io is open, and a copy of the picture shares its media key — the key alone would let the
+/// edit land on the copy, or nowhere.
+pub fn apply(app: &mut WordApp, png: Vec<u8>, media: &str, at: Option<&wordcraft_doc::Pos>) {
     if app.selected_picture_media().as_deref() != Some(media) {
-        app.status(tl!("The diagram was left as it was: the picture it belongs to isn't selected any more."));
-        return;
+        if let Some(at) = at.filter(|at| picture_at(app, at) == Some(media)) {
+            let _ = app.run("caret.set", json!({"pos": at}));
+        }
+        if app.selected_picture_media().as_deref() != Some(media) {
+            app.status(tl!("The diagram was left as it was: the picture it belongs to isn't in the document any more."));
+            return;
+        }
     }
     let data = wordcraft_engine::cmd::insert::base64_encode(&png);
     match app.run("diagram.update", json!({"data": data})) {
         Ok(_) => app.status(tl!("The diagram was updated.")),
         Err(e) => app.status(e),
+    }
+}
+
+/// The media key of the picture at `at`, when there is a picture there.
+fn picture_at<'a>(app: &'a WordApp, at: &wordcraft_doc::Pos) -> Option<&'a str> {
+    let para = app.session.doc.para(at.story, &at.path)?;
+    match para.object_at(at.off) {
+        Some(wordcraft_doc::para::InlineObject::Image { media, .. }) => Some(media.as_str()),
+        _ => None,
     }
 }

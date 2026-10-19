@@ -1521,22 +1521,30 @@ impl WordApp {
             // one with the window (`WordApp::diagram_frame`).
             "ui.editDiagram" => {
                 // One diagram at a time: a second `open` replaces the editor's webview, and the
-                // edits in the first go with it — unsaved, and without asking.
-                if self.diagram.is_open() {
+                // edits in the first go with it — unsaved, and without asking. A request that
+                // hasn't been opened yet counts: until the host's next frame, `is_open` is false.
+                if self.diagram.is_open() || self.diagram.pending().is_some() {
                     return Some(Err("finish editing the diagram that is open first".into()));
                 }
+                // The picture's place in the document travels with the request: the selection can
+                // move on while draw.io is open, and a copy of the picture shares its media key.
+                let selected = wordcraft_engine::cmd::objects::selected(&self.session);
                 // With `media` the caller already knows the picture (the double-click path);
                 // without it, the selected one is edited.
                 let media = match p.get("media").and_then(|v| v.as_str()) {
                     Some(m) => m.to_owned(),
-                    None => {
-                        let Some(media) = self.selected_picture_media() else {
+                    None => match &selected {
+                        Some((_, wordcraft_doc::para::InlineObject::Image { media, .. })) => media.clone(),
+                        _ => {
                             log::warn!("diagram: edit asked for, but no picture is selected");
                             return Some(Err("select a picture first".into()));
-                        };
-                        media
-                    }
+                        }
+                    },
                 };
+                let at = selected.and_then(|(pos, o)| match o {
+                    wordcraft_doc::para::InlineObject::Image { media: m, .. } if m == media => Some(pos),
+                    _ => None,
+                });
                 if !self.session.doc.media.get(&media).is_some_and(|b| wordcraft_diagram::png::is_drawio(b)) {
                     log::warn!("diagram: picture {media} carries no draw.io data");
                     return Some(Err("the picture isn't a draw.io diagram: export it from draw.io as a PNG with a copy of the diagram in it".into()));
@@ -1545,7 +1553,7 @@ impl WordApp {
                     return Some(Err(why.into()));
                 }
                 log::info!("diagram: opening the editor for picture {media}");
-                self.diagram.request(media.clone());
+                self.diagram.request(media.clone(), at);
                 json!({"pending": "editDiagram", "media": media})
             }
             // The page's context menu at the caret, as Shift+F10 or the Menu key opens it (#821).
@@ -2246,11 +2254,12 @@ impl WordApp {
                 // that is comes from the editor, not from whatever is selected now.
                 Event::Exported(png) => {
                     let media = self.diagram.media_key().map(str::to_owned);
+                    let at = self.diagram.at().cloned();
                     self.diagram.close();
                     // Without the key there is nothing to put the picture back into: applying it
                     // to whatever is selected now would be an edit the user never asked for.
                     match media {
-                        Some(media) => diagram::apply(self, png, &media),
+                        Some(media) => diagram::apply(self, png, &media, at.as_ref()),
                         None => log::warn!("diagram: an export arrived with no picture to put it back into"),
                     }
                     // The editor closed with this event, so nothing else in this poll is still
