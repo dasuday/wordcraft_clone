@@ -365,31 +365,62 @@ fn hhea_line(ascender: i16, descender: i16, line_gap: i16) -> (f64, f64) {
     (f64::from(ascender) + f64::from(line_gap.max(0)), f64::from(descender).abs())
 }
 
-/// Line metrics for a face in font units: (ascent, descent), both positive, the way word
-/// processors measure single line spacing: the hhea values with the line gap above the ascent
-/// (Word puts the first baseline that far below the line top), falling back to OS/2
-/// usWinAscent/usWinDescent.
+/// A line's (ascent, descent) as Word for Windows measures it, from the OS/2 usWinAscent and
+/// usWinDescent and the hhea values (GDI's text metrics): the win ascent and descent, and above
+/// the ascent the external leading, the part of the hhea line gap the win metrics do not
+/// already cover (`max(0, lineGap - ((winAscent + winDescent) - (ascender - descender)))`).
+fn win_line(win_ascent: u16, win_descent: u16, ascender: i16, descender: i16, line_gap: i16) -> (f64, f64) {
+    let (wa, wd) = (f64::from(win_ascent), f64::from(win_descent));
+    let hhea = f64::from(ascender) - f64::from(descender);
+    let leading = (f64::from(line_gap) - ((wa + wd) - hhea)).max(0.0);
+    (wa + leading, wd)
+}
+
+/// A line's (ascent, descent) from the OS/2 typographic values, both positive, the way Word
+/// measures a font whose `USE_TYPO_METRICS` flag (bit 7 of `fsSelection`) is set: the typo line
+/// gap goes above the ascent (Seaford, typo 1600 / -448 / 552 per 2048: first baseline 1.051 em
+/// below the line top, 1.269 em per line).
+fn typo_line(ascender: i16, descender: i16, line_gap: i16) -> (f64, f64) {
+    (f64::from(ascender) + f64::from(line_gap.max(0)), f64::from(descender).abs())
+}
+
+/// Line metrics for a face in font units: (ascent, descent), both positive, the way Word for
+/// Windows measures single line spacing. A font that sets `USE_TYPO_METRICS` (bit 7 of the OS/2
+/// `fsSelection`: Aptos, Seaford, Cambria Math, TeX Gyre Pagella) gets its typo values, the typo
+/// line gap above the ascent (see [`typo_line`]); any other the OS/2 win ascent and descent, with
+/// the external leading above the ascent (Word puts the first baseline that far below the line
+/// top; see [`win_line`]); the hhea values, the line gap above the ascent (Word for Mac), when the
+/// OS/2 table has no usable win metrics. Win and hhea agree for most fonts (Arial, Times New
+/// Roman, Segoe UI); where they don't (Calibri: win metrics placed differently from hhea), Word
+/// uses the win metrics: Calibri's first baseline 0.955 em below the line top, not 0.971.
 pub fn line_metrics(face: &crate::FontFace) -> (f64, f64) {
     static CACHE: OnceLock<Mutex<HashMap<u32, (f64, f64)>>> = OnceLock::new();
     let cache = CACHE.get_or_init(|| Mutex::new(HashMap::new()));
     if let Some(v) = cache.lock().unwrap_or_else(|e| e.into_inner()).get(&face.id()) {
         return *v;
     }
-    let mut v = (face.ascent.max(1.0), face.descent.abs());
-    if let Some(f) = face.skrifa() {
-        // hhea ascender + descender + line gap (Word on macOS), the gap above the ascent; OS/2
-        // win metrics only when the hhea values are missing, and never more than twice the em.
-        let hhea = f.hhea().ok().map(|h| hhea_line(h.ascender().to_i16(), h.descender().to_i16(), h.line_gap().to_i16()));
-        let win = f.os2().ok().map(|o| (o.us_win_ascent() as f64, o.us_win_descent() as f64));
-        let ok = |m: &(f64, f64)| m.0 > 0.0 && m.0 + m.1 <= face.upem * 2.0;
-        if let Some(m) = hhea.filter(ok) {
-            v = m;
-        } else if let Some(m) = win.filter(ok) {
-            v = m;
-        }
-    }
+    let v = face.skrifa().and_then(|f| font_line_metrics(&f, face.upem)).unwrap_or((face.ascent.max(1.0), face.descent.abs()));
     cache.lock().unwrap_or_else(|e| e.into_inner()).insert(face.id(), v);
     v
+}
+
+/// [`line_metrics`] read from a font's tables (`upem` units per em); `None` when neither OS/2 nor
+/// hhea gives usable metrics (a positive ascent, never more than twice the em in all).
+fn font_line_metrics(f: &skrifa::FontRef<'_>, upem: f64) -> Option<(f64, f64)> {
+    let ok = |m: &(f64, f64)| m.0 > 0.0 && m.0 + m.1 <= upem * 2.0;
+    let hhea = f.hhea().ok().map(|h| (h.ascender().to_i16(), h.descender().to_i16(), h.line_gap().to_i16()));
+    let os2 = f.os2().ok();
+    // USE_TYPO_METRICS: the typo values (Word for Windows and Mac alike).
+    let typo = os2
+        .as_ref()
+        .filter(|o| o.fs_selection().bits() & 0x80 != 0)
+        .map(|o| typo_line(o.s_typo_ascender(), o.s_typo_descender(), o.s_typo_line_gap()));
+    // Otherwise the win metrics with the external leading (Word for Windows).
+    let win = os2.as_ref().map(|o| {
+        let (a, d, g) = hhea.unwrap_or((0, 0, 0));
+        win_line(o.us_win_ascent(), o.us_win_descent(), a, d, g)
+    });
+    typo.filter(ok).or(win.filter(ok)).or_else(|| hhea.map(|(a, d, g)| hhea_line(a, d, g)).filter(ok))
 }
 
 #[cfg(test)]
@@ -405,6 +436,81 @@ mod tests {
         // A negative gap adds nothing; the most negative descender doesn't overflow.
         assert_eq!(hhea_line(1000, -300, -50), (1000.0, 300.0));
         assert_eq!(hhea_line(1000, i16::MIN, 0), (1000.0, 32768.0));
+    }
+
+    #[test]
+    fn win_metrics_with_the_external_leading_make_the_line() {
+        // Arial (win 1854 / 434, hhea 1854 / -434 / 67): the gap is external leading, above.
+        assert_eq!(win_line(1854, 434, 1854, -434, 67), (1921.0, 434.0));
+        // Calibri (win 1950 / 550, hhea 1536 / -512 / 452): the win metrics already cover the gap.
+        assert_eq!(win_line(1950, 550, 1536, -512, 452), (1950.0, 550.0));
+        // A sans whose win metrics are much taller than hhea (win 955 / 205, hhea 740 / -200 / 70,
+        // per 1000): the win metrics, 1.16 em, not 1.01.
+        assert_eq!(win_line(955, 205, 740, -200, 70), (955.0, 205.0));
+        // Win metrics shorter than hhea: the difference comes back as leading above.
+        assert_eq!(win_line(700, 200, 900, -200, 100), (1000.0, 200.0));
+    }
+
+    #[test]
+    fn typo_metrics_with_the_line_gap_above_make_the_line() {
+        // Typo values of Word's own USE_TYPO_METRICS fonts (per 2048 units), and what Word does
+        // with them (40 pt, single spacing): Aptos, Word's default font (typo 1923 / -577 / 0, win
+        // 2068 / 563): first baseline 0.938 em below the line top, 1.221 em per line.
+        assert_eq!(typo_line(1923, -577, 0), (1923.0, 577.0));
+        // Seaford (1600 / -448 / 552): the gap above, baseline at 1.050 em, 1.269 em per line.
+        assert_eq!(typo_line(1600, -448, 552), (2152.0, 448.0));
+        // Cambria Math (1593 / -455 / 353, win 6383 / 5045): baseline 0.950 em, 1.171 em per line.
+        assert_eq!(typo_line(1593, -455, 353), (1946.0, 455.0));
+        // TeX Gyre Pagella (per 1000: 726 / -281 / 0, win 1212 / 419): 1.007 em, not 1.631.
+        assert_eq!(typo_line(726, -281, 0), (726.0, 281.0));
+        // A negative gap adds nothing.
+        assert_eq!(typo_line(800, -200, -100), (800.0, 200.0));
+    }
+
+    /// `bytes` with the OS/2 `fsSelection` bit 7 set or cleared and, if given, the typo line gap
+    /// replaced (table checksums are not checked by the reader).
+    fn with_use_typo_metrics(mut bytes: Vec<u8>, on: bool, line_gap: Option<i16>) -> Vec<u8> {
+        let u16_at = |b: &[u8], i: usize| u16::from_be_bytes([b[i], b[i + 1]]) as usize;
+        let tables = u16_at(&bytes, 4);
+        let os2 = (0..tables)
+            .map(|i| 12 + 16 * i)
+            .find(|&r| &bytes[r..r + 4] == b"OS/2")
+            .map(|r| u32::from_be_bytes([bytes[r + 8], bytes[r + 9], bytes[r + 10], bytes[r + 11]]) as usize)
+            .expect("an OS/2 table");
+        let fs = u16_at(&bytes, os2 + 62) as u16;
+        let fs = if on { fs | 0x80 } else { fs & !0x80 };
+        bytes[os2 + 62..os2 + 64].copy_from_slice(&fs.to_be_bytes());
+        if let Some(g) = line_gap {
+            bytes[os2 + 72..os2 + 74].copy_from_slice(&g.to_be_bytes());
+        }
+        bytes
+    }
+
+    fn metrics_of(bytes: &[u8]) -> Option<(f64, f64)> {
+        let f = skrifa::FontRef::new(bytes).expect("a font");
+        let upem = f64::from(f.head().expect("a head table").units_per_em());
+        font_line_metrics(&f, upem)
+    }
+
+    #[test]
+    fn use_typo_metrics_picks_the_typo_values_over_the_win_ones() {
+        // JetBrains Mono (bundled, OFL) sets the flag: typo 1020 / -300 / 0 (1.32 em), win
+        // 1165 / 400 (1.565 em). Its copy without the flag falls back to the win metrics.
+        let mono = include_bytes!("../../../assets/fonts/JetBrainsMono-Regular.ttf").to_vec();
+        assert_eq!(metrics_of(&mono), Some((1020.0, 300.0)));
+        assert_eq!(metrics_of(&with_use_typo_metrics(mono, false, None)), Some((1165.0, 400.0)));
+        // Source Serif 4 (bundled, OFL) doesn't: typo = win = 1036 / -335, gap 0. A copy given a
+        // typo line gap keeps its win metrics; with the flag as well, the gap goes above the ascent.
+        let serif = include_bytes!("../../../assets/fonts/SourceSerif4-Regular.ttf").to_vec();
+        assert_eq!(metrics_of(&serif), Some((1036.0, 335.0)));
+        assert_eq!(metrics_of(&with_use_typo_metrics(serif.clone(), false, Some(200))), Some((1036.0, 335.0)));
+        assert_eq!(metrics_of(&with_use_typo_metrics(serif.clone(), true, Some(200))), Some((1236.0, 335.0)));
+        // Typo values over twice the em: the win metrics after all.
+        assert_eq!(metrics_of(&with_use_typo_metrics(serif, true, Some(1000))), Some((1036.0, 335.0)));
+        // Through the face database, the bundled face itself.
+        let r = resolve("JetBrains Mono", false, false);
+        assert!(!r.substituted);
+        assert_eq!(line_metrics(&r.face), (1020.0, 300.0));
     }
 
     #[test]
