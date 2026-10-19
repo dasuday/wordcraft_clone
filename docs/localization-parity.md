@@ -1,6 +1,6 @@
 # Localization parity with Microsoft Word
 
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-16 · **Change:** minor (how to install the Hunspell dictionaries on Windows, macOS and Linux: `docs/spelling-dictionaries.md`; previously minor: Read Aloud speaks each sentence in its own language, #1843; previously minor: Indonesian proofing: id-ID spelling from the installed Hunspell dictionary, dictionary-driven suggestions, generic checks with Indonesian messages, #498; previously trivial: print-area strings translated in every catalog; previously trivial: Italian: the interface audit checks the Italian catalog, `Privacy Settings` wording; previously trivial: Italian grammar: `po'`, `qual è`, `È`, `un`/`un'` rules; more elisions and truncations in spelling; previously trivial: Czech interface catalog completed, 2,447 entries; previously trivial: interface audit runs in CI again: size labels translated, 20 strings in every catalog, Read Aloud error race fixed, #1128; previously trivial: Review › Language reaches every language again — Set Proofing Language… and Set As Default, #860; previously minor: Italian proofing: it-IT spelling from the installed Hunspell dictionary, accent-first suggestions, conservative grammar with Italian messages; previously minor: Portuguese proofing; previously trivial: Turkish interface catalog completed, 2,325 entries, #774; previously minor: Hungarian interface added; previously trivial: sorting and table numbers follow the text's language, #836, #837; previously minor: Polish interface; Polish proofing — spelling, grammar, hyphenation — and a proofing language per run; previously minor: Turkish interface added; previously major: first version; catalogs measured from `crates/ui-egui/src/i18n`, Word's languages from its bundle listing) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4
+> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-19 · **Change:** minor (Slovak interface draft: 2,742 entries, native review pending; previously minor: how to install the Hunspell dictionaries on Windows, macOS and Linux: `docs/spelling-dictionaries.md`; previously minor: Read Aloud speaks each sentence in its own language, #1843; previously minor: Indonesian proofing: id-ID spelling from the installed Hunspell dictionary, dictionary-driven suggestions, generic checks with Indonesian messages, #498; previously trivial: print-area strings translated in every catalog; previously trivial: Italian: the interface audit checks the Italian catalog, `Privacy Settings` wording; previously trivial: Italian grammar: `po'`, `qual è`, `È`, `un`/`un'` rules; more elisions and truncations in spelling; previously trivial: Czech interface catalog completed, 2,447 entries; previously trivial: interface audit runs in CI again: size labels translated, 20 strings in every catalog, Read Aloud error race fixed, #1128; previously trivial: Review › Language reaches every language again — Set Proofing Language… and Set As Default, #860; previously minor: Italian proofing: it-IT spelling from the installed Hunspell dictionary, accent-first suggestions, conservative grammar with Italian messages; previously minor: Portuguese proofing; previously trivial: Turkish interface catalog completed, 2,325 entries, #774; previously minor: Hungarian interface added; previously trivial: sorting and table numbers follow the text's language, #836, #837; previously minor: Polish interface; Polish proofing — spelling, grammar, hyphenation — and a proofing language per run; previously minor: Turkish interface added; previously major: first version; catalogs measured from `crates/ui-egui/src/i18n`, Word's languages from its bundle listing) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4
 
 Interface languages, script support and proofing per language. How translation works (catalog
 format, adding a language, clean-room rule): `crates/ui-egui/src/i18n/mod.rs`.
@@ -17,15 +17,16 @@ native-speaker review (human).
 - **120 proofing tools** (`SharedSupport/Proofing Tools`): spellers for ~50 languages, grammar
   checkers for ~20, hyphenators for ~16, thesauri for ~20.
 
-## What WordCraft ships (measured)
+## What this WordCraft checkout includes (measured)
 
-- **23 interface languages**: English plus `zh-hans`, `zh-hant`, `ja`, Korean `ko` (#1216), `uk`, `es`, `pt-br`,
-  Serbian `sr`/`sr-latn` (#250), Estonian `et`, Turkish `tr`, Russian `ru`, Italian `it` (#594), German `de` (#574), Polish `pl`, Czech `cs`, Hungarian `hu`, French `fr`, Bulgarian `bg`, Vietnamese `vi` (#1434), Swedish `sv` (#1219) and Croatian `hr` (#1271). Catalogs have 2,061–2,504 entries
-  each; Polish has every key of every other catalog, including the built-in style names and the equation gallery, except the citation style names only Hungarian, Bulgarian and Swedish translate so far (a test checks it). A test (`every_tab_and_command_is_translated`) enforces that every ribbon tab, command
-  label and ribbon location is translated in every language.
-  `pl`, `pl-PL` and `pl_PL.UTF-8` system locales pick Polish automatically.
-- Of the 675 English strings a scan extracts from `tl!(…)` calls and command labels/locations, each
-  catalog covers **661 (98%)**. Some newer dialog and pane strings (Equation tab tooltips, Zotero,
+- **24 interface languages**: English plus `zh-hans`, `zh-hant`, `ja`, `ko`, `uk`, `es`, `pt-br`, `sr`/`sr-latn`, `et`, `tr`, `ru`, `it`, `de`, `pl`, `cs`, `sk`, `hu`, `fr`, `bg`, `vi`, `sv` and `hr`.
+  Catalogs have 2,251–2,742 entries; the Slovak draft has 2,742 entries.
+  A test (`every_tab_and_command_is_translated`) checks every ribbon tab, command
+  label and ribbon location in each catalog. `sk`, `sk-SK` and `sk_SK.UTF-8`
+  system locales select Slovak automatically; Slovak proofing is not included.
+
+- An earlier scan extracted 675 English strings from `tl!(…)` calls and command labels/locations.
+  It measured **661 (98%)** in the catalogs then present; that scan has not been rerun for Slovak. Some newer dialog and pane strings (Equation tab tooltips, Zotero,
   Read Aloud, Backstage greetings) aren't wrapped in `tl!` yet, so they show in English in every
   language: the true share of visible strings is **~93–95%** (estimated).
 - Pending PRs: Norwegian Bokmål (#208) and Nynorsk (#210), Hebrew with RTL (#20).
@@ -59,13 +60,23 @@ shared items below.
 | Korean | ko | 2,463 entries (all catalog keys and preview context) | most; newer panes English | Hangul ✅ (Korean-first embedded/system UI font fallback); macOS Korean IME fixes pending (#163, #164) | no | partial | 3–5 |
 | Vietnamese | vi | 2,448 entries; every key of the reference catalogs (#1434); 98% of extracted, ~95% of visible | most | Latin ✅ | no | partial | 0–1 (review) |
 
-Other shipped languages: **16** — Traditional Chinese (`zh-hant`), Ukrainian (`uk`), Serbian
-Cyrillic and Latin (`sr`, `sr-latn`, #250), Estonian (`et`), Turkish (`tr`), Russian (`ru`), Italian (`it`, #594), Polish (`pl`), Czech (`cs`), Hungarian (`hu`), French (`fr`), Bulgarian (`bg`), Vietnamese (`vi`, #1434), Swedish (`sv`, #1219) and Croatian (`hr`, #1271), all partial.
+Other included languages: **15** — Traditional Chinese (`zh-hant`), Ukrainian (`uk`), Serbian
+Cyrillic and Latin (`sr`, `sr-latn`, #250), Estonian (`et`), Turkish (`tr`), Russian (`ru`),
+Italian (`it`, #594), Polish (`pl`), Czech (`cs`), Slovak (`sk`), Hungarian (`hu`),
+Bulgarian (`bg`), Swedish (`sv`, #1219) and Croatian (`hr`, #1271),
+all partial.
+
 Swedish (`sv-SE` and `sv-FI` system locales, `{"value":"sv"}`) has 2,504 entries. Counts use
 count-neutral wording (`{words} ord`: the noun is the same in the singular and the plural). The
 catalog is an AI-assisted draft whose terminology and running app were reviewed by a native
 speaker. Swedish proofing is not included; terminology: [`localization-sv.md`](localization-sv.md).
 Croatian (`hr-HR` system locales, `{"value":"hr"}`) has 2,507 entries: every key of the reference catalog, built-in style names and the equation gallery. Counts use count-neutral wording (`Riječi: 21`) because Croatian numerals take three noun forms. The catalog was written and checked by a native speaker; Croatian proofing is a separate change.
+
+Slovak (`sk-SK` system locales, `{"value":"sk"}`) has 2,742 translated catalog entries in
+this catalog, including the About dialog's license notice. SPDX license identifiers and the
+rights-holder name remain unchanged. Native-speaker review and a running-app test are still
+pending; Slovak proofreading is not included.
+
 Estonian uses the existing fonts, follows `et-EE` system locales, and is available in Options or
 through `ui.language` with `{"value":"et"}`. Its 1,307 entries cover the existing interface catalog.
 Estonian spelling, grammar, dates and document templates are not added by the interface catalog.
@@ -198,6 +209,7 @@ WordCraft keeps 2,54 cm).
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-19 | minor | Slovak interface draft: 2,742 catalog entries including the About dialog's license notice; locale and saved-preference coverage added, native-speaker and running-app review pending |
 | 2026-10-14 | trivial | The sentence-capital rule (English, Polish, Croatian, Italian, Turkish, Portuguese) skips the first word of a list item (#1741) |
 | 2026-10-16 | minor | Indonesian proofing (#498): id-ID spelling from the installed Hunspell `id_ID` dictionary (not bundled), Czech's dictionary-driven suggestions, repeated-word (hyphenated reduplication offered) and spacing checks with Indonesian messages; Review › Language, the status bar, Set Proofing Language and File › Options › Proofing list Indonesian; estimates unchanged |
 | 2026-10-16 | trivial | Read Aloud picks a voice for the sentence's language (run tag, else script) when the default voice doesn't speak it, reads Windows text as UTF-8 |
