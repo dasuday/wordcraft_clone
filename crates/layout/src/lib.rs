@@ -1833,13 +1833,24 @@ impl NoteBox {
     }
 }
 
-/// Page borders, measured from the page edge (Word's default), so they surround the header,
-/// footer and line numbers. The first items of every printed page.
+/// Page borders, measured from the page edge (the Page Borders dialog's choice), so they
+/// surround the header, footer and line numbers, or from the text margins when the section says
+/// so (`w:offsetFrom="text"`). The first items of every printed page.
 fn page_border_rules(s: &SectionProps) -> Vec<Placed> {
     let mut v = Vec::new();
     if let Some(b) = &s.page_borders {
         let sp = |e: &Option<Border>| e.map(|x| x.space).unwrap_or(24.0);
-        let (x0, x1, y0, y1) = (sp(&b.left), s.page_w - sp(&b.right), sp(&b.top), s.page_h - sp(&b.bottom));
+        // The edges each side's space is measured inwards (page) or outwards (text) from.
+        let (x0, x1, y0, y1) = if s.page_borders_from_text {
+            (
+                (s.margin_left + s.gutter - sp(&b.left)).max(0.0),
+                (s.page_w - s.margin_right + sp(&b.right)).min(s.page_w),
+                (s.margin_top.abs() - sp(&b.top)).max(0.0),
+                (s.page_h - s.margin_bottom.abs() + sp(&b.bottom)).min(s.page_h),
+            )
+        } else {
+            (sp(&b.left), s.page_w - sp(&b.right), sp(&b.top), s.page_h - sp(&b.bottom))
+        };
         for (e, a, bb) in [(b.top, (x0, y0), (x1, y0)), (b.bottom, (x0, y1), (x1, y1)), (b.left, (x0, y0), (x0, y1)), (b.right, (x1, y0), (x1, y1))] {
             if let Some(e) = e.filter(Border::is_visible) {
                 v.push(Placed::Rule { x0: a.0, y0: a.1, x1: bb.0, y1: bb.1, border: e });
@@ -4547,8 +4558,8 @@ fn headers_footers(ctx: &mut Ctx, pages: &mut [Page], sections: &[(usize, &Secti
 }
 
 /// Mirrored margins: even pages have the inside margin (and gutter) on the right, so their
-/// header, text, notes and footer move to start at the outside margin. Page borders, measured
-/// from the page edge, stay.
+/// header, text, notes and footer move to start at the outside margin. Page borders measured
+/// from the page edge stay; those measured from the text move with it.
 fn mirror_even_pages(pages: &mut [Page], sections: &[(usize, &SectionProps)]) {
     for page in pages.iter_mut().filter(|p| p.number % 2 == 0) {
         let Some((_, s)) = sections.get(page.section) else { continue };
@@ -4556,7 +4567,7 @@ fn mirror_even_pages(pages: &mut [Page], sections: &[(usize, &SectionProps)]) {
         if dx.abs() < 0.001 || !dx.is_finite() {
             continue;
         }
-        let borders = page_border_rules(s).len();
+        let borders = if s.page_borders_from_text { 0 } else { page_border_rules(s).len() };
         for it in page.items.iter_mut().skip(borders).chain(page.header.iter_mut()).chain(page.footer.iter_mut()) {
             it.translate(dx, 0.0);
         }
