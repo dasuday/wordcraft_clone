@@ -7669,6 +7669,16 @@ fn rename_document_preserves_saved_contents_and_rejects_collisions() {
     assert!(s.run("file.rename", &json!({"name": "existing"})).is_err());
     assert_eq!(s.path.as_ref(), Some(&lower));
     assert_eq!(std::fs::read(&existing).unwrap(), b"keep these bytes");
+    // A name that already carries the extension (any case) is taken as the whole file name: it is
+    // not doubled (#2983).
+    s.run("file.rename", &json!({"name": "notes.docm"})).unwrap();
+    assert_eq!(s.path.as_ref(), Some(&lower));
+    s.run("file.rename", &json!({"name": "Notes.DOCM"})).unwrap();
+    let upper = dir.join("Notes.DOCM");
+    assert_eq!(s.path.as_ref(), Some(&upper));
+    assert_eq!(std::fs::read(&upper).unwrap(), b"original bytes");
+    let names: Vec<_> = std::fs::read_dir(&dir).unwrap().map(|e| e.unwrap().file_name()).collect();
+    assert!(names.contains(&"Notes.DOCM".into()) && !names.iter().any(|n| n.to_string_lossy().contains("DOCM.DOCM")), "{names:?}");
     std::fs::remove_dir_all(dir).unwrap();
 }
 

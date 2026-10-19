@@ -45,8 +45,13 @@ fn rename(s: &mut Session, v: &Value) -> CmdResult {
     if let Some(path) = &s.path {
         let mut destination = path.with_file_name(name);
         // The field edits the stem; retain the original format, including macro/template files.
+        // A name that already ends in that extension (any case) is the whole file name: agents and
+        // scripts pass one, and it must not be doubled (#2983).
         if let Some(ext) = path.extension() {
-            destination.set_file_name(format!("{name}.{}", ext.to_string_lossy()));
+            let ext = ext.to_string_lossy();
+            if !name.to_lowercase().ends_with(&format!(".{}", ext.to_lowercase())) {
+                destination.set_file_name(format!("{name}.{ext}"));
+            }
         }
         if destination != *path {
             #[cfg(not(target_arch = "wasm32"))]
