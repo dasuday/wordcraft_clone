@@ -9599,3 +9599,174 @@ fn empty_spacing_covers_band() {
         .collect();
     assert_eq!(heights, vec![30.0; 2], "paragraph spacing already exceeds the shared band minimum");
 }
+
+fn inline_content_row() -> crate::table::RowLayout {
+    use crate::table::{CellPart, RowLayout};
+    let mut d = Document::new();
+    let mut p = Paragraph::new();
+    p.props = ParaProps { space_before: Some(0.0), space_after: Some(0.0), widow_control: Some(false), ..Default::default() };
+    p.insert_object(
+        0,
+        InlineObject::Image {
+            media: "synthetic-inline-content".into(),
+            w: 30.0,
+            h: 30.0,
+            alt: String::new(),
+            float: Default::default(),
+            crop: [0.0; 4],
+            ole: None,
+        },
+        &Default::default(),
+    )
+    .unwrap();
+    d.body = vec![wordcraft_doc::para_block(p)];
+    let mut moved = lay(&d).pages[0].items.iter().find(|it| matches!(it, Placed::Lines { .. })).unwrap().clone();
+    let Placed::Lines { y, para, .. } = &mut moved else { panic!("lines") };
+    *y = 150.0;
+    assert_eq!(para.text_len, wordcraft_doc::para::OBJ.len_utf8(), "normal object paragraphs include their placeholder");
+    assert!(para.clusters.iter().any(|c| matches!(c.kind, para::ClKind::Object(_)) && c.adv > 0.0 && c.obj_h > 0.0));
+    let mut kept = lay(&Document::from_text("Kept")).pages[0].items.iter().find(|it| matches!(it, Placed::Lines { .. })).unwrap().clone();
+    let Placed::Lines { y, .. } = &mut kept else { panic!("lines") };
+    *y = 0.0;
+    RowLayout {
+        height: 200.0,
+        bottom: 0.0,
+        items: vec![kept, moved],
+        cells: vec![CellPart { top: 0.0, items: 0..1, end: Some(30.0) }, CellPart { top: 0.0, items: 1..2, end: Some(180.0) }],
+    }
+}
+
+#[test]
+fn inline_object_can_continue() {
+    use crate::table::split_row;
+    let row = inline_content_row();
+    assert!(split_row(&row, 100.0).is_some(), "normal model object layout already counts as content");
+    // Public ParaLayout can carry object clusters with no source text. Pin that defensive case separately.
+    for (advance, height) in [(30.0, 30.0), (0.0, 30.0), (30.0, 0.0)] {
+        let mut row = inline_content_row();
+        let Placed::Lines { para, .. } = &mut row.items[1] else { panic!("lines") };
+        let p = std::sync::Arc::make_mut(para);
+        p.text_len = 0;
+        for c in &mut p.clusters {
+            if matches!(c.kind, para::ClKind::Object(_)) {
+                c.adv = advance;
+                c.obj_h = height;
+            }
+        }
+        let expected = p.clusters.clone();
+        let (first, rest) = split_row(&row, 100.0).expect("visible inline object creates a continuation");
+        assert_eq!(first.items.len(), 1, "the other cell stays on the first page");
+        let Placed::Lines { para, y, l0, l1, .. } = &rest.items[0] else { panic!("continued lines") };
+        assert_eq!((*y, *l0, *l1), (0.0, 0, 1));
+        assert_eq!(para.clusters.len(), expected.len());
+        for (actual, original) in para.clusters.iter().zip(&expected) {
+            assert_eq!((actual.start, actual.end, actual.adv, actual.obj_h), (original.start, original.end, original.adv, original.obj_h));
+        }
+    }
+}
+
+#[test]
+fn inline_zero_marks_stay_empty() {
+    use crate::table::split_row;
+    for kind in [para::ClKind::Object(0), para::ClKind::Marker] {
+        let mut row = inline_content_row();
+        let Placed::Lines { para, .. } = &mut row.items[1] else { panic!("lines") };
+        let p = std::sync::Arc::make_mut(para);
+        p.text_len = 0;
+        for c in &mut p.clusters {
+            c.kind = kind;
+            c.adv = 0.0;
+            c.obj_h = 0.0;
+        }
+        assert!(split_row(&row, 100.0).is_none(), "zero-size marks alone do not split the row: {kind:?}");
+    }
+}
+
+#[test]
+fn inline_piece_range_is_local() {
+    use crate::table::split_row;
+    for line_range in [0..1, 1..2] {
+        let mut row = inline_content_row();
+        let Placed::Lines { para, l0, l1, .. } = &mut row.items[1] else { panic!("lines") };
+        let p = std::sync::Arc::make_mut(para);
+        p.text_len = 0;
+        let visible = p.clusters.iter().find(|c| matches!(c.kind, para::ClKind::Object(_))).unwrap().clone();
+        let mut mark = visible.clone();
+        mark.adv = 0.0;
+        mark.obj_h = 0.0;
+        p.clusters = vec![visible, mark];
+        let mut empty = p.lines[0].clone();
+        empty.c0 = 1;
+        empty.c1 = 2;
+        empty.xs = vec![0.0, 0.0];
+        if line_range.start == 0 {
+            // A visible object outside this line's cluster range does not count.
+            p.lines = vec![empty];
+        } else {
+            // A visible object on an earlier, unplaced line does not count either.
+            let mut earlier = empty.clone();
+            earlier.c0 = 0;
+            earlier.c1 = 1;
+            earlier.top = 0.0;
+            empty.top = 30.0;
+            p.lines = vec![earlier, empty];
+        }
+        *l0 = line_range.start;
+        *l1 = line_range.end;
+        assert!(split_row(&row, 100.0).is_none(), "only current piece clusters decide moved content");
+    }
+}
+
+#[test]
+fn kept_inline_empty_suffix() {
+    use crate::table::split_row;
+    for kind in [para::ClKind::Object(0), para::ClKind::Marker] {
+        let mut row = inline_content_row();
+        let Placed::Lines { para, y, l0, l1, .. } = &mut row.items[1] else { panic!("lines") };
+        let p = std::sync::Arc::make_mut(para);
+        p.text_len = 0;
+        p.rp.widow_control = false;
+        let visible = p.clusters.iter().find(|c| matches!(c.kind, para::ClKind::Object(_))).unwrap().clone();
+        let mut mark = visible.clone();
+        mark.kind = kind;
+        mark.start = visible.end;
+        mark.end = visible.end;
+        mark.adv = 0.0;
+        mark.obj_h = 0.0;
+        mark.obj_d = 0.0;
+        p.clusters = vec![visible, mark];
+        let mut kept = p.lines[0].clone();
+        kept.top = 0.0;
+        kept.height = 30.0;
+        kept.c0 = 0;
+        kept.c1 = 1;
+        kept.xs = vec![0.0, 30.0];
+        kept.end = para::LineEnd::Wrap;
+        let mut moved = kept.clone();
+        moved.top = 150.0;
+        moved.c0 = 1;
+        moved.c1 = 2;
+        moved.start = p.clusters[1].start;
+        moved.stop = p.clusters[1].end;
+        moved.xs = vec![0.0, 0.0];
+        moved.end = para::LineEnd::Para;
+        p.lines = vec![kept, moved];
+        p.height = 180.0;
+        *y = 0.0;
+        (*l0, *l1) = (0, 2);
+        assert!(crate::item_bottom(*y, p, *l0, 1).unwrap() < 100.0, "visible object line fits before cut");
+        assert!(crate::item_bottom(*y, p, *l0, 2).unwrap() > 100.0, "only the empty suffix is past cut");
+        assert!(split_row(&row, 100.0).is_none(), "kept object cannot make an empty moved suffix content: {kind:?}");
+
+        // The same geometry must continue when the moved suffix contains a visible object.
+        let Placed::Lines { para, .. } = &mut row.items[1] else { panic!("lines") };
+        let p = std::sync::Arc::make_mut(para);
+        p.clusters[1].kind = para::ClKind::Object(1);
+        p.clusters[1].obj_h = 30.0;
+        let (first, rest) = split_row(&row, 100.0).expect("a visible moved suffix is content");
+        assert_eq!(first.items.len(), 2, "both cells retain fitting lines");
+        assert!(matches!(&first.items[1], Placed::Lines { l0: 0, l1: 1, .. }));
+        assert_eq!(rest.items.len(), 1);
+        assert!(matches!(&rest.items[0], Placed::Lines { l0: 1, l1: 2, y, .. } if *y == 0.0));
+    }
+}

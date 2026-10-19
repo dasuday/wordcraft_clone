@@ -879,7 +879,8 @@ pub fn split_row(row: &RowLayout, cut: f32) -> Option<(RowLayout, RowLayout)> {
     for ((items, splits), m) in cells.iter().zip(&splits).zip(&mut moved) {
         let multiple_paras = items.iter().filter(|it| text_lines(it).is_some()).take(2).count() > 1;
         for (it, &split) in items.iter().zip(splits) {
-            let top = if let Some(r) = it.turned_bounds() {
+            let turned = it.turned_bounds();
+            let top = if let Some(r) = turned {
                 // Turned text moves as a whole, like a picture.
                 if fits(r.bottom()) {
                     kept_any = true;
@@ -912,8 +913,18 @@ pub fn split_row(row: &RowLayout, cut: f32) -> Option<(RowLayout, RowLayout)> {
                 }
             };
             if let Some(top) = top {
-                let empty_mark = matches!(it, Placed::Lines { para, .. }
+                // Turned lines move whole; ordinary lines count only the suffix past the cut.
+                let start = match it {
+                    Placed::Lines { l0, .. } if turned.is_some() => *l0,
+                    _ => split,
+                };
+                let empty_mark = matches!(it, Placed::Lines { para, l1, .. }
                 if !multiple_paras && para.text_len == 0 && para.label.is_none()
+                && !para.lines.get(start..*l1).is_some_and(|lines| lines.iter().any(|line| {
+                    para.clusters.get(line.c0..line.c1).is_some_and(|clusters| clusters.iter().any(|c| {
+                        matches!(c.kind, crate::para::ClKind::Object(_)) && (c.adv > 0.0 || c.obj_h > 0.0)
+                    }))
+                }))
                 && para.rp.borders.is_none_or(|b| {
                     ![b.top, b.bottom, b.left, b.right, b.between].into_iter().flatten().any(|b| b.is_visible())
                 }));
