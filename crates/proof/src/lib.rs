@@ -206,6 +206,13 @@ pub(crate) fn in_user_dictionary(lower: &str) -> bool {
         || ignored_words().read().unwrap_or_else(|e| e.into_inner()).contains(lower)
 }
 
+/// Is `word` in the session's Ignore All list? Unlike the user dictionary, Ignore All is an
+/// explicit choice and wins even for a Swiss word containing `ß`.
+fn in_ignored_words(word: &str) -> bool {
+    let w = word.trim_matches(|c: char| !c.is_alphanumeric()).to_lowercase();
+    ignored_words().read().unwrap_or_else(|e| e.into_inner()).contains(&w)
+}
+
 /// Words in the user dictionary.
 pub fn user_dictionary() -> Vec<String> {
     let mut v: Vec<String> = user_words().read().unwrap_or_else(|e| e.into_inner()).iter().cloned().collect();
@@ -673,6 +680,9 @@ pub fn is_correct_in_with(word: &str, lang: ProofLang, opts: &Options) -> bool {
         ProofLang::Hr => accepted_by_options(word, opts) || hr::is_correct(word),
         ProofLang::Pt => accepted_by_options(word, opts) || pt::is_correct(word),
         ProofLang::It => accepted_by_options(word, opts) || it::is_correct(word),
+        // Swiss spelling rejects `ß` even in uppercase text or a user-dictionary word. An
+        // explicit Ignore All still wins, and a missing dictionary leaves the word unmarked.
+        ProofLang::DeCh if !in_ignored_words(word) && de::has_dictionary(ProofLang::DeCh) && de::rejects_swiss_sharp_s(word) => false,
         ProofLang::De | ProofLang::DeAt | ProofLang::DeCh => accepted_by_options(word, opts) || de::is_correct(word, lang),
         ProofLang::Tr => accepted_by_options(word, opts) || tr::is_correct(word),
         ProofLang::Ru => accepted_by_options(word, opts) || ru::is_correct(word),
@@ -1348,6 +1358,24 @@ mod tests {
         assert!(!is_correct_for("Jänner", Some("de-DE")));
         assert!(check_grammar_in("dies ist ist ein test", ProofLang::DeCh).is_empty());
         assert!(check_text("Strasse gross Straße groß", &[(0..14, ProofLang::DeCh), (14..27, ProofLang::De)]).is_empty());
+    }
+
+    #[test]
+    fn swiss_sharp_s_beats_ignore_options_but_not_ignore_all() {
+        de::test_dict::install();
+        // A user-dictionary word cannot make `ß` Swiss; the German region still accepts it.
+        let user = "Zqxstraße";
+        add_word(user);
+        assert!(!is_correct_in(user, ProofLang::DeCh), "the user dictionary cannot make ß Swiss");
+        assert!(is_correct_in(user, ProofLang::De));
+        remove_word(user);
+        // Ignore words in UPPERCASE is language-independent, but not for Swiss `ß`.
+        assert!(!is_correct_in("ZQXSTRAẞE", ProofLang::DeCh), "uppercase text cannot make ß Swiss");
+        // Ignore All is explicit and wins even over the Swiss rule.
+        ignore_word("Zqxstraßeignored");
+        assert!(is_correct_in("Zqxstraßeignored", ProofLang::DeCh), "Ignore All still wins");
+        // A missing dictionary leaves Swiss text unmarked, as before.
+        assert!(de::is_correct_with(&crate::affix::AffixDict::default(), "Straße", ProofLang::DeCh));
     }
 
     /// #100: runs in a language without a dictionary are never flagged; English still is.

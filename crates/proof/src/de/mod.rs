@@ -83,13 +83,19 @@ pub fn is_correct(word: &str, lang: ProofLang) -> bool {
     is_correct_with(&dictionary(lang), word, lang)
 }
 
+/// Whether the Swiss standard rejects this word because it contains `ß`. The language-independent
+/// ignore options and the user dictionary must not override it; an explicit Ignore All may.
+pub fn rejects_swiss_sharp_s(word: &str) -> bool {
+    word.trim_matches(|c: char| !c.is_alphanumeric()).contains(['ß', 'ẞ'])
+}
+
 /// Check against a supplied regional dictionary, retaining noun capitalization and KEEPCASE.
 pub fn is_correct_with(d: &AffixDict, word: &str, lang: ProofLang) -> bool {
     if d.is_empty() {
         return true;
     }
     let w = word.trim_matches(|c: char| !c.is_alphanumeric());
-    if lang == ProofLang::DeCh && w.contains(['ß', 'ẞ']) {
+    if lang == ProofLang::DeCh && rejects_swiss_sharp_s(w) {
         return false;
     }
     if w.chars().count() <= 1 || w.chars().any(|c| c.is_ascii_digit()) || !w.chars().any(|c| c.is_alphabetic() && c < '\u{0250}') {
