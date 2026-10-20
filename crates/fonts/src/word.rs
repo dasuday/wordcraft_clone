@@ -127,6 +127,18 @@ fn substitutes(family: &str) -> &'static [&'static str] {
     }
 }
 
+/// Ascent and descent (em) of Word's symbol fonts, which aren't open fonts. Their characters are
+/// drawn from other faces (`wordcraft_doc::symbol_fonts`), but Word sizes a line by the font
+/// itself: a Symbol bullet makes its line taller than the text alone. The values are those Word's
+/// PDFs give the fonts (`/Ascent`, `/Descent`).
+pub fn symbol_font_metrics(family: &str) -> Option<(f64, f64)> {
+    match family.trim().to_ascii_lowercase().as_str() {
+        "symbol" | "symbol (pcl6)" => Some((1.005, 0.216)),
+        "wingdings" => Some((0.899, 0.205)),
+        _ => None,
+    }
+}
+
 /// The font a Windows 3.1-era charset name stands for: `Times New Roman Cyr`, `Arial CE`,
 /// `Courier New Baltic`, `Arial (Hebrew)`… are aliases Windows keeps (its FontSubstitutes) for
 /// the font itself, and old Russian and Central European documents name them. Other names are
@@ -448,6 +460,12 @@ mod tests {
         assert_eq!(charset_base_family("Cyr"), "Cyr");
         assert_eq!(charset_base_family("Calibri"), "Calibri");
         assert_eq!(substitutes(charset_base_family("Times New Roman Cyr")), substitutes("Times New Roman"));
+    }
+
+    #[test]
+    fn pcl6_symbol_has_symbols_line_metrics() {
+        assert_eq!(symbol_font_metrics("Symbol (PCL6)"), symbol_font_metrics("Symbol"));
+        assert_eq!(symbol_font_metrics("Arial"), None);
     }
 
     #[test]
