@@ -1,0 +1,2726 @@
+# Uzbek (uz, Latin script) interface catalog. Columns, separated by a TAB:
+#   context <TAB> English source <TAB> translation
+#   context    usually empty. `preview` words sample text inside rendered previews; `template` names
+#              a document template where the same English word means something else (Letter).
+#   source     the English text exactly as in the code (tl!(...), ribbon labels, command labels)
+#   escapes    \n  \t  \\  inside a column. `{name}` placeholders must appear in both columns, and a
+#              trailing "…" in one needs one in the other.
+#   Lines starting with # and blank lines are ignored. A missing entry shows in English.
+#
+# Clean room: every entry was written from the plain meaning of the English label in ordinary
+# computing vocabulary. No Microsoft Word (or other product) localisation, string table or
+# translated UI was consulted or copied; add entries the same way.
+# Product, format and technology names (WordCraft, PDF, Markdown, MCP …) stay in Latin letters.
+# Orthography: the 1995 Latin alphabet as currently written. Oʻ/gʻ use U+02BB (ʻ) and the tutuq
+# belgisi U+02BC (ʼ), never an ASCII apostrophe. Labels are in sentence case.
+# Counts: Uzbek nouns stay singular after numerals, so `{words} ta soʻz` fits every number.
+
+	% of all commits	barcha kommitlarning %
+	(All)	(Hammasi)
+	(Custom)	(Maxsus)
+	(no style)	(uslubsiz)
+	(no suggestions)	(takliflar yoʻq)
+	(none)	(yoʻq)
+	(normal text)	(oddiy matn)
+	(not matched)	(moslanmagan)
+	(picture or object)	(rasm yoki obyekt)
+	0 or More Characters	0 yoki undan ortiq belgi
+	1. Formatting restrictions	1. Formatlash cheklovlari
+	1.5 Line Spacing	1,5 qator oraligʻi
+	1/4 Em Space	1/4 Em boʻshliq
+	1×2 Empty Matrix	1×2 boʻsh matritsa
+	1×3 Empty Matrix	1×3 boʻsh matritsa
+	2. Editing restrictions	2. Tahrirlash cheklovlari
+	2×1 Empty Matrix	2×1 boʻsh matritsa
+	2×2 Determinant	2×2 determinant
+	2×2 Empty Matrix	2×2 boʻsh matritsa
+	2×2 Identity Matrix	2×2 birlik matritsa
+	2×2 Identity Matrix (sparse)	2×2 birlik matritsa (siyrak)
+	2×2 Matrix in Brackets	Kvadrat qavslardagi 2×2 matritsa
+	2×2 Matrix in Double Bars	Qoʻsh vertikal chiziqlar ichidagi 2×2 matritsa
+	2×2 Matrix in Parentheses	Oddiy qavslardagi 2×2 matritsa
+	2×3 Empty Matrix	2×3 boʻsh matritsa
+	3-D	Hajmli
+	3. Start enforcement	3. Himoyani yoqish
+	3×1 Empty Matrix	3×1 boʻsh matritsa
+	3×2 Empty Matrix	3×2 boʻsh matritsa
+	3×3 Empty Matrix	3×3 boʻsh matritsa
+	3×3 Identity Matrix	3×3 birlik matritsa
+	3×3 Identity Matrix (sparse)	3×3 birlik matritsa (siyrak)
+	<< Less	<< Kamroq
+	<< Remove	<< Olib tashlash
+	A file dialog is already open.	Fayl tanlash oynasi allaqachon ochiq.
+	A free, open-source word processor written from scratch in Rust.\nPart of the Crafting Apps from the ArtCraft team.	Rust tilida noldan yozilgan bepul, ochiq kodli matn protsessori.\nArtCraft jamoasining Crafting Apps toʻplamiga kiradi.
+	A mail merge field	Pochta birlashmasi maydoni
+	A numbered sequence (figures, tables…)	Raqamlangan ketma-ketlik (rasmlar, jadvallar…)
+	A password is required to open this document.	Bu hujjatni ochish uchun parol kerak.
+	A table of contents	Mundarija
+	A xor B	A xor B
+	A, B, C, …	A, B, C, …
+	APA	APA
+	ASAP	IMKON QADAR TEZ
+	AaBbCcDd	AaBbCcDd
+	AaBbYyZz	AaBbYyZz
+	About	Dastur haqida
+	About WordCraft	WordCraft haqida
+	Above Chart	Diagramma ustida
+	Above the item	Element ustida
+	Absolute value cases	Modulning shartli taʼrifi
+	Accent	Diakritik belgi
+	Accent Gradient	Aksent gradiyenti
+	Accent with Reflection	Aksent va aks
+	Accent {n}	Aksent {n}
+	Accents	Diakritik belgilar
+	Accept	Qabul qilish
+	Accept All Changes	Barcha oʻzgarishlarni qabul qilish
+	Accept This Change	Bu oʻzgarishni qabul qilish
+	Accessed on	Murojaat sanasi
+	Accessibility	Maxsus imkoniyatlar
+	Accessibility Pane	Maxsus imkoniyatlar paneli
+	Acute	Akut
+	Add	Qoʻshish
+	Add >>	Qoʻshish >>
+	Add Chart Element	Diagramma elementi qoʻshish
+	Add Field	Maydon qoʻshish
+	Add Font…	Shrift qoʻshish…
+	Add New Source…	Yangi manba qoʻshish…
+	Add Object to Selection	Obyektni belgilanganlarga qoʻshish
+	Add Pen	Qalam qoʻshish
+	Add Row	Qator qoʻshish
+	Add Series	Maʼlumotlar qatori qoʻshish
+	Add Shape	Shakl qoʻshish
+	Add Space Before Paragraph	Xatboshidan oldin interval qoʻshish
+	Add Text	Matn qoʻshish
+	Add a Table	Jadval qoʻshish
+	Add a comment	Izoh qoʻshish
+	Add at least one field.	Kamida bitta maydon qoʻshing.
+	Add line numbering	Qatorlarni raqamlash
+	Add space between Asian and Latin text	Osiyo va lotin matni orasiga boʻshliq qoʻshish
+	Add space between Asian text and numbers	Osiyo matni va raqamlar orasiga boʻshliq qoʻshish
+	Add tab stop at:	Tabulyatsiya pozitsiyasini qoʻshish:
+	Add the chapter number	Bob raqamini qoʻshish
+	Add to Dictionary	Lugʻatga qoʻshish
+	Add to Document	Hujjatga qoʻshish
+	Add to Quick Access Toolbar	Tezkor kirish paneliga qoʻshish
+	Add to Style Gallery	Uslublar toʻplamiga qoʻshish
+	Add/Edit\nBibliography	Bibliografiya\nqoʻshish/tahrirlash
+	Add/Edit\nCitation	Iqtibos\nqoʻshish/tahrirlash
+	Add\nNote	Eslatma\nqoʻshish
+	Add\nPen	Qalam\nqoʻshish
+	Add\nShape	Shakl\nqoʻshish
+	Added Fonts	Qoʻshilgan shriftlar
+	Address	Manzil
+	Address Block	Manzil bloki
+	Address labels	Manzil yorliqlari
+	Address:	Manzil:
+	Address\nBlock	Manzil\nbloki
+	Adjust	Sozlash
+	Advanced	Qoʻshimcha
+	Advanced Find	Kengaytirilgan qidiruv
+	Advanced Find…	Kengaytirilgan qidiruv…
+	After:	Keyin:
+	Agents	Agentlar
+	Align	Tekislash
+	Align Bottom Center	Pastki markazga tekislash
+	Align Bottom Left	Pastki chapga tekislash
+	Align Bottom Right	Pastki oʻngga tekislash
+	Align Center	Markazga tekislash
+	Align Center Left	Oʻrtada chapga tekislash
+	Align Center Right	Oʻrtada oʻngga tekislash
+	Align Left	Chapga tekislash
+	Align Right	Oʻngga tekislash
+	Align Text	Matnni tekislash
+	Align Top Center	Yuqori markazga tekislash
+	Align Top Left	Yuqori chapga tekislash
+	Align Top Right	Yuqori oʻngga tekislash
+	Aligned at:	Tekislash joyi:
+	Alignment	Tekislash
+	Alignment:	Tekislash:
+	All	Hammasi
+	All - Linear	Hammasi – chiziqli
+	All - Professional	Hammasi – professional
+	All Borders	Barcha chegaralar
+	All Caps	Hammasi bosh harflar
+	All Commands	Barcha buyruqlar
+	All Levels	Barcha darajalar
+	All Markup	Barcha belgilar
+	All caps	Hammasi bosh harflar
+	All files	Barcha fayllar
+	All pages	Barcha sahifalar
+	All pages in the range	Diapazondagi barcha sahifalar
+	All symbol sets	Barcha simvol toʻplamlari
+	Allow Latin text to wrap in the middle of a word	Lotin matnini soʻz oʻrtasida koʻchirishga ruxsat berish
+	Allow hanging punctuation	Osilgan tinish belgilariga ruxsat berish
+	Allow line breaks	Qator uzilishlariga ruxsat berish
+	Allow row to break across pages	Qatorni keyingi sahifaga koʻchirishga ruxsat berish
+	Alphabetical	Alifbo boʻyicha
+	Alt Text	Muqobil matn
+	Alt Text Pane	Muqobil matn paneli
+	Alt text	Muqobil matn
+	Alt:	Muqobil matn:
+	Alt\nText	Muqobil\nmatn
+	Angle Brackets	Burchak qavslar
+	Angle Brackets with Separator	Ajratgichli burchak qavslar
+	Angle Brackets with Two Separators	Ikki ajratgichli burchak qavslar
+	Animate the caret (it glides and fades)	Kursorni animatsiyalash (silliq siljiydi va soʻnadi)
+	Animation	Animatsiya
+	Animation effects:	Animatsiya effektlari:
+	Annotation Reference	Izoh belgisi
+	Annotation Subject	Izoh mavzusi
+	Annotation Text	Izoh matni
+	Another file	Boshqa fayl
+	Any Character	Istalgan belgi
+	Any Digit	Istalgan raqam
+	Any Letter	Istalgan harf
+	Anyone can open this document. Encrypt it with a password to keep it private.	Bu hujjatni istalgan kishi ocha oladi. Uni maxfiy saqlash uchun parol bilan shifrlang.
+	Anyone who opens the document will need this password.	Hujjatni ochadigan har bir kishiga bu parol kerak boʻladi.
+	Apply	Qoʻllash
+	Apply Asian line-breaking rules (kinsoku)	Osiyo qator koʻchirish qoidalarini qoʻllash (kinsoku)
+	Apply Character Style	Belgi uslubini qoʻllash
+	Apply Style	Uslubni qoʻllash
+	Apply Styles	Uslublarni qoʻllash
+	Apply as you type	Yozish jarayonida qoʻllash
+	Apply formatting to:	Formatlashni qoʻllash:
+	Apply to:	Qoʻllash:
+	Arabic	Arabcha
+	Arch Down	Pastga yoy
+	Arch Up	Yuqoriga yoy
+	Area	Maydonli
+	Arrange	Tartiblash
+	Arrange\nAll	Hammasini\ntartiblash
+	Arrow	Strelka
+	Arrows	Strelkalar
+	Artistic Effects	Badiiy effektlar
+	As Recommended	Tavsiyaga koʻra
+	As you type	Yozish jarayonida
+	Asian Typography	Osiyo tipografiyasi
+	Asian text font:	Osiyo matni shrifti:
+	Assign	Tayinlash
+	At least	Kamida
+	At least {n}	Kamida {n}
+	Atelier	Atelye
+	Atmosphere	Atmosfera
+	Attach Template	Shablonni biriktirish
+	Attach…	Biriktirish…
+	Author	Muallif
+	Auto	Avto
+	AutoCorrect	Avtotuzatish
+	AutoCorrect Options	Avtotuzatish parametrlari
+	AutoFit	Avtomoslash
+	AutoFit Column by Double-Clicking	Ustunni ikki marta bosish bilan avtomoslash
+	AutoFit Contents	Tarkibga qarab avtomoslash
+	AutoFit Window	Oyna kengligiga avtomoslash
+	AutoFormat As You Type	Yozish jarayonida avtoformat
+	AutoSave	Avtosaqlash
+	AutoSave documents you have saved in WordCraft	WordCraft dasturida saqlangan hujjatlarni avtosaqlash
+	AutoSave failed: {error}. Save the document to turn AutoSave back on.	Avtosaqlashda xato: {error}. Avtosaqlashni qayta yoqish uchun hujjatni saqlang.
+	AutoSave isn't available in the browser: it can't write to your files. Save downloads a copy.	Brauzerda avtosaqlash mavjud emas: u fayllaringizga yoza olmaydi. “Saqlash” nusxani yuklab oladi.
+	AutoSave only keeps .docx, .odt and .rtf files; {name} can't keep all formatting. Save as .docx to turn on AutoSave.	Avtosaqlash faqat .docx, .odt va .rtf fayllari bilan ishlaydi; {name} barcha formatlashni saqlay olmaydi. Avtosaqlashni yoqish uchun .docx sifatida saqlang.
+	AutoSave saves every change to the file (needs a saved document)	Avtosaqlash har bir oʻzgarishni faylga yozadi (hujjat saqlangan boʻlishi kerak)
+	AutoSave writes your changes to the file a moment after you stop typing.	Avtosaqlash yozishni toʻxtatganingizdan bir oz oʻtib oʻzgarishlarni faylga yozadi.
+	AutoText	Avtomatn
+	Automatic	Avtomatik
+	Automatic ({language})	Avtomatik ({language})
+	Automatic ({region})	Avtomatik ({region})
+	Automatic Table 1 (3 levels)	Avtomatik mundarija 1 (3 daraja)
+	Automatic Table 2 (2 levels)	Avtomatik mundarija 2 (2 daraja)
+	Automatic bulleted lists	Avtomatik markerli roʻyxatlar
+	Automatic follows your system's language. Menus and commands change; your documents don't.	“Avtomatik” tizim tilidan foydalanadi. Menyular va buyruqlar oʻzgaradi, hujjatlaringiz esa oʻzgarmaydi.
+	Automatic numbered lists	Avtomatik raqamli roʻyxatlar
+	Automatically Update Document Styles	Hujjat uslublarini avtomatik yangilash
+	Automatically hyphenate document	Hujjatda boʻgʻinlarni avtomatik koʻchirish
+	Automatically update document styles	Hujjat uslublarini avtomatik yangilash
+	Backspace	Backspace
+	Balloons	Izoh pufakchalari
+	Banded Columns	Navbatlashgan ustunlar
+	Banded Rows	Navbatlashgan qatorlar
+	Bar	Chiziq
+	Base text:	Asosiy matn:
+	Based on: {style}	Asosi: {style}
+	Baseline Dots	Asos chizigʻidagi koʻp nuqta
+	Basic Cycle	Oddiy sikl
+	Basic List	Oddiy roʻyxat
+	Basic Math	Asosiy matematik belgilar
+	Basic Matrix	Oddiy matritsa
+	Basic Process	Oddiy jarayon
+	Basic Pyramid	Oddiy piramida
+	Basic Radial	Oddiy radial sxema
+	Basic Venn	Oddiy Venn diagrammasi
+	Bayes' rule	Bayes formulasi
+	Before:	Oldin:
+	Beginning of Word	Soʻz boshi
+	Behind Text	Matn ortida
+	Below text	Matn ostida
+	Below the item	Element ostida
+	Between	Xatboshilar orasida
+	Bibliography	Bibliografiya
+	Binary assets added	Ikkilik resurslar qoʻshildi
+	Binary assets removed	Ikkilik resurslar olib tashlandi
+	Binomial Coefficient	Binomial koeffitsiyent
+	Binomial Coefficient (angle)	Binomial koeffitsiyent (burchak qavslar)
+	Binomial Coefficient with Angle Brackets	Burchak qavslardagi binomial koeffitsiyent
+	Binomial expansion of (x+a)ⁿ	(x+a)ⁿ binomial yoyilmasi
+	Blank	Boʻsh
+	Blank (Three Columns)	Boʻsh (uch ustun)
+	Blank Page	Boʻsh sahifa
+	Blank document	Boʻsh hujjat
+	Block\nAuthors	Mualliflarni\nbloklash
+	Blue:	Koʻk:
+	Body Text	Asosiy matn
+	Body text in a short paragraph to show spacing.	Intervallarni koʻrsatish uchun qisqa xatboshidagi asosiy matn.
+	Bold	Qalin
+	Book	Kitob
+	Book Title	Kitob nomi
+	Book title	Kitob nomi
+	Bookmark	Xatchoʻp
+	Bookmark name:	Xatchoʻp nomi:
+	Border Painter	Chegara moʻyqalami
+	Border lines	Chegara chiziqlari
+	Border\nPainter	Chegara\nmoʻyqalami
+	Borders	Chegaralar
+	Borders and Shading	Chegaralar va fon rangi
+	Borders and Shading…	Chegaralar va fon rangi…
+	Both Sides	Ikki tomondan
+	Bottom	Pastki
+	Bottom Border	Pastki chegara
+	Bottom Margin	Pastki hoshiya
+	Bottom of Page	Sahifa pastida
+	Bottom:	Pastki:
+	Box	Ramka
+	Boxed Formula	Ramkadagi formula
+	Boxed Formula (example)	Ramkadagi formula (namuna)
+	Boxed Formulas	Ramkadagi formulalar
+	Braces	Figurali qavslar
+	Braces with Separator	Ajratgichli figurali qavslar
+	Bracket	Qavs
+	Brackets	Kvadrat qavslar
+	Brackets with Separators	Ajratgichli qavslar
+	Break Link	Aloqani uzish
+	Breaks	Uzilishlar
+	Breve	Breve
+	Bring Forward	Oldinga chiqarish
+	Browse in WordCraft…	WordCraft ichida koʻrib chiqish…
+	Browse…	Koʻrib chiqish…
+	Building Block Gallery Content Control	Kontent boshqaruv elementi: standart bloklar toʻplami
+	Built-In	Oʻrnatilgan
+	Built-in style	Oʻrnatilgan uslub
+	Built-in styles can't be deleted.	Oʻrnatilgan uslublarni oʻchirib boʻlmaydi.
+	Bullet	Marker
+	Bullet Library	Markerlar kutubxonasi
+	Bullets	Markerlar
+	By author	Muallif boʻyicha
+	CONFIDENTIAL	MAXFIY
+	Calendar	Taqvim
+	Can't be deleted	Oʻchirib boʻlmaydi
+	Cancel	Bekor qilish
+	Canvas Member	Chizish maydoni elementi
+	Capitalize Each Word	Har Bir Soʻz Bosh Harfdan
+	Capitalize first letter of sentences	Gaplarning birinchi harfini bosh harf qilish
+	Capitalize first letter of table cells	Jadval kataklarining birinchi harfini bosh harf qilish
+	Capitalize names of days	Kun nomlarini bosh harf bilan yozish
+	Capitalize the first word of a sentence	Gapning birinchi soʻzini bosh harf bilan yozish
+	Caption	Taglavha
+	Caption Numbering	Taglavhalarni raqamlash
+	Caption text	Taglavha matni
+	Caption:	Taglavha:
+	Captions	Taglavhalar
+	Caret Character	Karet belgisi
+	Case changes	Registr oʻzgarishlari
+	Cases (Three Conditions)	Shartlar tizimi (uchta shart)
+	Cases (Two Conditions)	Shartlar tizimi (ikkita shart)
+	Cases and Stacks	Tizimlar va steklar
+	Categories	Toifalar
+	Categories:	Toifalar:
+	Category	Toifa
+	Category {n}	Toifa {n}
+	Ceiling	Yuqoriga yaxlitlash
+	Cell	Katak
+	Cell Margins	Katak hoshiyalari
+	Cell Size	Katak oʻlchami
+	Cell\nMargins	Katak\nhoshiyalari
+	Center	Markazga
+	Centered	Markazlangan
+	Centered as Group	Guruh sifatida markazlangan
+	Centimeters	Santimetrlar
+	Change	Oʻzgartirish
+	Change Case	Registrni oʻzgartirish
+	Change Chart Type	Diagramma turini oʻzgartirish
+	Change Colors	Ranglarni oʻzgartirish
+	Change Layout	Maketni oʻzgartirish
+	Change List Level	Roʻyxat darajasini oʻzgartirish
+	Change Password…	Parolni oʻzgartirish…
+	Change Picture	Rasmni almashtirish
+	Change Picture…	Rasmni almashtirish…
+	Change Shape	Shaklni oʻzgartirish
+	Change Structure	Tuzilmani oʻzgartirish
+	Change in y over change in x	y orttirmasining x orttirmasiga nisbati
+	Change to Display	Alohida qatorda koʻrsatish
+	Change to Inline	Qator ichida koʻrsatish
+	Change to Level 1	1-darajaga oʻtkazish
+	Change to Level 2	2-darajaga oʻtkazish
+	Change to Level 3	3-darajaga oʻtkazish
+	Change to Level 4	4-darajaga oʻtkazish
+	Change to Level 5	5-darajaga oʻtkazish
+	Change to Level 6	6-darajaga oʻtkazish
+	Change to Level 7	7-darajaga oʻtkazish
+	Change to Level 8	8-darajaga oʻtkazish
+	Change to Level 9	9-darajaga oʻtkazish
+	Change\nChart Type	Diagramma\nturini oʻzgartirish
+	Change\nColors	Ranglarni\noʻzgartirish
+	Changed lines:	Oʻzgargan qatorlar:
+	Changes	Oʻzgarishlar
+	Chapter in a book	Kitob bobi
+	Chapters begin at:	Boblar quyidagidan boshlanadi:
+	Character	Belgi
+	Character Border	Belgilar chegarasi
+	Character Position	Belgilar joylashuvi
+	Character Scale	Belgilar masshtabi
+	Character Shading	Belgilar fon rangi
+	Character Spacing	Belgilar oraligʻi
+	Character code:	Belgi kodi:
+	Character in Range	Diapazondagi belgi
+	Character level	Belgilar darajasida
+	Character spacing	Belgilar oraligʻi
+	Character style	Belgilar uslubi
+	Characters	Belgilar
+	Characters (no spaces)	Belgilar (boʻshliqlarsiz)
+	Characters (with spaces)	Belgilar (boʻshliqlar bilan)
+	Characters per line:	Qatordagi belgilar soni:
+	Chart	Diagramma
+	Chart Design	Diagramma dizayni
+	Chart Layouts	Diagramma maketlari
+	Chart Title	Diagramma nomi
+	Check	Tasdiq belgisi
+	Check Accessibility	Maxsus imkoniyatlarni tekshirish
+	Check Box Content Control	Tarkibni boshqarish elementi: belgilash katakchasi
+	Check Compatibility	Moslikni tekshirish
+	Check Spelling as You Type	Yozish jarayonida imloni tekshirish
+	Check for Errors	Xatolarni tekshirish
+	Check spelling as you type	Yozish jarayonida imloni tekshirish
+	Check\nAccessibility	Maxsus imkoniyatlarni\ntekshirish
+	Checked styles are allowed:	Belgilangan uslublarga ruxsat beriladi:
+	Checked symbol	Belgilangan holat simvoli
+	Chevron Down	Pastga shevron
+	Chevron Up	Yuqoriga shevron
+	Chicago	Chicago
+	Chinese (Simplified)	Xitoy (soddalashtirilgan)
+	Chinese (Traditional)	Xitoy (anʼanaviy)
+	Choose List Item	Roʻyxat elementini tanlash
+	Choose a command	Buyruqni tanlang
+	Choose a shortcut	Tezkor tugmani tanlang
+	Choose the sheet that holds the recipients.	Qabul qiluvchilar joylashgan varaqni tanlang.
+	Circle	Doira
+	Circle area from its radius	Radius boʻyicha doira yuzi
+	Circled Dot	Doiradagi nuqta
+	Circled Plus	Doiradagi plyus
+	Circled Times	Doiradagi koʻpaytirish
+	Citation Style	Iqtibos uslubi
+	Citations	Iqtiboslar
+	Citations & Bibliography	Iqtiboslar va bibliografiya
+	City	Shahar
+	Clear	Tozalash
+	Clear All	Hammasini tozalash
+	Clear All Formatting	Barcha formatlashni tozalash
+	Clear Character Formatting	Belgilar formatlashini tozalash
+	Clear Character Style	Belgilar uslubini tozalash
+	Clear Formatting Level	Formatlash darajasini tozalash
+	Clear Paragraph Formatting	Xatboshi formatlashini tozalash
+	Click a border between two cells to merge them. Esc stops.	Ikki katakni birlashtirish uchun ular orasidagi chegarani bosing. Esc – toʻxtatish.
+	Click an item to paste it.	Joylash uchun elementni bosing.
+	Click level to modify:	Oʻzgartirish uchun darajani bosing:
+	Click the empty text box the text should continue in (Esc cancels)	Matn davom etishi kerak boʻlgan boʻsh matn maydonini bosing (Esc – bekor qilish)
+	Click to switch back to inserting	Qoʻshish rejimiga qaytish uchun bosing
+	Clipboard	Almashish buferi
+	Clipboard Contents	Almashish buferi tarkibi
+	Clipboard Items	Almashish buferi elementlari
+	Clipboard Pane	Almashish buferi paneli
+	Close	Yopish
+	Close Equation	Tenglamani yopish
+	Close Header and Footer	Kolontitullarni yopish
+	Close Outline View	Struktura rejimini yopish
+	Close Outline\nView	Struktura\nrejimini yopish
+	Clustered Bar	Guruhlangan chiziqli diagramma
+	Clustered Column	Guruhlangan ustunli diagramma
+	Col #:	Ustun №:
+	Collapse	Yigʻish
+	Collapse Selection	Belgilangan qismni yigʻish
+	Collate copies	Nusxalarni toʻplamlarga ajratish
+	Collect entries from:	Yozuvlarni quyidagidan yigʻish:
+	Colon Equal	Ikki nuqta-teng
+	Color	Rang
+	Color model:	Rang modeli:
+	Color only	Faqat rang
+	Color:	Rang:
+	Color: {color}	Rang: {color}
+	Colorful	Rang-barang
+	Colors	Ranglar
+	Colors:	Ranglar:
+	Column	Ustun
+	Column Break	Ustun uzilishi
+	Column Selection	Ustunni belgilash
+	Column width	Ustun kengligi
+	Column:	Ustun:
+	Columns	Ustunlar
+	Columns:	Ustunlar:
+	Combine	Birlashtirish
+	Combine Documents	Hujjatlarni birlashtirish
+	Combo Box Content Control	Tarkibni boshqarish elementi: kombinatsiyalangan roʻyxat
+	Commands	Buyruqlar
+	Commands:	Buyruqlar:
+	Comment	Izoh
+	Comments	Izohlar
+	Comments Pane	Izohlar paneli
+	Comments beside each page and tracked changes in PDFs, prints and images; a comment list at the end of web pages, Markdown and text.	PDF, chop etish va rasmlarda har bir sahifa yonida izohlar va kuzatilgan oʻzgarishlar; veb-sahifalar, Markdown va matn oxirida izohlar roʻyxati.
+	Commits	Kommitlar
+	Common Accent Objects	Koʻp ishlatiladigan diakritik obyektlar
+	Common Brackets	Koʻp ishlatiladigan qavslar
+	Common Fractions	Koʻp ishlatiladigan kasrlar
+	Common Functions	Koʻp ishlatiladigan funksiyalar
+	Common Large Operators	Koʻp ishlatiladigan katta operatorlar
+	Common Operator Structures	Koʻp ishlatiladigan operator tuzilmalari
+	Common Operators	Koʻp ishlatiladigan operatorlar
+	Common Radicals	Koʻp ishlatiladigan radikallar
+	Common Subscripts and Superscripts	Koʻp ishlatiladigan pastki va yuqori indekslar
+	Communication	Aloqa
+	Community\nDiscord	Hamjamiyat\nDiscord
+	Compact	Ixcham
+	Company	Kompaniya
+	Compare	Solishtirish
+	Compare Documents	Hujjatlarni solishtirish
+	Compared: {changes} changes	Solishtirildi: {changes} ta oʻzgarish
+	Comparing with another file needs the desktop app.	Boshqa fayl bilan solishtirish uchun ish stoli ilovasi kerak.
+	Comparison settings	Solishtirish sozlamalari
+	Compress Pictures	Rasmlarni siqish
+	Compress punctuation at the start of a line	Qator boshidagi tinish belgilarini siqish
+	Conference	Konferensiya
+	Conference paper	Konferensiya maqolasi
+	Confirm password:	Parolni tasdiqlang:
+	Connect Shapes	Shakllarni ulash
+	Container Title	Konteyner nomi
+	Content Control Properties	Tarkibni boshqarish elementi xususiyatlari
+	Content Control at Selection	Belgilangan joydagi tarkibni boshqarish elementi
+	Contents can't be edited	Tarkibni tahrirlab boʻlmaydi
+	Context	Kontekst
+	Continuous	Uzluksiz
+	Continuous numbering	Uzluksiz raqamlash
+	Contour Integral	Kontur integrali
+	Contour Integral with Limits	Chegaralari bilan kontur integrali
+	Contour Integral with Stacked Limits	Ustma-ust chegarali kontur integrali
+	Contour Integrals	Kontur integrallari
+	Contributors	Hissa qoʻshganlar
+	Controls	Boshqaruv elementlari
+	Conversions	Konvertatsiyalar
+	Convert	Aylantirish
+	Convert Notes	Izohlarni aylantirish
+	Convert Text to Table	Matnni jadvalga aylantirish
+	Convert Text to Table…	Matnni jadvalga aylantirish…
+	Convert between built-up and linear form	Professional va chiziqli koʻrinish oʻrtasida almashtirish
+	Convert to Shapes	Shakllarga aylantirish
+	Convert to Text	Matnga aylantirish
+	Copies	Nusxalar
+	Coproduct	Qoʻshma koʻpaytma
+	Coproduct with Limits	Chegaralari bilan qoʻshma koʻpaytma
+	Coproduct with Lower Limit	Quyi chegarali qoʻshma koʻpaytma
+	Coproduct with Subscript-Superscript Limits	Indekslardagi chegaralar bilan qoʻshma koʻpaytma
+	Copy	Nusxalash
+	Copy Formatting	Formatlashni nusxalash
+	Copy Styles	Uslublarni nusxalash
+	Copy of the text a bookmark marks	Xatchoʻp belgilagan matn nusxasi
+	Copyright	Mualliflik huquqi belgisi
+	Copyright Sign	Mualliflik huquqi belgisi
+	Correct TWo INitial CApitals	Soʻz boshidagi IKki BOsh harfni tuzatish
+	Correct accidental usage of cAPS LOCK key	cAPS LOCK tugmasining tasodifiy bosilishini tuzatish
+	Corrections	Tuzatishlar
+	Cosecant Function	Kosekans funksiyasi
+	Cosine 2x	Kosinus 2x
+	Cosine Function	Kosinus funksiyasi
+	Cotangent Function	Kotangens funksiyasi
+	Couldn't download {name}: {error}	{name} yuklab olinmadi: {error}
+	Couldn't make WordCraft the default: {error}	WordCraft standart ilova qilib belgilanmadi: {error}
+	Couldn't open {path}: {error}	{path} ochilmadi: {error}
+	Count by:	Qadam:
+	Count words in text boxes and notes	Matn maydonlari va izohlardagi soʻzlarni ham sanash
+	Country	Mamlakat
+	Courtesy Title	Murojaat shakli
+	Cover Page	Titul sahifa
+	Craft	Craft
+	Create	Yaratish
+	Create Graphic	Grafik yaratish
+	Create Link	Bogʻlash
+	Create New Style	Yangi uslub yaratish
+	Create Source	Manba yaratish
+	Create a Style	Uslub yaratish
+	Create an interactive outline of your document.\n\nIt's a great way to keep track of where you are or quickly move your content around.\n\nTo get started, go to the Home tab and apply Heading styles to the headings in your document.	Hujjatingizning interaktiv strukturasini yarating.\n\nBu qayerda turganingizni kuzatish yoki kontentni tezda koʻchirishning ajoyib usuli.\n\nBoshlash uchun “Bosh sahifa” varagʻiga oʻting va hujjatdagi sarlavhalarga sarlavha uslublarini qoʻllang.
+	Crop	Qirqish
+	Cross-reference	Oʻzaro havola
+	Cross-reference:	Oʻzaro havola:
+	Cube Root	Kub ildiz
+	Current	Joriy
+	Current - Linear	Joriy – chiziqli koʻrinish
+	Current - Professional	Joriy – professional koʻrinish
+	Current Position	Joriy joylashuv
+	Current page	Joriy sahifa
+	Current style: {style}	Joriy uslub: {style}
+	Curved Arrow Connector	Egri strelkali ulagich
+	Curved Connector	Egri ulagich
+	Custom	Maxsus
+	Custom Margins…	Maxsus hoshiyalar…
+	Custom Table of Contents…	Maxsus mundarija…
+	Custom Watermark	Maxsus suv belgisi
+	Custom Watermark…	Maxsus suv belgisi…
+	Custom dictionary	Foydalanuvchi lugʻati
+	Custom mark:	Maxsus belgi:
+	Custom range	Maxsus diapazon
+	Customize	Moslashtirish
+	Customize Keyboard	Klaviaturani moslashtirish
+	Customize Quick Access Toolbar	Tezkor kirish panelini moslashtirish
+	Customize Quick Access Toolbar…	Tezkor kirish panelini moslashtirish…
+	Customize Ribbon	Lentani moslashtirish
+	Customize the Ribbon…	Lentani moslashtirish…
+	Customize…	Moslashtirish…
+	Cut	Kesib olish
+	Cycle	Sikl
+	Czech	Chex
+	DO NOT COPY	NUSXALAMANG
+	DOI	DOI
+	DRAFT	QORALAMA
+	Danish	Dan
+	Dark	Toʻq
+	Dark Mode	Toʻq rejim
+	Dark page (white text on black)	Toʻq sahifa (qora fonda oq matn)
+	Dark with Shadow	Soyali toʻq
+	Darkroom	Fotolaboratoriya
+	Dashed	Shtrixli
+	Data	Maʼlumotlar
+	Data Labels	Maʼlumotlar yorliqlari
+	Date & Time	Sana va vaqt
+	Date Picker Content Control	Tarkibni boshqarish elementi: sana tanlash
+	Date and Time	Sana va vaqt
+	Date format	Sana formati
+	Date formats:	Sana formatlari:
+	Day	Kun
+	Decimal	Oʻnlik ajratgich boʻyicha
+	Decorative objects only add visual interest: screen readers skip them.	Dekorativ obyektlar faqat bezak uchun: ekrandan oʻqish dasturlari ularni oʻtkazib yuboradi.
+	Decrease Font Size	Shrift oʻlchamini kichraytirish
+	Decrease Indent	Chekinishni kamaytirish
+	Default	Standart
+	Default Paragraph Font	Standart xatboshi shrifti
+	Default tab stops:	Standart tabulyatsiya:
+	Define New Bullet	Yangi marker belgilash
+	Define New Multilevel List	Yangi koʻp darajali roʻyxat belgilash
+	Define New Multilevel List…	Yangi koʻp darajali roʻyxat belgilash…
+	Define New Number Format	Yangi raqam formatini belgilash
+	Deflate	Siqish
+	Delete	Oʻchirish
+	Delete Back in Equation	Tenglamada orqaga oʻchirish
+	Delete Cells	Kataklarni oʻchirish
+	Delete Clipboard Item	Almashish buferi elementini oʻchirish
+	Delete Columns	Ustunlarni oʻchirish
+	Delete Comment	Izohni oʻchirish
+	Delete Label	Yorliqni oʻchirish
+	Delete Next Word	Keyingi soʻzni oʻchirish
+	Delete Previous Word	Oldingi soʻzni oʻchirish
+	Delete Rows	Qatorlarni oʻchirish
+	Delete Selected Ink	Belgilangan qoʻlyozma chiziqlarni oʻchirish
+	Delete Style	Uslubni oʻchirish
+	Delete Table	Jadvalni oʻchirish
+	Delete Table Style	Jadval uslubini oʻchirish
+	Delete in Equation	Tenglamada oʻchirish
+	Deleted	Oʻchirilgan
+	Deletions:	Oʻchirishlar:
+	Delivery address:	Qabul qiluvchi manzili:
+	Delta Equal To	Delta teng
+	Delta over arrow	Strelka ustida delta
+	Demote	Darajani pasaytirish
+	Demote to Body Text	Asosiy matngacha pasaytirish
+	Derivative as a limit	Limit sifatida hosila
+	Describe what this object shows, for people who can't see it.	Uni koʻra olmaydigan odamlar uchun ushbu obyekt nimani koʻrsatishini tasvirlab bering.
+	Describe what this table shows, for people who can't see it.	Uni koʻra olmaydigan odamlar uchun ushbu jadval nimani koʻrsatishini tasvirlab bering.
+	Description:	Tavsif:
+	Design	Dizayn
+	Design Mode	Konstruktor rejimi
+	Detach Template	Shablonni uzish
+	Detect language automatically	Tilni avtomatik aniqlash
+	Developer	Dasturchi
+	Diagonal	Diagonal
+	Diagonal Dots	Diagonal koʻp nuqta
+	Diamond	Romb
+	Dictate	Diktovka
+	Different First Page	Alohida birinchi sahifa
+	Different Odd & Even Pages	Juft va toq sahifalar alohida
+	Differential	Differensial
+	Differential theta	Differensial teta
+	Differential x	Differensial x
+	Differential y	Differensial y
+	Differentials	Differensiallar
+	Direct formatting	Bevosita formatlash
+	Direction:	Yoʻnalish:
+	Directory	Katalog
+	Discord	Discord
+	Discord community	Discord hamjamiyati
+	Display	Koʻrsatish
+	Display for Review	Taqriz uchun koʻrsatish
+	Display name	Koʻrsatiladigan ism
+	Display text	Koʻrsatiladigan matn
+	Distribute Columns	Ustunlarni tekis taqsimlash
+	Distribute Rows	Qatorlarni tekis taqsimlash
+	Distribute letters	Harflarni taqsimlash
+	Distribute spacing	Oraliqni taqsimlash
+	Distributed	Taqsimlangan
+	Do Not Check Spelling or Grammar	Imlo va grammatikani tekshirmaslik
+	Do Not Show in TOC	Mundarijada koʻrsatmaslik
+	Do not check spelling or grammar	Imlo va grammatikani tekshirmaslik
+	Do you want to save changes to {name}?	{name} hujjatidagi oʻzgarishlar saqlansinmi?
+	Document	Hujjat
+	Document End	Hujjat oxiri
+	Document Formatting	Hujjat formatlanishi
+	Document Grid	Hujjat toʻri
+	Document Information	Hujjat haqida maʼlumot
+	Document Property	Hujjat xususiyati
+	Document Start	Hujjat boshi
+	Document Text	Hujjat matni
+	Document Title	Hujjat nomi
+	Document template:	Hujjat shabloni:
+	Document1	Hujjat1
+	Document\nPreferences	Hujjat\nsozlamalari
+	Documents	Hujjatlar
+	Documents you open will show up here.	Siz ochgan hujjatlar shu yerda koʻrinadi.
+	Don't Save	Saqlamaslik
+	Don't add space between paragraphs of the same style	Bir xil uslubdagi xatboshilar orasiga oraliq qoʻshmaslik
+	Don't capitalize after:	Quyidagilardan keyin bosh harf qilmaslik:
+	Don't hyphenate	Boʻgʻin koʻchirmaslik
+	Don't read Zotero, Mendeley or EndNote citations and bibliographies	Zotero, Mendeley yoki EndNote iqtiboslari va bibliografiyalarini oʻqimaslik
+	Dot	Nuqta
+	Dot dash	Nuqta-tire
+	Dot-dash	Nuqta-tireli
+	Dots	Koʻp nuqtalar
+	Dotted	Nuqtali
+	Double	Qoʻsh
+	Double Bar	Qoʻsh chiziq
+	Double Closing Quote	Yopuvchi qoʻshtirnoq
+	Double Dot	Ikki nuqta
+	Double Integral	Ikki karrali integral
+	Double Integral with Limits	Chegaralari bilan ikki karrali integral
+	Double Integral with Stacked Limits	Chegaralari ustma-ust ikki karrali integral
+	Double Left Arrow with Text Above	Ustida matnli qoʻsh chap strelka
+	Double Left Arrow with Text Below	Ostida matnli qoʻsh chap strelka
+	Double Left Right Arrow with Text Above	Ustida matnli qoʻsh ikki tomonlama strelka
+	Double Left Right Arrow with Text Below	Ostida matnli qoʻsh ikki tomonlama strelka
+	Double Opening Quote	Ochuvchi qoʻshtirnoq
+	Double Right Arrow with Text Above	Ustida matnli qoʻsh oʻng strelka
+	Double Right Arrow with Text Below	Ostida matnli qoʻsh oʻng strelka
+	Double Spacing	Ikki barobar oraliq
+	Double Square Brackets	Qoʻsh kvadrat qavslar
+	Double Strikethrough	Ikki marta ustidan chizilgan
+	Double Underline	Ikki marta tagiga chizilgan
+	Double Vertical Bars	Qoʻsh vertikal chiziqlar
+	Double strikethrough	Ikki marta ustidan chizilgan
+	Double summation	Ikki karrali yigʻindi
+	Doughnut	Halqasimon
+	Down	Pastga
+	Draft	Qoralama
+	Drag a rectangle to draw a table, or a line across cells to split them. Esc stops.	Jadval chizish uchun toʻrtburchak torting yoki kataklarni boʻlish uchun ular boʻylab chiziq torting. Esc – toʻxtatish.
+	Draw	Chizish
+	Draw Ink	Qoʻlda chizish
+	Draw Table	Jadval chizish
+	Draw\nTable	Jadval\nchizish
+	Drawing Canvas	Chizish polotnosi
+	Drawing Tools	Chizish vositalari
+	Drawing\nCanvas	Chizish\npolotnosi
+	Drop Cap	Katta bosh harf
+	Drop cap	Katta bosh harf
+	Drop-Down List Content Control	Kontent boshqaruv elementi: ochiladigan roʻyxat
+	Drops all formatting and pastes plain text.	Barcha formatlashni olib tashlaydi va oddiy matnni joylaydi.
+	Dutch	Niderland tili
+	E-mail Messages	Elektron pochta xabarlari
+	Edit Comment	Izohni tahrirlash
+	Edit Data	Maʼlumotlarni tahrirlash
+	Edit Document	Hujjatni tahrirlash
+	Edit Equation	Tenglamani tahrirlash
+	Edit Field Code	Maydon kodini tahrirlash
+	Edit Field…	Maydonni tahrirlash…
+	Edit Footer	Quyi kolontitulni tahrirlash
+	Edit Header	Yuqori kolontitulni tahrirlash
+	Edit Items	Elementlarni tahrirlash
+	Edit Recipient List	Qabul qiluvchilar roʻyxatini tahrirlash
+	Edit Source	Manbani tahrirlash
+	Edit\nData	Maʼlumotlarni\ntahrirlash
+	Edit\nRecipient List	Qabul qiluvchilar roʻyxatini\ntahrirlash
+	Edited	Tahrirlangan
+	Editing	Tahrirlash
+	Editing header/footer	Kolontitulni tahrirlash
+	Editing in this document is restricted.	Bu hujjatni tahrirlash cheklangan.
+	Editing — edit the document directly	Tahrirlash – hujjatni bevosita tahrirlash
+	Edition	Nashr
+	Editor	Muharrir
+	Edit…	Tahrirlash…
+	Effects	Effektlar
+	Elbow Arrow Connector	Burchakli strelkali ulovchi chiziq
+	Elbow Connector	Burchakli ulovchi chiziq
+	Ellipsis	Koʻp nuqta
+	Em Dash	Uzun tire
+	Em Space	Uzun boʻshliq
+	Emboss	Boʻrttirma
+	Emphasis	Urgʻu
+	Empty Matrices	Boʻsh matritsalar
+	En Dash	Qisqa tire
+	En Space	Qisqa boʻshliq
+	Enclose Characters	Belgilarni ramkaga olish
+	Enclosure	Ramka
+	Encrypt with Password	Parol bilan shifrlash
+	Encrypt with Password…	Parol bilan shifrlash…
+	End of Word	Soʻz oxiri
+	End of document	Hujjat oxiri
+	End of section	Boʻlim oxiri
+	Endnote Reference	Oxirgi izoh belgisi
+	Endnote Text	Oxirgi izoh matni
+	Endnotes	Oxirgi izohlar
+	Endnotes to footnotes	Oxirgi izohlarni sahifa osti izohlariga
+	English (United Kingdom)	Ingliz tili (Buyuk Britaniya)
+	English (United States)	Ingliz tili (AQSH)
+	Engrave	Botiq
+	Enlarge symbol	Simvolni kattalashtirish
+	Enter formatting for number:	Raqam formati:
+	Enter in Equation	Tenglamada yangi qator
+	Enter page number:	Sahifa raqamini kiriting:
+	Entry marked.	Yozuv belgilandi.
+	Envelope #10	Konvert #10
+	Envelope Address	Konvertdagi manzil
+	Envelope DL	Konvert DL
+	Envelope Return	Qaytarish manzili
+	Envelope size:	Konvert oʻlchami:
+	Envelopes	Konvertlar
+	Equal Equal	Teng-teng
+	Equal by Definition	Taʼrifga koʻra teng
+	Equal column width	Teng ustun kengligi
+	Equals:	Teng:
+	Equation	Tenglama
+	Equation Gallery	Tenglamalar galereyasi
+	Equation Info	Tenglama haqida maʼlumot
+	Equation Number	Tenglama raqami
+	Equation Options	Tenglama parametrlari
+	Erase Ink	Qoʻlyozmani oʻchirish
+	Eraser	Oʻchirgʻich
+	Errors ({n})	Xatolar ({n})
+	Estonian	Eston tili
+	Euler's identity	Eyler ayniyati
+	Even Page	Juft sahifa
+	Even pages only	Faqat juft sahifalar
+	Every change is recorded as a tracked change.	Har bir oʻzgarish kuzatiladigan oʻzgarish sifatida yoziladi.
+	Every command is available to scripts and AI agents: run `wordcraft-cli mcp` for an MCP server, or start the app with `--control <port>` for the JSON control channel.	Har bir buyruq skriptlar va sunʼiy intellekt agentlari uchun mavjud: MCP server uchun `wordcraft-cli mcp` buyrugʻini ishga tushiring yoki JSON boshqaruv kanali uchun ilovani `--control <port>` bilan ishga tushiring.
+	Every field needs a name.	Har bir maydonning nomi boʻlishi kerak.
+	Everyone	Hamma
+	Exactly	Aniq
+	Exactly {n}	Aniq {n}
+	Example: {sample}	Misol: {sample}
+	Exceptions (optional)	Istisnolar (ixtiyoriy)
+	Exceptions…	Istisnolar…
+	Expand	Yoyish
+	Expand or Collapse Heading	Sarlavhani yoyish yoki yigʻish
+	Exponential	Eksponenta
+	Exponential series	Eksponenta qatori
+	Export	Eksport
+	Export PDF	PDF ga eksport
+	Export Page as PNG	Sahifani PNG sifatida eksport qilish
+	Export a copy to share (PDF, Word document)	Ulashish uchun nusxani eksport qilish (PDF, Word hujjati)
+	Exported {path}	Eksport qilindi: {path}
+	Expression	Ifoda
+	Extend Selection	Belgilashni kengaytirish
+	Extend Selection by Units	Belgilashni birliklar boʻyicha kengaytirish
+	Extra space	Qoʻshimcha oraliq
+	Field	Maydon
+	Field Codes	Maydon kodlari
+	Field code:	Maydon kodi:
+	Field codes:	Maydon kodlari:
+	Field name	Maydon nomi
+	Field name:	Maydon nomi:
+	Field names must be different.	Maydon nomlari takrorlanmasligi kerak.
+	Field names:	Maydon nomlari:
+	Field properties	Maydon xususiyatlari
+	Field:	Maydon:
+	Fields	Maydonlar
+	Fields:	Maydonlar:
+	Field…	Maydon…
+	Figure	Rasm
+	File	Fayl
+	File name:	Fayl nomi:
+	Fill	Toʻldirish
+	Fill color:	Toʻldirish rangi:
+	Filling in forms	Formalarni toʻldirish
+	Film	Film
+	Find	Topish
+	Find Next	Keyingisini topish
+	Find Next Editable Region	Keyingi tahrirlanadigan sohani topish
+	Find Previous	Oldingisini topish
+	Find Recipient	Qabul qiluvchini topish
+	Find What Expression	Qidiriladigan ifoda
+	Find What Text	Qidiriladigan matn
+	Find and Replace	Topish va almashtirish
+	Find what:	Topish:
+	Find:	Topish:
+	Finding printers…	Printerlar qidirilmoqda…
+	Finish	Yakunlash
+	Finish & Merge	Yakunlash va birlashtirish
+	Finish &\nMerge	Yakunlash va\nbirlashtirish
+	Finished	Yakunlandi
+	Finnish	Fin tili
+	First	Birinchi
+	First Column	Birinchi ustun
+	First Name	Ism
+	First commit	Birinchi kommit
+	First line	Birinchi qator
+	First line:	Birinchi qator:
+	First row of data contains column headers	Maʼlumotlarning birinchi qatorida ustun sarlavhalari bor
+	Fit	Moslash
+	Fix Position on Page	Sahifadagi joylashuvni qotirish
+	Fixed Column Width	Qatʼiy ustun kengligi
+	Flip Horizontal	Gorizontal aks ettirish
+	Flip Vertical	Vertikal aks ettirish
+	Floor	Pastga yaxlitlash
+	Focus	Fokus
+	Follow number with:	Raqamdan keyingi belgi:
+	Font	Shrift
+	Font Color	Shrift rangi
+	Font Dialog	“Shrift” oynasi
+	Font Size	Shrift oʻlchami
+	Font color	Shrift rangi
+	Font color:	Shrift rangi:
+	Font:	Shrift:
+	Font: {font}	Shrift: {font}
+	Fonts	Shriftlar
+	Font…	Shrift…
+	Footer	Quyi kolontitul
+	Footnote Reference	Sahifa osti izohi belgisi
+	Footnote Text	Sahifa osti izohi matni
+	Footnote and Endnote	Sahifa osti va oxirgi izohlar
+	Footnotes	Sahifa osti izohlari
+	Footnotes and endnotes	Sahifa osti va oxirgi izohlar
+	Footnotes to endnotes	Sahifa osti izohlarini oxirgi izohlarga
+	Format	Format
+	Format Page Numbers	Sahifa raqamlari formati
+	Format Page Numbers…	Sahifa raqamlari formati…
+	Format Painter	Formatni nusxalash
+	Format:	Format:
+	Formatted	Formatlangan
+	Formatted Text	Formatlangan matn
+	Formatting	Formatlash
+	Formatting at Selection	Belgilangan qismdagi formatlash
+	Formatting exceptions	Formatlash istisnolari
+	Formatting marks	Formatlash belgilari
+	Formatting, case changes, white space and tables are compared; the other settings are kept for later.	Formatlash, registr oʻzgarishlari, boʻshliqlar va jadvallar solishtiriladi; boshqa sozlamalar keyinroq uchun saqlanadi.
+	Formula	Formula
+	Forward	Oldinga
+	Fraction	Kasr
+	Fractions (1/2) as fraction characters (½)	Kasrlarni (1/2) kasr belgilariga (½)
+	French (France)	Fransuz (Fransiya)
+	From text:	Matndan:
+	Full page of the same label	Bir xil yorliqlardan iborat butun sahifa
+	Function	Funksiya
+	Functions	Funksiyalar
+	GB/T 7714	GB/T 7714
+	GOST (name sort)	GOST (nom boʻyicha saralash)
+	GOST (title sort)	GOST (sarlavha boʻyicha saralash)
+	Gallery	Galereya
+	General	Umumiy
+	Geometry	Geometriya
+	German (Germany)	Nemis (Germaniya)
+	Glow	Nur sochish
+	Glow Colors	Nur sochish ranglari
+	Go Back	Ortga qaytish
+	Go To	Oʻtish
+	Go To (⌘⌥G)	Oʻtish (⌘⌥G)
+	Go To…	Oʻtish…
+	Go to	Oʻtish
+	Go to what:	Nimaga oʻtish:
+	Good afternoon	Xayrli kun
+	Good evening	Xayrli kech
+	Good morning	Xayrli tong
+	Grab bag	Turli xil
+	Graphic	Grafik obyekt
+	Grave	Gravis
+	Grayscale	Kulrang tuslar
+	Greek	Grek
+	Greek Letters	Grek harflari
+	Green:	Yashil:
+	Greeting Line	Salomlashuv qatori
+	Greeting\nLine	Salomlashuv\nqatori
+	Grid Table 1 Light	Toʻrli jadval 1, och
+	Grid Table 4 – Blue	Toʻrli jadval 4 – koʻk
+	Grid Table 4 – Green	Toʻrli jadval 4 – yashil
+	Grid Table 4 – Orange	Toʻrli jadval 4 – toʻq sariq
+	Grid Table 4 – Purple	Toʻrli jadval 4 – binafsha
+	Gridlines	Toʻr chiziqlari
+	Group	Guruhlash
+	Grouping Character Above	Yuqoridagi guruhlovchi belgi
+	Grouping Character Below	Pastdagi guruhlovchi belgi
+	Grow Font 1 Point	Shriftni 1 pt kattalashtirish
+	H:	B:
+	HTML Format	HTML formati
+	Hanging Indent	Osilgan chekinish
+	Harvard (Anglia)	Harvard (Anglia)
+	Hat	Qalpoqcha
+	Header	Yuqori kolontitul
+	Header & Footer	Kolontitullar
+	Header Row	Sarlavha qatori
+	Header/Footer Position	Kolontitullar joylashuvi
+	Headers and footers	Kolontitullar
+	Heading 1	Sarlavha 1
+	Heading 2	Sarlavha 2
+	Heading 3	Sarlavha 3
+	Heading styles (levels 1–{n})	Sarlavha uslublari (1–{n} darajalar)
+	Heading {n}	Sarlavha {n}
+	Headings	Sarlavhalar
+	Heart	Yurak
+	Hebrew	Ivrit
+	Height:	Balandlik:
+	Help	Yordam
+	Hex:	Hex:
+	Hidden	Yashirin
+	Hidden text	Yashirin matn
+	Hide Codes	Kodlarni yashirish
+	Hide Ink	Qoʻlyozmani yashirish
+	Hide White Space	Sahifalar orasidagi boʻsh joyni yashirish
+	Hide from style lists	Uslublar roʻyxatida yashirish
+	Hide\nInk	Qoʻlyozmani\nyashirish
+	Hierarchy	Ierarxiya
+	Highlight	Ajratib koʻrsatish
+	Highlight Merge Fields	Birlashma maydonlarini ajratib koʻrsatish
+	Highlight\nMerge Fields	Birlashma maydonlarini\najratib koʻrsatish
+	Highlighter	Marker
+	Hindi	Hind
+	Hollow	Ichi boʻsh
+	Home	Bosh sahifa
+	Home folder	Uy jildi
+	Horizontal	Gorizontal
+	Horizontal Line	Gorizontal chiziq
+	How many pages the whole document has	Butun hujjatdagi sahifalar soni
+	How many pages this section has	Ushbu boʻlimdagi sahifalar soni
+	How many words the document holds	Hujjatdagi soʻzlar soni
+	Hue:	Tus:
+	Hyperbolic Cosecant Function	Giperbolik kosekans funksiyasi
+	Hyperbolic Cosine Function	Giperbolik kosinus funksiyasi
+	Hyperbolic Cotangent Function	Giperbolik kotangens funksiyasi
+	Hyperbolic Functions	Giperbolik funksiyalar
+	Hyperbolic Secant Function	Giperbolik sekans funksiyasi
+	Hyperbolic Sine Function	Giperbolik sinus funksiyasi
+	Hyperbolic Tangent Function	Giperbolik tangens funksiyasi
+	Hyperlink	Giperhavola
+	Hyphenate at:	Koʻchirish chegarasi:
+	Hyphenate words in CAPS	KATTA harflardagi soʻzlarni koʻchirish
+	Hyphenation	Boʻgʻin koʻchirish
+	Hyphenation Options…	Boʻgʻin koʻchirish parametrlari…
+	Hyphenation zone:	Koʻchirish zonasi:
+	Hyphens (--) as dashes (—)	Defislarni (--) tirega (—)
+	Hypotenuse	Gipotenuza
+	I, II, III, …	I, II, III, …
+	IEEE	IEEE
+	ISO 690 (author-date)	ISO 690 (muallif-sana)
+	ISO 690 (numerical)	ISO 690 (raqamli)
+	Icon Color	Ikonka rangi
+	Icons	Ikonkalar
+	Identity Matrices	Birlik matritsalar
+	If…Then…Else	If…Then…Else
+	If…Then…Else…	If…Then…Else…
+	Ignore All	Hammasini oʻtkazib yuborish
+	Ignore punctuation characters	Tinish belgilarini hisobga olmaslik
+	Ignore web and file addresses	Veb va fayl manzillarini oʻtkazib yuborish
+	Ignore white-space characters	Boʻshliq belgilarini hisobga olmaslik
+	Ignore words in capitals	Bosh harfli soʻzlarni oʻtkazib yuborish
+	Ignore words with numbers	Raqamli soʻzlarni oʻtkazib yuborish
+	Illustrations	Illyustratsiyalar
+	Immersive	Immersiv rejim
+	Immersive Reader	Immersiv oʻqish
+	Immersive\nReader	Immersiv\noʻqish
+	In Default apps, choose WordCraft for the document types you want it to open.	“Standart ilovalar” boʻlimida WordCraft ochishi kerak boʻlgan hujjat turlari uchun uni tanlang.
+	In Front of Text	Matn oldida
+	In Line with Text	Matn qatorida
+	In equations, typing a name after a backslash replaces it with its symbol.	Tenglamalarda teskari qiya chiziqdan keyin yozilgan nom uning simvoliga almashtiriladi.
+	Inches	Dyuymlar
+	Include level number from:	Daraja raqamini qoʻshish:
+	Include page numbers	Sahifa raqamlarini qoʻshish
+	Increase Font Size	Shrift oʻlchamini kattalashtirish
+	Increase Indent	Chekinishni oshirish
+	Indent	Chekinish
+	Indent from left:	Chapdan chekinish:
+	Indentation	Chekinishlar
+	Indented	Pogʻonali chekinish bilan
+	Indents	Chekinishlar
+	Indents and Spacing	Chekinishlar va oraliqlar
+	Index	Koʻrsatkich
+	Index Heading	Koʻrsatkich sarlavhasi
+	Index and Tables	Koʻrsatkichlar va jadvallar
+	Index {n}	Koʻrsatkich {n}
+	Inflate	Shishirish
+	Info	Maʼlumot
+	Initials:	Bosh harflar:
+	Ink	Qoʻlyozma
+	Ink Replay	Qoʻlyozmani qayta ijro etish
+	Ink to Shape	Qoʻlyozmani shaklga aylantirish
+	Ink to\nMath	Qoʻlyozmani\nformulaga
+	Ink to\nShape	Qoʻlyozmani\nshaklga
+	Ink\nReplay	Qoʻlyozmani\nqayta ijro etish
+	Inline	Qatorda
+	Input Format	Kiritish formati
+	Insert	Qoʻshish
+	Insert Above	Yuqoriga qoʻshish
+	Insert Below	Pastga qoʻshish
+	Insert Caption	Taglavha qoʻshish
+	Insert Caption…	Taglavha qoʻshish…
+	Insert Chart	Diagramma qoʻshish
+	Insert Citation	Iqtibos qoʻshish
+	Insert Columns to the Left	Chapga ustunlar qoʻshish
+	Insert Columns to the Right	Oʻngga ustunlar qoʻshish
+	Insert Date Field	Sana maydonini qoʻshish
+	Insert Endnote	Oxirgi izoh qoʻshish
+	Insert Footnote	Sahifa osti izohini qoʻshish
+	Insert Hyperlink	Giperhavola qoʻshish
+	Insert Index	Koʻrsatkich qoʻshish
+	Insert Left	Chapga qoʻshish
+	Insert Merge Field	Birlashma maydonini qoʻshish
+	Insert Merge\nField	Birlashma maydonini\nqoʻshish
+	Insert New Equation	Yangi tenglama qoʻshish
+	Insert Page Field	Sahifa maydonini qoʻshish
+	Insert Right	Oʻngga qoʻshish
+	Insert Row or Column by Clicking	Bosish orqali qator yoki ustun qoʻshish
+	Insert Rows Above	Yuqoriga qatorlar qoʻshish
+	Insert Rows Below	Pastga qatorlar qoʻshish
+	Insert Shapes	Shakllar qoʻshish
+	Insert SmartArt	SmartArt qoʻshish
+	Insert Structure	Struktura qoʻshish
+	Insert Symbol	Simvol qoʻshish
+	Insert Table	Jadval qoʻshish
+	Insert Table of Authorities	Havolalar jadvalini qoʻshish
+	Insert Table of Figures	Rasmlar roʻyxatini qoʻshish
+	Insert Table…	Jadval qoʻshish…
+	Insert Time Field	Vaqt maydonini qoʻshish
+	Insert a new equation (Alt+=)	Yangi tenglama qoʻshish (Alt+=)
+	Insert one text or another, depending on a field's value.	Maydon qiymatiga qarab u yoki bu matnni qoʻshish.
+	Insert\nAbove	Yuqoriga\nqoʻshish
+	Insert\nCaption	Taglavha\nqoʻshish
+	Insert\nCitation	Iqtibos\nqoʻshish
+	Insert\nFootnote	Sahifa osti izohini\nqoʻshish
+	Insertions and Deletions	Qoʻshilgan va oʻchirilganlar
+	Insertions:	Qoʻshilganlar:
+	Inside Borders	Ichki chegaralar
+	Inside:	Ichki:
+	Inspect Document	Hujjatni tekshirish
+	Inspect Styles at Selection	Belgilangan qismdagi uslublarni koʻrish
+	Institution	Muassasa
+	Integral	Integral
+	Integral of e^(−x²)	e^(−x²) dan integral
+	Integral with Limits	Chegarali integral
+	Integral with Stacked Limits	Chegaralari ustma-ust integral
+	Integrals	Integrallar
+	Intense Emphasis	Kuchli urgʻu
+	Intense Quote	Ajratilgan iqtibos
+	Intense Reference	Kuchli havola
+	Interface	Interfeys
+	Interface Theme	Interfeys mavzusi
+	Interface language	Interfeys tili
+	Interface language:	Interfeys tili:
+	Interface size:	Interfeys oʻlchami:
+	Interface theme:	Interfeys mavzusi:
+	Interface\nTheme	Interfeys\nmavzusi
+	Internet addresses as links	Internet manzillarini havolaga
+	Intersection	Kesishma
+	Intersection with Limits	Chegarali kesishma
+	Intersection with Lower Limit	Quyi chegarali kesishma
+	Intersection with Subscript-Superscript Limits	Indeksli chegaralar bilan kesishma
+	Inverse Cosecant Function	Teskari kosekans funksiyasi
+	Inverse Cosine Function	Teskari kosinus funksiyasi
+	Inverse Cotangent Function	Teskari kotangens funksiyasi
+	Inverse Functions	Teskari funksiyalar
+	Inverse Hyperbolic Cosecant Function	Teskari giperbolik kosekans funksiyasi
+	Inverse Hyperbolic Cosine Function	Teskari giperbolik kosinus funksiyasi
+	Inverse Hyperbolic Cotangent Function	Teskari giperbolik kotangens funksiyasi
+	Inverse Hyperbolic Functions	Teskari giperbolik funksiyalar
+	Inverse Hyperbolic Secant Function	Teskari giperbolik sekans funksiyasi
+	Inverse Hyperbolic Sine Function	Teskari giperbolik sinus funksiyasi
+	Inverse Hyperbolic Tangent Function	Teskari giperbolik tangens funksiyasi
+	Inverse Secant Function	Teskari sekans funksiyasi
+	Inverse Sine Function	Teskari sinus funksiyasi
+	Inverse Tangent Function	Teskari tangens funksiyasi
+	Ionosphere	Ionosfera
+	Issue	Son
+	Italian	Italyan
+	Italic	Kursiv
+	Japanese	Yapon
+	Join the ArtCraft community on Discord	Discorddagi ArtCraft hamjamiyatiga qoʻshiling
+	Join us on Discord: discord.gg/artcraft	Discordda bizga qoʻshiling: discord.gg/artcraft
+	Journal	Jurnal
+	Justification	Tekislash
+	Justification of a display equation	Alohida tenglamani tekislash
+	Justified	Kenglik boʻyicha
+	Justify	Kenglik boʻyicha tekislash
+	Keep Lines Together	Qatorlarni ajratmaslik
+	Keep Text Only	Faqat matnni saqlash
+	Keep lines together	Qatorlarni ajratmaslik
+	Keep the password somewhere safe: without it nobody, WordCraft included, can open the document. Leave both boxes empty to remove the password.	Parolni xavfsiz joyda saqlang: usiz hech kim, jumladan WordCraft ham, hujjatni ocha olmaydi. Parolni olib tashlash uchun ikkala maydonni boʻsh qoldiring.
+	Keep with Next	Keyingisidan ajratmaslik
+	Keep with next	Keyingisidan ajratmaslik
+	Keeps the fonts and formatting of the copied text.	Nusxalangan matnning shriftlari va formatlashini saqlaydi.
+	Keyboard shortcuts:	Tezkor tugmalar:
+	Keys for this command:	Ushbu buyruq tugmalari:
+	Keywords	Kalit soʻzlar
+	Korean	Koreys
+	Label changes with:	Oʻzgarishlarni belgilash:
+	Label:	Yorliq:
+	Labels	Yorliqlar
+	Landscape	Albom
+	Language	Til
+	Large	Katta
+	Large\nOperator	Katta\noperator
+	Largest Only	Faqat kattaroq tomon boʻyicha
+	Lasso	Lasso
+	Lasso Select	Lasso bilan belgilash
+	Last	Oxirgi
+	Last Column	Oxirgi ustun
+	Last Name	Familiya
+	Last commit	Soʻnggi kommit
+	Last, First; Last, First	Familiya, Ism; Familiya, Ism
+	Latin text font:	Lotin matni shrifti:
+	Layout	Maket
+	Layout Summary	Maket xulosasi
+	Layouts	Maketlar
+	Leader	Toʻldiruvchi
+	Leave Equation	Tenglamadan chiqish
+	Leave a recipient out of the merge when a field has this value.	Maydon shu qiymatga ega boʻlsa, qabul qiluvchini birlashmadan chiqarib tashlash.
+	Leave the equation (Esc)	Tenglamadan chiqish (Esc)
+	Leave the label out of the caption	Taglavhaga yorliqni qoʻshmaslik
+	Left	Chap
+	Left Arrow with Text Above	Tepasida matnli chapga strelka
+	Left Arrow with Text Below	Ostida matnli chapga strelka
+	Left Border	Chap chegara
+	Left Bracket Twice	Ikkita chap kvadrat qavs
+	Left Margin	Chap hoshiya
+	Left Only	Faqat chap
+	Left Right Arrow Above	Tepada ikki tomonlama strelka
+	Left Right Arrow with Text Above	Tepasida matnli ikki tomonlama strelka
+	Left Right Arrow with Text Below	Ostida matnli ikki tomonlama strelka
+	Left Subscript-Superscript	Chap pastki va yuqori indeks
+	Left border	Chap chegara
+	Left indent	Chapdan chekinish
+	Left-to-Right Text Direction	Chapdan oʻngga matn yoʻnalishi
+	Left-to-right	Chapdan oʻngga
+	Left:	Chap:
+	Leftwards Arrow Above	Tepada chapga strelka
+	Leftwards Harpoon Above	Tepada chapga garpun
+	Legal style numbering	Yuridik uslubdagi raqamlash
+	Legend	Legenda
+template	Letter	Xat
+	Letter	Letter
+	Letter headings	Harfli sarlavhalar
+	Letter-Like Symbols	Harfsimon simvollar
+	Letters	Xatlar
+	Level 1	Daraja 1
+	Level 2	Daraja 2
+	Level 3	Daraja 3
+	Level 4	Daraja 4
+	Level 5	Daraja 5
+	Level 6	Daraja 6
+	Level 7	Daraja 7
+	Level 8	Daraja 8
+	Level 9	Daraja 9
+	Level {n}	Daraja {n}
+	Levels:	Darajalar:
+	Light	Yorugʻ
+	Light with Outline	Konturli yorugʻ
+	Limit	Limit
+	Limit Example	Limit namunasi
+	Limit and	Limit va
+	Limit and\nLog	Limit\nva logarifm
+	Limit consecutive hyphens to:	Ketma-ket boʻgʻin koʻchirishlar chegarasi:
+	Limit formatting to a selection of styles	Formatlashni tanlangan uslublar bilan cheklash
+	Line	Chiziq
+	Line Break	Qator uzilishi
+	Line End	Qator oxiri
+	Line Number	Qator raqami
+	Line Numbering Options…	Qatorlarni raqamlash parametrlari…
+	Line Numbers	Qator raqamlari
+	Line Spacing	Qatorlar oraligʻi
+	Line Spacing Options…	Qatorlar oraligʻi parametrlari…
+	Line Start	Qator boshi
+	Line and Page Breaks	Qator va sahifa uzilishlari
+	Line and Paragraph Spacing	Qatorlar va xatboshilar oraligʻi
+	Line between	Ajratuvchi chiziq
+	Line breaking	Qatorlarga boʻlish
+	Line delta	Qatorlar farqi
+	Line spacing	Qatorlar oraligʻi
+	Line spacing:	Qatorlar oraligʻi:
+	Linear	Chiziqli
+	Linear Fraction	Chiziqli kasr
+	Lines	Qatorlar
+	Lines +/−	Qatorlar +/−
+	Lines added	Qoʻshilgan qatorlar
+	Lines and characters	Qatorlar va belgilar
+	Lines deleted	Oʻchirilgan qatorlar
+	Lines only	Faqat qatorlar
+	Lines per page:	Sahifadagi qatorlar soni:
+	Link	Havola
+	Link entries to their headings	Yozuvlarni sarlavhalariga bogʻlash
+	Link level to style:	Darajani uslubga bogʻlash:
+	Link to Previous	Oldingisiga bogʻlash
+	Linked style (paragraph and character)	Bogʻlangan uslub (xatboshi va belgi)
+	Links	Havolalar
+	Links and References	Havolalar va murojaatlar
+	Link…	Havola…
+	List	Roʻyxat
+	List Definition	Roʻyxat taʼrifi
+	List Paragraph	Roʻyxat xatboshisi
+	List Table 3 – Blue	Roʻyxat jadvali 3 – koʻk
+	List Table 3 – Green	Roʻyxat jadvali 3 – yashil
+	List Table 3 – Orange	Roʻyxat jadvali 3 – toʻq sariq
+	List Table 3 – Purple	Roʻyxat jadvali 3 – binafsha
+	List entries	Roʻyxat elementlari
+	Location	Joylashuv
+	Location: {path}	Joylashuv: {path}
+	Lock Fields	Maydonlarni qulflash
+	Log	Log
+	Logarithm	Logarifm
+	Logarithm with Base	Asosli logarifm
+	Logical AND	Mantiqiy VA
+	Logical AND with Limits	Chegarali mantiqiy VA
+	Logical OR	Mantiqiy YOKI
+	Logical OR with Limits	Chegarali mantiqiy YOKI
+	Lum:	Yorqinlik:
+	MIT OR Apache-2.0. Copyright (c) 2026 ArtCraft Team and the WordCraft contributors.	MIT OR Apache-2.0. Copyright (c) 2026 ArtCraft Team va WordCraft loyihasiga hissa qoʻshganlar.
+	MLA	MLA
+	Macros	Makroslar
+	Made from the author and year when empty	Boʻsh boʻlsa, muallif va yildan tuziladi
+	Magazine or newspaper article	Jurnal yoki gazetadagi maqola
+	Mail Merge	Pochta birlashmasi
+	Mailings	Pochta joʻnatmalari
+	Main entry:	Asosiy yozuv:
+	Make WordCraft the default for Word documents…	WordCraft dasturini Word hujjatlari uchun standart qilish…
+	Manage Sources	Manbalarni boshqarish
+	Manage Styles	Uslublarni boshqarish
+	Manage Styles…	Uslublarni boshqarish…
+	Manual Hyphenation	Qoʻlda boʻgʻin koʻchirish
+	Manual Line Break	Qoʻlda qator uzilishi
+	Manual Page Break	Qoʻlda sahifa uzilishi
+	Manual hyphenation is complete.	Qoʻlda boʻgʻin koʻchirish yakunlandi.
+	Manual…	Qoʻlda…
+	Many pages	Koʻp sahifa
+	Margins	Hoshiyalar
+	Mark	Belgi qoʻyish
+	Mark All	Hammasiga belgi qoʻyish
+	Mark Citation	Iqtibosga belgi qoʻyish
+	Mark Entry	Yozuvga belgi qoʻyish
+	Mark Entry…	Yozuvga belgi qoʻyish…
+	Mark Index Entry	Koʻrsatkich yozuviga belgi qoʻyish
+	Mark as decorative	Bezak sifatida belgilash
+	Mark grammar errors as you type	Yozish paytida grammatik xatolarni belgilash
+	Mark selected text as:	Tanlangan matnni quyidagicha belgilash:
+	Mark\nCitation	Iqtibosga\nbelgi qoʻyish
+	Mark\nEntry	Yozuvga\nbelgi qoʻyish
+	Markdown (*.md)	Markdown (*.md)
+	Match Fields	Maydonlarni moslashtirish
+	Match case	Registrni hisobga olish
+	Match prefix	Soʻz boshiga mos
+	Match suffix	Soʻz oxiriga mos
+	Math AutoCorrect	Matematik avtotuzatish
+	Matrices with Brackets	Qavsli matritsalar
+	Matrix	Matritsa
+	Maximum	Maksimum
+	Maximum Example	Maksimum namunasi
+	Measured By	Oʻlchov birligi
+	Measurement units:	Oʻlchov birliklari:
+	Merge	Birlashtirish
+	Merge Cells	Kataklarni birlashtirish
+	Merge Formatting	Formatlashni birlashtirish
+	Merge Record #	Birlashma yozuvi #
+	Merged PRs	Qabul qilingan PRlar
+	Mesosphere	Mezosfera
+	Middle	Oʻrtada
+	Midline Dots	Oʻrta chiziqdagi nuqtalar
+	Millimeters	Millimetrlar
+	Minimum	Minimum
+	Minus Equal	Minus-teng
+	Mirror indents	Koʻzgu chekinishlar
+	Mirrored	Koʻzgusimon
+	Model	Model
+	Models	Modellar
+	Moderate	Oʻrtacha
+	Modify Style	Uslubni oʻzgartirish
+	Modify Table Style	Jadval uslubini oʻzgartirish
+	Modify Table Style…	Jadval uslubini oʻzgartirish…
+	Modify…	Oʻzgartirish…
+	Mon	Du
+	Month	Oy
+	More >>	Batafsil >>
+	More Colors…	Boshqa ranglar…
+	More Columns…	Boshqa ustunlar…
+	More Commands…	Boshqa buyruqlar…
+	More Symbols…	Boshqa simvollar…
+	More templates →	Boshqa shablonlar →
+	Move Down	Pastga surish
+	Move Paragraph Down	Xatboshini pastga surish
+	Move Paragraph Up	Xatboshini yuqoriga surish
+	Move Past Citation	Iqtibos oxiriga oʻtish
+	Move Past\nCitation	Iqtibos\noxiriga oʻtish
+	Move Selected Ink	Tanlangan siyoh chiziqlarini surish
+	Move Table by Dragging	Jadvalni sudrab surish
+	Move Up	Yuqoriga surish
+	Move in Equation	Tenglama ichida harakatlanish
+	Move or Resize	Surish yoki oʻlchamini oʻzgartirish
+	Move with Text	Matn bilan birga surish
+	Moved from	Koʻchirildi: qayerdan
+	Moved to	Koʻchirildi: qayerga
+	Moves	Koʻchirishlar
+	Multilevel List	Koʻp darajali roʻyxat
+	Multilevel List Library	Koʻp darajali roʻyxatlar toʻplami
+	Article I.	Modda I.
+	Chapter 1	Bob 1
+	Section 1.01	Boʻlim 1.01
+	Multiple Pages	Bir nechta sahifa
+	Name	Nom
+	Name (A–Z)	Nom (A–Z)
+	Name of the file this document is saved as	Hujjat saqlangan fayl nomi
+	Name:	Nom:
+	Narrow  {size} all	Tor  {size} har tomondan
+	Natural Logarithm	Natural logarifm
+	Nature	Tabiat
+	Navigation	Navigatsiya
+	Navigation Pane	Navigatsiya paneli
+	Negated Relations	Inkor munosabatlar
+	New	Yangi
+	New Comment	Yangi izoh
+	New Document	Yangi hujjat
+	New Drawing Canvas	Yangi chizma maydoni
+	New Entry	Yangi yozuv
+	New Group	Yangi guruh
+	New Label	Yangi taglavha turi
+	New Label…	Yangi taglavha turi…
+	New Paragraph	Yangi xatboshi
+	New Style…	Yangi uslub…
+	New Tab	Yangi varaq
+	New Table Style	Yangi jadval uslubi
+	New Table Style…	Yangi jadval uslubi…
+	New Window	Yangi oyna
+	New comments and tracked changes are recorded under this name and these initials.	Yangi izohlar va kuzatilgan oʻzgarishlar shu nom va bosh harflar bilan yoziladi.
+	New document	Yangi hujjat
+	New from Template	Shablondan yaratish
+	New shortcut:	Yangi tezkor tugma:
+	New word	Yangi soʻz
+	New\nComment	Yangi\nizoh
+	New\nWindow	Yangi\noyna
+	New…	Yangi…
+	Next	Keyingi
+	Next Change	Keyingi oʻzgarish
+	Next Comment	Keyingi izoh
+	Next Field	Keyingi maydon
+	Next Footnote	Keyingi sahifa osti izohi
+	Next Page	Keyingi sahifa
+	Next Record	Keyingi yozuv
+	Next Section	Keyingi boʻlim
+	Next Sentence	Keyingi gap
+	Next sentence	Keyingi gap
+	No	Yoʻq
+	No Border	Chegarasiz
+	No Color	Rangsiz
+	No Fill	Toʻldirishsiz
+	No Glow	Nur sochishsiz
+	No Markup	Belgilarsiz
+	No Outline	Kontursiz
+	No Paragraph Space	Xatboshilar orasida boʻshliqsiz
+	No Reflection	Aks ettirishsiz
+	No Shadow	Soyasiz
+	No Soft Edges	Yumshoq chetlarsiz
+	No Spacing	Oraliqsiz
+	No Transform	Oʻzgartirishsiz
+	No accessibility issues found.	Maxsus imkoniyatlar boʻyicha muammolar topilmadi.
+	No changes (read only)	Oʻzgartirishsiz (faqat oʻqish uchun)
+	No contributor data was built into this copy.	Ushbu nusxaga hissa qoʻshganlar haqidagi maʼlumotlar kiritilmagan.
+	No errors found: every merge field is in the recipient list.	Xatolar topilmadi: barcha birlashma maydonlari qabul qiluvchilar roʻyxatida bor.
+	No grid	Toʻrsiz
+	No icons match your search.	Qidiruvingizga mos ikonkalar yoʻq.
+	No limit	Cheklovsiz
+	No model credits were built into this copy.	Ushbu nusxaga modellar haqidagi maʼlumotlar kiritilmagan.
+	No printers found. Configure a system printer or export a PDF.	Printerlar topilmadi. Tizim printerini sozlang yoki PDF eksport qiling.
+	No sources yet.	Hozircha manbalar yoʻq.
+	No templates match your search.	Qidiruvingizga mos shablonlar yoʻq.
+	No words yet. Add to Dictionary on a misspelled word puts it here.	Hozircha soʻzlar yoʻq. Xato yozilgan soʻzda “Lugʻatga qoʻshish” buyrugʻi uni shu yerga qoʻshadi.
+	No-Width Non Break	Nol kenglikdagi uzilmas belgi
+	No-Width Optional Break	Nol kenglikdagi ixtiyoriy uzilish
+	Nonbreaking Hyphen	Uzilmas defis
+	Nonbreaking Space	Uzilmas boʻshliq
+	None	Yoʻq
+	Normal	Oddiy
+	Normal  {size} all	Oddiy  {size} har tomondan
+	Normal Indent	Oddiy chekinish
+	Normal Style	Oddiy uslub
+	Normal Table	Oddiy jadval
+	Normal Text	Oddiy matn
+	Normal Word Document	Oddiy Word hujjati
+	Normal probability density	Normal taqsimot zichligi
+	Normal speed	Oddiy tezlik
+	North	Shimol
+	Norwegian (Bokmål)	Norveg (bukmol)
+	Not	Emas
+	Not available right now	Hozir mavjud emas
+	Not linked: click a text box	Bogʻlanmagan: matn maydonini bosing
+	Not saved	Saqlanmagan
+	Not saved yet	Hali saqlanmagan
+	Not used by any command	Hech qaysi buyruqda ishlatilmaydi
+	Not {name}	{name} emas
+	Nothing	Hech narsa
+	Nothing collected yet. Items you copy or cut appear here.	Hozircha hech narsa yigʻilmagan. Siz nusxalagan yoki kesib olgan elementlar shu yerda paydo boʻladi.
+	Now used by {command}	Hozir ishlatilmoqda: {command}
+	Nudge	Siljitish
+	Num Occurrences	Takrorlanishlar soni
+	Number	Raqam
+	Number alignment:	Raqamni tekislash:
+	Number format	Raqam formati
+	Number of columns:	Ustunlar soni:
+	Number of rows:	Qatorlar soni:
+	Number of the page the field sits on	Maydon joylashgan sahifa raqami
+	Number of the section the field sits in	Maydon joylashgan boʻlim raqami
+	Number style for this level:	Ushbu daraja uchun raqamlash turi:
+	Number the equation; the number sits at the right margin (or type # then the number)	Tenglamani raqamlash; raqam oʻng hoshiyada turadi (yoki # va raqamni kiriting)
+	Numbering	Raqamlash
+	Numbering:	Raqamlash:
+	Numbering…	Raqamlash…
+	Numerals	Raqamlar
+	Numerals:	Raqamlar:
+	OK	OK
+	Object	Obyekt
+	Odd Page	Toq sahifa
+	Odd pages only	Faqat toq sahifalar
+	Off	Oʻchiq
+	Office	Ofis
+	Office 2003 Default	Office 2003 standarti
+	Offset (pt):	Siljish (pt):
+	Offset: Bottom	Siljish: pastga
+	Offset: Bottom Left	Siljish: pastga chapga
+	Offset: Bottom Right	Siljish: pastga oʻngga
+	Offset: Center	Siljish: markazga
+	Offset: Left	Siljish: chapga
+	Offset: Right	Siljish: oʻngga
+	Offset: Top	Siljish: yuqoriga
+	Offset: Top Left	Siljish: yuqoriga chapga
+	Offset: Top Right	Siljish: yuqoriga oʻngga
+	Omit	Tushirib qoldirish
+	On	Yoqiq
+	On: WordCraft opens on File › Home, with a blank document, the templates and your recent documents. Off: it opens a blank document.	Yoqiq: WordCraft Fayl › Bosh sahifa boʻlimida boʻsh hujjat, shablonlar va soʻnggi hujjatlaringiz bilan ochiladi. Oʻchiq: boʻsh hujjat ochiladi.
+	On: the caret glides to its new place when you type or use the arrow keys, and its blink fades. Off: it jumps and blinks on and off.	Yoqiq: yozganingizda yoki strelka tugmalaridan foydalanganingizda kursor yangi joyiga silliq oʻtadi, miltillashi esa asta soʻnadi. Oʻchiq: kursor sakrab oʻtadi va keskin miltillaydi.
+	One	Bitta
+	One Page	Bir sahifa
+	One half	Ikkidan bir
+	One label per recipient	Har bir qabul qiluvchiga bitta yorliq
+	One line per item. Enter adds an item.	Har bir element uchun bitta qator. Enter element qoʻshadi.
+	One-sided	Bir tomonlama
+	Only allow this kind of editing:	Faqat quyidagi tahrirlash turiga ruxsat berish:
+	Only comments can be added, except in regions marked editable.	Tahrirlanadigan deb belgilangan hududlardan tashqari faqat izoh qoʻshish mumkin.
+	Only form fields can be filled in.	Faqat shakl maydonlarini toʻldirish mumkin.
+	Only the allowed styles can be applied.	Faqat ruxsat etilgan uslublarni qoʻllash mumkin.
+	Only web (http, https) and email (mailto) links can be followed	Faqat veb (http, https) va elektron pochta (mailto) havolalari orqali oʻtish mumkin
+	Open	Ochish
+	Open a file with WordCraft's own browser when the system file dialog doesn't appear.	Tizimning fayl tanlash oynasi chiqmasa, faylni WordCraft ichki brauzeri orqali ochish.
+	OpenDocument Text (*.odt)	OpenDocument matni (*.odt)
+	Opening print dialog…	Chop etish oynasi ochilmoqda…
+	Opens .docx, .doc, .rtf and .odt files and Word templates with WordCraft from now on.	Bundan buyon .docx, .doc, .rtf va .odt fayllari hamda Word shablonlari WordCraft dasturida ochiladi.
+	Opens Settings › Default apps, where you choose WordCraft for .docx and the other document types.	“Sozlamalar” › “Standart ilovalar” boʻlimini ochadi, u yerda .docx va boshqa hujjat turlari uchun WordCraft dasturini tanlaysiz.
+	Operator	Operator
+	Operator Structures	Operator tuzilmalari
+	Operators	Operatorlar
+	Optional Hyphen	Ixtiyoriy defis
+	Options	Parametrlar
+	Options…	Parametrlar…
+	Or save a copy in another format:	Yoki nusxani boshqa formatda saqlash:
+	Ordinals (1st) as superscript	Tartib sonlar (1st) yuqori indeks sifatida
+	Organizer	Boshqaruvchi
+	Organizer…	Tashkilotchi…
+	Orientation	Yoʻnalish
+	Original document	Asl hujjat
+	Other	Boshqa
+	Other Large Operators	Boshqa katta operatorlar
+	Other styles and their TOC level:	Boshqa uslublar va ularning mundarijadagi darajasi:
+	Otherwise insert:	Aks holda qoʻshish:
+	Outline	Struktura
+	Outline Level	Struktura darajasi
+	Outline State	Struktura holati
+	Outline Tools	Struktura vositalari
+	Outline level	Struktura darajasi
+	Outline levels	Struktura darajalari
+	Outlining	Struktura
+	Outside Borders	Tashqi chegaralar
+	Outside border	Tashqi chegara
+	Outside:	Tashqi:
+	Outward Brackets	Tashqariga qaragan kvadrat qavslar
+	Oval	Oval
+	Overbar	Ustki chiziq
+	Overbars and Underbars	Ustki va ostki chiziqlar
+	Overbrace	Ustki figurali qavs
+	Overtype	Ustidan yozish
+	Overtype (typing replaces the characters after the caret)	Ustidan yozish (kiritilgan matn kursordan keyingi belgilarni almashtiradi)
+	PDF document (*.pdf)	PDF hujjat (*.pdf)
+	PRs	PR
+	Page	Sahifa
+	Page Background	Sahifa foni
+	Page Border	Sahifa chegarasi
+	Page Borders	Sahifa chegaralari
+	Page Break	Sahifa uzilishi
+	Page Break Before	Yangi sahifadan
+	Page Breaks	Sahifa uzilishlari
+	Page Color	Sahifa rangi
+	Page Down	Page Down
+	Page Movement	Sahifalarni varaqlash
+	Page Number	Sahifa raqami
+	Page Setup	Sahifa parametrlari
+	Page Up	Page Up
+	Page Width	Sahifa kengligi
+	Page X of Y	Sahifa: X / Y
+	Page break before	Yangi sahifadan
+	Page display	Sahifa koʻrinishi
+	Page image (*.png)	Sahifa tasviri (*.png)
+	Page number style	Sahifa raqami uslubi
+	Page numbers at the right margin	Sahifa raqamlari oʻng hoshiyada
+	Page on which a bookmarked passage falls	Xatchoʻp qoʻyilgan parcha joylashgan sahifa
+	Page title	Sahifa nomi
+	Page width	Sahifa kengligi
+	Page {page}	Sahifa {page}
+	Page {page} of {pages}	Sahifa: {page} / {pages}
+	Page\nBorders	Sahifa\nchegaralari
+	Page\nColor	Sahifa\nrangi
+	Page\nNumber	Sahifa\nraqami
+	Pages	Sahifalar
+	Pages like 1-3, 5	Sahifalar, masalan 1-3, 5
+	Pages of bookmark:	Xatchoʻp sahifalari:
+	Paragraph	Xatboshi
+	Paragraph Character	Xatboshi belgisi
+	Paragraph Details	Xatboshi tafsilotlari
+	Paragraph Down	Bir xatboshi pastga
+	Paragraph Mark	Xatboshi belgisi
+	Paragraph Settings	Xatboshi sozlamalari
+	Paragraph Spacing	Xatboshilar oraligʻi
+	Paragraph Up	Bir xatboshi yuqoriga
+	Paragraph marks	Xatboshi belgilari
+	Paragraph style	Xatboshi uslubi
+	Paragraphs	Xatboshilar
+	Paragraph…	Xatboshi…
+	Parentheses	Oddiy qavslar
+	Parentheses with Separator	Ajratgichli oddiy qavslar
+	Partial Differential	Xususiy differensial
+	Password	Parol
+	Password:	Parol:
+	Paste	Joylash
+	Paste (⌘V)	Joylash (⌘V)
+	Paste All	Hammasini joylash
+	Paste Clipboard Item	Almashuv buferi elementini joylash
+	Paste Formatting	Formatlashni joylash
+	Paste Special	Maxsus joylash
+	Paste Special…	Maxsus joylash…
+	Paste as:	Quyidagicha joylash:
+	Paste: Keep Text Only	Joylash: faqat matnni saqlash
+	Paste: Merge Formatting	Joylash: formatlashni birlashtirish
+	Pastes the clipboard's picture.	Almashuv buferidagi rasmni joylaydi.
+	Pause	Pauza
+	Paused	Toʻxtatib turilgan
+	Pen	Ruchka
+	Pencil	Qalam
+	Pens	Ruchkalar
+	People	Odamlar
+	Periodical	Davriy nashr
+	Personalize	Shaxsiylashtirish
+	Phonetic Guide	Fonetik yoʻriqnoma
+	Pi Over 2	Pi ikkiga boʻlingan
+	Picas	Pikalar
+	Pick a custom group (New Group makes one)	Maxsus guruhni tanlang (“Yangi guruh” uni yaratadi)
+	Pick a field from the list	Roʻyxatdan maydonni tanlang
+	Picture	Rasm
+	Picture Border	Rasm chegarasi
+	Picture Content Control	Rasm tarkibini boshqarish elementi
+	Picture Format	Rasm formati
+	Picture Styles	Rasm uslublari
+	Pictures	Rasmlar
+	Pie	Doiraviy
+	Placeholder text	Oʻrinbosar matn
+	Plain Table 1	Oddiy jadval 1
+	Plain Text Content Control	Oddiy matn tarkibini boshqarish elementi
+	Plain text (*.txt)	Oddiy matn (*.txt)
+	Play	Ijro etish
+	Play/Pause	Ijro etish/pauza
+	Plus Equal	Plyus-teng
+	Points	Punktlar
+	Polish	Polyak tili
+	Portrait	Kitob
+	Portuguese (Brazil)	Portugal tili (Braziliya)
+	Portuguese (Portugal)	Portugal tili (Portugaliya)
+	Position	Joylashuv
+	Position:	Joylashuv:
+	Possible spelling mistake	Ehtimoliy imlo xatosi
+	Postal Code	Pochta indeksi
+	Power series of (1+x)ⁿ	(1+x)ⁿ ning darajali qatori
+	Preferred width:	Afzal kenglik:
+	Preserve formatting during updates	Yangilashda formatlashni saqlab qolish
+	Presets	Tayyor andozalar
+	Press a key combination	Tugmalar birikmasini bosing
+	Preview	Oldindan koʻrish
+	Preview Results	Natijalarni oldindan koʻrish
+	Preview\nResults	Natijalarni\noldindan koʻrish
+	Previous	Oldingi
+	Previous 1 or More	Oldingi belgi 1 yoki undan koʻp marta
+	Previous Change	Oldingi oʻzgarish
+	Previous Comment	Oldingi izoh
+	Previous Field	Oldingi maydon
+	Previous Page	Oldingi sahifa
+	Previous Record	Oldingi yozuv
+	Previous Section	Oldingi boʻlim
+	Previous Sentence	Oldingi gap
+	Previous sentence	Oldingi gap
+	Print	Chop etish
+	Print Layout	Chop etish maketi
+	Print Markup	Belgilarni chop etish
+	Print failed: the printing worker stopped.	Chop etib boʻlmadi: chop etish jarayoni toʻxtadi.
+	Print failed: {error}	Chop etish xatosi: {error}
+	Print job submitted.	Chop etish vazifasi yuborildi.
+	Print job submitted: {receipt}	Chop etish vazifasi yuborildi: {receipt}
+	Print the page color	Sahifa rangini chop etish
+	Print to PDF	PDF formatida chop etish
+	Print\nLayout	Chop etish\nmaketi
+	Printer	Printer
+	Printer default	Printerning standart sozlamasi
+	Printer discovery failed.	Printerlarni topib boʻlmadi.
+	Printing	Chop etish
+	Process	Jarayon
+	Product	Koʻpaytma
+	Product of A	A koʻpaytmasi
+	Product with Limits	Chegarali koʻpaytma
+	Product with Lower Limit	Quyi chegarali koʻpaytma
+	Product with Subscript-Superscript Limits	Indeksli chegarali koʻpaytma
+	Products and Coproducts	Koʻpaytmalar va qoʻshma koʻpaytmalar
+	Professional	Professional
+	Promote	Darajasini oshirish
+	Promote to Heading 1	Sarlavha 1 darajasiga koʻtarish
+	Proofing	Imlo tekshiruvi
+	Proofing Issues	Imlo tekshiruvi muammolari
+	Proofing language	Imlo tekshiruvi tili
+	Properties	Xususiyatlar
+	Protect	Himoyalash
+	Protect Document	Hujjatni himoyalash
+	Publisher	Nashriyot
+	Put the caret in a content control first.	Avval kursorni tarkibni boshqarish elementiga qoʻying.
+	Put the default commands back on the Quick Access Toolbar?	Standart buyruqlar tezkor kirish paneliga qaytarilsinmi?
+	Pyramid	Piramida
+	Quadratic Root	Kvadrat tenglama ildizi
+	Quick Access Toolbar	Tezkor kirish paneli
+	Quick Parts	Tezkor bloklar
+	Quick Tables	Tayyor jadvallar
+	Quote	Koʻchirma
+	Radical	Radikal
+	Radical with Degree	Darajali radikal
+	Radicals	Radikallar
+	Raised/lowered	Koʻtarilgan/tushirilgan
+	Read Aloud	Ovoz chiqarib oʻqish
+	Read Aloud Status	Ovoz chiqarib oʻqish holati
+	Read Mode	Oʻqish rejimi
+	Read\nAloud	Ovoz chiqarib\noʻqish
+	Read\nMode	Oʻqish\nrejimi
+	Reading	Oʻqish
+	Reading Column Width	Oʻqish rejimida ustun kengligi
+	Reading Highlight	Mosliklarni ajratib koʻrsatish
+	Reading Line Spacing	Oʻqish rejimida qatorlar oraligʻi
+	Reading Mode	Oʻqish rejimi
+	Reading Speed	Oʻqish tezligi
+	Reading Text Size	Oʻqish rejimida matn oʻlchami
+	Reads the clipboard's rich text and keeps its formatting.	Almashuv buferidan RTF matnni oladi va formatlashini saqlaydi.
+	Reads the clipboard's web content and keeps its formatting.	Almashuv buferidan veb-kontentni oladi va formatlashini saqlaydi.
+	Real name	Haqiqiy ism
+	Recent	Soʻnggi
+	Recent Colors	Soʻnggi ranglar
+	Recent documents to show:	Koʻrsatiladigan soʻnggi hujjatlar soni:
+	Recently used symbols:	Yaqinda ishlatilgan simvollar:
+	Recipient List	Qabul qiluvchilar roʻyxati
+	Recipient lists	Qabul qiluvchilar roʻyxatlari
+	Recipients: {count}	Qabul qiluvchilar: {count}
+	Recolor Selected Ink	Belgilangan siyoh rangini oʻzgartirish
+	Recolor a one-color picture, such as an icon	Bir rangli rasm, masalan, ikonka rangini oʻzgartirish
+	Record Macro	Makros yozib olish
+	Recover Unsaved Documents	Saqlanmagan hujjatlarni tiklash
+	Rectangle	Toʻrtburchak
+	Red:	Qizil:
+	Redo	Qaytarish
+	Reduce Hanging Indent	Osma chekinishni kamaytirish
+	References	Havolalar
+	Reflection	Aks
+	Refresh	Yangilash
+	Refresh printers	Printerlarni yangilash
+	Region:	Mintaqa:
+	Registered	Roʻyxatdan oʻtgan tovar belgisi
+	Registered Sign	Roʻyxatdan oʻtgan tovar belgisi simvoli
+	Regular expressions	Muntazam ifodalar
+	Reject	Rad etish
+	Reject All Changes	Barcha oʻzgarishlarni rad etish
+	Reject Change	Oʻzgarishni rad etish
+	Relationship	Bogʻliqlik
+	Relaxed	Erkin
+	Remove	Olib tashlash
+	Remove Added Font	Qoʻshilgan shriftni olib tashlash
+	Remove Background	Fonni olib tashlash
+	Remove Content Control	Tarkibni boshqarish elementini olib tashlash
+	Remove Footer	Quyi kolontitulni olib tashlash
+	Remove Header	Yuqori kolontitulni olib tashlash
+	Remove Hyperlink	Giperhavolani olib tashlash
+	Remove Password	Parolni olib tashlash
+	Remove Pen	Ruchkani olib tashlash
+	Remove Space After Paragraph	Xatboshidan keyingi oraliqni olib tashlash
+	Remove Table of Contents	Mundarijani olib tashlash
+	Remove Watermark	Suv belgisini olib tashlash
+	Remove every custom shortcut and restore the built-in keys?	Barcha maxsus tezkor tugmalar olib tashlanib, oʻrnatilgan tugmalar tiklansinmi?
+	Remove every custom tab and group and show all tabs again?	Barcha maxsus varaq va guruhlar olib tashlanib, barcha varaqlar yana koʻrsatilsinmi?
+	Remove field	Maydonni olib tashlash
+	Remove from Quick Access Toolbar	Tezkor kirish panelidan olib tashlash
+	Hide Quick Access Toolbar	Tezkor kirish panelini yashirish
+	Show Quick Access Toolbar	Tezkor kirish panelini koʻrsatish
+	Remove recipient	Qabul qiluvchini olib tashlash
+	Remove row	Qatorni olib tashlash
+	Remove series	Maʼlumotlar qatorini olib tashlash
+	Remove the control once edited	Tahrirlangandan keyin boshqarish elementini olib tashlash
+	Remove the space before the punctuation	Tinish belgisidan oldingi boʻshliqni olib tashlang
+	Rename Style	Uslub nomini oʻzgartirish
+	Rename…	Nomini oʻzgartirish…
+	Reopen	Qayta ochish
+	Repeat	Takrorlash
+	Repeat Header Rows	Sarlavha qatorlarini takrorlash
+	Repeat as header row on each page	Har bir sahifada sarlavha qatori sifatida takrorlash
+	Repeating Section Content Control	Takrorlanuvchi boʻlim tarkibini boshqarish elementi
+	Replace	Almashtirish
+	Replace All	Hammasini almashtirish
+	Replace Document Text	Hujjat matnini almashtirish
+	Replace as you type	Yozish jarayonida almashtirish
+	Replace text as you type	Yozish jarayonida matnni almashtirish
+	Replace with:	Bunga almashtirish:
+	Replace:	Almashtirish:
+	Replay	Qayta ijro etish
+	Reply	Javob berish
+	Report	Hisobot
+	Research	Tadqiqot
+	Researcher	Tadqiqotchi
+	Researcher needs an online service; WordCraft keeps your documents offline.	Tadqiqotchi onlayn xizmatni talab qiladi, WordCraft esa hujjatlaringizni oflayn saqlaydi.
+	Reset	Asliga qaytarish
+	Reset All…	Hammasini asliga qaytarish…
+	Reset Character Formatting	Belgilar formatlashini asliga qaytarish
+	Reset Crop	Qirqishni asliga qaytarish
+	Reset Graphic	Grafikani asliga qaytarish
+	Reset Paragraph Formatting	Xatboshi formatlashini asliga qaytarish
+	Reset Picture	Rasmni asliga qaytarish
+	Reset to Normal	“Oddiy” uslubiga qaytarish
+	Reset\nGraphic	Grafikani\nasliga qaytarish
+	Reset…	Asliga qaytarish…
+	Resize Table by Dragging	Jadval oʻlchamini sudrab oʻzgartirish
+	Resolve	Hal qilingan deb belgilash
+	Resolved	Hal qilingan
+	Restart Each Page	Har bir sahifada qaytadan
+	Restart Each Section	Har bir boʻlimda qaytadan
+	Restart at 1	1 dan qayta boshlash
+	Restart list after:	Roʻyxatni quyidagidan keyin qayta boshlash:
+	Restrict Editing	Tahrirlashni cheklash
+	Restrict\nEditing	Tahrirlashni\ncheklash
+	Result	Natija
+	Results	Natijalar
+	Return address labels	Qaytarish manzili yorliqlari
+	Return address:	Qaytarish manzili:
+	Reverse the order	Tartibni teskari qilish
+	Review	Taqriz
+	Reviewing	Taqriz
+	Reviewing Pane	Taqriz paneli
+	Reviewing — edits become suggestions	Taqriz – tahrirlar takliflarga aylanadi
+	Revised document	Oʻzgartirilgan hujjat
+	Rewind	Orqaga
+	Ribbon	Lenta
+	Ribbon and Quick Access Toolbar:	Lenta va tezkor kirish paneli:
+	Ribbon tabs	Lenta varaqlari
+	Rich Text Content Control	Kontent boshqaruvi elementi: formatlangan matn
+	Rich Text Format (*.rtf)	RTF formati (*.rtf)
+	Rich Text Format (RTF)	RTF formatidagi matn
+	Right	Oʻng
+	Right (vertical)	Oʻng (vertikal)
+	Right Arrow with Text Above	Ustida matn boʻlgan oʻngga strelka
+	Right Arrow with Text Below	Ostida matn boʻlgan oʻngga strelka
+	Right Border	Oʻng chegara
+	Right Bracket Twice	Ikkita oʻng kvadrat qavs
+	Right Margin	Oʻng hoshiya
+	Right Only	Faqat oʻngda
+	Right border	Oʻng chegara
+	Right indent	Oʻngdan chekinish
+	Right-to-Left Section	Oʻngdan chapga boʻlim
+	Right-to-Left Table	Oʻngdan chapga jadval
+	Right-to-Left Text Direction	Oʻngdan chapga matn yoʻnalishi
+	Right-to-left	Oʻngdan chapga
+	Right:	Oʻng:
+	Rightwards Arrow Above	Ustida oʻngga strelka
+	Rightwards Harpoon Above	Ustida oʻngga garpun
+	Roots of ax²+bx+c	ax²+bx+c ildizlari
+	Rotate	Burish
+	Rotate Left 90°	Chapga 90° burish
+	Rotate Right 90°	Oʻngga 90° burish
+	Rotate all text 270°	Butun matnni 270° burish
+	Rotate all text 90°	Butun matnni 90° burish
+	Rotation	Burilish
+	Rotation:	Burilish:
+	Rounded Rectangle	Yumaloq burchakli toʻrtburchak
+	Row	Qator
+	Row:	Qator:
+	Rows & Columns	Qatorlar va ustunlar
+	Ruby text:	Furigana matni:
+	Ruler	Chizgʻich
+	Rules	Qoidalar
+	Run-in	Bir qatorda
+	Russian	Rus tili
+	Résumé	Rezyume
+	SAMPLE	NAMUNA
+	SIST02	SIST02
+	Sat:	Toʻyinganlik:
+	Save	Saqlash
+	Save As	Boshqacha saqlash
+	Save a copy in another format. Printing goes through a PDF you can print from any viewer.	Nusxani boshqa formatda saqlang. Chop etish PDF orqali amalga oshadi, uni istalgan koʻrish dasturidan chop etish mumkin.
+	Save as Template	Shablon sifatida saqlash
+	Save documents	Hujjatlarni saqlash
+	Save the document to turn on AutoSave	Avtosaqlashni yoqish uchun hujjatni saqlang
+	Save the document to turn on AutoSave (a file you have only opened isn't rewritten until you save it)	Avtosaqlashni yoqish uchun hujjatni saqlang (faqat ochilgan fayl siz uni saqlamaguningizcha qayta yozilmaydi)
+	Save these pages as PDF…	Bu sahifalarni PDF sifatida saqlash…
+	Saved	Saqlandi
+	Scale	Masshtab
+	Scale Drawing	Chizmani masshtablash
+	Scatter	Nuqtali
+	Script	Indeks
+	Scripts	Indekslar
+	Scroll ribbon left	Lentani chapga aylantirish
+	Scroll ribbon right	Lentani oʻngga aylantirish
+	Search	Qidirish
+	Search Commands	Buyruqlarni qidirish
+	Search Options	Qidiruv parametrlari
+	Search commands and help	Buyruqlar va yordamni qidirish
+	Search document	Hujjatdan qidirish
+	Search for templates	Shablonlarni qidirish
+	Search icons	Ikonkalarni qidirish
+	Secant Function	Sekans funksiyasi
+	Section Break	Boʻlim uzilishi
+	Section Breaks	Boʻlim uzilishlari
+	Section Character	Boʻlim belgisi
+	Section Mark	Paragraf belgisi
+	Section Properties	Boʻlim xususiyatlari
+	Section direction:	Boʻlim yoʻnalishi:
+	Sections	Boʻlimlar
+	See	Qarang
+	Select	Belgilash
+	Select All	Hammasini belgilash
+	Select Cell	Katakni belgilash
+	Select Column	Ustunni belgilash
+	Select Heading and Content	Sarlavha va mazmunni belgilash
+	Select Line	Matn qatorini belgilash
+	Select Objects	Obyektlarni tanlash
+	Select Paragraph	Xatboshini belgilash
+	Select Range	Oraliqni belgilash
+	Select Recipients	Qabul qiluvchilarni tanlash
+	Select Row	Jadval qatorini belgilash
+	Select Sentence	Gapni belgilash
+	Select Table	Jadvalni belgilash
+	Select Table Cells by Clicking	Jadval kataklarini bosish orqali belgilash
+	Select Text	Matnni belgilash
+	Select Text with Similar Formatting	Oʻxshash formatlangan matnni belgilash
+	Select Word	Soʻzni belgilash
+	Select a picture, shape, chart or table to describe it.	Tavsiflash uchun rasm, shakl, diagramma yoki jadvalni tanlang.
+	Select a printer	Printerni tanlang
+	Select recipients first to choose from their fields.	Ularning maydonlaridan tanlash uchun avval qabul qiluvchilarni tanlang.
+	Select recipients first to match their fields.	Ularning maydonlarini moslashtirish uchun avval qabul qiluvchilarni tanlang.
+	Select text, then tick who can still edit it.	Matnni belgilang, soʻng uni kimlar tahrirlay olishiga belgi qoʻying.
+	Select\nRecipients	Qabul qiluvchilarni\ntanlash
+	Selected Fields	Tanlangan maydonlar
+	Selected pages	Tanlangan sahifalar
+	Selection	Belgilangan qism
+	Selection Pane	Tanlash paneli
+	Send Backward	Orqaga surish
+	Send the document straight to the system print dialog, or save a copy in another format below.	Hujjatni toʻgʻridan-toʻgʻri tizimning chop etish oynasiga yuboring yoki quyida nusxasini boshqa formatda saqlang.
+	Sentence	Gap
+	Sentence case.	Gapdagidek.
+	Separator:	Ajratgich:
+	Sequence name:	Ketma-ketlik nomi:
+	Serbian (Cyrillic)	Serb tili (kirill)
+	Serbian (Latin)	Serb tili (lotin)
+	Series name	Seriya nomi
+	Series {n}	Seriya {n}
+	Set	Oʻrnatish
+	Set As Default	Standart qilib belgilash
+	Set Caret	Kursorni oʻrnatish
+	Set Character Formatting	Belgilar formatini oʻrnatish
+	Set Date	Sanani oʻrnatish
+	Set Equation	Tenglamani oʻrnatish
+	Set Numbering Value	Raqamlash qiymatini oʻrnatish
+	Set Paragraph Formatting	Xatboshi formatini oʻrnatish
+	Set as Default	Standart qilib belgilash
+	Setting:	Turi:
+	Settings…	Sozlamalar…
+	Shading	Fon rangi
+	Shadow	Soya
+	Shadow, glow and soft edges	Soya, nur sochish va yumshoq qirralar
+	Shape Effects	Shakl effektlari
+	Shape Fill	Shaklni toʻldirish
+	Shape Format	Shakl formati
+	Shape Outline	Shakl konturi
+	Shape Styles	Shakl uslublari
+	Shapes	Shakllar
+	Share	Ulashish
+	Shift+Tab	Shift+Tab
+	Shipping labels	Joʻnatma yorliqlari
+	Shortcut key:	Tezkor tugma:
+	Show	Koʻrsatish
+	Show All Levels	Barcha darajalarni koʻrsatish
+	Show Comments	Izohlarni koʻrsatish
+	Show First Line Only	Faqat birinchi qatorni koʻrsatish
+	Show KeyTips (Alt or F10)	Tugma maslahatlarini koʻrsatish (Alt yoki F10)
+	Show Level	Darajani koʻrsatish
+	Show Level 1	1-darajani koʻrsatish
+	Show Level 2	2-darajani koʻrsatish
+	Show Level 3	3-darajani koʻrsatish
+	Show Level 4	4-darajani koʻrsatish
+	Show Level 5	5-darajani koʻrsatish
+	Show Level 6	6-darajani koʻrsatish
+	Show Level 7	7-darajani koʻrsatish
+	Show Level 8	8-darajani koʻrsatish
+	Show Level 9	9-darajani koʻrsatish
+	Show Markup	Belgilarni koʻrsatish
+	Show Notes	Sahifa osti izohlarini koʻrsatish
+	Show Text Formatting	Matn formatlashini koʻrsatish
+	Show all formatting marks	Barcha formatlash belgilarini koʻrsatish
+	Show all revisions inline	Barcha tuzatishlarni matn ichida koʻrsatish
+	Show changes at:	Oʻzgarishlarni koʻrsatish:
+	Show changes in:	Oʻzgarishlarni quyidagida koʻrsatish:
+	Show documents with their colours inverted, like View › Switch Modes. Saving, printing and PDFs are unchanged.	Hujjatlarni ranglari teskari qilingan holda koʻrsatish (“Koʻrinish › Rejimni almashtirish” kabi). Saqlash, chop etish va PDF oʻzgarmaydi.
+	Show every bibliography field	Barcha bibliografiya maydonlarini koʻrsatish
+	Show in the Styles gallery	Uslublar galereyasida koʻrsatish
+	Show only comments and formatting in balloons	Pufakchalarda faqat izohlar va formatlashni koʻrsatish
+	Show or Hide Style	Uslubni koʻrsatish yoki yashirish
+	Show revisions in balloons	Tuzatishlarni pufakchalarda koʻrsatish
+	Show rulers	Chizgʻichlarni koʻrsatish
+	Show the Start screen when WordCraft starts	WordCraft ishga tushganda boshlangʻich ekranni koʻrsatish
+	Show the community button in the title bar	Sarlavha satrida hamjamiyat tugmasini koʻrsatish
+	Show the equation in the line of text	Tenglamani matn qatorida koʻrsatish
+	Show the equation on a line of its own	Tenglamani alohida qatorda koʻrsatish
+	Show the mini toolbar when text is selected	Matn belgilanganda mini asboblar panelini koʻrsatish
+	Show/Hide ¶	Koʻrsatish/yashirish ¶
+	Show\nComments	Izohlarni\nkoʻrsatish
+	Showing the first {count} items.	Dastlabki {count} ta element koʻrsatilmoqda.
+	No items to show.	Koʻrsatiladigan elementlar yoʻq.
+	Shows a tree: each item below the item it belongs to.	Daraxt koʻrinishida koʻrsatadi: har bir element u tegishli boʻlgan element ostida.
+	Shows items around a central idea: the first item is the centre.	Elementlarni markaziy gʻoya atrofida koʻrsatadi: birinchi element markazda.
+	Shows items of equal weight as blocks in rows.	Teng ahamiyatli elementlarni qatorlardagi bloklar sifatida koʻrsatadi.
+	Shows overlapping ideas as overlapping circles.	Kesishuvchi gʻoyalarni kesishuvchi doiralar sifatida koʻrsatadi.
+	Shows parts of a whole as quadrants.	Butunning qismlarini choraklar sifatida koʻrsatadi.
+	Shows parts that build on each other, largest at the bottom.	Bir-biriga tayanadigan qismlarni koʻrsatadi, eng kattasi pastda.
+	Shows steps in order, left to right, with arrows between them.	Bosqichlarni chapdan oʻngga tartib bilan, oralarida strelkalar bilan koʻrsatadi.
+	Shows steps that repeat, around a circle.	Takrorlanuvchi bosqichlarni doira boʻylab koʻrsatadi.
+	Shrink Font 1 Point	Shriftni 1 pt kichraytirish
+	Shrink text	Matnni kichraytirish
+	Side to Side	Yonma-yon
+	Side\nto Side	Yonma-\nyon
+	Sides of a right triangle	Toʻgʻri burchakli uchburchak tomonlari
+	Signature Line	Imzo satri
+	Sine Function	Sinus funksiyasi
+	Sine and cosine series of f(x)	f(x) ning sinus va kosinus qatori
+	Sine theta	Sinus teta
+	Single	Yakka
+	Single Brackets	Yakka qavslar
+	Single Closing Quote	Yopuvchi yakka tirnoq
+	Single Left Angle	Yakka chap burchakli qavs
+	Single Left Bar	Yakka chap chiziq
+	Single Left Brace	Yakka chap figurali qavs
+	Single Left Bracket	Yakka chap kvadrat qavs
+	Single Left Parenthesis	Yakka chap dumaloq qavs
+	Single Opening Quote	Ochuvchi yakka tirnoq
+	Single Right Brace	Yakka oʻng figurali qavs
+	Single Right Bracket	Yakka oʻng kvadrat qavs
+	Single Right Parenthesis	Yakka oʻng dumaloq qavs
+	Single Spacing	Yakka qator oraligʻi
+	Single label	Bitta yorliq
+	Site name	Sayt nomi
+	Size	Oʻlcham
+	Size (pt):	Oʻlcham (pt):
+	Size and Crop…	Oʻlcham va qirqish…
+	Size:	Oʻlcham:
+	Sketchbook	Eskizlar daftari
+	Skewed Fraction	Qiya kasr
+	Skip Citations and Bibliography	Iqtiboslar va bibliografiyani oʻtkazib yuborish
+	Skip Record If	Yozuvni oʻtkazib yuborish, agar
+	Skip Record If…	Yozuvni oʻtkazib yuborish, agar…
+	Skip citations & bibliography	Iqtiboslar va bibliografiyani oʻtkazib yuborish
+	Slant Down	Pastga qiyalik
+	Slant Up	Yuqoriga qiyalik
+	Small Caps	Kichik bosh harflar
+	Small caps	Kichik bosh harflar
+	Small change	Kichik qadam
+	Smart quotes instead of straight quotes	Toʻgʻri qoʻshtirnoqlar oʻrniga “aqlli” qoʻshtirnoqlar
+	SmartArt	SmartArt
+	SmartArt Design	SmartArt dizayni
+	SmartArt Styles	SmartArt uslublari
+	Smooth scrolling and zooming, and menus and buttons that fade in. Off shows every change at once.	Silliq aylantirish va masshtablash, menyu va tugmalarning silliq paydo boʻlishi. “Oʻchiq” tanlansa, har bir oʻzgarish darhol koʻrsatiladi.
+	Soft Edges	Yumshoq qirralar
+	Soft Glow	Yumshoq nur
+	Solid Accent	Yaxlit urgʻu
+	Sort	Saralash
+	Sort order:	Saralash tartibi:
+	Source Manager	Manbalar menejeri
+	Source code: github.com/storytold/wordcraft	Manba kodi: github.com/storytold/wordcraft
+	Source type:	Manba turi:
+	Sources in this document:	Ushbu hujjatdagi manbalar:
+	South	Janub
+	Space	Probel
+	Space after	Keyin oraliq
+	Space after: {pt} pt	Keyin oraliq: {pt} pt
+	Space before	Oldin oraliq
+	Space before/after:	Oldin/keyin oraliq:
+	Space before: {pt} pt	Oldin oraliq: {pt} pt
+	Spaces	Probellar
+	Spacing	Oraliq
+	Spacing (pt):	Oraliq (pt):
+	Kerning for fonts:	Shriftlar uchun kerning:
+	Points and above	pt va undan ortiq
+	Spacing:	Oraliq:
+	Spanish (Mexico)	Ispan tili (Meksika)
+	Spanish (Spain)	Ispan tili (Ispaniya)
+	Sparse Matrices	Siyrak matritsalar
+	Special	Maxsus
+	Special Characters	Maxsus belgilar
+	Specify height:	Balandlik:
+	Speech	Nutq
+	Speed	Tezlik
+	Spelling	Imlo
+	Spelling & Grammar	Imlo va grammatika
+	Spelling &\nGrammar	Imlo va\ngrammatika
+	Spelling Suggestions	Imlo takliflari
+	Spelling and grammar are checked in English (United States).	Imlo va grammatika ingliz tili (AQSh) boʻyicha tekshiriladi.
+	Split	Boʻlish
+	Split Cells	Katakni boʻlish
+	Split Table	Jadvalni boʻlish
+	Spreadsheet Table	Elektron jadval
+	Square	Kvadrat
+	Square Root	Kvadrat ildiz
+	Square Root with Degree	Darajali kvadrat ildiz
+	Square Union	Kvadrat birlashma
+	Stack Object	Taxlama
+	Stack Object (Three)	Taxlama (uchta element)
+	Stacked	Ustma-ust
+	Stacked Bar	Yigʻma gorizontal ustunli
+	Stacked Column	Yigʻma gistogramma
+	Stacked Fraction	Vertikal kasr
+	Stacked, no bar	Ustma-ust, chiziqsiz
+	Standard	Standart
+	Standard Colors	Standart ranglar
+	Star	Yulduz
+	Start Enforcing Protection	Himoyani yoqish
+	Start Mail Merge	Pochta birlashmasini boshlash
+	Start Mail\nMerge	Pochta birlashmasini\nboshlash
+	Start at:	Boshlanishi:
+	Start-up	Ishga tushirish
+	State	Viloyat
+	Statistics	Statistika
+	Status Bar	Holat satri
+	Stop	Toʻxtatish
+	Stop Protection	Himoyani oʻchirish
+	Stop Reading	Oʻqishni toʻxtatish
+	Stopped	Toʻxtatildi
+	Straight Arrow Connector	Toʻgʻri strelkali birlashtiruvchi chiziq
+	Straight Connector	Toʻgʻri birlashtiruvchi chiziq
+	Strikethrough	Ustidan chizilgan
+	Stroke {n} of {total}	Shtrix: {n} / {total}
+	Strong	Kuchli
+	Structure Actions	Struktura amallari
+	Structures	Strukturalar
+	Studio	Studio
+	Studio cover	Studio muqovasi
+	Studio handbook (sample)	Studio qoʻllanmasi (namuna)
+	Style	Uslub
+	Style Inspector	Uslub inspektori
+	Style Set	Uslublar toʻplami
+	Style based on:	Asos uslub:
+	Style:	Uslub:
+	Style: APA	Uslub: APA
+	Style: {style}	Uslub: {style}
+	Styles	Uslublar
+	Styles Pane	Uslublar paneli
+	Styles:	Uslublar:
+	Subentry:	Quyi yozuv:
+	Subject	Mavzu
+	Submitting print job…	Chop etish vazifasi yuborilmoqda…
+	Subscript	Pastki indeks
+	Subscript-Superscript	Pastki va yuqori indeks
+	Subscripts and Superscripts	Pastki va yuqori indekslar
+	Subset:	Toʻplam:
+	Subtitle	Kichik nom
+	Subtle Emphasis	Yengil urgʻu
+	Subtle Reference	Yengil havola
+	Suggested	Tavsiya etilgan
+	Sum	Yigʻindi
+	Sum of cosines	Kosinuslar yigʻindisi
+	Sum or difference of sines	Sinuslar yigʻindisi yoki ayirmasi
+	Summation	Yigʻindi
+	Summation from 0 to n	0 dan n gacha yigʻindi
+	Summation over binomials	Binomial koeffitsiyentlar yigʻindisi
+	Summation with Limits	Chegarali yigʻindi
+	Summation with Lower Limit	Quyi chegarali yigʻindi
+	Summation with Subscript Limit	Indeksdagi chegarali yigʻindi
+	Summation with Subscript-Superscript Limits	Indekslardagi chegarali yigʻindi
+	Summations	Yigʻindilar
+	Superscript	Yuqori indeks
+	Suppress line numbers	Qator raqamlarisiz
+	Surface Integral	Sirt integrali
+	Surface Integral with Limits	Chegarali sirt integrali
+	Surface Integral with Stacked Limits	Ustma-ust chegarali sirt integrali
+	Swap footnotes and endnotes	Sahifa osti izohlari va oxirgi izohlarni almashtirish
+	Swedish	Shved tili
+	Switch Modes	Rejimni almashtirish
+	Switch\nModes	Rejimni\nalmashtirish
+	Symbol	Simvol
+	Symbols	Simvollar
+	Synonyms	Sinonimlar
+	System	Tizim
+	TC entry fields	TC yozuv maydonlari
+	TOA Heading	Havolalar jadvali sarlavhasi
+	TOC Heading	Mundarija sarlavhasi
+	TOC {n}	Mundarija {n}
+	Tab	Tab
+	Tab Character	Tabulyatsiya belgisi
+	Tab character	Tabulyatsiya belgisi
+	Tab characters	Tabulyatsiya belgilari
+	Tab leader:	Tabulyatsiya toʻldiruvchisi:
+	Tab stop position:	Tabulyatsiya joylashuvi:
+	Tab stops to be cleared:	Oʻchiriladigan tabulyatsiyalar:
+	Table	Jadval
+	Table Column Width	Jadval ustuni kengligi
+	Table Design	Jadval dizayni
+	Table Grid	Jadval toʻri
+	Table Layout	Jadval maketi
+	Table Properties	Jadval xususiyatlari
+	Table Properties…	Jadval xususiyatlari…
+	Table Row Height	Jadval qatori balandligi
+	Table Style Options	Jadval uslubi parametrlari
+	Table Styles	Jadval uslublari
+	Table direction:	Jadval yoʻnalishi:
+	Table of Authorities	Havolalar jadvali
+	Table of Contents	Mundarija
+	Table of Contents Options	Mundarija parametrlari
+	Table of Contents Styles	Mundarija uslublari
+	Table of Figures	Rasmlar roʻyxati
+	Table of\nContents	Mundarija
+	Table style	Jadval uslubi
+	Tables	Jadvallar
+	Tabs	Tabulyatsiya
+	Tabs…	Tabulyatsiya…
+	Tabular List	Jadvalli roʻyxat
+	Tag	Teg
+	Tangent Function	Tangens funksiyasi
+	Tangent formula	Tangens formulasi
+	Technology	Texnologiya
+	Templates	Shablonlar
+	Templates and Add-ins	Shablonlar va qoʻshimchalar
+	Text	Matn
+	Text Box	Matn maydoni
+	Text Direction	Matn yoʻnalishi
+	Text Effects	Matn effektlari
+	Text Effects and Typography	Matn effektlari va tipografika
+	Text Fill	Matnni toʻldirish
+	Text Highlight Color	Matnni ajratib koʻrsatish rangi
+	Text Outline	Matn konturi
+	Text Pane	Matn paneli
+	Text Wrapping	Matn bilan oʻrash
+	Text boxes	Matn maydonlari
+	Text from File	Fayldan matn
+	Text indent at:	Matn chekinishi:
+	Text over Colon Equal	Ikki nuqta-tenglik ustidagi matn
+	Text over Equal	Tenglik belgisi ustidagi matn
+	Text size	Matn oʻlchami
+	Text snaps to characters	Matn belgilarga moslanadi
+	Text to display:	Koʻrsatiladigan matn:
+	Text:	Matn:
+	Text\nBox	Matn\nmaydoni
+	Text\nDirection	Matn\nyoʻnalishi
+	That format doesn't keep everything, so the document is still open. Save it as a Word document (.docx) to go on.	Bu format hamma narsani saqlamaydi, shuning uchun hujjat hali ochiq. Davom etish uchun uni Word hujjati (.docx) sifatida saqlang.
+	That password isn't right. Check it (passwords are case-sensitive) and try again.	Parol notoʻgʻri. Uni tekshiring (parolda katta-kichik harflar farqlanadi) va qayta urinib koʻring.
+	The clipboard is empty.	Almashinuv buferi boʻsh.
+	The date it is today	Bugungi sana
+	The document has no bookmarks yet.	Hujjatda hali xatchoʻplar yoʻq.
+	The document is read only, except for regions marked editable.	Hujjat faqat oʻqish uchun, tahrirlash mumkin deb belgilangan sohalar bundan mustasno.
+	The document will be saved with a password. Save it to protect it.	Hujjat parol bilan saqlanadi. Uni himoyalash uchun saqlang.
+	The new style takes the formatting of the current paragraph.	Yangi uslub joriy xatboshi formatini oladi.
+	The password is optional; without it anyone can stop the protection.	Parol ixtiyoriy; parolsiz istalgan kishi himoyani oʻchira oladi.
+	The password is removed. Save the document to keep the change.	Parol olib tashlandi. Oʻzgarish saqlanib qolishi uchun hujjatni saqlang.
+	The passwords don't match.	Parollar mos kelmadi.
+	The printer, two-sided printing and pages per sheet are chosen in that dialog.	Printer, ikki tomonlama chop etish va har varaqdagi sahifalar soni oʻsha oynada tanlanadi.
+	The recipient-list field that fills each part of an address block and greeting line.	Manzil bloki va salomlashuv qatorining har bir qismini toʻldiradigan qabul qiluvchilar roʻyxati maydoni.
+	The spelling and grammar check is complete.	Imlo va grammatika tekshiruvi yakunlandi.
+	The system file dialog isn't available, so WordCraft shows its own. To get the system dialog, install a file chooser portal (such as xdg-desktop-portal-gtk) or zenity.	Tizimning fayl tanlash oynasi mavjud emas, shuning uchun WordCraft oʻz oynasini koʻrsatadi. Tizim oynasidan foydalanish uchun fayl tanlash portalini (masalan, xdg-desktop-portal-gtk) yoki zenity dasturini oʻrnating.
+	The time right now	Joriy vaqt
+	Theme Colors	Mavzu ranglari
+	Theme Fonts	Mavzu shriftlari
+	Theme List	Mavzular roʻyxati
+	Themes	Mavzular
+	Then insert:	Keyin qoʻshish:
+	Thesaurus	Sinonimlar lugʻati
+	These marks show even when Show/Hide ¶ is off.	Bu belgilar “Koʻrsatish/yashirish ¶” oʻchiq boʻlsa ham koʻrinadi.
+	These merge fields aren't in the recipient list:	Bu birlashma maydonlari qabul qiluvchilar roʻyxatida yoʻq:
+	These settings will be used for new documents.	Bu sozlamalar yangi hujjatlar uchun ishlatiladi.
+	Thick	Qalin
+	Thickness	Qalinlik
+	This document	Ushbu hujjat
+	This field has no options.	Bu maydonning parametrlari yoʻq.
+	This folder can't be read: {error}	Bu jildni oʻqib boʻlmadi: {error}
+	This font has no characters to show.	Bu shriftda koʻrsatiladigan belgilar yoʻq.
+	This page	Ushbu sahifa
+	This password type isn't supported.	Bu parol turi qoʻllab-quvvatlanmaydi.
+	This point forward	Shu joydan oxirigacha
+	This section	Ushbu boʻlim
+	Selected text	Belgilangan matn
+	Three	Uch
+	Through	Orqali
+	Tight	Zich
+	Tilde	Tilda
+	Tips ({n})	Maslahatlar ({n})
+	Title	Nom
+preview	Title	Nom
+	Title Bar	Sarlavha satri
+	Title from the document properties	Hujjat xususiyatlaridagi nom
+	Title:	Nom:
+	To open Word documents with WordCraft by default: select one in Finder, choose File › Get Info, pick WordCraft under Open with, then click Change All.	Word hujjatlarini standart holatda WordCraft bilan ochish uchun: Finder ilovasida hujjatni belgilang, File › Get Info buyrugʻini tanlang, Open with boʻlimida WordCraft ni tanlang, soʻng Change All tugmasini bosing.
+	Today	Bugun
+	Toggle Check Box	Belgilash katakchasini almashtirish
+	Toggle Field Codes	Maydon kodlarini almashtirish
+	Toggle Unicode Character	Unicode belgisiga aylantirish
+	Tools	Asboblar
+	Top	Yuqori
+	Top Border	Yuqori chegara
+	Top Margin	Yuqori hoshiya
+	Top and Bottom	Yuqori va pastki
+	Top of Page	Sahifa yuqorisida
+	Top:	Yuqori:
+	Total	Jami
+	Total Row	Jami qatori
+	Track Changes	Oʻzgarishlarni kuzatish
+	Track Changes Options	Oʻzgarishlarni kuzatish parametrlari
+	Track Changes: On	Oʻzgarishlarni kuzatish: yoqilgan
+	Track formatting	Formatlashni kuzatish
+	Track\nChanges	Oʻzgarishlarni\nkuzatish
+	Track\nChanges ✓	Oʻzgarishlarni\nkuzatish ✓
+	Tracked changes	Kuzatilgan oʻzgarishlar
+	Tracking	Kuzatish
+	Trademark	Tovar belgisi
+	Trademark Sign	Tovar belgisi simvoli
+	Transform	Oʻzgartirish
+	Translate	Tarjima qilish
+	Transparency	Shaffoflik
+	Transport	Transport
+	Triangle	Uchburchak
+	Triangle Down	Pastga qaragan uchburchak
+	Triangle Up	Yuqoriga qaragan uchburchak
+	Trigonometric Functions	Trigonometrik funksiyalar
+	Triple	Uchlik
+	Triple Dot	Uch nuqta
+	Triple Integral	Uchkarrali integral
+	Triple Integral with Limits	Chegarali uchkarrali integral
+	Triple Integral with Stacked Limits	Ustma-ust chegarali uchkarrali integral
+	Tue	Se
+	Turabian	Turabian
+	Turkish	Turk tili
+	Two	Ikki
+	Two-sided printing	Ikki tomonlama chop etish
+	Two-sided: long edge	Ikki tomonlama: uzun chet
+	Two-sided: short edge	Ikki tomonlama: qisqa chet
+	Type	Tur
+	Type +2 or -1 to move from the page you are on.	Joriy sahifadan shuncha sahifaga siljish uchun +2 yoki -1 kiriting.
+	Type Text	Matn kiritish
+	Type a New List…	Yangi roʻyxat kiritish…
+	Type a command, e.g. "insert table"	Buyruq kiriting, masalan, “jadval qoʻshish”
+	Type at least one recipient.	Kamida bitta qabul qiluvchini kiriting.
+	Type equations in LaTeX	Tenglamalarni LaTeX formatida kiritish
+	Type equations in the linear format (UnicodeMath)	Tenglamalarni chiziqli formatda kiritish (UnicodeMath)
+	Type in Equation	Tenglamaga kiritish
+	Type normal (non-math) text in the equation	Tenglamada oddiy (matematik boʻlmagan) matn kiritish
+	Type the categories down the side and a column of values per series.	Kategoriyalarni chap tomonda pastga qarab, har bir maʼlumotlar qatori uchun esa qiymatlar ustunini kiriting.
+	Type the field's name and its switches, for example PAGE \\* roman.	Maydon nomi va uning kalitlarini kiriting, masalan, PAGE \\* roman.
+	Type the password to stop the protection.	Himoyani oʻchirish uchun parolni kiriting.
+	Type the recipients, or load them from a file.	Qabul qiluvchilarni kiriting yoki ularni fayldan yuklang.
+	Type:	Tur:
+	Typing	Matn kiritish
+	Typing replaces selected text	Kiritilgan matn belgilangan matn oʻrnini egallaydi
+	UPPERCASE	KATTA HARFLAR
+	URGENT	SHOSHILINCH
+	URL	URL
+	Ukrainian	Ukrain tili
+	Unchecked symbol	Belgilanmagan holat simvoli
+	Underbar	Pastki chiziq
+	Underbrace	Pastki figurali qavs
+	Underline	Tagiga chizilgan
+	Underline Words Only	Faqat soʻzlarning tagiga chizish
+	Underline color	Tagiga chiziq rangi
+	Undo	Ortga qaytarish
+	Undo 1 Action	1 ta amalni ortga qaytarish
+	Undo Actions	Amallarni ortga qaytarish
+	Undo History	Ortga qaytarish tarixi
+	Undo {action}	Ortga qaytarish: {action}
+	Undo {n} Actions	{n} ta amalni ortga qaytarish
+	Unformatted Text	Formatlanmagan matn
+	Ungroup	Guruhdan chiqarish
+	Union	Birlashma
+	Union of intersections	Kesishmalar birlashmasi
+	Union with Limits	Chegarali birlashma
+	Union with Lower Limit	Quyi chegarali birlashma
+	Union with Plus	Plyusli birlashma
+	Union with Subscript-Superscript Limits	Indekslardagi chegarali birlashma
+	Unions and Intersections	Birlashmalar va kesishmalar
+	Unlink Fields	Maydonlar bogʻlanishini uzish
+	Unlink\nCitations	Iqtiboslar bogʻlanishini\nuzish
+	Unlock Fields	Maydonlarni qulfdan chiqarish
+	Up	Yuqoriga
+	Up Diagonal Dots	Yuqoriga diagonal nuqtalar
+	Up one level	Bir daraja yuqoriga
+	Update Field	Maydonni yangilash
+	Update Index	Koʻrsatkichni yangilash
+	Update Style to Match Selection	Uslubni belgilangan qismga moslab yangilash
+	Update Styles from Template	Uslublarni shablondan yangilash
+	Update Table	Jadvalni yangilash
+	Update Table of Figures	Rasmlar roʻyxatini yangilash
+	Update fields before printing	Chop etishdan oldin maydonlarni yangilash
+	Update to Match	Namunaga moslab yangilash
+	Update to Match Selection	Belgilangan qismga moslab yangilash
+	Use "a" before a consonant sound	Undosh tovushdan oldin “a” ishlating
+	Use "an" before a vowel sound	Unli tovushdan oldin “an” ishlating
+	Use an Existing List…	Mavjud roʻyxatdan foydalanish…
+	Use system setting	Tizim sozlamasidan foydalanish
+	Use the Insert key to switch overtype on and off	Almashtirish rejimini yoqish va oʻchirish uchun Insert tugmasidan foydalanish
+	Use wildcards	Joker belgilardan foydalanish
+	User Name	Foydalanuvchi nomi
+	User name:	Foydalanuvchi nomi:
+	Username	Foydalanuvchi nomi
+	Value	Qiymat
+	Vector A	A vektor
+	Vector AB	AB vektor
+	Version	Versiya
+	Version History	Versiyalar tarixi
+	Version {version} ({build})	Versiya {version} ({build})
+	Vertical	Vertikal
+	Vertical Alignment	Vertikal tekislash
+	Vertical Bars	Vertikal chiziqlar
+	Vertical Dots	Vertikal nuqtalar
+	Vertical alignment:	Vertikal tekislash:
+	View	Koʻrinish
+	View Alt Text…	Muqobil matnni koʻrish…
+	View Gridlines	Toʻr chiziqlarini koʻrsatish
+	View State	Koʻrinish holati
+	Views	Koʻrinishlar
+	Visual effects	Vizual effektlar
+	Voice	Ovoz
+	Volume	Jild
+	Volume Integral	Hajmiy integral
+	Volume Integral with Limits	Chegaralari bilan hajmiy integral
+	Volume Integral with Stacked Limits	Ustma-ust chegaralari bilan hajmiy integral
+	W:	K:
+	Waiting for Zotero…	Zotero kutilmoqda…
+	Warm Gradient with Outline	Konturli iliq gradiyent
+	Warnings ({n})	Ogohlantirishlar ({n})
+	Watermark	Suv belgisi
+	Wave	Toʻlqinli
+	Weather	Ob-havo
+	Web Layout	Veb-maket
+	Web page (*.html)	Veb-sahifa (*.html)
+	Web\nLayout	Veb-\nmaket
+	Website	Veb-sayt
+	Wed	Chor
+	Weight	Qalinlik
+	West	Gʻarb
+	When this document was first created	Hujjat birinchi marta yaratilgan vaqt
+	When this document was most recently printed	Hujjat oxirgi marta chop etilgan vaqt
+	When this document was most recently saved	Hujjat oxirgi marta saqlangan vaqt
+	White Space	Boʻsh joy belgisi
+	White space	Boʻsh joylar
+	Who the document properties name as author	Hujjat xususiyatlarida muallif sifatida koʻrsatilgan shaxs
+	Whole Table	Butun jadval
+	Whole document	Butun hujjat
+	Whole page	Butun sahifa
+	Whole words	Butun soʻzlar
+	Wide	Keng
+	Widow/Orphan Control	Osilib qolgan qatorlarni taqiqlash
+	Widow/Orphan control	Osilib qolgan qatorlarni taqiqlash
+	Width and spacing	Kenglik va oraliq
+	Width:	Kenglik:
+	Wildcards (regex)	Shablon belgilar (regex)
+	Window	Oyna
+	With:	Nima bilan:
+	Word Count	Soʻzlar soni
+	Word Left	Bir soʻz chapga
+	Word Right	Bir soʻz oʻngga
+	Word XML Document (*.xml)	Word XML hujjati (*.xml)
+	Word document	Word hujjati
+	Word document (*.docx)	Word hujjati (*.docx)
+	Word level	Soʻz darajasida
+	WordArt	WordArt
+	WordArt Styles	WordArt uslublari
+	WordCraft	WordCraft
+	WordCraft is now the default app for Word documents.	WordCraft endi Word hujjatlari uchun standart ilova.
+	Words	Soʻzlar
+	Words only	Faqat soʻzlar
+	Wrap Text	Matn bilan oʻrash
+	Wrap Text Sides	Oʻrash tomonlari
+	Wrap\nText	Matn bilan\noʻrash
+	Write & Insert Fields	Yozish va maydonlarni qoʻshish
+	Write a reply	Javob yozish
+	Year	Yil
+	Yes	Ha
+	Yields	Hosil qiladi
+	Your changes will be lost if you don't save them.	Saqlamasangiz, oʻzgarishlar yoʻqoladi.
+	Your system doesn't report an animation setting, so animation effects stay on.	Tizimingiz animatsiya sozlamasi haqida maʼlumot bermaydi, shuning uchun animatsiya effektlari yoqilgan qoladi.
+	Your system has animation effects turned off.	Tizimingizda animatsiya effektlari oʻchirilgan.
+	Your system has animation effects turned on.	Tizimingizda animatsiya effektlari yoqilgan.
+	Zoom	Masshtab
+	Zoom In	Kattalashtirish
+	Zoom Out	Kichiklashtirish
+	Zotero	Zotero
+	Zotero: cancelled	Zotero: bekor qilindi
+	Zotero: done	Zotero: tayyor
+	a, b, c, …	a, b, c, …
+	can't split at the first row	birinchi qatordan boʻlib boʻlmaydi
+	development build	ishlab chiqish yigʻmasi
+	from Unicode (hex)	Unicode kodidan (hex)
+	getartcraft.com/apps/wordcraft	getartcraft.com/apps/wordcraft
+	i, ii, iii, …	i, ii, iii, …
+	lowercase	kichik harflar
+	n×n Identity Matrix	n×n birlik matritsa
+	n×n Matrix	n×n matritsa
+	pt	pt
+	select two or more cells to merge	birlashtirish uchun ikki yoki undan ortiq katakni belgilang
+	tOGGLE cASE	rEGISTRNI aLMASHTIRISH
+	there is no ink to replay	qayta ijro etish uchun qoʻlyozma chiziqlar yoʻq
+	there's no citation after the caret	kursordan keyin iqtibos yoʻq
+	this item is already at the top level	bu element allaqachon yuqori darajada
+	x bar	ustiga chiziqli x
+	{cols}×{rows} Table	{cols}×{rows} jadval
+	{contributors} contributors · {commits} commits	{contributors} ta hissa qoʻshgan · {commits} ta kommit
+	{count} items highlighted	{count} ta element ajratib koʻrsatildi
+	{count} of {total} pages will print	{total} ta sahifadan {count} tasi chop etiladi
+	{group} settings	{group} sozlamalari
+	{key}+Click to follow link	Havolaga oʻtish uchun {key}+bosish
+	{language} is now the document's default language.	{language} endi hujjatning standart tili.
+	{name} already exists. Choose Save again to replace it.	{name} allaqachon mavjud. Uni almashtirish uchun yana “Saqlash”ni tanlang.
+	{name} is protected with a password.	{name} parol bilan himoyalangan.
+	{name} wasn't found.	{name} topilmadi.
+	{n} entries marked.	{n} ta yozuv belgilandi.
+	{n} lines	{n} qator
+	{n} pt	{n} pt
+	{selected} of {words} words	{words} ta soʻzdan {selected} tasi
+	{size} pt	{size} pt
+	{words} words	{words} ta soʻz
+	“{text}” ({row}, {series}) isn't a number.	“{text}” ({row}, {series}) son emas.
+	✓ None	✓ Yoʻq
+	➕ New comment	➕ Yangi izoh
+	📂  Browse…	📂  Koʻrib chiqish…
+	Account	Hisob
+	Add Condition	Shart qoʻshish
+	Add whether it is above or below	Yuqorida yoki pastda ekanini qoʻshish
+	All system fonts are already available.	Barcha tizim shriftlari allaqachon mavjud.
+	And	Va
+	Ascending	Oʻsish boʻyicha
+	Auto ({percent}%)	Avto ({percent}%)
+	Column {n}	Ustun {n}
+	Compare to	Taqqoslanadigan qiymat
+	Comparison	Taqqoslash
+	Contains	Oʻz ichiga oladi
+	Copy to	Bu yerga nusxalash
+	Croatian	Xorvat tili
+	Indonesian	Indonez tili
+	Custom size	Maxsus oʻlcham
+	Delete Bookmark	Xatchoʻpni oʻchirish
+	Descending	Kamayish boʻyicha
+	Dictionaries	Lugʻatlar
+	Dictionaries folder:	Lugʻatlar jildi:
+	Document name	Hujjat nomi
+	Does not contain	Oʻz ichiga olmaydi
+	Enter bookmark name:	Xatchoʻp nomini kiriting:
+	Equal to	Teng
+	Existing File or Web Page	Mavjud fayl yoki veb-sahifa
+	Filter Recipients	Qabul qiluvchilarni filtrlash
+	Filter and Sort	Filtrlash va saralash
+	Find “{text}” in the document	Hujjatda “{text}”ni topish
+	For which item:	Qaysi element uchun:
+	Formula:	Formula:
+	Full Screen	Toʻliq ekran
+	Full\nScreen	Toʻliq\nekran
+	Greater than	Katta
+	Greater than or equal	Katta yoki teng
+	Header row	Sarlavha qatori
+	Heading	Sarlavha
+	Heading text	Sarlavha matni
+	Hidden bookmarks	Yashirin xatchoʻplar
+	Hunspell .aff and .dic files here (pl_PL, pt_BR, it_IT, hr_HR, tr_TR) are used before the system's.	Bu yerdagi Hunspell .aff va .dic fayllari (pl_PL, pt_BR, it_IT, hr_HR, tr_TR) tizimdagilaridan oldin ishlatiladi.
+	In the margin	Hoshiyada
+	Insert reference to:	Nimaga havola qoʻshish:
+	Is blank	Boʻsh
+	Is not blank	Boʻsh emas
+	Language Preferences…	Til afzalliklari…
+	Leave out the date and time of comments and tracked changes when saving	Saqlashda izohlar va kuzatilgan oʻzgarishlarning sana va vaqtini olib tashlash
+	Less than	Kichik
+	Less than or equal	Kichik yoki teng
+	Link to:	Havola manzili:
+	Load System Installed Fonts…	Tizimga oʻrnatilgan shriftlarni yuklash…
+	Loaded {count} system fonts.	{count} ta tizim shrifti yuklandi.
+	Local font access is not supported by your browser.	Brauzeringiz mahalliy shriftlarga kirishni qoʻllab-quvvatlamaydi.
+	Local font access was denied.	Mahalliy shriftlarga kirish rad etildi.
+	Makes the ribbon, menus and dialogs larger or smaller. Auto follows your system's display scaling; 100% is one screen pixel per point. Document zoom is separate.	Lenta, menyular va oynalarni kattalashtiradi yoki kichiklashtiradi. “Avto” tizimning ekran masshtabiga moslashadi; 100% – bir nuqtaga bitta ekran pikseli. Hujjat masshtabi alohida sozlanadi.
+	Mirror margins	Koʻzgu hoshiyalar
+	More Paper Sizes…	Boshqa qogʻoz oʻlchamlari…
+	Moved objects snap to the page's edges and centre, the margins and other objects. Hold Alt to move freely.	Koʻchirilayotgan obyektlar sahifa chetlari va markaziga, hoshiyalarga va boshqa obyektlarga yopishadi. Erkin koʻchirish uchun Alt tugmasini bosib turing.
+	My list has	Mening roʻyxatimda
+	No document is open. Create a document or open one first.	Hech qanday hujjat ochilmagan. Avval hujjat yarating yoki oching.
+	No header row	Sarlavha qatorisiz
+	No spelling dictionary for {language} is installed, so it isn't checked. WordCraft looks for the Hunspell dictionary {name} in the WORDCRAFT_DICTIONARIES folder and in the usual system locations.	{language} uchun imlo lugʻati oʻrnatilmagan, shuning uchun matn tekshirilmaydi. WordCraft {name} Hunspell lugʻatini WORDCRAFT_DICTIONARIES jildida va odatiy tizim joylarida qidiradi.
+	Not equal to	Teng emas
+	Not set: the system's usual places	Belgilanmagan: tizimning odatiy joylari
+	Number only, without the label's words	Faqat raqam, taglavha nomisiz
+	Only for the selected text	Faqat belgilangan matn uchun
+	Or	Yoki
+	Paper	Qogʻoz
+	Paper size:	Qogʻoz oʻlchami:
+	Paste function:	Funksiyani joylash:
+	Place in This Document	Ushbu hujjatdagi joy
+	Print settings	Chop etish sozlamalari
+	Privacy Options	Maxfiylik parametrlari
+	Privacy Settings	Maxfiylik sozlamalari
+	Privacy for this document	Ushbu hujjat maxfiyligi
+	Recover	Tiklash
+	Reference type:	Havola turi:
+	Remove condition	Shartni olib tashlash
+	Remove my name from comments, changes and file properties when saving	Saqlashda izohlar, oʻzgarishlar va fayl xususiyatlaridan ismimni olib tashlash
+	Rename	Nomini oʻzgartirish
+	Rename Document	Hujjat nomini oʻzgartirish
+	Saving {name} was cancelled, so it is still open and nothing was lost.	{name} saqlash bekor qilindi, shuning uchun u hali ham ochiq va hech narsa yoʻqolmadi.
+	Set Proofing Language…	Imlo tekshiruvi tilini belgilash…
+	Show alignment guides when moving pictures and shapes	Rasm va shakllarni koʻchirishda tekislash yoʻnaltiruvchilarini koʻrsatish
+	Show its list number	Uning roʻyxatdagi raqamini koʻrsatish
+	Show its number relative to this field	Uning ushbu maydonga nisbatan raqamini koʻrsatish
+	Show its number with all higher levels	Uning raqamini barcha yuqori darajalar bilan koʻrsatish
+	Sort Recipients	Qabul qiluvchilarni saralash
+	Sort by	Saralash mezoni
+	Sort by:	Saralash mezoni:
+	Style name:	Uslub nomi:
+	Submit print job	Chop etish vazifasini yuborish
+	Take the last match on the page	Sahifadagi oxirgi moslikni olish
+	Text of the nearest paragraph with a given style (running headers)	Berilgan uslubdagi eng yaqin xatboshi matni (oʻzgaruvchan kolontitullar)
+	The document you are editing keeps the names and dates; only the saved file leaves them out.	Tahrirlayotgan hujjatingizda ismlar va sanalar saqlanib qoladi; faqat saqlangan faylda ular boʻlmaydi.
+	The margins don't fit on a page this size; make the margins smaller first.	Hoshiyalar bunday oʻlchamdagi sahifaga sigʻmaydi; avval hoshiyalarni kichraytiring.
+	Then by	Keyin
+	This document has no bookmarks.	Bu hujjatda xatchoʻplar yoʻq.
+	Trust Center	Xavfsizlik markazi
+	Type Character Code	Belgi kodini kiritish
+	Type a page number, or +2 / -1.	Sahifa raqamini yoki +2 / -1 ni kiriting.
+	Use the browser's full screen (F11)	Brauzerning toʻliq ekran rejimidan foydalaning (F11)
+	Wait for the print job to finish submitting before closing.	Yopishdan oldin chop etish vazifasi yuborilishini kuting.
+	Waiting for the save to finish…	Saqlash tugashi kutilmoqda…
+	Word 2003 XML Document (*.xml)	Word 2003 XML hujjati (*.xml)
+	{count} of {total} recipients will be merged.	{total} ta qabul qiluvchidan {count} tasi birlashtiriladi.
+	Find in list:	Roʻyxatda topish:
+	Any field	Istalgan maydon
+	Matches: {count}	Mosliklar: {count}
+	Show only records that will be merged	Faqat birlashtiriladigan yozuvlarni koʻrsatish
+	{kind}, {columns} × {rows}, {size} ({paper})	{kind}, {columns} × {rows}, {size} ({paper})
+	{language} (no dictionary)	{language} (lugʻat yoʻq)
+	{language}: no dictionary found	{language}: lugʻat topilmadi
+	{language}: {file}	{language}: {file}
+	{name}   {height} × {width} in	{name}   {height} × {width} in
+	{name}   {height} × {width} mm	{name}   {height} × {width} mm
+	{width} × {height} mm	{width} × {height} mm
+	B4 (JIS)   10.12" × 14.33"	B4 (JIS)   10.12" × 14.33"
+	B5 (JIS)   7.17" × 10.12"	B5 (JIS)   7.17" × 10.12"
+	Envelope #10   4.12" × 9.50"	Konvert #10   4.12" × 9.50"
+	Envelope DL   4.33" × 8.66"	Konvert DL   4.33" × 8.66"
+	Executive   7.25" × 10.50"	Executive   7.25" × 10.50"
+	Legal   8.50" × 14.00"	Legal   8.50" × 14.00"
+	Letter   8.50" × 11.00"	Letter   8.50" × 11.00"
+	Statement   5.50" × 8.50"	Statement   5.50" × 8.50"
+	Tabloid   11.00" × 17.00"	Tabloid   11.00" × 17.00"
+	Narrow	Tor
+	Medium	Oʻrtacha
+	Odd Banded Rows	Toq navbatlashgan qatorlar
+	Even Banded Rows	Juft navbatlashgan qatorlar
+	Odd Banded Columns	Toq navbatlashgan ustunlar
+	Even Banded Columns	Juft navbatlashgan ustunlar
+	Top Left Cell	Yuqori chap katak
+	Top Right Cell	Yuqori oʻng katak
+	Bottom Left Cell	Pastki chap katak
+	Bottom Right Cell	Pastki oʻng katak
+	Inside Horizontal Border	Ichki gorizontal chegara
+	Inside Vertical Border	Ichki vertikal chegara
+	Merge cells before split	Boʻlishdan oldin kataklarni birlashtirish
+	Table size	Jadval oʻlchami
+	AutoFit behavior	Avtomoslash usuli
+	Initial column width:	Boshlangʻich ustun kengligi:
+	AutoFit to contents	Tarkibga avtomoslash
+	AutoFit to window	Oyna kengligiga avtomoslash
+	Separate text at	Matnni ajratish belgisi
+	Commas	Vergullar
+	Other:	Boshqa:
+	The number must be between 1 and {max}.	Son 1 dan {max} gacha boʻlishi kerak.
+	The measurement must be between {min} and {max}.	Oʻlcham {min} dan {max} gacha boʻlishi kerak.
+	Recently Used Fonts	Soʻnggi ishlatilgan shriftlar
+	All Fonts	Barcha shriftlar
+	Moved from:	Qayerdan koʻchirildi:
+	Moved to:	Qayerga koʻchirildi:
+	Spike	Yigʻgich
+	Insert Spike	Yigʻgichdan qoʻshish
+	Added 1 font	1 ta shrift qoʻshildi
+	Added {n} fonts	{n} ta shrift qoʻshildi
+	{added}; {count} couldn't be read: {names}	{added}; {count} tasini oʻqib boʻlmadi: {names}
+	{names} and {n} more	{names} va yana {n} ta
+	{added}; {n} skipped (limit {max})	{added}; {n} tasi oʻtkazib yuborildi (cheklov {max})
+	nothing is selected	hech narsa belgilanmagan
+	select a picture or shape first	avval rasm yoki shaklni belgilang
+	select recipients first	avval qabul qiluvchilarni tanlang
+	select two or more pictures or shapes first (Shift+click)	avval ikki yoki undan ortiq rasm yoki shaklni belgilang (Shift+bosish)
+	text boxes can't go inside a text box	matn maydonini boshqa matn maydoni ichiga qoʻyib boʻlmaydi
+	the cursor isn't in a table	kursor jadval ichida emas
+	{name} options	{name} parametrlari
+	Dropped	Matn ichida
+	In margin	Hoshiyada
+	Drop Cap Options…	Bosh harf parametrlari…
+	Lines to drop:	Balandligi (qatorlarda):
+	Distance from text:	Matngacha masofa:
+	Distance from text	Matngacha masofa
+	the paragraph is empty	xatboshi boʻsh
+	the paragraph starts with a space	xatboshi boʻsh joy bilan boshlanadi
+	Lock aspect ratio	Tomonlar nisbatini qulflash
+	Relative to original picture size	Rasmning asl oʻlchamiga nisbatan
+	Original size	Asl oʻlcham
+	{width} × {height} pixels	{width} × {height} piksel
+	Type a size in any unit, such as 5 cm or 300 px. The other side follows, so the picture keeps its proportions.	Oʻlchamni istalgan birlikda kiriting, masalan, 5 cm yoki 300 px. Ikkinchi tomon ham mos ravishda oʻzgaradi, shuning uchun rasm proporsiyalari saqlanadi.
+	Import…	Import…
+
+# Newer interface strings no other catalog has yet (recovery, dictionaries, source import…).
+	Recover documents	Hujjatlarni tiklash
+	Restore opens an unsaved copy. Your original file stays unchanged.	Tiklash saqlanmagan nusxani ochadi. Asl faylingiz oʻzgarmaydi.
+	Recovery is disabled while this document has a password.	Hujjatda parol borligi sababli tiklash oʻchirilgan.
+	Local recovery is unavailable or still loading.	Mahalliy tiklash mavjud emas yoki hali yuklanmoqda.
+	No recovery copies.	Tiklash nusxalari yoʻq.
+	Recovery copy	Tiklash nusxasi
+	Restore	Tiklash
+	Discard…	Oʻchirib tashlash…
+	Discard	Oʻchirib tashlash
+	Discard the recovery copy of {name}?	{name} hujjatining tiklash nusxasi oʻchirib tashlansinmi?
+	This cannot be undone. Your original file stays unchanged.	Buni ortga qaytarib boʻlmaydi. Asl faylingiz oʻzgarmaydi.
+	Continue without restoring	Tiklamasdan davom etish
+	Untitled draft	Nomsiz qoralama
+	Current Document	Joriy hujjat
+	Select a place in this document:	Ushbu hujjatdagi joyni tanlang:
+	Top of the Document	Hujjat boshi
+	Bookmarks	Xatchoʻplar
+	{language} (dictionary unreadable)	{language} (lugʻatni oʻqib boʻlmadi)
+	The spelling dictionary for {language} couldn't be read, so it isn't checked. File: {file}. Reason: {reason}	{language} imlo lugʻatini oʻqib boʻlmadi, shuning uchun u tekshirilmaydi. Fayl: {file}. Sabab: {reason}
+	{language}: {file} (unreadable: {reason})	{language}: {file} (oʻqib boʻlmadi: {reason})
+	select a picture first	avval rasmni belgilang
+	Crop on the page works on unturned pictures: set Rotation to 0° first, or use the crop boxes	Sahifada qirqish faqat burilmagan rasmlarda ishlaydi: avval burilishni 0° ga oʻrnating yoki qirqish maydonlaridan foydalaning
+	The number must be a divisor of {max}.	Son {max} ning boʻluvchisi boʻlishi kerak.
+	Nothing of this type in the document.	Hujjatda bu turdagi element yoʻq.
+	Automatically add words to list (First Letter)	Soʻzlarni roʻyxatga avtomatik qoʻshish (birinchi harf)
+	Automatically add words to list (INitial CAps)	Soʻzlarni roʻyxatga avtomatik qoʻshish (IKki BOsh harf)
+	No new sources in that file	Bu faylda yangi manbalar yoʻq
+	Imported 1 source	1 ta manba import qilindi
+	Imported {n} sources	{n} ta manba import qilindi
+	Couldn't save {name}, so it is still open and nothing was lost: {error}	{name} saqlanmadi, shuning uchun u ochiq qoldi va hech narsa yoʻqolmadi: {error}
+	Scale to paper size	Qogʻoz oʻlchamiga moslash
+	Open a document first	Avval hujjatni oching
+	{paper}   {width} × {height}	{paper}   {width} × {height}

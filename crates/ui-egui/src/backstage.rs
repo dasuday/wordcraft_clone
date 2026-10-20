@@ -195,7 +195,8 @@ fn recovery_page(app: &mut WordApp, ui: &mut Ui) {
             ui.end_row();
         }
         for doc in documents {
-            ui.label(&doc.name);
+            // The engine names drafts without a file in English; show that name translated.
+            ui.label(if doc.name == "Untitled draft" { tl!("Untitled draft") } else { doc.name.as_str() });
             ui.label(&doc.saved_at);
             ui.add_enabled_ui(!busy, |ui| {
                 // Buttons keep the theme's own text colour: the page-wide white override is
