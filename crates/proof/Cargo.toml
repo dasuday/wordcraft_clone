@@ -14,3 +14,4 @@ miniz_oxide = "0.8"
 
 [dev-dependencies]
 proptest = { workspace = true }
+tempfile = "3"
