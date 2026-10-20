@@ -440,10 +440,35 @@ pub fn now_unix() -> u64 {
     }
 }
 
-/// ISO-8601 timestamp (UTC, seconds).
+/// ISO-8601 timestamp (UTC, seconds): the clock, for an event that happened now -- a comment, a
+/// tracked change, a version. Not for what a saved or exported file records: see [`saved_iso`].
 pub fn now_iso() -> String {
     iso_from_unix_secs(now_unix())
 }
+
+/// The timestamp a saved or exported file records (its created and modified properties):
+/// `SOURCE_DATE_EPOCH` when it holds a non-negative whole number of seconds, else the clock. With
+/// it set, saving or exporting one document twice gives the same bytes, which is otherwise
+/// impossible -- the timestamp is the only thing that differs
+/// (<https://reproducible-builds.org/specs/source-date-epoch/>).
+///
+/// The clock stays in [`now_iso`]: an editing event's time is not the file's, and pinning it would
+/// misdate comments and tracked changes.
+pub fn saved_iso() -> String {
+    iso_from_unix_secs(pinned_or(|name| std::env::var(name).ok(), now_unix))
+}
+
+/// [`saved_iso`]'s choice, with the environment and the clock given so a test can show which wins.
+pub(crate) fn pinned_or(get: impl Fn(&str) -> Option<String>, clock: impl Fn() -> u64) -> u64 {
+    let pinned = get("SOURCE_DATE_EPOCH").and_then(|v| v.trim().parse::<u64>().ok()).filter(|secs| *secs <= LAST_DATE);
+    pinned.unwrap_or_else(clock)
+}
+
+/// The last date a document can record, as Unix seconds: 9999-12-31T23:59:59Z. A year runs to
+/// four digits in `xsd:dateTime`, which is what a .docx core property holds, so a value past this
+/// would be written as something no reader accepts -- `292277026596-12-04T15:30:07Z` for
+/// `i64::MAX`. Such a value is left to the clock, as a malformed one is.
+const LAST_DATE: u64 = 253_402_300_799;
 
 /// Days since 1970-01-01 → (year, month, day) (Howard Hinnant's algorithm).
 pub fn civil_from_days(z: i64) -> (i64, u32, u32) {
@@ -497,5 +522,44 @@ mod iso_tests {
         assert_eq!(iso_from_unix_secs(1_709_164_800), "2024-02-29T00:00:00Z");
         assert_eq!(iso_from_unix_secs(951_782_400), "2000-02-29T00:00:00Z");
         assert_eq!(iso_from_unix_secs(1_735_689_599), "2024-12-31T23:59:59Z");
+    }
+}
+
+#[cfg(test)]
+mod saved_time_tests {
+    use super::{iso_from_unix_secs, pinned_or};
+
+    /// What a saved or exported file records: `SOURCE_DATE_EPOCH` when it holds a non-negative
+    /// whole number of seconds, the clock whenever it does not. The environment and the clock are
+    /// given here rather than set, so no test changes this process's environment -- that is
+    /// `unsafe` under edition 2024 and would reach every test beside it.
+    #[test]
+    fn a_pinned_epoch_is_preferred_and_the_clock_answers_otherwise() {
+        let env = |v: Option<&'static str>| move |_: &str| v.map(str::to_owned);
+        let clock = || 1_000_000;
+        assert_eq!(pinned_or(env(Some("1791208980")), clock), 1_791_208_980, "the variable wins");
+        assert_eq!(pinned_or(env(Some("0")), clock), 0, "the epoch itself counts");
+        assert_eq!(pinned_or(env(Some("  1791208980  ")), clock), 1_791_208_980, "spaces around it are allowed");
+        // The last date a document can write is honoured; past it the year would not fit
+        // `xsd:dateTime` and the clock answers instead.
+        assert_eq!(pinned_or(env(Some("253402300799")), clock), 253_402_300_799);
+        assert_eq!(iso_from_unix_secs(253_402_300_799), "9999-12-31T23:59:59Z");
+        for ignored in [
+            None,
+            Some(""),
+            Some("   "),
+            Some("-1"),
+            Some("later"),
+            Some("1791208980.5"),
+            Some("99999999999999999999"),
+            Some("253402300800"),
+            Some("9223372036854775807"),
+        ] {
+            assert_eq!(pinned_or(env(ignored), clock), 1_000_000, "{ignored:?} leaves it to the clock");
+        }
+        // Only that variable is read.
+        assert_eq!(pinned_or(|name: &str| (name == "TZ").then(|| "1791208980".to_owned()), clock), 1_000_000);
+        // And it reaches the stamp as that instant, not as something near it.
+        assert_eq!(iso_from_unix_secs(pinned_or(env(Some("1791208980")), clock)), "2026-10-05T14:03:00Z");
     }
 }
