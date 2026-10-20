@@ -1095,7 +1095,7 @@ fn flow_table(doc: &Document, t: &Table, depth: usize, tracked: bool) -> FTable 
     let visible = |b: &Option<wordcraft_doc::props::Borders>| b.as_ref().is_some_and(|b| b.any_visible());
     let borderless =
         t.props.style.is_none() && !visible(&t.props.borders) && t.rows.iter().flat_map(|r| &r.cells).all(|c| !visible(&c.props.borders));
-    FTable { rows, widths: t.grid.clone(), borderless, ..Default::default() }
+    FTable { rows, widths: t.grid.clone(), borderless, indent: t.props.indent, cell_margins: t.props.cell_margins }
 }
 
 /// The document body as a flow.

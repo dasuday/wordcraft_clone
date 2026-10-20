@@ -3011,6 +3011,9 @@ mod tests {
         let d = import(br"{\rtf1\ansi\trowd\trgaph108\trpaddl300\cellx9000 \pard\intbl a\cell\row}").unwrap();
         let Some(wordcraft_doc::Block::Table(t)) = d.body.first().map(|b| &**b) else { panic!("a table first") };
         assert_eq!(t.props.cell_margins, Some([0.0, 5.4, 0.0, 5.4]));
+        // The document's flow keeps the table's placement.
+        let Some(FBlock::Table(ft)) = model::from_doc(&d).blocks.into_iter().next() else { panic!("a table first") };
+        assert_eq!((ft.indent, ft.cell_margins), (t.props.indent, t.props.cell_margins));
     }
 
     #[test]
