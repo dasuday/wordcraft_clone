@@ -22,7 +22,13 @@ establish cross-platform reliability.
 
 Document renaming: desktop renaming requires a filesystem that supports hard links (exFAT/FAT drives and some network shares refuse it). Behaviour: [UI parity](ui-parity.md).
 
+External mail-merge source settings and relationships now survive DOCX saves with their fields.
+Invalid or unsupported references refuse the save instead of silently turning the template into
+an ordinary letter; internal recipient-data preservation remains open. Synthetic two-save
+coverage narrows gap #1; it does not qualify the wider real-world DOCX corpus.
+
 Font-menu reliability: clearing a query with no matches now shows the recent section from its first row, including its heading, in a scrollable list. Fixed synthetic-family widget and full-ribbon tests cover this case and matching-query controls (#2068).
+
 Additive paragraph spacing retains the full before-space after a section page break; ordinary overlapping spacing is unchanged. Other pagination gaps remain open.
 
 Exact line spacing keeps the run font baseline around tall equations; automatic and minimum spacing still grow for math. Other pagination gaps remain open.
@@ -123,6 +129,7 @@ Footer page-table height and body wrapping are corrected. Other pagination gaps 
 | 2026-10-15 | trivial | Gap 19: RTF tracked paragraph marks and character/paragraph formatting revisions read and written; RTF section/table and ODT formatting revisions remain |
 | 2026-10-14 | trivial | #19 narrowed: ODT export done (master page and page layout per section, columned `text:section`s) |
 | 2026-10-17 | trivial | Explicit DrawingML preset/custom outline dashes survive import/save and paint in raster/PDF, scaled to the effective stroke width even for zero-width paths. Synthetic controls; theme-inherited dashes and line caps remain unverified. |
+| 2026-10-16 | trivial | External mail-merge settings and sources survive two DOCX saves; source-reference errors are explicit; wider corpus and internal recipient-data gaps remain |
 | 2026-10-15 | trivial | `wordcraft-cli convert --update-fields` explicitly refreshes unlocked fields before conversion; ordinary conversion keeps cached results. Field refresh can change pagination |
 | 2026-10-17 | trivial | Arial Unicode MS uses Arial and its proportional substitutes; glyph coverage and exact Word line height remain font-dependent. |
 | 2026-10-18 | trivial | #7: Split Cells and Convert Text to Table follow the Word check (#2592) |
