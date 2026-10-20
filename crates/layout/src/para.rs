@@ -3055,6 +3055,18 @@ impl ParaLayout {
         }
         l.xs.last().copied()
     }
+    /// Does left-to-right line `li` wrap straight into `off`, the next line's start, with no space
+    /// or break between (Khmer, Thai, Chinese…)? `off` then has two caret places: after line
+    /// `li`'s last letter and before the next line's first.
+    pub fn wraps_into(&self, li: usize, off: usize) -> bool {
+        let (Some(l), Some(next)) = (self.lines.get(li), self.lines.get(li + 1)) else { return false };
+        l.end == LineEnd::Wrap
+            && l.vis.is_empty()
+            && l.c1 > l.c0
+            && next.start == off
+            && self.clusters.get(l.c1 - 1).is_some_and(|c| c.kind == ClKind::Text && c.end == off)
+    }
+
     /// The farthest right a caret goes on left-to-right line `li`: spaces at the end of a line
     /// hang past its right edge, but the caret after them stays at the edge, as in Word (#2146);
     /// text that overflows the line still carries it. `None` on bidirectional lines.

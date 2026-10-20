@@ -76,6 +76,7 @@ fn extend(v: &Value) -> bool {
 }
 
 fn apply(s: &mut Session, to: Pos, ext: bool) {
+    s.line_end = None;
     if ext {
         s.sel.focus = to;
     } else {
@@ -116,6 +117,18 @@ fn lr(s: &mut Session, v: &Value, is_left: bool) -> CmdResult {
     }
     if bidi_para(s) {
         return visual_lr(s, v, is_left);
+    }
+    // Right past a line's last letter where the line wraps without a space stops after that
+    // letter, at the end of the line, before going on to the next line (Khmer, Thai, Chinese…).
+    let from = s.sel.focus.clone();
+    if !is_left && s.line_end.as_ref() != Some(&from) {
+        let to = right(s, &from);
+        if s.layout().caret_at_line_end(&to, s.page_hint).is_some() {
+            s.goal_x = None;
+            apply(s, to.clone(), extend(v));
+            s.line_end = Some(to);
+            return sel_result(s);
+        }
     }
     mv(s, v, if is_left { left } else { right })
 }
@@ -216,7 +229,12 @@ fn vert(s: &mut Session, v: &Value, dir: i32) -> CmdResult {
     let ext = extend(v);
     let l = s.layout();
     let from = s.sel.focus.clone();
-    let to = match l.vertical(&from, s.goal_x, dir, s.page_hint) {
+    let moved = if s.line_end.as_ref() == Some(&from) {
+        l.vertical_from_line_end(&from, s.goal_x, dir, s.page_hint)
+    } else {
+        l.vertical(&from, s.goal_x, dir, s.page_hint)
+    };
+    let to = match moved {
         Some((p, gx)) => {
             s.goal_x = Some(gx);
             p
@@ -239,18 +257,29 @@ fn line(s: &mut Session, v: &Value, home: bool) -> CmdResult {
     let ext = extend(v);
     let l = s.layout();
     let from = s.sel.focus.clone();
-    let to = match l.line_bounds(&from, s.page_hint) {
-        Some((a, b)) => {
-            if home {
-                a
-            } else {
-                b
+    // A caret drawn at the end of a line is on that line, not the next one it is the start of.
+    let on_line = match s.doc.para_at(&from) {
+        Some(p) if s.line_end.as_ref() == Some(&from) => Pos { off: p.prev_boundary(from.off), ..from.clone() },
+        _ => from.clone(),
+    };
+    let mut line_end = None;
+    let to = match l.line_bounds(&on_line, s.page_hint) {
+        Some((a, _)) if home => a,
+        Some((_, b)) => {
+            // A line that wraps without a space ends after its last letter, not before it.
+            match s.doc.para_at(&b).map(|p| Pos { off: p.next_boundary(b.off), ..b.clone() }) {
+                Some(end) if end.off > b.off && l.caret_at_line_end(&end, s.page_hint).is_some() => {
+                    line_end = Some(end.clone());
+                    end
+                }
+                _ => b,
             }
         }
         None => from,
     };
     s.goal_x = None;
     apply(s, to, ext);
+    s.line_end = line_end;
     sel_result(s)
 }
 

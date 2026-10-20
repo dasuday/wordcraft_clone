@@ -379,6 +379,10 @@ pub struct Session {
     pub find: FindState,
     /// Page x the caret tries to keep on Up/Down.
     pub goal_x: Option<f32>,
+    /// The caret at this position is drawn at the end of the line before it rather than at the
+    /// next line's start: the line wraps into it with no space between (Khmer, Thai, Chinese…),
+    /// and End or Right put the caret after its last letter. Only while the focus is here.
+    pub line_end: Option<Pos>,
     /// Page the caret was last on (headers/footers repeat on many pages).
     pub page_hint: usize,
     pub registry: Arc<Registry>,
@@ -644,6 +648,7 @@ impl Session {
             clip_history: Default::default(),
             find: FindState::default(),
             goal_x: None,
+            line_end: None,
             page_hint: 0,
             registry: Arc::new(crate::cmd::registry()),
             author: "WordCraft User".into(),
@@ -736,6 +741,12 @@ impl Session {
     /// The whole table cells selected, if the selection is that (see [`CellRange`]).
     pub fn cell_range(&self) -> Option<&CellRange> {
         self.column.as_ref().filter(|c| c.sel == self.sel).and_then(|c| c.cells.as_ref())
+    }
+
+    /// Where the caret for `pos` is drawn: at the end of the line before it after End or Right
+    /// took it past a line's last letter ([`Self::line_end`]), else where the layout puts it.
+    pub fn caret_geometry(&self, l: &DocLayout, pos: &Pos) -> Option<wordcraft_layout::hit::Caret> {
+        self.line_end.as_ref().filter(|p| *p == pos).and_then(|p| l.caret_at_line_end(p, self.page_hint)).or_else(|| l.caret_on(pos, self.page_hint))
     }
 
     /// The selection as it was made: where a drag, Shift+click or Shift+arrows started and where
@@ -1162,6 +1173,7 @@ impl Session {
             clip_history: _,
             find: _,
             goal_x: _,
+            line_end: _,
             page_hint: _,
             registry: _,
             author: _,
@@ -1304,6 +1316,10 @@ impl Session {
             }
             p
         };
+        // An edit or a new selection puts the caret back at the start of the next line.
+        if spec.mutates || id.starts_with("select.") {
+            self.line_end = None;
+        }
         if record && let Some((_, steps)) = self.recording.as_mut() {
             steps.push((id.to_string(), kept()));
         }
