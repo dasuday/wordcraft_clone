@@ -414,10 +414,25 @@ impl Writer {
         if let Some(c) = &p.fmt_change {
             // RTF 1.9.1: the paragraph formatting before the change, then who changed it and when.
             let old = self.para_ctl(&c.old, intbl);
-            // The old list is the same list instance (only its level may differ).
-            let list = match (c.old.list, &ls) {
-                (Some(li), Some((n, _))) => format!("\\ls{n}\\ilvl{}", li.level.min(8)),
-                _ => String::new(),
+            let list = match c.old.list {
+                Some(li) => {
+                    let level = li.level.min(8);
+                    // Reuse the current list only if it describes the old level's kind too.
+                    // Otherwise reuse a compatible definition before allocating one: repeated
+                    // prior kinds must not exhaust the reader's bounded list table.
+                    let current = ls
+                        .as_ref()
+                        .map(|(n, _)| *n)
+                        .filter(|n| self.lists.get(n.saturating_sub(1)).and_then(|kinds| kinds.get(usize::from(level))) == Some(&li.ordered));
+                    let n = current
+                        .or_else(|| self.lists.iter().position(|kinds| kinds.get(usize::from(level)) == Some(&li.ordered)).map(|i| i + 1))
+                        .unwrap_or_else(|| {
+                            self.lists.push([li.ordered; 9]);
+                            self.lists.len()
+                        });
+                    format!("\\ls{n}\\ilvl{level}")
+                }
+                None => String::new(),
             };
             out.push_str(&format!("{{\\*\\oldpprops {old}{list}}}"));
             let words = self.rev_words("\\prauth", "\\prdate", &c.mark);
