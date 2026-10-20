@@ -24,6 +24,7 @@ pub mod eq;
 pub mod fields;
 pub mod freeform;
 pub mod graphic;
+pub mod khmer;
 pub mod legacy_form;
 pub mod line_dash;
 pub mod link;
@@ -42,6 +43,7 @@ pub mod smart_art;
 pub mod styles;
 pub mod symbol_fonts;
 pub mod table;
+pub mod thai;
 pub mod wordart;
 pub mod wrap;
 

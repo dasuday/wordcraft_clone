@@ -380,6 +380,9 @@ pub struct ParaLayout {
     /// Room after a cluster between Asian text and Latin text or digits ([`auto_space`]), by
     /// cluster index, sorted. It is part of the cluster's advance, but takes no room at a line's end.
     pub auto_space: Vec<(usize, f32)>,
+    /// Thai Distributed and Khmer Justify: for each cluster, what the gap after it is (a space, a
+    /// word boundary, a syllable boundary, or nothing to stretch). Empty for other alignments.
+    pub gaps: Vec<wordcraft_doc::khmer::Gap>,
 }
 
 /// A shape drawn over a cluster (an enclosed character's circle, square, triangle or diamond),
@@ -1084,7 +1087,9 @@ impl<'a> Builder<'a> {
                 let ch = s.chars().next().unwrap_or(' ');
                 let kind = kind_override.unwrap_or(if ch == ' ' || ch == '\u{3000}' {
                     ClKind::Space
-                } else if ch == SOFT_HYPHEN {
+                } else if ch == SOFT_HYPHEN || ch == '\u{200B}' {
+                    // The zero-width space is invisible and takes no room, whatever the font draws
+                    // for it (Khmer OS Battambang has no glyph for it at all).
                     ClKind::Marker
                 } else {
                     ClKind::Text
@@ -1872,7 +1877,11 @@ pub fn layout_para(p: &Paragraph, env: &ParaEnv) -> ParaLayout {
         left_out: Vec::new(),
         enclosures,
         auto_space,
+        gaps: Vec::new(),
     };
+    if matches!(pl.rp.align, Align::ThaiDistribute | Align::KhmerJustify) {
+        pl.gaps = cluster_gaps(&p.text, &pl.clusters);
+    }
     let auto = env.doc.settings.auto_hyphenation && !pl.rp.suppress_hyphens;
     pl.hyph_after = hyphenation_points(&text, to_para, &pl, auto, env.doc.settings.hyphenate_caps, &runs);
     // A paragraph whose text and mark are all a deletion the layout leaves out (a deleted
@@ -1889,6 +1898,54 @@ pub fn layout_para(p: &Paragraph, env: &ParaEnv) -> ParaLayout {
         collapse(&mut pl);
     }
     pl
+}
+
+/// The gap after each cluster for Thai Distributed and Khmer Justify. A zero-width space is a
+/// cluster of its own with no width: the gap after it is the word boundary it marks, and the
+/// cluster before it has none.
+fn cluster_gaps(text: &str, clusters: &[Cluster]) -> Vec<wordcraft_doc::khmer::Gap> {
+    use wordcraft_doc::khmer::{self, Gap};
+    let slice = |c: &Cluster| text.get(c.start..c.end).unwrap_or("");
+    let mut out = vec![Gap::None; clusters.len()];
+    let mut k = 0;
+    while let Some(c) = clusters.get(k) {
+        k += 1;
+        let t = slice(c);
+        if c.kind == ClKind::Space {
+            if let Some(g) = out.get_mut(k - 1) {
+                *g = Gap::Space;
+            }
+            continue;
+        }
+        if !matches!(c.kind, ClKind::Text) {
+            continue;
+        }
+        let Some(before) = t.chars().next_back() else { continue };
+        // Skip zero-width spaces: they only turn the gap into a word boundary.
+        let mut j = k;
+        let mut zwsp = false;
+        while clusters.get(j).is_some_and(|n| slice(n).chars().all(khmer::is_zero_width_space) && !slice(n).is_empty()) {
+            zwsp = true;
+            j += 1;
+        }
+        let Some(next) = clusters.get(j).filter(|n| n.kind == ClKind::Text) else { continue };
+        let Some(after) = slice(next).chars().next() else { continue };
+        if khmer::is_zero_width_space(before) {
+            continue;
+        }
+        let gap =
+            match (khmer::is_khmer(before) || khmer::is_khmer(after), wordcraft_doc::thai::is_thai(before) || wordcraft_doc::thai::is_thai(after)) {
+                (true, _) => khmer::gap_between(before, after, zwsp),
+                (false, true) => wordcraft_doc::thai::gap_between(before, after),
+                _ if zwsp => Gap::Word,
+                _ => Gap::None,
+            };
+        // The gap sits after the last cluster before `next` (the zero-width space, if any).
+        if let Some(g) = out.get_mut(j - 1) {
+            *g = gap;
+        }
+    }
+    out
 }
 
 /// Lays a paragraph out as nothing: no height, no spacing, no label, its lines (kept for the
@@ -2453,11 +2510,43 @@ fn break_lines(pl: &mut ParaLayout, env: &ParaEnv, mark_style: u32, level: Optio
                 lab.x += shift;
             }
         }
-        let justify = display.is_none() && ((rp.align == Align::Justify && end == LineEnd::Wrap) || rp.align == Align::Distribute);
+        let khmer_mode = matches!(rp.align, Align::ThaiDistribute | Align::KhmerJustify);
+        let justify = display.is_none() && (((rp.align == Align::Justify || khmer_mode) && end == LineEnd::Wrap) || rp.align == Align::Distribute);
         // A line that only fits with shrunk spaces is shrunk, the last line of the paragraph too.
         let shrink = display.is_none() && shrink_spaces && slack < 0.0 && last_tab.is_none();
         if shrink {
             shrink_line_spaces(pl, &mut xs, c0, c1, content_end, slack);
+        } else if justify && slack > 0.0 && khmer_mode {
+            // Space goes between the clusters of Thai and Khmer text, which has no spaces to
+            // stretch: all alike (Thai Distributed) or by rank (Khmer Justify). Not after the
+            // line's last cluster, nor after a space that hangs past the edge.
+            let mode = if rp.align == Align::KhmerJustify { crate::khmer_just::Mode::Tiered } else { crate::khmer_just::Mode::Even };
+            let last = (align_from..c1).rev().find(|k| pl.clusters.get(*k).is_some_and(|c| c.kind != ClKind::Space && c.kind != ClKind::Marker));
+            let slots: Vec<usize> = match last {
+                Some(l) => (align_from..l).collect(),
+                None => Vec::new(),
+            };
+            let gaps: Vec<(wordcraft_doc::khmer::Gap, f32)> = slots
+                .iter()
+                .map(|&k| {
+                    let em = pl.clusters.get(k).and_then(|c| pl.styles.get(c.style as usize)).map_or(12.0, |s| s.size);
+                    (pl.gaps.get(k).copied().unwrap_or(wordcraft_doc::khmer::Gap::None), em)
+                })
+                .collect();
+            let adds = crate::khmer_just::distribute(mode, slack, &gaps);
+            let mut add = 0.0;
+            let mut it = slots.iter().zip(adds.iter()).peekable();
+            for k in align_from..c1 {
+                if let Some(v) = xs.get_mut(k - c0) {
+                    *v += add;
+                }
+                if let Some((_, a)) = it.next_if(|(s, _)| **s == k) {
+                    add += *a;
+                }
+            }
+            if let Some(v) = xs.last_mut() {
+                *v += add;
+            }
         } else if justify && slack > 0.0 {
             // Spaces inside the content (after the last tab).
             let spaces: Vec<usize> = (align_from..c1)
