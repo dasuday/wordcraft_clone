@@ -1212,11 +1212,13 @@ mod tests {
 
     #[test]
     fn script_parse_resolves_paths_against_the_base() {
-        let s = script::parse(r#"{"file":"in.docx","commands":[{"command":"edit.undo"}],"save":["/abs/o.pdf","o.docx"]}"#, Some(Path::new("/base")))
-            .unwrap();
-        let joined = |name: &str| Path::new("/base").join(name).to_string_lossy().into_owned();
+        let base = std::env::temp_dir().join("script-base");
+        let absolute = std::env::temp_dir().join("absolute.pdf").to_string_lossy().into_owned();
+        let input = serde_json::json!({"file":"in.docx","commands":[{"command":"edit.undo"}],"save":[absolute,"o.docx"]});
+        let s = script::parse(&input.to_string(), Some(&base)).unwrap();
+        let joined = |name: &str| base.join(name).to_string_lossy().into_owned();
         assert_eq!(s.file, Some(joined("in.docx")));
-        assert_eq!(s.save, vec!["/abs/o.pdf".to_string(), joined("o.docx")]);
+        assert_eq!(s.save, vec![absolute, joined("o.docx")]);
         let s = script::parse(r#"{"commands":["caret.docEnd"],"save":["o.docx"]}"#, None).unwrap();
         assert_eq!(s.save, vec!["o.docx".to_string()]);
         assert_eq!(s.commands.len(), 1);

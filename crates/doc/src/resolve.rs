@@ -19,6 +19,8 @@ pub const MAX_DROP_CAP_DISTANCE: f32 = 1584.0;
 #[serde(rename_all = "camelCase")]
 pub struct ResolvedChar {
     pub font: String,
+    #[serde(default)]
+    pub font_theme: Option<crate::props::ThemeFont>,
     pub size: f32,
     pub bold: bool,
     pub italic: bool,
@@ -41,10 +43,16 @@ pub struct ResolvedChar {
     /// Kerning: the smallest font size, in points, that is kerned (`w:kern`); 0 = never kerned.
     #[serde(default)]
     pub kern: f32,
-    /// OpenType ligatures (`w14:ligatures`); `None` = the shaper's default (standard and
-    /// contextual).
     #[serde(default)]
     pub ligatures: Option<crate::props::Ligatures>,
+    #[serde(default)]
+    pub number_spacing: crate::props::NumberSpacing,
+    #[serde(default)]
+    pub number_form: crate::props::NumberForm,
+    #[serde(default)]
+    pub stylistic_sets: u32,
+    #[serde(default)]
+    pub contextual_alternates: Option<bool>,
     pub outline: bool,
     pub shadow: bool,
     pub emboss: bool,
@@ -65,6 +73,9 @@ pub struct ResolvedChar {
     pub cs: bool,
     /// Complex-script font, size, bold and italic (Arabic, Persian, Hebrew… text).
     pub font_cs: String,
+    /// Only an inherited complex-script family follows the Latin theme font.
+    #[serde(default)]
+    pub font_cs_inherited: bool,
     /// East Asian font (Chinese, Japanese and Korean text), when one is set.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub font_ea: Option<String>,
@@ -78,11 +89,12 @@ impl ResolvedChar {
         ResolvedChar {
             // A symbol character is shown in its own font (`w:sym`), whatever the run's font.
             font: c.shown_font().map(str::to_string).unwrap_or_else(|| crate::styles::BODY_FONT.to_string()),
+            font_theme: c.font_theme,
             size: c.size.unwrap_or(11.0).clamp(1.0, 1638.0),
             bold: c.bold.unwrap_or(false),
             italic: c.italic.unwrap_or(false),
             underline: c.underline.unwrap_or_default(),
-            underline_color: c.underline_color,
+            underline_color: if c.underline_auto == Some(true) { None } else { c.underline_color },
             strike: c.strike.unwrap_or(false),
             double_strike: c.double_strike.unwrap_or(false),
             color: c.color.unwrap_or_default(),
@@ -98,11 +110,15 @@ impl ResolvedChar {
             position: c.position.unwrap_or(0.0).clamp(-800.0, 800.0),
             kern: c.kern.filter(|k| k.is_finite()).unwrap_or(0.0).clamp(0.0, 1638.0),
             ligatures: c.ligatures,
+            number_spacing: c.number_spacing.unwrap_or_default(),
+            number_form: c.number_form.unwrap_or_default(),
+            stylistic_sets: c.stylistic_sets.unwrap_or(0) & 0xFFFFF,
+            contextual_alternates: c.contextual_alternates,
             outline: c.outline.unwrap_or(false),
             shadow: c.shadow.unwrap_or(false),
             emboss: c.emboss.unwrap_or(false),
             engrave: c.engrave.unwrap_or(false),
-            text_effects: c.text_effects.as_deref().map(crate::wordart::TextEffects::sanitized).filter(|t| !t.is_empty()).map(Box::new),
+            text_effects: c.text_effects.as_deref().map(crate::wordart::TextEffects::visible).filter(|t| !t.is_empty()).map(Box::new),
             link: c.link.clone(),
             ins: c.ins,
             del: c.del,
@@ -112,6 +128,7 @@ impl ResolvedChar {
             rtl: c.rtl.unwrap_or(false),
             cs: c.cs.unwrap_or(false),
             font_cs: c.font_cs.clone().or_else(|| c.font.clone()).unwrap_or_else(|| crate::styles::BODY_FONT.to_string()),
+            font_cs_inherited: c.font_cs.is_none(),
             font_ea: c.font_ea.clone(),
             size_cs: c.size_cs.or(c.size).unwrap_or(11.0).clamp(1.0, 1638.0),
             bold_cs: c.bold_cs.or(c.bold).unwrap_or(false),
@@ -378,6 +395,29 @@ impl StyleSheet {
     }
 }
 
+impl crate::Document {
+    /// Resolve styles and direct formatting, including the document's current theme font.
+    pub fn resolve_char(&self, style: Option<&str>, props: &CharProps) -> ResolvedChar {
+        self.resolve_char_in(style, None, props)
+    }
+
+    pub fn resolve_char_in(&self, style: Option<&str>, table: Option<&CharProps>, props: &CharProps) -> ResolvedChar {
+        let mut rc = self.styles.resolve_char_in(style, table, props);
+        let family = match rc.font_theme {
+            Some(crate::props::ThemeFont::Body) => Some(&self.settings.minor_font),
+            Some(crate::props::ThemeFont::Headings) => Some(&self.settings.major_font),
+            _ => None,
+        };
+        if let Some(family) = family.filter(|f| !f.is_empty() && props.sym_font.is_none()) {
+            if rc.font_cs_inherited {
+                rc.font_cs = family.clone();
+            }
+            rc.font = family.clone();
+        }
+        rc
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -393,6 +433,34 @@ mod tests {
         assert_ne!(s.resolve_char(None, &CharProps::default()).font, "Wingdings");
         let direct = CharProps { sym_font: Some("Wingdings".into()), ..Default::default() };
         assert_eq!(s.resolve_char(None, &direct).font, "Wingdings");
+    }
+
+    #[test]
+    fn font_dialog_theme_links_and_automatic_underline_resolve_through_styles() {
+        use crate::props::ThemeFont;
+        let mut doc = crate::Document::new();
+        doc.settings.minor_font = "Body family".into();
+        doc.settings.major_font = "Heading family".into();
+        for (theme, family) in [(ThemeFont::Body, "Body family"), (ThemeFont::Headings, "Heading family")] {
+            doc.styles.get_mut("Normal").unwrap().chr = CharProps {
+                font: Some("Theme fallback".into()),
+                font_theme: Some(theme),
+                underline_color: Some(Rgb(255, 0, 0)),
+                ..Default::default()
+            };
+            let props = CharProps { underline_auto: Some(true), ..Default::default() };
+            let resolved = doc.resolve_char(None, &props);
+            assert_eq!((&*resolved.font, &*resolved.font_cs), (family, family));
+            assert_eq!(resolved.underline_color, None, "Automatic overrides the style's underline color");
+            let explicit_cs = doc.resolve_char(None, &CharProps { font_cs: Some("Complex script family".into()), ..props.clone() });
+            assert_eq!(explicit_cs.font, family);
+            assert_eq!(explicit_cs.font_cs, "Complex script family");
+            let symbol = doc.resolve_char(None, &CharProps { sym_font: Some("Symbol family".into()), ..props.clone() });
+            assert_eq!(symbol.font, "Symbol family", "theme changes never replace a symbol's own font");
+            let explicit = doc.resolve_char(None, &CharProps { font: Some("Explicit family".into()), ..props });
+            assert_eq!(explicit.font, "Explicit family");
+            assert_eq!(explicit.font_theme, None, "choosing a family removes the inherited theme link");
+        }
     }
 
     #[test]

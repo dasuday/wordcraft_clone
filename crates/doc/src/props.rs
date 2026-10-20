@@ -157,13 +157,38 @@ impl Underline {
 
 /// The OpenType ligatures a run asks for ([MS-DOCX] `w14:ligatures`): standard (`liga`),
 /// contextual (`clig`), historical (`hlig`) and discretional (`dlig`).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
-#[serde(default, rename_all = "camelCase")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Default)]
+#[serde(rename_all = "camelCase")]
 pub struct Ligatures {
     pub standard: bool,
     pub contextual: bool,
     pub historical: bool,
     pub discretional: bool,
+}
+
+impl<'de> Deserialize<'de> for Ligatures {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum Value {
+            Name(String),
+            Flags {
+                #[serde(default)]
+                standard: bool,
+                #[serde(default)]
+                contextual: bool,
+                #[serde(default)]
+                historical: bool,
+                #[serde(default)]
+                discretional: bool,
+            },
+        }
+        match Value::deserialize(deserializer)? {
+            // Accept preferences and commands written before the upstream flag model landed.
+            Value::Name(name) => Self::from_ooxml(&name).ok_or_else(|| serde::de::Error::custom("unknown ligature combination")),
+            Value::Flags { standard, contextual, historical, discretional } => Ok(Self { standard, contextual, historical, discretional }),
+        }
+    }
 }
 
 impl Ligatures {
@@ -317,6 +342,32 @@ impl Highlight {
     }
 }
 
+/// A Latin font linked to the document theme.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ThemeFont {
+    Body,
+    Headings,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum NumberSpacing {
+    #[default]
+    Default,
+    Proportional,
+    Tabular,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum NumberForm {
+    #[default]
+    Default,
+    Lining,
+    OldStyle,
+}
+
 /// Character formatting (direct or in a style). `None` = inherit.
 #[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
@@ -326,6 +377,8 @@ pub struct CharProps {
     pub style: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub font: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub font_theme: Option<ThemeFont>,
     /// The symbol's own font (OOXML `w:sym/@w:font`, ECMA-376 §17.3.3.30), set on a symbol
     /// character from a `w:sym` or Insert › Symbol: it is shown in this font whatever `font` is,
     /// so changing the text's font keeps the symbol. `None` = the run's font.
@@ -342,6 +395,9 @@ pub struct CharProps {
     pub underline: Option<Underline>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub underline_color: Option<Rgb>,
+    /// Explicit Automatic overrides an underline colour inherited from a style.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub underline_auto: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub strike: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -380,6 +436,15 @@ pub struct CharProps {
     /// contextual ligatures.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ligatures: Option<Ligatures>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub number_spacing: Option<NumberSpacing>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub number_form: Option<NumberForm>,
+    /// A bit per OpenType set, ss01 through ss20. Zero explicitly disables inherited sets.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stylistic_sets: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub contextual_alternates: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub outline: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -547,9 +612,9 @@ impl CharProps {
     /// The fields of `self` that differ from `base` (equal ones unset): what `self` adds when
     /// overlaid on `base`.
     pub fn minus(mut self, base: &CharProps) -> CharProps {
-        drop_same_fields!(self, base; style, font, sym_font, size, bold, italic, underline, underline_color, strike, double_strike, color, highlight,
-            shading, border, vert_align, caps, small_caps, hidden, spacing, scale, position, kern, outline, shadow, emboss, engrave, lang, no_proof, rtl,
-            cs, font_cs, size_cs, bold_cs, italic_cs, lang_bidi, east_asian_layout, link, ins, del, ligatures);
+        drop_same_fields!(self, base; style, font, sym_font, font_theme, size, bold, italic, underline, underline_color, underline_auto, strike, double_strike, color, highlight,
+            shading, border, vert_align, caps, small_caps, hidden, spacing, scale, position, kern, ligatures, number_spacing, number_form, stylistic_sets, contextual_alternates, outline, shadow, emboss, engrave, lang, no_proof, rtl,
+            cs, font_cs, size_cs, bold_cs, italic_cs, lang_bidi, east_asian_layout, link, ins, del);
         self
     }
 
@@ -558,9 +623,12 @@ impl CharProps {
     /// Plain and complex-script properties inherit independently. Commands that intend to
     /// format both scripts must set both values explicitly.
     pub fn overlay(&mut self, patch: &CharProps) {
-        overlay_fields!(self, patch; style, font, sym_font, size, bold, italic, underline, underline_color, strike, double_strike, color, highlight,
-            shading, border, vert_align, caps, small_caps, hidden, spacing, scale, position, kern, outline, shadow, emboss, engrave, lang, no_proof, rtl,
-            cs, font_cs, font_ea, size_cs, bold_cs, italic_cs, lang_bidi, east_asian_layout, link, ins, del, fmt_change, ligatures);
+        if patch.font.is_some() {
+            self.font_theme = None;
+        }
+        overlay_fields!(self, patch; style, font, sym_font, font_theme, size, bold, italic, underline, underline_color, underline_auto, strike, double_strike, color, highlight,
+            shading, border, vert_align, caps, small_caps, hidden, spacing, scale, position, kern, ligatures, number_spacing, number_form, stylistic_sets, contextual_alternates, outline, shadow, emboss, engrave, lang, no_proof, rtl,
+            cs, font_cs, font_ea, size_cs, bold_cs, italic_cs, lang_bidi, east_asian_layout, link, ins, del, fmt_change);
         if let Some(p) = &patch.text_effects {
             self.text_effects.get_or_insert_with(Default::default).overlay(p);
         }
@@ -1370,6 +1438,8 @@ mod tests {
         ] {
             assert_eq!(Ligatures::from_ooxml(name), Some(flags), "{name}");
             assert_eq!(flags.ooxml(), name);
+            assert_eq!(serde_json::from_value::<Ligatures>(serde_json::json!(name)).unwrap(), flags);
+            assert_eq!(serde_json::from_value::<Ligatures>(serde_json::to_value(flags).unwrap()).unwrap(), flags);
         }
         assert_eq!(Ligatures::all().count(), 16);
         for bad in ["", "Standard", "contextualStandard", "standardstandard", "allx"] {

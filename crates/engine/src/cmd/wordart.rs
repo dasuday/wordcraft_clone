@@ -15,7 +15,7 @@ use wordcraft_doc::{Paragraph, PartKind, Pos, StoryRef, para_block};
 use super::sel_result;
 use crate::{CmdError, CmdResult, CommandSpec, Selection, Session, p};
 
-const EFFECT_PARAMS: &str = r#"{"style"?: "solid"|"outlined"|"hollow"|"gradient"|"shadowed"|"glowing"|"reflected"|"sunset", "clear"?: bool, "fill"?: "RRGGBB"|"none" (hollow)|{"color": "RRGGBB", "transparency"?: %}|{"gradient": ["RRGGBB", …], "angle"?: deg}|null (the run's colour), "outline"?: "RRGGBB"|"none"|{"color"?: "RRGGBB"|null, "width"?: pt, "transparency"?: %}|null, "shadow"?: preset|{"color"?, "transparency"?, "blur"?, "distance"?, "angle"?}|null, "glow"?: pt|{"color"?, "size"?, "transparency"?}|null, "reflection"?: bool|"none"|{"transparency"?: %, "size"?: %, "distance"?: pt}|null}  (an omitted key is left as it is; with a shape selected or the caret in a text box, the box's whole text)"#;
+const EFFECT_PARAMS: &str = r#"{"style"?: "solid"|"outlined"|"hollow"|"gradient"|"shadowed"|"glowing"|"reflected"|"sunset", "clear"?: bool, "fill"?: "RRGGBB"|"none" (hollow)|{"color": "RRGGBB", "transparency"?: %}|{"gradient": ["RRGGBB", …], "angle"?: deg}|null (the run's colour), "outline"?: "RRGGBB"|"none" (hide inherited outline)|{"color"?: "RRGGBB"|null, "width"?: pt, "transparency"?: %}|null (inherit), "shadow"?: preset|{"color"?, "transparency"?, "blur"?, "distance"?, "angle"?}|null, "glow"?: pt|{"color"?, "size"?, "transparency"?}|null, "reflection"?: bool|"none"|{"transparency"?: %, "size"?: %, "distance"?: pt}|null}  (an omitted key is left as it is; with a shape selected or the caret in a text box, the box's whole text)"#;
 
 pub fn specs() -> Vec<CommandSpec> {
     vec![
@@ -183,10 +183,19 @@ fn parse_reflection(v: Option<&Value>) -> Result<Change<Reflection>, CmdError> {
 
 /// `format.textEffects`: set or clear the WordArt effects of the selection.
 fn text_effects(s: &mut Session, v: &Value) -> CmdResult {
-    let theme = theme(s);
+    let patch = effect_patch(&theme(s), v)?;
+    apply(s, &patch)
+}
+
+/// Parse before mutation so the Font dialog can commit formatting and effects atomically.
+pub(super) fn effect_patch(theme: &[Rgb], v: &Value) -> Result<impl Fn(&mut CharProps) + 'static, CmdError> {
+    if !v.is_null() && !v.is_object() {
+        return Err(CmdError::Params("text effects must be an object".into()));
+    }
+    let active = !v.is_null();
     let accent = theme.get(4).copied().unwrap_or(Rgb(0x15, 0x60, 0x82));
     let style = match p::str(v, "style") {
-        Some(id) => Some(art_style(id, &theme).ok_or_else(|| CmdError::Params(format!("unknown WordArt style `{id}`")))?),
+        Some(id) => Some(art_style(id, theme).ok_or_else(|| CmdError::Params(format!("unknown WordArt style `{id}`")))?),
         None => None,
     };
     let clear = p::bool(v, "clear").unwrap_or(false);
@@ -195,7 +204,10 @@ fn text_effects(s: &mut Session, v: &Value) -> CmdResult {
     let shadow = parse_shadow(v.get("shadow"))?;
     let glow = parse_glow(v.get("glow"), accent)?;
     let reflection = parse_reflection(v.get("reflection"))?;
-    let f = |c: &mut CharProps| {
+    Ok(move |c: &mut CharProps| {
+        if !active {
+            return;
+        }
         let mut fx = if clear { TextEffects::default() } else { c.text_effects.take().map(|b| *b).unwrap_or_default() };
         if let Some(st) = &style {
             fx = st.clone();
@@ -215,10 +227,32 @@ fn text_effects(s: &mut Session, v: &Value) -> CmdResult {
         if let Some(x) = reflection {
             fx.reflection = x;
         }
+        if clear || outline.flatten().is_some_and(|o| o.color.is_none()) {
+            c.outline = Some(false);
+        }
+        if clear || shadow == Some(None) {
+            c.shadow = Some(false);
+        }
+        if clear {
+            c.emboss = Some(false);
+            c.engrave = Some(false);
+        }
+        // Explicit invisible values suppress inherited decorations and survive DOCX saves.
+        if clear && fx.outline.is_none() {
+            fx.outline = Some(TextOutline { color: None, ..Default::default() });
+        }
+        if (clear && fx.shadow.is_none()) || shadow == Some(None) {
+            fx.shadow = Some(Shadow { transparency: 100.0, blur: 0.0, distance: 0.0, ..Default::default() });
+        }
+        if (clear && fx.glow.is_none()) || glow == Some(None) {
+            fx.glow = Some(Glow { size: 0.0, ..Default::default() });
+        }
+        if (clear && fx.reflection.is_none()) || reflection == Some(None) {
+            fx.reflection = Some(Reflection { transparency: 100.0, size: 0.0, ..Default::default() });
+        }
         let fx = fx.sanitized();
         c.text_effects = (!fx.is_empty()).then(|| Box::new(fx));
-    };
-    apply(s, &f)
+    })
 }
 
 /// The shape a Transform applies to: the selected one, or the one whose text box the caret is in.

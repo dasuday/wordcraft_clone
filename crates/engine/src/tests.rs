@@ -22,6 +22,87 @@ fn text(s: &Session) -> String {
 }
 
 #[test]
+fn font_dialog_rejects_invalid_parameters_without_applying_selection_or_defaults() {
+    let mut s = s();
+    run(&mut s, "text.insert", json!({"text": "Keep my formatting"}));
+    run(&mut s, "select.all", json!({}));
+    let before = s.doc.clone();
+    let prefs = s.prefs.clone();
+    let mut invalid = vec![
+        json!({"props":{"strike":true,"doubleStrike":true}}),
+        json!({"props":{"stylisticSets":1 << 20}}),
+        json!({"props":{"ligatures":"unknown"}}),
+        json!({"props":{"bold":true},"effects":{"glow":"invalid"}}),
+        json!({"props":{"bold":true},"defaultScope":"unknown"}),
+        json!({"props":{"bold":true},"defaultScope":"future","defaultProps":{"size":0}}),
+    ];
+    for (field, low, high) in
+        [("size", 0, 1639), ("sizeCs", 0, 1639), ("spacing", -101, 101), ("scale", 0, 601), ("position", -801, 801), ("kern", -1, 1639)]
+    {
+        for value in [low, high] {
+            let mut params = json!({"props":{"bold":true}});
+            params["props"][field] = json!(value);
+            invalid.push(params);
+        }
+    }
+    for params in invalid {
+        assert!(s.run("format.set", &params).is_err(), "{params}");
+        assert_eq!(s.doc, before, "{params}");
+        assert_eq!(s.prefs, prefs, "{params}");
+    }
+}
+
+#[test]
+fn font_dialog_document_defaults_and_effects_undo_together_without_changing_future_defaults() {
+    let mut s = s();
+    run(&mut s, "text.insert", json!({"text":"Document defaults"}));
+    run(&mut s, "select.all", json!({}));
+    let before = s.doc.clone();
+    let prefs = s.prefs.clone();
+    run(
+        &mut s,
+        "format.set",
+        json!({
+            "props":{"size":18,"strike":true}, "effects":{"fill":"2468AC"},
+            "defaultScope":"document", "defaultProps":{"size":18,"strike":true}
+        }),
+    );
+    assert_eq!(s.doc.styles.default_chr.size, Some(18.0));
+    assert_eq!(s.doc.styles.get("Normal").unwrap().chr.size, Some(18.0));
+    assert_eq!(cmd::format::state(&s)["textEffects"]["fill"]["color"], json!([36, 104, 172]));
+    assert_eq!(s.prefs, prefs);
+    run(&mut s, "edit.undo", json!({}));
+    assert_eq!(s.doc, before, "selection formatting, effects and document defaults share one undo");
+    assert_eq!(s.prefs, prefs);
+}
+
+#[test]
+fn font_defaults_preserve_omitted_effects_and_merge_explicit_patches() {
+    use wordcraft_doc::wordart::TextEffects;
+    let mut s = s();
+    let fx = Some(Box::new(TextEffects { shadow: Some(Default::default()), ..Default::default() }));
+    s.doc.styles.default_chr.text_effects = fx.clone();
+    s.doc.styles.get_mut("Normal").unwrap().chr.text_effects = fx.clone();
+    s.prefs.font_defaults = Some(wordcraft_doc::CharProps { text_effects: fx.clone(), ..Default::default() });
+    for default_props in [json!({"size":18}), json!({"size":18,"textEffects":null})] {
+        run(&mut s, "format.set", json!({"props":{},"defaultScope":"future","defaultProps":default_props}));
+        let expected = if default_props.get("textEffects").is_some() { None } else { fx.clone() };
+        assert_eq!(s.doc.styles.default_chr.text_effects, expected);
+        assert_eq!(s.doc.styles.get("Normal").unwrap().chr.text_effects, expected);
+        assert_eq!(s.prefs.font_defaults.as_ref().unwrap().text_effects, expected);
+    }
+    s.doc.styles.default_chr.text_effects = fx.clone();
+    s.doc.styles.get_mut("Normal").unwrap().chr.text_effects = fx.clone();
+    s.prefs.font_defaults.as_mut().unwrap().text_effects = fx;
+    run(&mut s, "format.set", json!({"props":{},"defaultScope":"future","defaultProps":{"size":20},"effects":{"glow":3}}));
+    for props in [&s.doc.styles.default_chr, &s.doc.styles.get("Normal").unwrap().chr, s.prefs.font_defaults.as_ref().unwrap()] {
+        let effects = props.text_effects.as_ref().unwrap();
+        assert!(effects.shadow.is_some(), "a glow patch preserves the existing shadow");
+        assert_eq!(effects.glow.unwrap().size, 3.0);
+    }
+}
+
+#[test]
 fn doc_extension_dispatches_to_docbin() {
     // Garbage bytes with a .doc name must produce an error through the Word 97-2003
     // reader — never a panic and never a silently empty document.

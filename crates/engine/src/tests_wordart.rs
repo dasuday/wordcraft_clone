@@ -141,6 +141,40 @@ fn wordart_is_inserted_styled_and_bent() {
 }
 
 #[test]
+fn font_effect_removal_suppresses_inherited_decorations_after_docx_roundtrip() {
+    use wordcraft_doc::wordart::TextEffects;
+    let mut s = Session::new(Document::new());
+    s.doc.styles.get_mut("Normal").unwrap().chr.text_effects = Some(Box::new(TextEffects {
+        shadow: Some(Default::default()),
+        glow: Some(Default::default()),
+        reflection: Some(Default::default()),
+        outline: Some(Default::default()),
+        ..Default::default()
+    }));
+    run(&mut s, "text.insert", json!({"text":"Inherited decorations"}));
+    run(&mut s, "select.all", json!({}));
+    run(&mut s, "format.set", json!({"props":{},"effects":{"glow":null}}));
+    let state = super::cmd::format::state(&s);
+    assert!(state["textEffects"].get("glow").is_none());
+    assert!(state["textEffects"].get("shadow").is_some());
+    let mut reopened = Session::new(wordcraft_docx::read(&wordcraft_docx::write(&s.doc).unwrap()).unwrap());
+    run(&mut reopened, "select.all", json!({}));
+    assert_eq!(super::cmd::format::state(&reopened)["textEffects"], state["textEffects"]);
+    // Automatic inherits; No Outline suppresses the style instead.
+    run(&mut reopened, "format.set", json!({"props":{},"effects":{"outline":null}}));
+    assert!(super::cmd::format::state(&reopened)["textEffects"].get("outline").is_some());
+    run(&mut reopened, "format.set", json!({"props":{},"effects":{"outline":"none"}}));
+    assert!(super::cmd::format::state(&reopened)["textEffects"].get("outline").is_none());
+    let mut no_outline = Session::new(wordcraft_docx::read(&wordcraft_docx::write(&reopened.doc).unwrap()).unwrap());
+    run(&mut no_outline, "select.all", json!({}));
+    assert!(super::cmd::format::state(&no_outline)["textEffects"].get("outline").is_none());
+    run(&mut reopened, "format.set", json!({"props":{},"effects":{"clear":true}}));
+    let mut cleared = Session::new(wordcraft_docx::read(&wordcraft_docx::write(&reopened.doc).unwrap()).unwrap());
+    run(&mut cleared, "select.all", json!({}));
+    assert!(super::cmd::format::state(&cleared)["textEffects"].is_null());
+}
+
+#[test]
 fn wordart_reflection_and_outline_none_options() {
     let mut s = Session::new(Document::new());
     let r = run(&mut s, "insert.wordArt", json!({"text": "Reflect", "style": "solid"}));
@@ -154,7 +188,7 @@ fn wordart_reflection_and_outline_none_options() {
     // Clearing reflection using "none"
     run(&mut s, "format.textEffects", json!({"reflection": "none"}));
     let props = s.doc.para_at(&s.doc.start_of(StoryRef::Part(id))).unwrap().props_at(0).clone();
-    assert!(props.text_effects.as_ref().and_then(|fx| fx.reflection).is_none());
+    assert!(props.text_effects.as_ref().and_then(|fx| fx.visible().reflection).is_none());
 
     // Setting outline with color "none"
     run(&mut s, "wordArt.textOutline", json!({"color": "none", "width": 1.5}));
