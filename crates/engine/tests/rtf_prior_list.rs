@@ -7,7 +7,7 @@ use wordcraft_formats::{
 };
 
 fn changed_list(old: Option<bool>, new: Option<bool>, level: u8) -> Document {
-    let list = |ordered| ListInfo { ordered, level };
+    let list = |ordered| ListInfo { ordered, level, start: 1 };
     let mut item = Para {
         list: new.map(list),
         fmt_change: Some(Box::new(FmtChange {
@@ -37,10 +37,10 @@ fn lists(doc: &Document) -> Vec<Option<(bool, u8)>> {
 // Prior properties must not consume one reader list-table slot per changed paragraph.
 fn many_changed_lists(old_ordered: bool) {
     let mut item = Para {
-        list: Some(ListInfo { ordered: !old_ordered, level: 2 }),
+        list: Some(ListInfo { ordered: !old_ordered, level: 2, start: 1 }),
         fmt_change: Some(Box::new(FmtChange {
             mark: RevMark { author: "Alice".into(), date: "2024-03-15T10:30:00Z".into(), id: None },
-            old: Para { list: Some(ListInfo { ordered: old_ordered, level: 2 }), ..Default::default() },
+            old: Para { list: Some(ListInfo { ordered: old_ordered, level: 2, start: 1 }), ..Default::default() },
         })),
         ..Default::default()
     };
@@ -49,7 +49,7 @@ fn many_changed_lists(old_ordered: bool) {
     let mut separator = Para::default();
     separator.push_text("Separator", &Fmt::default());
     blocks.push(FBlock::Para(separator));
-    let mut later = Para { list: Some(ListInfo { ordered: true, level: 0 }), ..Default::default() };
+    let mut later = Para { list: Some(ListInfo { ordered: true, level: 0, start: 1 }), ..Default::default() };
     later.push_text("Independent numbered item", &Fmt::default());
     blocks.push(FBlock::Para(later));
     let mut doc = model::to_doc(&Flow { blocks, ..Default::default() });
