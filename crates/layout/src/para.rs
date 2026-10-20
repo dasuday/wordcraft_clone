@@ -1754,21 +1754,18 @@ pub fn layout_para(p: &Paragraph, env: &ParaEnv) -> ParaLayout {
     };
     let mut found = Vec::new();
     for (i, o) in unicode_linebreak::linebreaks(&text) {
-        // Word keeps "and/or" and web addresses whole: no break right after a slash (a word
-        // too long for the line still breaks anywhere).
-        let after_slash =
-            text.get(..i).is_some_and(|t| t.ends_with('/')) && text.get(i..).and_then(|t| t.chars().next()).is_some_and(char::is_alphanumeric);
-        if (o == unicode_linebreak::BreakOpportunity::Allowed || i < text.len()) && !after_slash {
+        if o == unicode_linebreak::BreakOpportunity::Allowed || i < text.len() {
             found.push(i);
         }
     }
     // UAX #14 (LB13) also forbids a break between a space and a slash, so with the break after the
     // slash gone as well, "caption /word" had no break at all and the word split mid-letter. Word
     // wraps "/word" whole to the next line: break before a slash that starts a word.
+    let breaking_space = |c: char| c.is_whitespace() && !matches!(c, '\u{a0}' | '\u{2007}' | '\u{202f}');
     let before_slash: Vec<usize> = text
         .match_indices('/')
         .filter(|&(i, _)| {
-            text.get(..i).and_then(|t| t.chars().next_back()).is_some_and(|c| c.is_whitespace() && !matches!(c, '\u{a0}' | '\u{2007}' | '\u{202f}'))
+            text.get(..i).and_then(|t| t.chars().next_back()).is_some_and(breaking_space)
                 && text.get(i + 1..).and_then(|t| t.chars().next()).is_some_and(char::is_alphanumeric)
         })
         .map(|(i, _)| i)
@@ -1784,6 +1781,21 @@ pub fn layout_para(p: &Paragraph, env: &ParaEnv) -> ParaLayout {
         found.sort_unstable();
         found.dedup();
     }
+    // Thai, Lao and Khmer wrap between dictionary words.
+    let dict = crate::dictionary::breaks(&text);
+    if !dict.is_empty() {
+        found.extend(dict);
+        found.sort_unstable();
+        found.dedup();
+    }
+    // Word keeps "and/or" and web addresses whole: no break right after a slash (a word too long
+    // for the line still breaks anywhere), nor right before one unless a space precedes it
+    // (LB13). Checked on every source, as the dictionary's breaks don't follow UAX #14 here.
+    found.retain(|&i| {
+        let prev = text.get(..i).and_then(|t| t.chars().next_back());
+        let next = text.get(i..).and_then(|t| t.chars().next());
+        !(prev == Some('/') && next.is_some_and(char::is_alphanumeric)) && !(next == Some('/') && !prev.is_some_and(breaking_space))
+    });
     // Asian typography: kinsoku and breaking Latin words anywhere.
     crate::kinsoku::apply(&text, &mut found, rp.kinsoku, rp.word_wrap);
     let opps: std::collections::HashSet<usize> = found.into_iter().filter_map(to_para).collect();
