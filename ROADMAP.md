@@ -776,3 +776,4 @@ Footer page-table height and body wrapping are corrected. Other pagination gaps 
 | 2026-10-15 | trivial | Progress log: mixed Hebrew/Latin text keeps its order in Word (#1543) |
 | 2026-10-15 | trivial | Progress log: ruler numbers by zoom, rulers follow the caret's page (#1878) |
 | 2026-10-17 | trivial | Progress log: saving into a folder that refuses a temporary file (#2138) |
+| 2026-10-17 | minor | Progress log: Khmer dictionary-based line wrapping and balanced justification (km.dic, wordcraft-proof, wordcraft-layout) |

@@ -787,7 +787,8 @@ fn draw(ctx: &mut RenderContext, doc: &Document, it: &Draw, view: Affine, visibl
             // stroke grows the outline by half its width on each side). Darkening is skipped for
             // translucent text, where the stroke overlapping the fill would show as a darker rim.
             let px_per_pt = view.determinant().abs().sqrt();
-            let darken_px = if opts.text_darkening && *alpha >= 1.0 { stem_darkening(*size as f64 * px_per_pt) } else { 0.0 };
+            let is_sea_font = face.covers('\u{0E01}') || face.covers('\u{0E81}') || face.covers('\u{1000}') || face.covers('\u{1780}');
+            let darken_px = if opts.text_darkening && *alpha >= 1.0 && !is_sea_font { stem_darkening(*size as f64 * px_per_pt) } else { 0.0 };
             let darken = if darken_px > 0.0 && k * px_per_pt > 0.0 { 2.0 * darken_px / (k * px_per_pt) } else { 0.0 };
             let outline_stroke = if *synth_bold { face.upem * 0.03 } else { 0.0 } + darken;
             if outline_stroke > 0.0 {

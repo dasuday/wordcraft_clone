@@ -1784,6 +1784,18 @@ pub fn layout_para(p: &Paragraph, env: &ParaEnv) -> ParaLayout {
         found.sort_unstable();
         found.dedup();
     }
+    // Khmer has no spaces between words: it wraps at word boundaries.
+    if text.chars().any(|c| matches!(u32::from(c), 0x1780..=0x17FF | 0x19E0..=0x19FF)) {
+        found.extend(wordcraft_proof::km::khmer_breaks(&text));
+        found.sort_unstable();
+        found.dedup();
+    }
+    // Thai and Lao have no spaces between words: they wrap at word boundaries.
+    if text.chars().any(|c| matches!(u32::from(c), 0x0E00..=0x0EFF)) {
+        found.extend(wordcraft_proof::sea::thai_lao_breaks(&text));
+        found.sort_unstable();
+        found.dedup();
+    }
     // Asian typography: kinsoku and breaking Latin words anywhere.
     crate::kinsoku::apply(&text, &mut found, rp.kinsoku, rp.word_wrap);
     let opps: std::collections::HashSet<usize> = found.into_iter().filter_map(to_para).collect();
@@ -1884,7 +1896,7 @@ pub fn layout_para(p: &Paragraph, env: &ParaEnv) -> ParaLayout {
             c.break_after = true;
         }
     }
-    break_lines(&mut pl, env, mark_style, env.label.as_ref().map(|(_, l)| l));
+    break_lines(&mut pl, env, mark_style, env.label.as_ref().map(|(_, l)| l), &p.text);
     if gone {
         collapse(&mut pl);
     }
@@ -1945,7 +1957,7 @@ fn ptab_stop(align: PTabAlign, base: PTabBase, leader: TabLeader, width: f32, in
     TabStop { pos, align, leader }
 }
 
-fn break_lines(pl: &mut ParaLayout, env: &ParaEnv, mark_style: u32, level: Option<&Level>) {
+fn break_lines(pl: &mut ParaLayout, env: &ParaEnv, mark_style: u32, level: Option<&Level>, p_text: &str) {
     // Narrow cells and float spans must retain their usable width.
     const MIN_LINE_WIDTH: f32 = 1.0;
     let suffix = level.map(|l| l.suffix);
@@ -1962,6 +1974,7 @@ fn break_lines(pl: &mut ParaLayout, env: &ParaEnv, mark_style: u32, level: Optio
     let zone = Some(env.doc.settings.hyphenation_zone).filter(|z| z.is_finite() && *z >= 0.0).unwrap_or(HYPHENATION_ZONE).min(1584.0);
     let hyph_limit = env.doc.settings.consecutive_hyphen_limit as usize;
     let n = pl.clusters.len();
+    let is_sea_para = p_text.chars().any(wordcraft_proof::sea::is_sea);
     // A right-to-left paragraph is laid out from its start edge, as if mirrored: indents, tabs,
     // the list label and alignment are measured from the right. Lines are mirrored back (and
     // bidirectional text reordered) once broken; floating objects are mirrored in.
@@ -2084,6 +2097,7 @@ fn break_lines(pl: &mut ParaLayout, env: &ParaEnv, mark_style: u32, level: Optio
         let mut pending_tab: Option<(usize, TabStop, f32)> = None; // tab cluster, stop, x where tab started
         let mut space_w = 0.0f32; // width of the spaces so far on this line
         let mut has_tab = false;
+        let mut last_tab_idx: Option<usize> = None;
         while j < n {
             let Some(c) = pl.clusters.get(j).cloned() else { break };
             match c.kind {
@@ -2100,6 +2114,7 @@ fn break_lines(pl: &mut ParaLayout, env: &ParaEnv, mark_style: u32, level: Optio
                 }
                 ClKind::Tab => {
                     has_tab = true;
+                    last_tab_idx = Some(j);
                     resolve_tab(pl, &mut pending_tab, &mut xs, c0, x, &mut x);
                     let ptab = pl.ptabs.iter().find(|t| t.0 == j).map(|&(_, a, b, l)| ptab_stop(a, b, l, width, (rp.indent_left, rp.indent_right)));
                     let stop = ptab.unwrap_or_else(|| next_tab(x, &rp.tabs, default_tab, hanging_at));
@@ -2159,7 +2174,13 @@ fn break_lines(pl: &mut ParaLayout, env: &ParaEnv, mark_style: u32, level: Optio
                     _ => false,
                 }
             });
-            let shrink = if shrink_spaces && !has_tab { space_w * MAX_SPACE_SHRINK } else { 0.0 };
+            let after_tab_cnt = j.saturating_sub(last_tab_idx.map(|t| t + 1).unwrap_or(c0));
+            let sea_shrink = if is_sea_para && (rp.align == Align::Justify || rp.align == Align::Distribute) && pending_tab.is_none() {
+                (after_tab_cnt as f32 * 0.55).min(28.0)
+            } else {
+                0.0
+            };
+            let shrink = if shrink_spaces && !has_tab { space_w * MAX_SPACE_SHRINK + sea_shrink } else { sea_shrink };
             let fits =
                 absorbs || x + c.adv - pl.auto_space_after(j) <= right_edge + shrink + 0.01 || c.kind == ClKind::Space || c.kind == ClKind::Marker;
             // A line's first item stays on it even when it doesn't fit; markers before it
@@ -2453,11 +2474,16 @@ fn break_lines(pl: &mut ParaLayout, env: &ParaEnv, mark_style: u32, level: Optio
                 lab.x += shift;
             }
         }
-        let justify = display.is_none() && ((rp.align == Align::Justify && end == LineEnd::Wrap) || rp.align == Align::Distribute);
-        // A line that only fits with shrunk spaces is shrunk, the last line of the paragraph too.
-        let shrink = display.is_none() && shrink_spaces && slack < 0.0 && last_tab.is_none();
+        let is_sea_line = is_sea_para
+            && (align_from..c1).any(|k| pl.clusters.get(k).is_some_and(|c| p_text.get(c.start..c.end).is_some_and(wordcraft_proof::sea::has_sea)));
+        let justify = display.is_none()
+            && ((rp.align == Align::Justify && end == LineEnd::Wrap) || (rp.align == Align::Distribute && (!is_sea_line || end == LineEnd::Wrap)));
+        let shrink = display.is_none()
+            && (shrink_spaces || (is_sea_line && (rp.align == Align::Justify || rp.align == Align::Distribute)))
+            && slack < 0.0
+            && (last_tab.is_none() || is_sea_line);
         if shrink {
-            shrink_line_spaces(pl, &mut xs, c0, c1, content_end, slack);
+            shrink_line_spaces(pl, &mut xs, c0, c1, content_end, slack, is_sea_line, align_from, p_text);
         } else if justify && slack > 0.0 {
             // Spaces inside the content (after the last tab).
             let spaces: Vec<usize> = (align_from..c1)
@@ -2465,7 +2491,53 @@ fn break_lines(pl: &mut ParaLayout, env: &ParaEnv, mark_style: u32, level: Optio
                     pl.clusters.get(*k).is_some_and(|c| c.kind == ClKind::Space) && xs.get(k - c0).copied().unwrap_or(f32::MAX) < content_end - 0.01
                 })
                 .collect();
-            if rp.align == Align::Distribute || spaces.is_empty() {
+            if is_sea_line {
+                // Southeast Asian continuous scripts (Khmer, Thai, Lao, Myanmar):
+                // MS Word "Thai Distributed" justification (OpenXML w:jc w:val="thaiDistribute").
+                // Thai, Lao, and Khmer are continuous scripts written without inter-word spaces.
+                // We must NEVER insert artificial spaces at word boundaries!
+                // Justification distributes slack smoothly across character clusters and spaces,
+                // without separating attached marks from their base letters.
+                let content_c1 = (align_from..c1)
+                    .rposition(|k| {
+                        !matches!(
+                            pl.clusters.get(k).map(|c| c.kind),
+                            Some(ClKind::Space)
+                                | Some(ClKind::Marker)
+                                | Some(ClKind::LineBreak)
+                                | Some(ClKind::PageBreak)
+                                | Some(ClKind::ColumnBreak)
+                        )
+                    })
+                    .map(|pos| align_from + pos + 1)
+                    .unwrap_or(c1);
+
+                let is_attached_mark = |k: usize| -> bool {
+                    pl.clusters
+                        .get(k)
+                        .is_some_and(|c| c.adv <= 0.0 || p_text.get(c.start..c.end).is_some_and(|t| t.chars().all(wordcraft_proof::sea::is_sea_mark)))
+                };
+
+                let steps: Vec<usize> = (align_from..content_c1).filter(|&k| k + 1 < content_c1 && !is_attached_mark(k + 1)).collect();
+
+                if !steps.is_empty() {
+                    let per = slack / steps.len() as f32;
+                    let mut add = 0.0;
+                    let mut si = 0;
+                    for k in align_from..c1 {
+                        if let Some(v) = xs.get_mut(k - c0) {
+                            *v += add;
+                        }
+                        if steps.get(si) == Some(&k) {
+                            add += per;
+                            si += 1;
+                        }
+                    }
+                    if let Some(v) = xs.last_mut() {
+                        *v += add;
+                    }
+                }
+            } else if rp.align == Align::Distribute || spaces.is_empty() {
                 let cnt = (c1 - align_from).saturating_sub(1).max(1) as f32;
                 if rp.align == Align::Distribute {
                     let per = slack / cnt;
@@ -2750,7 +2822,60 @@ const MAX_SPACE_SHRINK: f32 = 0.2;
 
 /// Take `-slack` (an overflow) out of the line's inner spaces, in proportion to their widths and
 /// never more than [`MAX_SPACE_SHRINK`] of them. Trailing spaces hang and are left alone.
-fn shrink_line_spaces(pl: &ParaLayout, xs: &mut [f32], c0: usize, c1: usize, content_end: f32, slack: f32) {
+/// For Southeast Asian continuous script lines, overflow is distributed letter-by-letter across clusters.
+fn shrink_line_spaces(
+    pl: &ParaLayout,
+    xs: &mut [f32],
+    c0: usize,
+    c1: usize,
+    content_end: f32,
+    slack: f32,
+    is_sea: bool,
+    align_from: usize,
+    p_text: &str,
+) {
+    if !slack.is_finite() || slack >= 0.0 {
+        return;
+    }
+    let overflow = -slack;
+    if is_sea {
+        let content_c1 = (align_from..c1)
+            .rposition(|k| {
+                !matches!(
+                    pl.clusters.get(k).map(|c| c.kind),
+                    Some(ClKind::Space) | Some(ClKind::Marker) | Some(ClKind::LineBreak) | Some(ClKind::PageBreak) | Some(ClKind::ColumnBreak)
+                )
+            })
+            .map(|pos| align_from + pos + 1)
+            .unwrap_or(c1);
+
+        let is_attached_mark = |k: usize| -> bool {
+            pl.clusters
+                .get(k)
+                .is_some_and(|c| c.adv <= 0.0 || p_text.get(c.start..c.end).is_some_and(|t| t.chars().all(wordcraft_proof::sea::is_sea_mark)))
+        };
+
+        let steps: Vec<usize> = (align_from..content_c1).filter(|&k| k + 1 < content_c1 && !is_attached_mark(k + 1)).collect();
+
+        if !steps.is_empty() {
+            let per = overflow / steps.len() as f32;
+            let mut take = 0.0;
+            let mut si = 0;
+            for k in align_from..c1 {
+                if let Some(v) = xs.get_mut(k - c0) {
+                    *v -= take;
+                }
+                if steps.get(si) == Some(&k) {
+                    take += per;
+                    si += 1;
+                }
+            }
+            if let Some(v) = xs.last_mut() {
+                *v -= take;
+            }
+        }
+        return;
+    }
     let spaces: Vec<(usize, f32)> = (c0..c1)
         .filter_map(|k| {
             let c = pl.clusters.get(k).filter(|c| c.kind == ClKind::Space)?;
@@ -2758,10 +2883,10 @@ fn shrink_line_spaces(pl: &ParaLayout, xs: &mut [f32], c0: usize, c1: usize, con
         })
         .collect();
     let total: f32 = spaces.iter().map(|s| s.1).sum();
-    if total <= 0.0 || !slack.is_finite() {
+    if total <= 0.0 {
         return;
     }
-    let ratio = (-slack / total).clamp(0.0, MAX_SPACE_SHRINK);
+    let ratio = (overflow / total).clamp(0.0, MAX_SPACE_SHRINK);
     let mut take = 0.0;
     let mut next = spaces.iter().peekable();
     for k in c0..c1 {
@@ -3160,7 +3285,7 @@ mod label_spacing_tests {
             (st.ascent, st.descent) = if i == label_style as usize { label_metrics } else { text_metrics };
         }
         let mark_style = pl.clusters[0].style;
-        break_lines(&mut pl, &env, mark_style, Some(&level));
+        break_lines(&mut pl, &env, mark_style, Some(&level), &p.text);
         pl.lines
     }
 

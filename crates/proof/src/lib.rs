@@ -51,11 +51,13 @@ pub mod hunspell;
 pub mod hyphen;
 pub mod id;
 pub mod it;
+pub mod km;
 pub mod lang;
 pub mod patterns;
 pub mod pl;
 pub mod pt;
 pub mod ru;
+pub mod sea;
 pub mod tr;
 pub mod vi;
 
