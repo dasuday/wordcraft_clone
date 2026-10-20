@@ -992,7 +992,7 @@ fn polish_covers_every_key_of_every_other_catalog() {
     // pieces of gallery labels. Polish matches every other catalog, including the built-in style
     // names, citation styles and equation gallery. French carries newer strings (paper sizes,
     // bookmarks, printing) the Polish catalog hasn't caught up with yet.
-    for other in Lang::all().filter(|l| *l != Lang::EN && !matches!(l.code(), "pl" | "it" | "hu" | "bg" | "vi" | "sv" | "hr" | "fr")) {
+    for other in Lang::all().filter(|l| *l != Lang::EN && !matches!(l.code(), "pl" | "it" | "hu" | "bg" | "vi" | "sv" | "hr" | "fr" | "uz")) {
         let mut missing: Vec<String> = keys(other.0.source).difference(&polish).cloned().collect();
         missing.sort();
         assert!(missing.is_empty(), "pl lacks {}'s {missing:?}", other.code());
@@ -1337,7 +1337,8 @@ fn croatian_covers_the_entire_existing_interface_catalog_and_keeps_count_labels_
     let keys = |source| parse_entries(source).0.into_iter().map(|e| e.source).collect::<HashSet<_>>();
     let hr = lang("hr");
     // Every key of every other catalog, and no catalog errors.
-    for other in Lang::all().filter(|l| *l != Lang::EN && l.code() != "hr") {
+    // Uzbek carries newer strings (recovery, dictionaries, source import) no other catalog has yet.
+    for other in Lang::all().filter(|l| *l != Lang::EN && !matches!(l.code(), "hr" | "uz")) {
         let mut missing: Vec<String> = keys(other.0.source).difference(&keys(hr.0.source)).cloned().collect();
         missing.sort();
         // Italian and Hungarian still carry "Style: APA", which the interface no longer shows.
@@ -1509,7 +1510,8 @@ fn vietnamese_covers_existing_catalog_keys_with_an_explicit_preview_fallback() {
     assert_eq!(trc(vi, "preview", "Title"), tr(vi, "Title"));
     // Compare complete (context, source) keys so a contextual entry cannot hide a missing plain
     // translation, or silently satisfy another context's key.
-    for other in Lang::all().filter(|l| *l != Lang::EN && l.code() != "vi") {
+    // Uzbek carries newer strings (recovery, dictionaries, source import) no other catalog has yet.
+    for other in Lang::all().filter(|l| *l != Lang::EN && !matches!(l.code(), "vi" | "uz")) {
         let (entries, errors) = parse_entries(other.0.source);
         assert!(errors.is_empty(), "{}: {errors:?}", other.code());
         let keys: HashSet<_> = entries.into_iter().map(|e| (e.context, e.source)).collect();
@@ -1559,4 +1561,91 @@ fn bundled_interface_fonts_cover_vietnamese_letters() {
         }
     }
     assert!(!lang("vi").uses_cjk());
+}
+
+#[test]
+fn uzbek_locales_and_saved_preference_work_without_changing_the_document() {
+    let uz = lang("uz");
+    for tag in ["uz", "uz-UZ", "uz_UZ.UTF-8", "UZ-uz", "uz-Latn-UZ", "uz-Latn"] {
+        assert_eq!(lang_from_tag(tag), Some(uz), "{tag}");
+    }
+    assert_eq!(first_supported([UNSUPPORTED, "uz-UZ", "en-US"]), Some(uz));
+    let mut app = crate::WordApp::new(wordcraft_engine::Session::new(wordcraft_doc::Document::new()), Default::default());
+    let before = serde_json::to_value(&app.session.doc).unwrap();
+    let result = app.run("ui.language", serde_json::json!({"value": "UZ"})).unwrap();
+    assert_eq!(result["effective"], "uz");
+    assert_eq!(app.ui.language, "uz");
+    assert!(result["available"].as_array().unwrap().iter().any(|l| l["code"] == "uz" && l["name"] == "Oʻzbekcha"));
+    assert_eq!(serde_json::to_value(&app.session.doc).unwrap(), before);
+    let saved = serde_json::to_string(&app.ui).unwrap();
+    let restored: crate::UiState = serde_json::from_str(&saved).unwrap();
+    assert_eq!(Lang::from_pref(&restored.language), uz);
+    assert_eq!(uz.name(), "Oʻzbekcha");
+}
+
+#[test]
+fn uzbek_covers_every_key_of_every_other_catalog_and_keeps_templates() {
+    use std::collections::HashSet;
+    let uz = lang("uz");
+    let (entries, errors) = parse_entries(uz.0.source);
+    assert!(errors.is_empty(), "{errors:?}");
+    let uz_keys: HashSet<_> = entries.iter().map(|e| (e.context.clone(), e.source.clone())).collect();
+    for other in Lang::all().filter(|l| *l != Lang::EN && l.code() != "uz") {
+        let keys: HashSet<_> = parse_entries(other.0.source).0.into_iter().map(|e| (e.context, e.source)).collect();
+        let mut missing: Vec<_> = keys.difference(&uz_keys).cloned().collect();
+        missing.sort();
+        assert!(missing.is_empty(), "uz lacks {}'s {missing:?}", other.code());
+    }
+    // Oʻ and gʻ are written with U+02BB, never an ASCII apostrophe.
+    let ascii: Vec<_> = entries.iter().filter(|e| ["o'", "g'", "O'", "G'"].iter().any(|p| e.translation.contains(p))).map(|e| &e.source).collect();
+    assert!(ascii.is_empty(), "ASCII apostrophe in {ascii:?}");
+    for (source, expected) in [
+        ("File", "Fayl"),
+        ("Home", "Bosh sahifa"),
+        ("Review", "Taqriz"),
+        ("Save", "Saqlash"),
+        ("Heading 1", "Sarlavha 1"),
+        ("Spelling & Grammar", "Imlo va grammatika"),
+        ("WordCraft", "WordCraft"),
+        ("unknown future label", "unknown future label"),
+    ] {
+        assert_eq!(tr(uz, source), expected, "{source}");
+    }
+    assert_eq!(tr(uz, "Insert"), "Qoʻshish");
+    assert_eq!(tr(uz, "Options"), "Parametrlar");
+    // The search hint's example must find the command it names.
+    assert!(tr(uz, "Type a command, e.g. \"insert table\"").contains(&tr(uz, "Insert Table").to_lowercase()));
+    assert_eq!(trc(uz, "template", "Letter"), "Xat");
+    assert_eq!(tr(uz, "Letter"), "Letter");
+    assert_eq!(fmt(tr(uz, "Exported {path}"), &[("path", "draft-{words}.docx")]).matches("draft-{words}.docx").count(), 1);
+    // Uzbek nouns stay singular after a numeral, so one wording fits every count.
+    for count in [0, 1, 2, 5, 21, 100, 1000] {
+        let words = count.to_string();
+        assert_eq!(fmt(tr(uz, "{words} words"), &[("words", &words)]), format!("{count} ta soʻz"));
+        assert_eq!(fmt(tr(uz, "{selected} of {words} words"), &[("selected", "1"), ("words", &words)]), format!("{count} ta soʻzdan 1 tasi"));
+    }
+}
+
+#[test]
+fn bundled_interface_fonts_cover_uzbek_letters() {
+    let db = wordcraft_fonts::FontDb::with_font_dirs(Vec::new());
+    let (entries, errors) = parse_entries(lang("uz").0.source);
+    assert!(errors.is_empty());
+    let chars: std::collections::HashSet<char> = entries
+        .iter()
+        .flat_map(|e| e.translation.chars())
+        // The oʻ/gʻ letter mark, the tutuq belgisi, quotes and dashes; symbols come from the English sources.
+        .filter(|c| !c.is_ascii() && (c.is_alphabetic() || matches!(c, 'ʻ' | 'ʼ' | '“' | '”' | '–')))
+        .chain("ʻʼ".chars())
+        .collect();
+    // Catalog text is drawn in Inter. JetBrains Mono has no U+02BB and only shows field codes, never
+    // translated labels, so it is not checked here.
+    for (family, style) in [("Inter", "Regular"), ("Inter", "Medium"), ("Inter", "SemiBold")] {
+        let face = db.face(family, style);
+        assert_eq!(face.family, family, "must use the bundled interface face");
+        for ch in &chars {
+            assert_ne!(face.glyph_for(*ch), 0, "{family} {style} lacks {ch:?}");
+        }
+    }
+    assert!(!lang("uz").uses_cjk());
 }
