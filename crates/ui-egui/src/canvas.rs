@@ -2512,7 +2512,7 @@ fn mouse(app: &mut WordApp, ui: &Ui, resp: &egui::Response, rects: &[Rect], layo
             return;
         }
         app.canvas.column_drag = None;
-        let _ = app.run("caret.set", json!({"pos": pj, "extend": mods.shift}));
+        let _ = app.run("caret.set", json!({"pos": pj, "extend": mods.shift, "page": page, "y": y}));
         // Double-click selects a word, triple-click a paragraph, Ctrl/⌘+click a sentence; holding
         // the button and dragging then extends by whole units (Word, #549).
         let unit = match clicks {

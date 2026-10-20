@@ -3168,7 +3168,8 @@ impl ParaLayout {
                 if lastc.is_some_and(|c| matches!(c.kind, ClKind::LineBreak | ClKind::PageBreak | ClKind::ColumnBreak)) {
                     continue;
                 }
-                if l.end == LineEnd::Wrap && self.lines.get(li + 1).is_some() {
+                // A line wrapping without a space ends after its last letter (Khmer, Thai…).
+                if l.end == LineEnd::Wrap && self.lines.get(li + 1).is_some() && !self.wraps_into(li, l.stop) {
                     continue;
                 }
             }

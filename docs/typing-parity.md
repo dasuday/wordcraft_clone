@@ -277,11 +277,15 @@ again.
   `indic_and_khmer_backspace_removes_one_character`).
 - A line of Khmer, Thai, Chinese or other text that wraps without a space ends after its last
   syllable: End (and Shift+End) go there and the caret is drawn at the end of that line, so
-  typing goes after the syllable instead of before it; Right from before the last syllable stops
-  there too, and the next Right goes past the next line's first syllable (the place between is
-  the same). Home and Up/Down from there work from that line. Spaced text is unchanged. Not yet
-  compared against Word (#604, `end_on_a_line_wrapped_without_a_space_goes_after_its_last_syllable`,
-  `right_stops_at_the_end_of_a_line_wrapped_without_a_space`, `end_and_right_on_spaced_text_are_unchanged`).
+  typing goes after the syllable instead of before it. A click past the line's last letter puts
+  the caret there too. Right from before the last syllable steps to the line's end, then to the
+  next line's start (the same place in the text, drawn there), then past its first syllable;
+  Left goes back the same way. Home and Up/Down from the line's end work from that line, and
+  Down or Up landing past a line's last letter stays at its end. Spaced text is unchanged. Not
+  yet compared against Word (#604, `end_on_a_line_wrapped_without_a_space_goes_after_its_last_syllable`,
+  `right_stops_at_the_end_of_a_line_wrapped_without_a_space`,
+  `a_click_after_the_last_letter_of_a_line_wrapped_without_a_space_stays_on_that_line`,
+  `end_and_right_on_spaced_text_are_unchanged`).
 
 ## Input methods
 
@@ -332,7 +336,7 @@ again.
 
 | Date | Change | Summary |
 |---|---|---|
-| 2026-10-20 | trivial | End and Right put the caret after the last syllable of a line that wraps without a space (Khmer, Thai, Chinese), drawn at that line's end, instead of before it (#604) |
+| 2026-10-20 | trivial | End, Right and a click put the caret after the last syllable of a line that wraps without a space (Khmer, Thai, Chinese), drawn at that line's end, instead of before it; the next Right goes to the next line's start (#604) |
 | 2026-10-18 | trivial | Typing over a selection takes the first selected character's formatting, also when the selection was made right to left (#2879) |
 | 2026-10-17 | trivial | A table inserted in a right-to-left paragraph is a right-to-left table, so Tab moves to the cell on the left (#2634) |
 | 2026-10-15 | trivial | Backspace after a section break and Delete before it remove the break, also one on the last paragraph's mark; the text takes the following section's setup and keeps the headers it showed (#2127) |
