@@ -92,6 +92,19 @@ fn thai_without_spaces_wraps_between_dictionary_words() {
     }
 }
 
+#[test]
+fn thai_words_around_a_slash_stay_together() {
+    // The dictionary breaks on both sides of "/": neither survives, as with Latin "and/or".
+    let text = "คำ/ภาษา ".repeat(40);
+    let l = lay(&Document::from_text(&text));
+    let pl = para_layout(&l, 0);
+    for c in pl.clusters.iter().filter(|c| c.break_after) {
+        let (prev, next) = (text[..c.end].chars().next_back(), text[c.end..].chars().next());
+        assert!(prev != Some('/') && next != Some('/'), "break at {} beside a slash", c.end);
+    }
+    assert!(pl.lines.len() > 1);
+}
+
 /// A face with Myanmar letters (an installed system font), or `None` to skip.
 fn myanmar_face() -> Option<wordcraft_fonts::FaceRef> {
     wordcraft_fonts::FontDb::global().fallback_for('\u{1000}', 0).map(|f| wordcraft_fonts::FaceRef::of(&f)).filter(|f| f.has_layout_tables())
