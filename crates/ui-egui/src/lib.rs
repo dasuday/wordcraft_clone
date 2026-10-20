@@ -6800,7 +6800,7 @@ mod tests {
         a.run("ui.interfaceSize", json!({"percent": 100})).unwrap();
         assert_eq!(ppp(&mut a, 2.0), 1.0, "100% is one screen pixel per point on a 2× display");
         for native in [1.0, 1.25, 1.5, 2.0, 3.0] {
-            for pct in [75u16, 100, 150, 200, 300] {
+            for pct in [75u16, 100, 150, 200, 225, 300] {
                 a.run("ui.interfaceSize", json!({"percent": pct})).unwrap();
                 let got = ppp(&mut a, native);
                 assert!((got - f32::from(pct) / 100.0).abs() < 1e-4, "{pct}% on a {native}× display drew at {got}");

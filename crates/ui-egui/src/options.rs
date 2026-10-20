@@ -742,6 +742,7 @@ mod tests {
         WordApp::new(wordcraft_engine::Session::new(wordcraft_doc::Document::new()), Services::default())
     }
 
+    /// Open General options at the requested language and absolute size on a 2× display.
     fn nav_harness(language: &str, percent: u16) -> egui_kittest::Harness<'static, WordApp> {
         let mut a = app();
         a.run("ui.language", json!({"value": language})).unwrap();
@@ -757,6 +758,30 @@ mod tests {
         );
         h.run_steps(4);
         h
+    }
+
+    /// #3062: the intermediate size is selectable and persists without changing document zoom.
+    #[test]
+    fn interface_size_225_is_selectable_and_persists() {
+        let mut h = nav_harness("en", 100);
+        let doc_zoom = h.state().session.view.zoom;
+        h.query_all_by_role(egui::accesskit::Role::ComboBox)
+            .find(|node| node.value().as_deref() == Some("100%"))
+            .expect("interface size picker")
+            .click();
+        h.run_steps(4);
+        h.get_by_label("225%").scroll_to_me();
+        h.run_steps(20);
+        h.get_by_label("225%").click();
+        h.run_steps(4);
+        assert_eq!(h.state().ui.interface_size.percent(), Some(225));
+        assert_eq!(h.ctx.pixels_per_point(), 2.25);
+        assert_eq!(h.state().session.view.zoom, doc_zoom);
+
+        let saved = serde_json::to_string(&h.state().prefs()).unwrap();
+        let mut reopened = app();
+        reopened.apply_prefs(serde_json::from_str(&saved).unwrap());
+        assert_eq!(reopened.ui.interface_size.percent(), Some(225));
     }
 
     /// #1266: check the actual painted text and renderer clip, including the bold selected
