@@ -211,6 +211,9 @@ pub(crate) fn qat_menu(ui: &mut Ui, app: &mut WordApp) {
     }
 }
 
+const TITLE_BAR: f32 = 38.0;
+const STATUS_BAR: f32 = 26.0;
+
 /// Height of the macOS integrated title bar (#225). AppKit draws the traffic lights itself, centred
 /// in the standard 28 pt title-bar band at the top of the window; moving them would take AppKit
 /// calls (`unsafe`, which the workspace forbids). So the title bar is that band: the lights sit
@@ -262,7 +265,7 @@ pub fn title_bar(app: &mut WordApp, ui: &mut Ui) {
     let left = if mac { bar.content_left as i8 } else { 8 };
     let control_h = if mac { 22.0 } else { 26.0 };
     egui::Panel::top("title_bar")
-        .exact_size(if mac { bar.height } else { 38.0 })
+        .exact_size(if mac { bar.height } else { TITLE_BAR })
         .frame(egui::Frame::NONE.fill(t.title_bar).inner_margin(egui::Margin { left, right: 10, top: 0, bottom: 0 }))
         .show(ui, |ui| {
             let full = ui.max_rect();
@@ -355,15 +358,7 @@ pub fn title_bar(app: &mut WordApp, ui: &mut Ui) {
                     let ph = tl!("Search commands and help");
                     let pfont = TypeRung::Control.regular();
                     let ptrack = TypeRung::Control.tracking();
-                    paint_text(
-                        ui.painter(),
-                        pos2(r.min.x + 30.0, r.center().y - TypeRung::Control.line_height() / 2.0),
-                        Align2::LEFT_TOP,
-                        ph,
-                        &pfont,
-                        ptrack,
-                        t.text_dim,
-                    );
+                    paint_text(ui.painter(), pos2(r.min.x + 30.0, r.center().y), Align2::LEFT_CENTER, ph, &pfont, ptrack, t.text_dim);
                     if app.ui.keytips == crate::keytips::Phase::Tabs {
                         app.keytip_rects.push((r, crate::keytips::SEARCH_LETTER.to_string()));
                     }
@@ -414,15 +409,7 @@ pub fn title_bar(app: &mut WordApp, ui: &mut Ui) {
                     let _ = app.run("file.rename", json!({}));
                 }
 
-                paint_text(
-                    ui.painter(),
-                    pos2(cx - w / 2.0, full.center().y - TypeRung::Chrome.line_height() / 2.0),
-                    Align2::LEFT_TOP,
-                    &shown,
-                    &font,
-                    track,
-                    t.text,
-                );
+                paint_text(ui.painter(), pos2(cx - w / 2.0, full.center().y), Align2::LEFT_CENTER, &shown, &font, track, t.text);
             }
         });
 }
@@ -430,7 +417,7 @@ pub fn title_bar(app: &mut WordApp, ui: &mut Ui) {
 pub fn status_bar(app: &mut WordApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
     egui::Panel::bottom("status")
-        .exact_size(26.0)
+        .exact_size(STATUS_BAR)
         .frame(
             egui::Frame::NONE
                 .fill(t.status_bar)
@@ -455,7 +442,7 @@ pub fn status_bar(app: &mut WordApp, ui: &mut Ui) {
                     let track = TypeRung::Caption.tracking();
                     let w = text_width(ui.painter(), s, &font, track, t.text_dim);
                     let (r, resp) = ui.allocate_exact_size(vec2(w + 1.0, TypeRung::Caption.line_height()), Sense::click());
-                    paint_text(ui.painter(), pos2(r.min.x, r.min.y), Align2::LEFT_TOP, s, &font, track, t.text_dim);
+                    paint_text(ui.painter(), r.left_center(), Align2::LEFT_CENTER, s, &font, track, t.text_dim);
                     resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, s));
                     resp
                 };
@@ -517,8 +504,9 @@ pub fn status_bar(app: &mut WordApp, ui: &mut Ui) {
                 {
                     let font = TypeRung::Caption.regular();
                     let track = TypeRung::Caption.tracking();
-                    paint_text(ui.painter(), pos2(ui.cursor().min.x, ui.cursor().min.y), Align2::LEFT_TOP, msg, &font, track, t.accent_text);
-                    ui.allocate_space(vec2(text_width(ui.painter(), msg, &font, track, t.accent_text) + 1.0, TypeRung::Caption.line_height()));
+                    let w = text_width(ui.painter(), msg, &font, track, t.accent_text);
+                    let (r, _) = ui.allocate_exact_size(vec2(w + 1.0, TypeRung::Caption.line_height()), Sense::hover());
+                    paint_text(ui.painter(), r.left_center(), Align2::LEFT_CENTER, msg, &font, track, t.accent_text);
                 }
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     ui.spacing_mut().item_spacing = vec2(4.0, 0.0);
@@ -532,7 +520,7 @@ pub fn status_bar(app: &mut WordApp, ui: &mut Ui) {
                     // left don't shift as the percentage gains or loses digits (#1975).
                     let zslot = text_width(ui.painter(), "000%", &zfont, ztrack, t.text_dim) + 4.0;
                     let (zr, zresp) = ui.allocate_exact_size(vec2(zw.max(zslot) + 1.0, TypeRung::Caption.line_height()), Sense::click());
-                    paint_text(ui.painter(), pos2(zr.max.x - 1.0, zr.min.y), Align2::RIGHT_TOP, &ztxt, &zfont, ztrack, t.text_dim);
+                    paint_text(ui.painter(), zr.right_center() - vec2(1.0, 0.0), Align2::RIGHT_CENTER, &ztxt, &zfont, ztrack, t.text_dim);
                     if zresp.clicked() && !reading {
                         let _ = app.run("ui.dialog", json!({ "name": "zoom" }));
                     }
@@ -590,8 +578,8 @@ pub fn status_bar(app: &mut WordApp, ui: &mut Ui) {
                     let ftrack = TypeRung::Caption.tracking();
                     paint_text(
                         ui.painter(),
-                        pos2(r.min.x + 22.0, r.center().y - TypeRung::Caption.line_height() / 2.0),
-                        Align2::LEFT_TOP,
+                        pos2(r.min.x + 22.0, r.center().y),
+                        Align2::LEFT_CENTER,
                         focus,
                         &ffont,
                         ftrack,
@@ -687,6 +675,49 @@ mod tests {
         assert_eq!(a.session.doc.plain_text(wordcraft_doc::StoryRef::Body), "Hello");
         frame(&ctx, &mut n, vec![], &mut a);
         assert!(!egui::Popup::is_id_open(&ctx, popup), "the list closes");
+    }
+
+    /// Every label in the title bar and the status bar sits on its bar's centre line, to the
+    /// half point that an odd text height in an even bar allows, for the standard title bar and the
+    /// macOS integrated one at its standard and a taller height.
+    #[test]
+    fn title_and_status_bar_text_is_vertically_centred() {
+        let mac_tall = MacTitleBar::around_lights(78.0, 18.0, 14.0);
+        for (mac, bar) in [(false, MacTitleBar::default()), (true, MacTitleBar::default()), (true, mac_tall)] {
+            let mut a = WordApp::new(wordcraft_engine::Session::new(wordcraft_engine::sample::sample_document()), crate::Services::default());
+            a.integrated_titlebar = mac;
+            a.mac_titlebar = bar;
+            a.session.prefs.overtype = true;
+            a.session.doc.settings.track_changes = true;
+            a.status("Saved a copy");
+            let ctx = ctx();
+            let screen = Rect::from_min_size(egui::Pos2::ZERO, vec2(1400.0, 800.0));
+            let mut texts = Vec::new();
+            for i in 0..3 {
+                let input = egui::RawInput { time: Some(f64::from(i) / 60.0), screen_rect: Some(screen), ..Default::default() };
+                let out = ctx.run_ui(input, |ui| {
+                    title_bar(&mut a, ui);
+                    status_bar(&mut a, ui);
+                });
+                texts = out
+                    .shapes
+                    .iter()
+                    .filter_map(|c| match &c.shape {
+                        egui::Shape::Text(t) => Some((t.galley.text().to_owned(), t.galley.rect.translate(t.pos.to_vec2()))),
+                        _ => None,
+                    })
+                    .collect();
+                out.drop_without_applying_deltas();
+            }
+            for want in ["Search commands and help", "The Open Studio Handbook — Not saved", "Page 1 of 2", "Saved a copy", "100%", "Focus"] {
+                assert!(texts.iter().any(|(s, _)| s == want), "{want} in {texts:?}");
+            }
+            let title = if mac { bar.height } else { TITLE_BAR };
+            for (s, r) in &texts {
+                let centre = if r.center().y < screen.center().y { title / 2.0 } else { screen.max.y - STATUS_BAR / 2.0 };
+                assert!((r.center().y - centre).abs() <= 0.501, "{s:?} at {r:?}, bar centre {centre} (mac {mac}, height {title})");
+            }
+        }
     }
 
     /// #1975: the zoom percentage gains and loses digits (9% → 100% → 500%); the controls to its
