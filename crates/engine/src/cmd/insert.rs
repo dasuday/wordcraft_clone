@@ -107,7 +107,7 @@ pub fn specs() -> Vec<CommandSpec> {
         CommandSpec::new("insert.pageField", "Insert Page Field", "Insert › Text › Quick Parts", |s, _| field(s, &json!({"instr": "PAGE"})))
             .key(super::mac_or("Ctrl+Shift+P", "Alt+Shift+P")),
         CommandSpec::new("insert.dropCap", "Drop Cap", "Insert › Text", drop_cap)
-            .params(r#"{"position"?: "none"|"dropped"|"margin" (default dropped), "lines"?: 1..10 (default 3; 0 = none), "distance"?: pt from the text (0..1584, default 0), "font"?: family (omit for the text's font)}"#)
+            .params(r#"{"position"?: "none"|"dropped"|"margin" (omit to toggle), "lines"?: 1..10 (default 3; 0 = none), "distance"?: pt from the text (0..1584, default 0), "font"?: family (omit for the text's font)}"#)
             .when(drop_cap_off),
         CommandSpec::new("insert.horizontalLine", "Horizontal Line", "Home › Paragraph › Borders", |s, _| {
             super::para::fmt(s, &|p| {
@@ -1242,8 +1242,12 @@ fn drop_cap_off(s: &Session) -> Option<&'static str> {
 /// None takes all of it away, the letter's font with it.
 fn drop_cap(s: &mut Session, v: &Value) -> CmdResult {
     let lines = v.get("lines").and_then(Value::as_f64).filter(|l| l.is_finite());
-    let none = p::str(v, "position") == Some("none") || lines == Some(0.0);
-    let margin = p::str(v, "position") == Some("margin");
+    let explicit_position = p::str(v, "position");
+    let has_explicit_options = explicit_position.is_some() || lines.is_some() || v.get("distance").is_some() || v.get("font").is_some();
+    let is_active =
+        super::selected_paths(s).iter().all(|path| s.doc.para(s.sel.focus.story, path).is_some_and(|p| p.props.drop_cap.unwrap_or(0) > 0));
+    let none = explicit_position == Some("none") || lines == Some(0.0) || (!has_explicit_options && is_active);
+    let margin = explicit_position == Some("margin");
     let lines = lines.map_or(3.0, |l| l.round().clamp(1.0, 10.0)) as u8;
     let distance = p::f32(v, "distance").map_or(0.0, |d| d.clamp(0.0, wordcraft_doc::resolve::MAX_DROP_CAP_DISTANCE));
     // A family name, not a paragraph of text.
