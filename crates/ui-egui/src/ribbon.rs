@@ -650,17 +650,6 @@ pub(crate) fn mi(ui: &mut Ui, app: &mut WordApp, label: &str, id: &str, params: 
     mi_text(ui, app, tl!(label), id, params);
 }
 
-/// [`mi`] with a drawn icon before the label.
-fn mi_icon(ui: &mut Ui, app: &mut WordApp, icon: &str, label: &str, id: &str, params: Value) {
-    let sc = crate::widgets::shortcut_text(app, id);
-    let enabled = crate::widgets::enabled(app, id);
-    let resp = ui.add_enabled_ui(enabled, |ui| crate::widgets::icon_menu_item(ui, icon, tl!(label), &sc, 200.0)).inner;
-    if resp.clicked() {
-        crate::widgets::run_from_ribbon(app, id, params);
-        ui.close();
-    }
-}
-
 /// A menu item whose text is already in the interface language.
 fn mi_text(ui: &mut Ui, app: &mut WordApp, text: &str, id: &str, params: Value) {
     let sc = crate::widgets::shortcut_text(app, id);
@@ -669,6 +658,52 @@ fn mi_text(ui: &mut Ui, app: &mut WordApp, text: &str, id: &str, params: Value) 
     if resp.clicked() {
         crate::widgets::run_from_ribbon(app, id, params);
         ui.close();
+    }
+}
+
+/// A menu item with a small picture before its text (#2718), as Word's border choices have:
+/// a dotted box with the sides `icon` draws, in the accent colour. egui's `Button` can't hold
+/// our painter-drawn icons, so the row is drawn by hand like the ribbon's buttons. Runs `id`
+/// on click and reports it, so a caller can remember the choice (as Shading does its colour).
+pub(crate) fn mi_icon(ui: &mut Ui, app: &mut WordApp, icon: &str, label: &str, id: &str, params: Value) -> egui::Response {
+    let sc = crate::widgets::shortcut_text(app, id);
+    let enabled = crate::widgets::enabled(app, id);
+    let text = tl!(label);
+    let t = Tokens::get(ui.ctx());
+    let fonts = |s: &str, c: egui::Color32| ui.ctx().fonts_mut(|f| f.layout_no_wrap(s.to_string(), regular(11.5), c).size().x);
+    let sc_w = if sc.is_empty() { 0.0 } else { fonts(&sc, t.text_dim) };
+    // Icon, gap, text, then room for the shortcut at the right edge; never narrower than the
+    // plain menu items, so the two kinds line up in one menu.
+    let w = 200.0f32.max(12.0 + 17.0 + 6.0 + fonts(text, t.text) + 12.0 + sc_w + 12.0);
+    let (r, resp) = ui.allocate_exact_size(vec2(w, 22.0), Sense::click());
+    crate::widgets::bg(ui, r, &resp, false, &t);
+    let (c, a) = if enabled { (t.icon, t.accent) } else { (t.text_disabled, t.text_disabled) };
+    icons::paint(ui.painter(), Rect::from_center_size(pos2(r.min.x + 12.0 + 8.5, r.center().y), vec2(17.0, 17.0)), icon, c, a);
+    ui.painter().text(
+        pos2(r.min.x + 12.0 + 17.0 + 6.0, r.center().y),
+        Align2::LEFT_CENTER,
+        text,
+        regular(11.5),
+        if enabled { t.text } else { t.text_disabled },
+    );
+    if !sc.is_empty() {
+        ui.painter().text(pos2(r.max.x - 12.0, r.center().y), Align2::RIGHT_CENTER, &sc, regular(11.5), t.text_dim);
+    }
+    resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, enabled, text));
+    if resp.clicked() && enabled {
+        crate::widgets::run_from_ribbon(app, id, params);
+        ui.close();
+    }
+    resp
+}
+
+/// A Borders menu entry: the pictogram for `kind` next to its label, and the kind remembered
+/// so the split button applies it on a plain click (#2718), as Shading remembers its colour.
+fn mi_border(ui: &mut Ui, app: &mut WordApp, label: &str, kind: &str) {
+    let icon = format!("borders_{kind}");
+    let resp = mi_icon(ui, app, &icon, label, "para.borders", json!({"kind": kind}));
+    if resp.clicked() && crate::widgets::enabled(app, "para.borders") {
+        app.canvas.last_border = kind.to_string();
     }
 }
 
@@ -1168,7 +1203,10 @@ fn home(app: &mut WordApp, ui: &mut Ui) {
                     let theme = app.session.doc.settings.theme_colors.clone();
                     crate::colors::menu(ui, app, &theme, Target::cmd("para.shading").remember(Remember::Shading));
                 });
-                split(ui, app, "borders", "Borders", "para.borders", json!({"kind": "bottom"}), false, None, |ui, app| {
+                // The button applies the kind last chosen from the menu (#2718, default
+                // Bottom), like Shading beside it remembers its colour — its icon shows it.
+                let kind = app.canvas.last_border.clone();
+                split(ui, app, &format!("borders_{kind}"), "Borders", "para.borders", json!({"kind": kind}), false, None, |ui, app| {
                     for (l, k) in [
                         ("Bottom Border", "bottom"),
                         ("Top Border", "top"),
@@ -1179,7 +1217,7 @@ fn home(app: &mut WordApp, ui: &mut Ui) {
                         ("Outside Borders", "outside"),
                         ("Inside Borders", "inside"),
                     ] {
-                        mi(ui, app, l, "para.borders", json!({"kind": k}));
+                        mi_border(ui, app, l, k);
                     }
                     ui.separator();
                     mi(ui, app, "Horizontal Line", "insert.horizontalLine", json!({}));
