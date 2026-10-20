@@ -1762,9 +1762,10 @@ impl Reader {
         if !self.table.is_empty() {
             let mut rows = std::mem::take(&mut self.table);
             let rights = std::mem::take(&mut self.table_rights);
-            let widths = column_grid(&mut rows, &rights);
             // Word draws only the borders the cells name: no grid style, each cell its own.
-            let (indent, cell_margins) = self.table_geom.take().unwrap_or_default().table_props();
+            let geom = self.table_geom.take().unwrap_or_default();
+            let widths = column_grid(&mut rows, &rights, geom.left);
+            let (indent, cell_margins) = geom.table_props();
             self.body.push(FBlock::Table(FTable { rows, widths, borderless: true, indent: Some(indent), cell_margins: Some(cell_margins) }));
         }
     }
@@ -2699,31 +2700,33 @@ fn parse_full(bytes: &[u8]) -> Result<Parsed, String> {
 
 /// The column grid of a table from its rows' cell right edges: every distinct edge starts a grid
 /// column, and each cell spans the grid columns between its left and right edges, as Word lays
-/// out RTF rows whose cells don't line up. Returns the widths in points, or none (equal columns)
-/// when the edges don't make a grid.
-fn column_grid(rows: &mut [Vec<Cell>], rights: &[Vec<i32>]) -> Vec<f32> {
-    let mut edges: Vec<i32> = rights.iter().flatten().copied().filter(|&x| x > 0).collect();
+/// out RTF rows whose cells don't line up. The first column starts at the table's left edge
+/// (`left`, the first row's `\trleft`), as in Word: `\trleft-108\cellx2000` is a 2108-twip
+/// cell. Returns the widths in points, or none (equal columns) when the edges don't make a grid.
+fn column_grid(rows: &mut [Vec<Cell>], rights: &[Vec<i32>], left: i32) -> Vec<f32> {
+    let origin = left;
+    let mut edges: Vec<i32> = rights.iter().flatten().copied().filter(|&x| x > origin).collect();
     edges.sort_unstable();
     edges.dedup();
     let ok = rights.len() == rows.len()
         && rows
             .iter()
             .zip(rights)
-            .all(|(r, x)| r.len() == x.len() && x.windows(2).all(|w| w.first() < w.get(1)) && x.first().is_some_and(|&v| v > 0))
+            .all(|(r, x)| r.len() == x.len() && x.windows(2).all(|w| w.first() < w.get(1)) && x.first().is_some_and(|&v| v > origin))
         && !edges.is_empty()
         && edges.len() <= 63;
     if !ok {
         return Vec::new();
     }
     for (row, x) in rows.iter_mut().zip(rights) {
-        let mut left = 0;
+        let mut left = origin;
         for (c, &right) in row.iter_mut().zip(x) {
             let span = edges.iter().filter(|&&e| e > left && e <= right).count().max(1);
             c.colspan = span as u32;
             left = right;
         }
     }
-    let mut prev = 0;
+    let mut prev = origin;
     edges
         .iter()
         .map(|&e| {
@@ -3000,6 +3003,8 @@ mod tests {
         let Some(wordcraft_doc::Block::Table(t)) = d.body.first().map(|b| &**b) else { panic!("a table first") };
         assert_eq!(t.props.indent, Some(25.0 + 5.4));
         assert_eq!(t.props.cell_margins, Some([10.0, 5.4, 0.0, 5.4]));
+        // The first column runs from \trleft, not from the margin: 2000 - 500 twips.
+        assert_eq!(t.grid, [75.0, 350.0]);
         use wordcraft_doc::props::VAlign;
         assert_eq!(t.rows[0].cells.iter().map(|c| c.props.valign).collect::<Vec<_>>(), [None, Some(VAlign::Center)]);
         assert_eq!(t.rows[1].cells[1].props.valign, Some(VAlign::Bottom));
