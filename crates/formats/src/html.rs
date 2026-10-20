@@ -1465,6 +1465,7 @@ pub fn esc(s: &str) -> String {
     o
 }
 
+/// The CSS `text-align` for a paragraph alignment (both distributed kinds export as justify).
 fn align_css(a: Option<Align>) -> Option<&'static str> {
     match a? {
         Align::Center => Some("text-align:center"),

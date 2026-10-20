@@ -19,12 +19,15 @@ pub struct KhmerDict {
 }
 
 impl Default for KhmerDict {
+    /// An empty dictionary: no words, so segmentation falls back to syllable boundaries.
     fn default() -> Self {
         Self { words_blob: String::new(), offs: vec![0] }
     }
 }
 
 impl KhmerDict {
+    /// The bundled dictionary (`assets/hyphenation/km.dic`), decoded once; empty if it can't be
+    /// read, with the error logged.
     pub fn global() -> &'static KhmerDict {
         static INSTANCE: OnceLock<KhmerDict> = OnceLock::new();
         INSTANCE.get_or_init(|| {
@@ -35,20 +38,24 @@ impl KhmerDict {
         })
     }
 
+    /// The number of words.
     pub fn len(&self) -> usize {
         self.offs.len().saturating_sub(1)
     }
 
+    /// Does the dictionary hold no words?
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
 
+    /// Word `idx` in sorted order, or `""` past the end.
     pub fn word(&self, idx: usize) -> &str {
         let start = self.offs.get(idx).copied().unwrap_or(0) as usize;
         let end = self.offs.get(idx + 1).copied().unwrap_or(0) as usize;
         self.words_blob.get(start..end).unwrap_or("")
     }
 
+    /// Is `word` in the dictionary? A binary search over the sorted words.
     pub fn contains(&self, word: &str) -> bool {
         if self.is_empty() || word.is_empty() {
             return false;
@@ -65,6 +72,9 @@ impl KhmerDict {
         false
     }
 
+    /// Decode a `KMDICT1` dictionary: deflate-compressed, the `KMDICT1` header line, then one
+    /// sorted word per line, each a byte (how many bytes it shares with the word before) and the
+    /// rest of the word. Malformed input is an error, never a panic.
     pub fn from_bytes(data: &[u8]) -> Result<KhmerDict, String> {
         let raw = miniz_oxide::inflate::decompress_to_vec(data).map_err(|e| format!("khmer dictionary inflate failed: {e:?}"))?;
         let body = raw.strip_prefix(MAGIC).ok_or("khmer dictionary: bad header")?;
@@ -273,6 +283,7 @@ pub fn is_consonant_onset(text: &str, idx: usize) -> bool {
     false
 }
 
+/// A vowel or sign that closes a syllable (ៃ ៅ, and nikahit, reahmuk, yuukaleapintu).
 fn is_closed_vowel_or_sign(c: char) -> bool {
     matches!(u32::from(c), 0x17C3 | 0x17C5 | 0x17C6..=0x17C8)
 }

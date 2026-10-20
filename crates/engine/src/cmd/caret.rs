@@ -75,6 +75,7 @@ fn extend(v: &Value) -> bool {
     p::bool(v, "extend").unwrap_or(false)
 }
 
+/// Move the caret to `to`, or with `ext` the selection's focus, drawn at the next line's start.
 fn apply(s: &mut Session, to: Pos, ext: bool) {
     s.line_end = None;
     if ext {
@@ -232,6 +233,7 @@ fn para_down(s: &mut Session, p: &Pos) -> Pos {
     }
 }
 
+/// Up (`dir < 0`) or Down: the nearest place on the line above or below, keeping the column.
 fn vert(s: &mut Session, v: &Value, dir: i32) -> CmdResult {
     let ext = extend(v);
     let l = s.layout();
@@ -268,6 +270,7 @@ fn vert(s: &mut Session, v: &Value, dir: i32) -> CmdResult {
     sel_result(s)
 }
 
+/// Home (`home`) or End: the start or end of the caret's line on the screen.
 fn line(s: &mut Session, v: &Value, home: bool) -> CmdResult {
     let ext = extend(v);
     let l = s.layout();
@@ -310,6 +313,7 @@ fn page(s: &mut Session, v: &Value, dir: i32) -> CmdResult {
     sel_result(s)
 }
 
+/// `caret.set`: the caret at a position, or where a page point is clicked.
 fn set(s: &mut Session, v: &Value) -> CmdResult {
     let ext = extend(v);
     let to = if let Some(pv) = v.get("pos") {

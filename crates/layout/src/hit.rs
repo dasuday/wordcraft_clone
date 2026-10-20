@@ -437,6 +437,8 @@ impl DocLayout {
         self.caret_on(pos, 0)
     }
 
+    /// Caret geometry for a position, looking first at page `page_hint` (headers, footers and
+    /// paragraphs split across pages have the position on more than one page).
     pub fn caret_on(&self, pos: &Pos, page_hint: usize) -> Option<Caret> {
         self.caret_in(pos, page_hint, false)
     }
@@ -449,6 +451,7 @@ impl DocLayout {
         self.caret_in(pos, page_hint, true)
     }
 
+    /// [`Self::caret_on`], or with `line_end` [`Self::caret_at_line_end`].
     fn caret_in(&self, pos: &Pos, page_hint: usize, line_end: bool) -> Option<Caret> {
         for (pi, it) in self.pieces(pos.story, &pos.path, page_hint) {
             let Placed::Lines { para, l0, l1, x, y, turn, .. } = it else { continue };
@@ -486,6 +489,7 @@ impl DocLayout {
         self.vertical_from(pos, self.caret_at_line_end(pos, page_hint)?, goal_x, dir)
     }
 
+    /// [`Self::vertical`] from the caret `c` drawn for `pos`.
     fn vertical_from(&self, pos: &Pos, c: Caret, goal_x: Option<f32>, dir: i32) -> Option<(Pos, f32)> {
         let gx = goal_x.unwrap_or(c.x);
         let page = self.pages.get(c.page)?;

@@ -178,6 +178,7 @@ pub fn rpr(w: &mut W, c: &CharProps) {
     }
 }
 
+/// A paragraph alignment's `w:jc` value.
 pub fn align_val(a: Align) -> &'static str {
     match a {
         Align::Left => "left",

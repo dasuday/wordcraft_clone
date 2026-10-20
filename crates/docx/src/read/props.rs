@@ -359,6 +359,7 @@ impl PropCtx {
     }
 }
 
+/// A `w:jc` value as a paragraph alignment: kashida values justify, unknown values align left.
 pub fn align(v: &str) -> Align {
     match v {
         "center" => Align::Center,
