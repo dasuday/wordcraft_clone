@@ -742,6 +742,7 @@ mod tests {
         WordApp::new(wordcraft_engine::Session::new(wordcraft_doc::Document::new()), Services::default())
     }
 
+    /// Open General options at the requested language and absolute size on a 2× display.
     fn nav_harness(language: &str, percent: u16) -> egui_kittest::Harness<'static, WordApp> {
         let mut a = app();
         a.run("ui.language", json!({"value": language})).unwrap();
