@@ -2022,7 +2022,11 @@ impl WordApp {
         }
         if !self.recovery_seen && self.session.recovery_ready() {
             self.recovery_seen = true;
-            if !self.session.recovery_documents().is_empty() && !self.session.dirty {
+            // Not when a file was handed to us at launch (`session.path` set before the first
+            // tick, e.g. opened from the OS or a CLI argument): the user's intent to see that
+            // document is explicit, and this recovery prompt would otherwise paper over it with
+            // leftover copies from an unrelated past session (#3209).
+            if !self.session.recovery_documents().is_empty() && !self.session.dirty && self.session.path.is_none() {
                 self.ui.backstage = true;
                 self.ui.backstage_page = "recover".into();
             }
@@ -7929,5 +7933,63 @@ mod tests {
         h.step();
         h.step();
         assert!(h.state().session.view.read_mode && shown(&h, "Focus"), "Immersive Reader keeps the status bar");
+    }
+
+    /// #3209: opening a file from the OS (or a CLI argument) sets `session.path` before the first
+    /// tick. If a *different*, leftover recovery copy from an unrelated earlier session is sitting
+    /// in the same profile, the one-shot recovery check used to show the Recover backstage over the
+    /// document the user explicitly asked to open — it only looked at `dirty`, not at whether a
+    /// specific file had already been handed to the session. A later in-app File › Open never hit
+    /// this because `recovery_seen` had already fired once, which is why the bug only showed up
+    /// launching from the OS, never from File › Open (both symptoms the issue reports).
+    #[test]
+    fn opening_a_file_at_launch_does_not_show_the_recover_screen_for_an_unrelated_leftover_draft() {
+        use std::time::{Duration, Instant};
+        let root = std::env::temp_dir().join(format!("wordcraft-ui-recovery-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        // A previous, unrelated session: writes one real recovery record to `root`, then its
+        // Recovery (and the worker thread behind it) is dropped, leaving the record on disk — the
+        // scenario the issue describes as "leftover copies from a previous session".
+        {
+            let mut stale = app();
+            stale.session.enable_recovery(root.clone(), std::sync::Arc::new(|| {})).unwrap();
+            let deadline = Instant::now() + Duration::from_secs(15);
+            while !(stale.session.recovery_ready() && !stale.session.recovery_busy()) {
+                stale.session.recovery_tick();
+                assert!(Instant::now() < deadline, "recovery never became ready");
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            stale.run("document.setText", json!({"text": "Leftover draft from a previous session"})).unwrap();
+            // The autosave only fires once its 10s interval elapses (private to the engine crate,
+            // so this test can't force it sooner the way the engine's own recovery tests do).
+            let deadline = Instant::now() + Duration::from_secs(15);
+            while stale.session.recovery_documents().is_empty() {
+                stale.session.recovery_tick();
+                assert!(Instant::now() < deadline, "the leftover recovery record was never saved");
+                std::thread::sleep(Duration::from_millis(20));
+            }
+        }
+        // The new session: a file is "opened from the OS" (`path` set before the first tick, as
+        // `apps/wordcraft/src/main.rs` does for a CLI/OS-handed file), then recovery is enabled
+        // against the same profile, which will find the stale session's leftover record.
+        let ctx = egui::Context::default();
+        let mut opened = app();
+        opened.session.path = Some("report.docx".into());
+        opened.session.enable_recovery(root.clone(), std::sync::Arc::new(|| {})).unwrap();
+        let deadline = Instant::now() + Duration::from_secs(15);
+        loop {
+            ctx.run_ui(egui::RawInput::default(), |ui| opened.logic(ui.ctx())).drop_without_applying_deltas();
+            if opened.recovery_seen {
+                break;
+            }
+            assert!(Instant::now() < deadline, "the new session's recovery check never ran");
+        }
+        assert!(!opened.session.recovery_documents().is_empty(), "test setup: the leftover record should still be there");
+        assert!(!opened.session.dirty, "a freshly opened, unmodified document isn't dirty");
+        assert_ne!(
+            opened.ui.backstage_page, "recover",
+            "an explicitly opened file should not be hidden behind the Recover screen for an unrelated draft"
+        );
+        let _ = std::fs::remove_dir_all(&root);
     }
 }
