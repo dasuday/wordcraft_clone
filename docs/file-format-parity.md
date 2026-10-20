@@ -199,9 +199,30 @@ hold was dropped without a warning (on 18 real-world Word documents: compatibili
 of 18; the privacy options are modelled since #1062). Now the writer merges into the
 file's original (`crates/docx/src/write/settings_merge.rs`): the original root and every child
 the model doesn't own stay byte for byte; owned children follow the model, in CT_Settings order;
-in `w:compat` only `compatibilityMode` is replaced. Kept children that point at a relationship
-(a mail-merge data source) are dropped. Files WordCraft wrote itself keep nothing extra. Tests:
-`crates/docx/tests/settings_merge.rs`.
+in `w:compat` only `compatibilityMode` is replaced. External mail-merge sources now have their
+own preservation path: `w:mailMerge` (including query, connection string and ODSO settings) is
+kept with its referenced external `mailMergeSource` and `mailMergeHeaderSource` relationships.
+IDs are allocated with the attached-template relationship and rewritten in the kept subtree;
+unrelated relationships are not emitted. Opening or saving never connects to a source or runs
+a query. Two-save synthetic tests retain three MERGEFIELD instructions and an ordinary text edit.
+Missing, duplicate, wrong-type or empty source relationships refuse the save with a mail-merge
+error instead of silently dropping the template's identity. A single referenced internal
+recipient-data part is also kept byte-identically through the existing bounded part manifest.
+Word's `relationships/recipientData` and the documented ISO `officeDocument/2006/mailMergeRecipientData`
+relationship forms are supported, with the original WML or Microsoft wordml content type and
+root namespace. Its inclusion/exclusion flags and record keys are never evaluated or rewritten.
+The part is limited to 1 MiB and must be a leaf; a dependent relationship file, unsupported
+content type/root, unsafe or encoded target, missing/ambiguous reference, or lost kept bytes
+refuses saving. Package-local relative targets and allocated output names keep their references
+resolvable. Synthetic tests cover edits, two DOCX saves and native JSON reopening. Other
+unowned settings with relationship IDs remain outside this preservation path. Files WordCraft
+wrote itself keep nothing extra. Tests: `crates/docx/tests/settings_merge.rs` and `mail_merge.rs`.
+Recipient-data tests: `crates/docx/tests/mail_merge_recipients.rs`.
+Public format references: [mailMerge](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.mailmerge)
+and [ODSO source reference](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.sourcereference).
+Recipient data: [MS-OE376 3.1.1.3](https://learn.microsoft.com/en-us/openspecs/office_standards/ms-oe376/8bb1a00c-fc11-49f9-88f2-3ce626f2fda3)
+and [Word/ISO relationship difference, MS-OI29500 2.1.378](https://learn.microsoft.com/en-us/openspecs/office_standards/ms-oi29500/b05d3137-d2c6-4c6e-9afa-eb92d7ccf317).
+No new Microsoft Word runtime comparison or corpus-readiness claim accompanies these synthetic tests.
 
 ## Unmodelled-part preservation
 
@@ -251,6 +272,8 @@ Imported text fields use the first nonempty cached result run's formatting on th
 | 2026-10-16 | trivial | #2445: interactive Save on import-only .doc/.dot paths uses the existing DOCX Save As flow; cancel and failed writes keep the draft, and Close waits for a successful save. Explicit/script saves still report unsupported legacy output |
 | 2026-10-16 | trivial | Fonts Word embeds as subsets are found by the font table's name (`OBRBWW+Century Schoolbook`), not only the family inside the file, so the text set in them uses them instead of a substitute (#2240) |
 | 2026-10-17 | trivial | Paste: an HTML `<blockquote>` (LibreOffice's both-sides indent) pastes as a Normal paragraph with its margins as indents, not the centred italic Quote style; opening .html unchanged (#1270) |
+| 2026-10-16 | trivial | External mail-merge settings and sources survive two DOCX saves; source-reference errors are explicit; wider corpus and internal recipient-data gaps remain |
+| 2026-10-16 | trivial | Embedded mail-merge recipient data is carried byte-identically with its content type and remapped reference; malformed or unsupported internal references refuse saving; synthetic DOCX/native-reopen coverage |
 | 2026-10-15 | trivial | `wordcraft-cli convert --update-fields` explicitly refreshes unlocked fields before conversion; ordinary conversion keeps cached results. Field refresh can change pagination |
 | 2026-10-16 | trivial | Cached textual `REF` results with `\h` export links to their bookmarks. Code view and existing enclosing hyperlinks remain unchanged; unresolved bookmarks emit no PDF link. |
 | 2026-10-16 | trivial | Cached text fields retain result-run formatting instead of field-begin formatting. |
