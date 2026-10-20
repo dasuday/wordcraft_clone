@@ -842,6 +842,13 @@ fn enumerate_faces(data: &[u8]) -> Vec<Found> {
     (0..count).filter_map(|i| skrifa::FontRef::from_index(data, i).ok().map(|f| font_faces(&f, i))).flatten().collect()
 }
 
+/// macOS's LastResort font maps every code point to a placeholder box: loaded as a fallback, it
+/// would "cover" every character and shadow the real script fonts found after it.
+#[cfg(not(target_arch = "wasm32"))]
+fn is_placeholder_font(path: &std::path::Path) -> bool {
+    path.file_stem().and_then(|s| s.to_str()).is_some_and(|s| s.eq_ignore_ascii_case("LastResort"))
+}
+
 /// The compiled-in Source Sans 3 Regular, for a database that somehow has no faces at all.
 pub(crate) fn last_resort_face() -> Arc<FontFace> {
     static FACE: std::sync::OnceLock<Arc<FontFace>> = std::sync::OnceLock::new();
@@ -1743,7 +1750,7 @@ impl FontDb {
             index.generation = Some(generation);
         }
         let CoverageIndex { files, reads, .. } = &mut *index;
-        for file in files.iter_mut().filter(|f| !f.used) {
+        for file in files.iter_mut().filter(|f| !f.used && !is_placeholder_font(&f.path)) {
             let mut data = None;
             match &file.ranges {
                 Some(r) if !ranges_hold(r, cp) => continue,

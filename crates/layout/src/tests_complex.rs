@@ -298,12 +298,21 @@ fn khmer_line_wrapping_keeps_recognized_words_intact() {
     }
 }
 
+/// A face with Khmer letters (an installed system font), or `None` to skip: the spacing these
+/// tests pin depends on the fallback face's advances.
+fn khmer_face() -> Option<wordcraft_fonts::FaceRef> {
+    wordcraft_fonts::FontDb::global().fallback_for('\u{1780}', 0).map(|f| wordcraft_fonts::FaceRef::of(&f)).filter(|f| f.has_layout_tables())
+}
+
 #[test]
 fn khmer_justification_avoids_excessive_spacing() {
     use crate::para::ClKind;
     use wordcraft_doc::Align;
 
-    let _ = wordcraft_fonts::FontDb::global();
+    if khmer_face().is_none() {
+        eprintln!("skipped: no Khmer font with OpenType tables installed");
+        return;
+    }
     for (name, p_text) in [
         (
             "P1",
@@ -440,6 +449,10 @@ fn khmer_tab_indented_paragraph_spaces_remain_uniform() {
     use crate::para::ClKind;
     use wordcraft_doc::Align;
 
+    if khmer_face().is_none() {
+        eprintln!("skipped: no Khmer font with OpenType tables installed");
+        return;
+    }
     let p_text = "\tខ្ញុំបាទ/នាងខ្ញុំ សូមសម្ដែងនូវកតញ្ញូនិងគោរពថ្លែងអំណរគុណយ៉ាងជ្រាលជ្រៅបំផុត ជូនចំពោះ ឯកឧត្តម អ៊ាង សុផល្លែត រដ្ឋមន្ត្រីក្រសួងបរិស្ថាន ដែលបានផ្ដល់ការគាំទ្រ ការណែនាំ ប្រកបដោយយកចិត្តទុកដាក់ និងផ្ដល់ឱកាសដ៏ មានតម្លៃដល់រូបយើងខ្ញុំក្នុងការសិក្សា ស្រាវជ្រាវ និង អនុវត្តការងារជាក់ស្ដែងនៅក្នុងវិស័យបរិស្ថាន។";
     let mut doc = Document::from_text(p_text);
     doc.format_paragraphs(&Pos::body(0, 0), &Pos::body(0, 0), &|p| p.align = Some(Align::Justify)).unwrap();
@@ -568,27 +581,83 @@ fn khmer_words_stay_tight_under_justification() {
     }
 }
 
-#[test]
-fn thai_distributed_does_not_stretch_last_line_of_paragraph() {
-    // Under thaiDistribute (Align::Distribute on SEA text), wrapped lines are justified
-    // but the final line of the paragraph must stay natural/un-stretched.
-    let text = "ខ្ញុំបាទ/នាងខ្ញុំ សូមគោរពជូនពរចំពោះ ឯកឧត្តម លោកជំទាវ លោក លោកស្រី និង មន្ត្រី រាជការ ទាំងអស់ នៃ ក្រសួងបរិស្ថាន។ ចប់។";
+/// The width of a paragraph's last line set with `align`, and its column width.
+fn last_line_width(text: &str, align: Align) -> (f32, f32) {
     let mut doc = Document::from_text(text);
-    doc.format_paragraphs(&Pos::body(0, 0), &Pos::body(0, 0), &|p| p.align = Some(Align::Distribute)).unwrap();
+    doc.format_paragraphs(&Pos::body(0, 0), &Pos::body(0, 0), &|p| p.align = Some(align)).unwrap();
     let l = lay(&doc);
     let pl = para_layout(&l, 0);
-
     assert!(pl.lines.len() >= 2, "Should wrap into multiple lines");
-    let last_line = pl.lines.last().unwrap();
-    // The last line should end at natural width, not stretched to right_edge
-    let last_xs = &last_line.xs;
-    let natural_w = last_xs.last().copied().unwrap_or(0.0) - last_xs.first().copied().unwrap_or(0.0);
-    // Line width should be far less than the full column width (~468 pt)
-    assert!(natural_w < 200.0, "Last line must not be stretched to column width; got {natural_w}");
+    let last = pl.lines.last().unwrap();
+    (last.xs.last().copied().unwrap_or(0.0) - last.xs.first().copied().unwrap_or(0.0), last.right - last.left)
+}
+
+const KHMER_TWO_LINES: &str = "ខ្ញុំបាទ/នាងខ្ញុំ សូមគោរពជូនពរចំពោះ ឯកឧត្តម លោកជំទាវ លោក លោកស្រី និង មន្ត្រី រាជការ ទាំងអស់ នៃ ក្រសួងបរិស្ថាន។ ចប់។";
+
+#[test]
+fn thai_distributed_does_not_stretch_last_line_of_paragraph() {
+    // Thai distributed (`w:jc="thaiDistribute"`) justifies wrapped lines but leaves the last one.
+    let (w, col) = last_line_width(KHMER_TWO_LINES, Align::ThaiDistribute);
+    assert!(w < col / 2.0, "Last line must not be stretched to column width {col}; got {w}");
+}
+
+#[test]
+fn distributed_stretches_the_last_line_of_southeast_asian_text_too() {
+    // Plain distributed (`w:jc="distribute"`) stretches every line, the last one included.
+    let (w, col) = last_line_width(KHMER_TWO_LINES, Align::Distribute);
+    assert!((w - col).abs() <= 0.5, "Last line spans the column {col}; got {w}");
+}
+
+#[test]
+fn script_word_breaks_stay_inside_their_script() {
+    // No dictionary break before Khmer punctuation (។) or Latin punctuation, and none inside the
+    // Latin text around Thai words.
+    let khmer = "ក្រសួងបរិស្ថាន។ ក្រសួងបរិស្ថាន, ok";
+    let thai = "word/ห้องสมุดสถานะ, other/text";
+    for text in [khmer, thai] {
+        let l = lay(&Document::from_text(text));
+        let pl = para_layout(&l, 0);
+        for c in pl.clusters.iter().filter(|c| c.break_after) {
+            let next = text.get(c.end..).and_then(|t| t.chars().next());
+            assert!(!matches!(next, Some('។' | ',' | '/')), "{text}: break before {next:?} at {}", c.end);
+            let prev = text.get(..c.end).and_then(|t| t.chars().next_back());
+            assert!(prev != Some('/'), "{text}: break after a slash at {}", c.end);
+        }
+    }
+    // Breaks between Khmer words are still found.
+    let words = "ការណែនាំប្រកបដោយ";
+    let l = lay(&Document::from_text(words));
+    assert!(para_layout(&l, 0).clusters.iter().any(|c| c.break_after && c.end == "ការណែនាំ".len()), "a break between {words}");
+}
+
+#[test]
+fn latin_lines_of_a_justified_southeast_asian_paragraph_stay_inside_the_margin() {
+    // The extra shrink allowed between Southeast Asian clusters doesn't let an English line of
+    // the same paragraph run past the margin.
+    let english =
+        "Typography is the art and technique of arranging type to make written language legible readable and appealing when displayed. ".repeat(3);
+    for compat in [14, 15] {
+        let mut doc = Document::from_text(&format!("ក្រសួងបរិស្ថាន {english}"));
+        doc.settings.compat_mode = compat;
+        doc.format_paragraphs(&Pos::body(0, 0), &Pos::body(0, 0), &|p| p.align = Some(Align::Justify)).unwrap();
+        let l = lay(&doc);
+        let pl = para_layout(&l, 0);
+        for (idx, line) in pl.lines.iter().enumerate().skip(1) {
+            let last = (line.c0..line.c1).rev().find(|&k| pl.clusters[k].kind == crate::para::ClKind::Text);
+            let Some(k) = last else { continue };
+            let end = line.xs[k - line.c0] + pl.clusters[k].adv;
+            assert!(end <= line.right + 0.5, "compat {compat} line {idx} ends at {end}, past {}", line.right);
+        }
+    }
 }
 
 #[test]
 fn test_khmer_os_battambang_line_break() {
+    // The line count is Word's with this font; another face's advances break elsewhere.
+    if !wordcraft_fonts::FontDb::global().has_family("Khmer OS Battambang") {
+        eprintln!("skipped: Khmer OS Battambang is not installed");
+        return;
+    }
     let p_text = "\tខ្ញុំបាទ/នាងខ្ញុំ សូមសម្ដែងនូវកតញ្ញូតាធម៌ដ៏ជ្រាលជ្រៅ និងការគោរពដឹងគុណយ៉ាងខ្ពង់ខ្ពស់បំផុត \
         ជូនចំពោះ ឯកឧត្តមបណ្ឌិត អ៊ាង សុផល្លែត រដ្ឋមន្ត្រីក្រសួងបរិស្ថាន ដែលជានិច្ចកាលតែងតែផ្តល់ការ\
         គាំទ្រ លើកទឹកចិត្ត និងផ្តល់ឱកាសដ៏មានតម្លៃបំផុតដល់រូបយើងខ្ញុំ ក្នុងការចុះសិក្សាស្រាវជ្រាវ និងអនុវត្ត\
@@ -629,8 +698,7 @@ fn khmer_coda_consonants_are_never_orphaned_at_line_breaks() {
         let pl = para_layout(&l, 0);
 
         for (idx, line) in pl.lines.iter().enumerate() {
-            let line_text: String =
-                (line.c0..line.c1).map(|ci| p_text.get(pl.clusters[ci].start..pl.clusters[ci].end).unwrap_or("")).collect();
+            let line_text: String = (line.c0..line.c1).map(|ci| p_text.get(pl.clusters[ci].start..pl.clusters[ci].end).unwrap_or("")).collect();
             let trimmed = line_text.trim();
 
             // Line must never start with orphaned coda consonant ម or ង
@@ -638,19 +706,10 @@ fn khmer_coda_consonants_are_never_orphaned_at_line_breaks() {
                 !trimmed.starts_with('ម') || trimmed.starts_with("មន្ត្រី") || trimmed.starts_with("មិន"),
                 "Line {idx} at margin {margin} starts with orphaned coda 'ម': '{trimmed}'"
             );
-            assert!(
-                !trimmed.starts_with('ង'),
-                "Line {idx} at margin {margin} starts with orphaned coda 'ង': '{trimmed}'"
-            );
+            assert!(!trimmed.starts_with('ង'), "Line {idx} at margin {margin} starts with orphaned coda 'ង': '{trimmed}'");
             // Line must never end with ញ៉ូ or ដឹ
-            assert!(
-                !trimmed.ends_with("ញ៉ូ"),
-                "Line {idx} at margin {margin} ends with broken syllable 'ញ៉ូ': '{trimmed}'"
-            );
-            assert!(
-                !trimmed.ends_with("ដឹ"),
-                "Line {idx} at margin {margin} ends with broken syllable 'ដឹ': '{trimmed}'"
-            );
+            assert!(!trimmed.ends_with("ញ៉ូ"), "Line {idx} at margin {margin} ends with broken syllable 'ញ៉ូ': '{trimmed}'");
+            assert!(!trimmed.ends_with("ដឹ"), "Line {idx} at margin {margin} ends with broken syllable 'ដឹ': '{trimmed}'");
         }
     }
 }
@@ -667,25 +726,15 @@ fn khmer_medial_clusters_are_never_severed_at_line_breaks() {
         let pl = para_layout(&l, 0);
 
         for (idx, line) in pl.lines.iter().enumerate() {
-            let line_text: String =
-                (line.c0..line.c1).map(|ci| p_text.get(pl.clusters[ci].start..pl.clusters[ci].end).unwrap_or("")).collect();
+            let line_text: String = (line.c0..line.c1).map(|ci| p_text.get(pl.clusters[ci].start..pl.clusters[ci].end).unwrap_or("")).collect();
             let trimmed = line_text.trim();
 
             // Line must never start with orphaned subscript ន្ត (e.g. ន្តដឹកនាំ)
-            assert!(
-                !trimmed.starts_with("ន្ត"),
-                "Line {idx} at margin {margin} starts with severed subscript 'ន្ត': '{trimmed}'"
-            );
+            assert!(!trimmed.starts_with("ន្ត"), "Line {idx} at margin {margin} starts with severed subscript 'ន្ត': '{trimmed}'");
             // Line must never end with ដើម្បីប
-            assert!(
-                !trimmed.ends_with("ដើម្បីប"),
-                "Line {idx} at margin {margin} ends with 'ដើម្បីប' (severing បន្ត): '{trimmed}'"
-            );
+            assert!(!trimmed.ends_with("ដើម្បីប"), "Line {idx} at margin {margin} ends with 'ដើម្បីប' (severing បន្ត): '{trimmed}'");
             // Line must never end with broken initial consonant ប before subscript ន្ត
-            assert!(
-                !trimmed.ends_with("ឆ្នាំប"),
-                "Line {idx} at margin {margin} ends with 'ឆ្នាំប': '{trimmed}'"
-            );
+            assert!(!trimmed.ends_with("ឆ្នាំប"), "Line {idx} at margin {margin} ends with 'ឆ្នាំប': '{trimmed}'");
         }
     }
 }
@@ -711,8 +760,7 @@ fn khmer_user_document_line_breaks_never_tear_words() {
             let pl = para_layout(&l, 0);
 
             for (idx, line) in pl.lines.iter().enumerate() {
-                let line_text: String =
-                    (line.c0..line.c1).map(|ci| p_text.get(pl.clusters[ci].start..pl.clusters[ci].end).unwrap_or("")).collect();
+                let line_text: String = (line.c0..line.c1).map(|ci| p_text.get(pl.clusters[ci].start..pl.clusters[ci].end).unwrap_or("")).collect();
                 let trimmed = line_text.trim();
 
                 // P1 checks:
@@ -720,24 +768,12 @@ fn khmer_user_document_line_breaks_never_tear_words() {
                     !trimmed.ends_with("ប្រ") || trimmed.ends_with("ប្រើ") || trimmed.ends_with("ប្រកបដោយ"),
                     "P{pi} Line {idx} at margin {margin} ends with torn 'ប្រ': '{trimmed}'"
                 );
-                assert!(
-                    !trimmed.starts_with("យោជន៍"),
-                    "P{pi} Line {idx} at margin {margin} starts with torn 'យោជន៍': '{trimmed}'"
-                );
-                assert!(
-                    !trimmed.starts_with("ន្ត"),
-                    "P{pi} Line {idx} at margin {margin} starts with severed subscript 'ន្ត': '{trimmed}'"
-                );
-                assert!(
-                    !trimmed.ends_with("ដើម្បីប"),
-                    "P{pi} Line {idx} at margin {margin} ends with 'ដើម្បីប': '{trimmed}'"
-                );
+                assert!(!trimmed.starts_with("យោជន៍"), "P{pi} Line {idx} at margin {margin} starts with torn 'យោជន៍': '{trimmed}'");
+                assert!(!trimmed.starts_with("ន្ត"), "P{pi} Line {idx} at margin {margin} starts with severed subscript 'ន្ត': '{trimmed}'");
+                assert!(!trimmed.ends_with("ដើម្បីប"), "P{pi} Line {idx} at margin {margin} ends with 'ដើម្បីប': '{trimmed}'");
 
                 // P2 checks:
-                assert!(
-                    !trimmed.starts_with("ដឹងបន្ថែម"),
-                    "P{pi} Line {idx} at margin {margin} splits ការយល់ from ដឹង: '{trimmed}'"
-                );
+                assert!(!trimmed.starts_with("ដឹងបន្ថែម"), "P{pi} Line {idx} at margin {margin} splits ការយល់ from ដឹង: '{trimmed}'");
             }
         }
     }
@@ -758,18 +794,11 @@ fn khmer_robos_is_never_severed_at_line_breaks() {
         let pl = para_layout(&l, 0);
 
         for (idx, line) in pl.lines.iter().enumerate() {
-            let line_text: String =
-                (line.c0..line.c1).map(|ci| p_text.get(pl.clusters[ci].start..pl.clusters[ci].end).unwrap_or("")).collect();
+            let line_text: String = (line.c0..line.c1).map(|ci| p_text.get(pl.clusters[ci].start..pl.clusters[ci].end).unwrap_or("")).collect();
             let trimmed = line_text.trim();
 
-            assert!(
-                !trimmed.ends_with("ដីរ"),
-                "Line {idx} at margin {margin} ends with 'ដីរ' (tearing របស់): '{trimmed}'"
-            );
-            assert!(
-                !trimmed.starts_with("បស់"),
-                "Line {idx} at margin {margin} starts with torn 'បស់': '{trimmed}'"
-            );
+            assert!(!trimmed.ends_with("ដីរ"), "Line {idx} at margin {margin} ends with 'ដីរ' (tearing របស់): '{trimmed}'");
+            assert!(!trimmed.starts_with("បស់"), "Line {idx} at margin {margin} starts with torn 'បស់': '{trimmed}'");
         }
     }
 }
@@ -792,24 +821,12 @@ fn khmer_chhlon_is_never_severed_at_line_breaks() {
         let pl = para_layout(&l, 0);
 
         for (idx, line) in pl.lines.iter().enumerate() {
-            let line_text: String =
-                (line.c0..line.c1).map(|ci| p_text.get(pl.clusters[ci].start..pl.clusters[ci].end).unwrap_or("")).collect();
+            let line_text: String = (line.c0..line.c1).map(|ci| p_text.get(pl.clusters[ci].start..pl.clusters[ci].end).unwrap_or("")).collect();
             let trimmed = line_text.trim();
 
-            assert!(
-                !trimmed.ends_with("ឆ្ល"),
-                "Line {idx} at margin {margin_f} ends with severed 'ឆ្ល': '{trimmed}'"
-            );
-            assert!(
-                !trimmed.starts_with("ង"),
-                "Line {idx} at margin {margin_f} starts with severed coda 'ង': '{trimmed}'"
-            );
-            assert!(
-                !trimmed.starts_with("ងធនាគារ"),
-                "Line {idx} at margin {margin_f} starts with severed 'ងធនាគារ': '{trimmed}'"
-            );
+            assert!(!trimmed.ends_with("ឆ្ល"), "Line {idx} at margin {margin_f} ends with severed 'ឆ្ល': '{trimmed}'");
+            assert!(!trimmed.starts_with("ង"), "Line {idx} at margin {margin_f} starts with severed coda 'ង': '{trimmed}'");
+            assert!(!trimmed.starts_with("ងធនាគារ"), "Line {idx} at margin {margin_f} starts with severed 'ងធនាគារ': '{trimmed}'");
         }
     }
 }
-
-

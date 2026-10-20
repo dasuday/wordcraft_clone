@@ -82,8 +82,8 @@ pub fn thai_lao_breaks(span: &str) -> Vec<usize> {
         if b == 0 || b >= span.len() {
             continue;
         }
-        let Some(prev) = span[..b].chars().next_back() else { continue };
-        let Some(next) = span[b..].chars().next() else { continue };
+        let Some(prev) = span.get(..b).and_then(|t| t.chars().next_back()) else { continue };
+        let Some(next) = span.get(b..).and_then(|t| t.chars().next()) else { continue };
         if is_sea_mark(next) || stays_with_previous(next) || stays_with_next(prev) {
             continue;
         }

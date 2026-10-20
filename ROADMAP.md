@@ -136,6 +136,7 @@ Ranked, to beta (detail and remaining milestones in [docs/roadmap.md](docs/roadm
 
 Imported Word 97–2003 `.doc`/`.dot` files now ask for a supported DOCX target on interactive Save (#2445). Save before Close waits for that write; cancel or failure keeps the draft and original file. This does not add binary Word output. Late Save As answers are rejected before writing if automation has replaced the document.
 
+- 2026-10-20: Khmer wraps at dictionary word boundaries (ICU's Khmer word list, `assets/hyphenation/km.dic`) and Thai and Lao at the word boundaries ICU's dictionary and LSTM segmenters agree on, without tearing marks from their letters; justified Southeast Asian lines spread the room between clusters instead of widening spaces. Thai distributed (`w:jc="thaiDistribute"`) is kept apart from distributed and round-trips; it leaves the paragraph's last line alone (#604). Not yet compared with Word.
 - 2026-10-19: Restrict Editing: with Filling in forms enforced, inserting content controls, their Properties and Remove Content Control are refused, as in Word (it greys them out), so a form's fields stay as they are and only their content is filled in.
 - 2026-10-19: Content controls: text typed over a placeholder takes the control's own run properties (`w:sdtPr/w:rPr`, ECMA-376 §17.5.2.27), as in Word, and the placeholder style is recognised by its built-in name "Placeholder Text" whatever its localized id (German Word: `Platzhaltertext`), so entries in forms from localized Word no longer stay grey.
 - 2026-10-15: Find opens Navigation on Results; editing the query restores Results after manual Headings/Pages navigation. Typed and selected-text searches retain document contents (#2096).
@@ -777,3 +778,4 @@ Footer page-table height and body wrapping are corrected. Other pagination gaps 
 | 2026-10-15 | trivial | Progress log: ruler numbers by zoom, rulers follow the caret's page (#1878) |
 | 2026-10-17 | trivial | Progress log: saving into a folder that refuses a temporary file (#2138) |
 | 2026-10-17 | minor | Progress log: Khmer dictionary-based line wrapping and balanced justification (km.dic, wordcraft-proof, wordcraft-layout) |
+| 2026-10-20 | trivial | Progress log: Thai and Lao word-boundary wrapping, Thai distributed alignment kept apart (#604) |

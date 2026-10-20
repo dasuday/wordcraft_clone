@@ -116,7 +116,7 @@ pub fn is_khmer_coeng(c: char) -> bool {
 
 /// Is `c` a Khmer dependent vowel (`\u{17B6}`..=`\u{17C5}`, `\u{17B4}`..=`\u{17B5}`)?
 pub fn is_khmer_dep_vowel(c: char) -> bool {
-    matches!(u32::from(c), 0x17B6..=0x17C5 | 0x17B4..=0x17B5)
+    matches!(u32::from(c), 0x17B4..=0x17C5)
 }
 
 /// Is `c` a Khmer consonant register shifter (muusikatoan `\u{17C9}` or triisap `\u{17CA}`)?
@@ -204,20 +204,20 @@ pub fn is_khmer_dict_word(dict: &KhmerDict, word: &str) -> bool {
     if dict.contains(word) {
         return true;
     }
-    if let Some(stem) = word.strip_prefix("ការ") {
-        if dict.contains(stem) {
-            return true;
-        }
+    if let Some(stem) = word.strip_prefix("ការ")
+        && dict.contains(stem)
+    {
+        return true;
     }
-    if let Some(stem) = word.strip_prefix("អ្នក") {
-        if dict.contains(stem) {
-            return true;
-        }
+    if let Some(stem) = word.strip_prefix("អ្នក")
+        && dict.contains(stem)
+    {
+        return true;
     }
-    if let Some(stem) = word.strip_prefix("ភាព") {
-        if dict.contains(stem) {
-            return true;
-        }
+    if let Some(stem) = word.strip_prefix("ភាព")
+        && dict.contains(stem)
+    {
+        return true;
     }
     false
 }
@@ -241,12 +241,11 @@ pub fn starts_with_dict_word(text: &str, idx: usize) -> bool {
         }
     }
     for &eb in end_bytes.iter().rev() {
-        if eb >= 6 {
-            if let Some(sub) = rem.get(..eb) {
-                if is_khmer_dict_word(dict, sub) {
-                    return true;
-                }
-            }
+        if eb >= 6
+            && let Some(sub) = rem.get(..eb)
+            && is_khmer_dict_word(dict, sub)
+        {
+            return true;
         }
     }
     false
@@ -265,15 +264,11 @@ pub fn is_consonant_onset(text: &str, idx: usize) -> bool {
     }
     let mut chars = text[idx..].chars();
     chars.next(); // skip the base consonant at idx
-    while let Some(c) = chars.next() {
+    for c in chars {
         if c == '\u{200C}' || c == '\u{200D}' {
             continue;
         }
-        return is_khmer_coeng(c)
-            || is_khmer_dep_vowel(c)
-            || is_khmer_shifter(c)
-            || is_khmer_robat(c)
-            || is_khmer_vowel_modifier(c);
+        return is_khmer_coeng(c) || is_khmer_dep_vowel(c) || is_khmer_shifter(c) || is_khmer_robat(c) || is_khmer_vowel_modifier(c);
     }
     false
 }
@@ -317,30 +312,29 @@ pub fn next_khmer_syllable(text: &str, i: usize) -> usize {
         while let Some(ch1) = text[i + idx..].chars().next() {
             if is_khmer_coeng(ch1) {
                 let mut iter2 = text[i + idx + ch1.len_utf8()..].chars();
-                if let Some(ch2) = iter2.next() {
-                    if is_khmer_subscript_consonant(ch2) {
-                        idx += ch1.len_utf8() + ch2.len_utf8();
-                        continue;
-                    }
+                if let Some(ch2) = iter2.next()
+                    && is_khmer_subscript_consonant(ch2)
+                {
+                    idx += ch1.len_utf8() + ch2.len_utf8();
+                    continue;
                 }
             } else if is_khmer_consonant(ch1) {
                 let after_ch1 = i + idx + ch1.len_utf8();
-                if let Some(c_coeng) = text[after_ch1..].chars().next() {
-                    if is_khmer_coeng(c_coeng) {
-                        let after_coeng = after_ch1 + c_coeng.len_utf8();
-                        if let Some(c3) = text[after_coeng..].chars().next() {
-                            if is_khmer_subscript_consonant(c3) {
-                                idx += ch1.len_utf8() + c_coeng.len_utf8() + c3.len_utf8();
-                                continue;
-                            }
-                        }
+                if let Some(c_coeng) = text[after_ch1..].chars().next()
+                    && is_khmer_coeng(c_coeng)
+                {
+                    let after_coeng = after_ch1 + c_coeng.len_utf8();
+                    if let Some(c3) = text[after_coeng..].chars().next()
+                        && is_khmer_subscript_consonant(c3)
+                    {
+                        idx += ch1.len_utf8() + c_coeng.len_utf8() + c3.len_utf8();
+                        continue;
                     }
                 }
             }
             break;
         }
     } else if starts_medial_cluster(text, i) {
-
         // Medial stack words: e.g. បន្ត, បង្កើន, កម្ពុជា, កន្លែង, សម្ដែង: consume C2, Coeng, C3
         if let Some(c2) = text[i + idx..].chars().next() {
             idx += c2.len_utf8();
@@ -355,11 +349,11 @@ pub fn next_khmer_syllable(text: &str, i: usize) -> usize {
         while let Some(ch1) = text[i + idx..].chars().next() {
             if is_khmer_coeng(ch1) {
                 let mut iter2 = text[i + idx + ch1.len_utf8()..].chars();
-                if let Some(ch2) = iter2.next() {
-                    if is_khmer_subscript_consonant(ch2) {
-                        idx += ch1.len_utf8() + ch2.len_utf8();
-                        continue;
-                    }
+                if let Some(ch2) = iter2.next()
+                    && is_khmer_subscript_consonant(ch2)
+                {
+                    idx += ch1.len_utf8() + ch2.len_utf8();
+                    continue;
                 }
             }
             break;
@@ -369,11 +363,11 @@ pub fn next_khmer_syllable(text: &str, i: usize) -> usize {
         while let Some(ch1) = text[i + idx..].chars().next() {
             if is_khmer_coeng(ch1) {
                 let mut iter2 = text[i + idx + ch1.len_utf8()..].chars();
-                if let Some(ch2) = iter2.next() {
-                    if is_khmer_subscript_consonant(ch2) {
-                        idx += ch1.len_utf8() + ch2.len_utf8();
-                        continue;
-                    }
+                if let Some(ch2) = iter2.next()
+                    && is_khmer_subscript_consonant(ch2)
+                {
+                    idx += ch1.len_utf8() + ch2.len_utf8();
+                    continue;
                 }
             }
             break;
@@ -388,10 +382,10 @@ pub fn next_khmer_syllable(text: &str, i: usize) -> usize {
             break;
         }
     }
-    if let Some(ch) = text[i + idx..].chars().next() {
-        if is_khmer_shifter(ch) {
-            idx += ch.len_utf8();
-        }
+    if let Some(ch) = text[i + idx..].chars().next()
+        && is_khmer_shifter(ch)
+    {
+        idx += ch.len_utf8();
     }
     while let Some(ch) = text[i + idx..].chars().next() {
         if ch == '\u{200C}' || ch == '\u{200D}' {
@@ -402,10 +396,10 @@ pub fn next_khmer_syllable(text: &str, i: usize) -> usize {
     }
 
     // Consume robat if any
-    if let Some(ch) = text[i + idx..].chars().next() {
-        if is_khmer_robat(ch) {
-            idx += ch.len_utf8();
-        }
+    if let Some(ch) = text[i + idx..].chars().next()
+        && is_khmer_robat(ch)
+    {
+        idx += ch.len_utf8();
     }
     while let Some(ch) = text[i + idx..].chars().next() {
         if ch == '\u{200C}' || ch == '\u{200D}' {
@@ -419,11 +413,11 @@ pub fn next_khmer_syllable(text: &str, i: usize) -> usize {
     while let Some(ch1) = text[i + idx..].chars().next() {
         if is_khmer_coeng(ch1) {
             let mut iter2 = text[i + idx + ch1.len_utf8()..].chars();
-            if let Some(ch2) = iter2.next() {
-                if is_khmer_subscript_consonant(ch2) {
-                    idx += ch1.len_utf8() + ch2.len_utf8();
-                    continue;
-                }
+            if let Some(ch2) = iter2.next()
+                && is_khmer_subscript_consonant(ch2)
+            {
+                idx += ch1.len_utf8() + ch2.len_utf8();
+                continue;
             }
         }
         break;
@@ -470,80 +464,75 @@ pub fn next_khmer_syllable(text: &str, i: usize) -> usize {
     while let Some(ch1) = text[i + idx..].chars().next() {
         if is_khmer_coeng(ch1) {
             let mut iter2 = text[i + idx + ch1.len_utf8()..].chars();
-            if let Some(ch2) = iter2.next() {
-                if is_khmer_subscript_consonant(ch2) {
-                    idx += ch1.len_utf8() + ch2.len_utf8();
-                    continue;
-                }
+            if let Some(ch2) = iter2.next()
+                && is_khmer_subscript_consonant(ch2)
+            {
+                idx += ch1.len_utf8() + ch2.len_utf8();
+                continue;
             }
         }
         break;
     }
 
     // Check for CODA consonant
-    if !is_closed {
-        if let Some(coda) = text[i + idx..].chars().next() {
-            if is_khmer_consonant(coda) && u32::from(coda) != 0x17A2 && u32::from(coda) != 0x17A1 {
-                let coda_offset = i + idx;
-                let after_coda = coda_offset + coda.len_utf8();
-                let next_ch = text[after_coda..].chars().next();
+    if !is_closed
+        && let Some(coda) = text[i + idx..].chars().next()
+        && is_khmer_consonant(coda)
+        && u32::from(coda) != 0x17A2
+        && u32::from(coda) != 0x17A1
+    {
+        let coda_offset = i + idx;
+        let after_coda = coda_offset + coda.len_utf8();
+        let next_ch = text[after_coda..].chars().next();
 
-                let is_combining_attachment = match next_ch {
-                    Some(c) => is_khmer_dep_vowel(c)
-                        || is_khmer_coeng(c)
-                        || is_khmer_shifter(c)
-                        || is_khmer_robat(c)
-                        || is_khmer_vowel_modifier(c),
-                    None => false,
-                };
+        let is_combining_attachment = match next_ch {
+            Some(c) => is_khmer_dep_vowel(c) || is_khmer_coeng(c) || is_khmer_shifter(c) || is_khmer_robat(c) || is_khmer_vowel_modifier(c),
+            None => false,
+        };
 
-                let consume_coda = if is_combining_attachment {
-                    false
-                } else if !is_consonant_onset(text, coda_offset) {
-                    let has_coda_sign = next_ch.is_some_and(is_khmer_coda_diacritic);
-                    let at_boundary = match next_ch {
-                        None => true,
-                        Some(c) => c.is_whitespace() || (!is_khmer_consonant(c) && !is_khmer_indep_vowel(c)),
-                    };
-                    let next_is_onset = match next_ch {
-                        Some(c) if is_khmer_consonant(c) => is_consonant_onset(text, after_coda),
-                        _ => false,
-                    };
-                    let is_dict_word_with_coda = is_khmer_dict_word(KhmerDict::global(), &text[i..after_coda]);
+        let consume_coda = if is_combining_attachment {
+            false
+        } else if !is_consonant_onset(text, coda_offset) {
+            let has_coda_sign = next_ch.is_some_and(is_khmer_coda_diacritic);
+            let at_boundary = match next_ch {
+                None => true,
+                Some(c) => c.is_whitespace() || (!is_khmer_consonant(c) && !is_khmer_indep_vowel(c)),
+            };
+            let next_is_onset = match next_ch {
+                Some(c) if is_khmer_consonant(c) => is_consonant_onset(text, after_coda),
+                _ => false,
+            };
+            let is_dict_word_with_coda = is_khmer_dict_word(KhmerDict::global(), &text[i..after_coda]);
 
-                    has_coda_sign
-                        || is_dict_word_with_coda
-                        || (has_vowel && (at_boundary || next_is_onset))
+            has_coda_sign || is_dict_word_with_coda || (has_vowel && (at_boundary || next_is_onset))
+        } else {
+            false
+        };
+
+        if consume_coda {
+            idx += coda.len_utf8();
+            // Consume any coda diacritic (bantoc, toandakhiat, etc.)
+            while let Some(ch) = text[i + idx..].chars().next() {
+                if is_khmer_coda_diacritic(ch) || is_khmer_vowel_modifier(ch) {
+                    idx += ch.len_utf8();
                 } else {
-                    false
-                };
-
-                if consume_coda {
-                    idx += coda.len_utf8();
-                    // Consume any coda diacritic (bantoc, toandakhiat, etc.)
-                    while let Some(ch) = text[i + idx..].chars().next() {
-                        if is_khmer_coda_diacritic(ch) || is_khmer_vowel_modifier(ch) {
-                            idx += ch.len_utf8();
+                    break;
+                }
+            }
+            // Check for subscript on coda (e.g. សិស្ស)
+            if let Some(ch1) = text[i + idx..].chars().next()
+                && is_khmer_coeng(ch1)
+            {
+                let mut iter2 = text[i + idx + ch1.len_utf8()..].chars();
+                if let Some(ch2) = iter2.next()
+                    && is_khmer_subscript_consonant(ch2)
+                {
+                    idx += ch1.len_utf8() + ch2.len_utf8();
+                    while let Some(ch3) = text[i + idx..].chars().next() {
+                        if is_khmer_coda_diacritic(ch3) || is_khmer_vowel_modifier(ch3) {
+                            idx += ch3.len_utf8();
                         } else {
                             break;
-                        }
-                    }
-                    // Check for subscript on coda (e.g. សិស្ស)
-                    if let Some(ch1) = text[i + idx..].chars().next() {
-                        if is_khmer_coeng(ch1) {
-                            let mut iter2 = text[i + idx + ch1.len_utf8()..].chars();
-                            if let Some(ch2) = iter2.next() {
-                                if is_khmer_subscript_consonant(ch2) {
-                                    idx += ch1.len_utf8() + ch2.len_utf8();
-                                    while let Some(ch3) = text[i + idx..].chars().next() {
-                                        if is_khmer_coda_diacritic(ch3) || is_khmer_vowel_modifier(ch3) {
-                                            idx += ch3.len_utf8();
-                                        } else {
-                                            break;
-                                        }
-                                    }
-                                }
-                            }
                         }
                     }
                 }
@@ -561,10 +550,10 @@ pub fn next_khmer_syllable(text: &str, i: usize) -> usize {
     }
 
     // Attach repetition mark ៗ if present
-    if let Some(ch) = text[i + idx..].chars().next() {
-        if u32::from(ch) == 0x17D7 {
-            idx += ch.len_utf8();
-        }
+    if let Some(ch) = text[i + idx..].chars().next()
+        && u32::from(ch) == 0x17D7
+    {
+        idx += ch.len_utf8();
     }
 
     i + idx
@@ -639,7 +628,7 @@ pub fn khmer_breaks(text: &str) -> Vec<usize> {
             syllable_ends.push(next_s);
             curr = next_s;
             match text.get(curr..).and_then(|t| t.chars().next()) {
-                Some(c) if is_khmer_char(c) => {},
+                Some(c) if is_khmer_char(c) => {}
                 _ => break,
             }
         }
@@ -647,21 +636,16 @@ pub fn khmer_breaks(text: &str) -> Vec<usize> {
         // Try longest word match in dictionary among syllable boundaries
         let mut matched_end = None;
         for &cand_end in syllable_ends.iter().rev() {
-            if let Some(next_c) = text.get(cand_end..).and_then(|t| t.chars().next()) {
-                if is_khmer_coeng(next_c)
-                    || is_khmer_dep_vowel(next_c)
-                    || is_khmer_coda_diacritic(next_c)
-                    || is_khmer_vowel_modifier(next_c)
-                {
-                    continue;
-                }
+            if let Some(next_c) = text.get(cand_end..).and_then(|t| t.chars().next())
+                && (is_khmer_coeng(next_c) || is_khmer_dep_vowel(next_c) || is_khmer_coda_diacritic(next_c) || is_khmer_vowel_modifier(next_c))
+            {
+                continue;
             }
             if text.get(i..cand_end).is_some_and(|sub| is_khmer_dict_word(dict, sub)) {
                 matched_end = Some(cand_end);
                 break;
             }
         }
-
 
         if let Some(end) = matched_end {
             out.push(end);
@@ -670,11 +654,7 @@ pub fn khmer_breaks(text: &str) -> Vec<usize> {
             // Fallback: advance to the next valid syllable boundary
             let next_bound = syllable_ends.first().copied().unwrap_or_else(|| {
                 let next_s = next_khmer_syllable(text, i);
-                if next_s > i {
-                    next_s
-                } else {
-                    i + ch.len_utf8()
-                }
+                if next_s > i { next_s } else { i + ch.len_utf8() }
             });
             out.push(next_bound);
             i = next_bound;
@@ -770,10 +750,7 @@ mod tests {
             tokens.push(&text[prev..b]);
             prev = b;
         }
-        assert!(
-            tokens == vec!["ក្នុង", "គោលដៅ", "បង្កើន", "ការយល់ដឹង"]
-                || tokens == vec!["ក្នុង", "គោលដៅ", "បង្កើន", "ការយល់", "ដឹង"]
-        );
+        assert!(tokens == vec!["ក្នុង", "គោលដៅ", "បង្កើន", "ការយល់ដឹង"] || tokens == vec!["ក្នុង", "គោលដៅ", "បង្កើន", "ការយល់", "ដឹង"]);
     }
 
     #[test]
@@ -803,11 +780,7 @@ mod tests {
             tokens.push(&text[prev..b]);
             prev = b;
         }
-        assert!(
-            tokens == vec!["ការយល់ដឹង"]
-                || tokens == vec!["ការយល់", "ដឹង"]
-                || tokens == vec!["ការ", "យល់", "ដឹង"]
-        );
+        assert!(tokens == vec!["ការយល់ដឹង"] || tokens == vec!["ការយល់", "ដឹង"] || tokens == vec!["ការ", "យល់", "ដឹង"]);
         // Must never break between ដឹ and ង
         let de_len = "ការយល់ដឹ".len();
         assert!(!breaks.contains(&de_len), "Must never break coda consonant ង away from ដឹ");
@@ -815,7 +788,8 @@ mod tests {
 
     #[test]
     fn test_single_syllables_preserve_coda() {
-        for word in ["ដឹង", "រៀន", "បាទ", "ញ៉ូម", "ទុក", "ដាក់", "យល់", "ដង", "បង", "កក", "ពង", "សព", "ជន", "បទ"] {
+        for word in ["ដឹង", "រៀន", "បាទ", "ញ៉ូម", "ទុក", "ដាក់", "យល់", "ដង", "បង", "កក", "ពង", "សព", "ជន", "បទ"]
+        {
             let breaks = khmer_breaks(word);
             assert_eq!(breaks, vec![word.len()], "Word {word} must be kept as single syllable unit");
         }
@@ -862,21 +836,7 @@ mod tests {
 
     #[test]
     fn test_all_medial_cluster_words_kept_intact() {
-        let words = [
-            "បន្ត",
-            "បង្កើន",
-            "កម្ពុជា",
-            "កន្លែង",
-            "សម្ដែង",
-            "អង្គការ",
-            "បញ្ជាក់",
-            "បញ្ហា",
-            "បណ្តុះ",
-            "បន្ទាប់",
-            "សង្គម",
-            "សន្តិភាព",
-            "កណ្តាល",
-        ];
+        let words = ["បន្ត", "បង្កើន", "កម្ពុជា", "កន្លែង", "សម្ដែង", "អង្គការ", "បញ្ជាក់", "បញ្ហា", "បណ្តុះ", "បន្ទាប់", "សង្គម", "សន្តិភាព", "កណ្តាល"];
         for word in words {
             let breaks = khmer_breaks(word);
             assert_eq!(breaks, vec![word.len()], "Word {word} must be kept as single whole unit");
@@ -1037,27 +997,25 @@ mod tests {
                 if nxt <= curr {
                     break;
                 }
-                if nxt < w.len() {
-                    if let Some(next_c) = w[nxt..].chars().next() {
-                        // An orthographic break must never precede a subscript coeng, dep vowel, or coda sign
-                        if is_khmer_coeng(next_c)
-                            || is_khmer_dep_vowel(next_c)
-                            || is_khmer_coda_diacritic(next_c)
-                        {
-                            // Ignore rare corrupt double-sign typos in raw Unicode wordlist (e.g. coeng before vowel or double coeng)
-                            let prev_c = w[..nxt].chars().next_back().unwrap_or(' ');
-                            let is_raw_typo = is_khmer_coeng(prev_c)
-                                || is_khmer_dep_vowel(prev_c)
-                                || is_khmer_vowel_modifier(prev_c)
-                                || is_khmer_coda_diacritic(prev_c)
-                                || is_khmer_indep_vowel(prev_c)
-                                || (is_khmer_dep_vowel(next_c) && w[..nxt].chars().any(is_khmer_dep_vowel))
-                                || (is_khmer_coeng(next_c) && w[nxt..].chars().nth(1).is_some_and(|c| is_khmer_dep_vowel(c) || is_khmer_coeng(c) || is_khmer_vowel_modifier(c)));
-                            if !is_raw_typo {
-                                illegal_splits += 1;
-                                if illegal_splits <= 20 {
-                                    eprintln!("Illegal split #{illegal_splits}: '{w}' -> '{}' | '{}'", &w[..nxt], &w[nxt..]);
-                                }
+                if nxt < w.len()
+                    && let Some(next_c) = w[nxt..].chars().next()
+                {
+                    // An orthographic break must never precede a subscript coeng, dep vowel, or coda sign
+                    if is_khmer_coeng(next_c) || is_khmer_dep_vowel(next_c) || is_khmer_coda_diacritic(next_c) {
+                        // Ignore rare corrupt double-sign typos in raw Unicode wordlist (e.g. coeng before vowel or double coeng)
+                        let prev_c = w[..nxt].chars().next_back().unwrap_or(' ');
+                        let is_raw_typo = is_khmer_coeng(prev_c)
+                            || is_khmer_dep_vowel(prev_c)
+                            || is_khmer_vowel_modifier(prev_c)
+                            || is_khmer_coda_diacritic(prev_c)
+                            || is_khmer_indep_vowel(prev_c)
+                            || (is_khmer_dep_vowel(next_c) && w[..nxt].chars().any(is_khmer_dep_vowel))
+                            || (is_khmer_coeng(next_c)
+                                && w[nxt..].chars().nth(1).is_some_and(|c| is_khmer_dep_vowel(c) || is_khmer_coeng(c) || is_khmer_vowel_modifier(c)));
+                        if !is_raw_typo {
+                            illegal_splits += 1;
+                            if illegal_splits <= 20 {
+                                eprintln!("Illegal split #{illegal_splits}: '{w}' -> '{}' | '{}'", &w[..nxt], &w[nxt..]);
                             }
                         }
                     }
@@ -1074,19 +1032,97 @@ mod tests {
     fn test_thousands_of_word_combinations_never_sever_clusters() {
         let sample = [
             // Open vowel syllables
-            "ដើម្បី", "ជា", "ទៅ", "នៅ", "ពី", "លើ", "ធ្វើ", "ក្រៅ", "ក្នុង", "នេះ", "នោះ", "ណា", "ដែល", "មាន", "បាន",
+            "ដើម្បី",
+            "ជា",
+            "ទៅ",
+            "នៅ",
+            "ពី",
+            "លើ",
+            "ធ្វើ",
+            "ក្រៅ",
+            "ក្នុង",
+            "នេះ",
+            "នោះ",
+            "ណា",
+            "ដែល",
+            "មាន",
+            "បាន",
             // Clusters with Coeng
-            "គ្រប់គ្រង", "ការពារ", "ស្រាវជ្រាវ", "ស្តីពី", "ថ្លែង", "ប្រកប", "ផ្លូវ", "ខ្ពស់", "ច្រើន", "ព្រោះ", "គ្រួសារ", "ក្រសួង",
+            "គ្រប់គ្រង",
+            "ការពារ",
+            "ស្រាវជ្រាវ",
+            "ស្តីពី",
+            "ថ្លែង",
+            "ប្រកប",
+            "ផ្លូវ",
+            "ខ្ពស់",
+            "ច្រើន",
+            "ព្រោះ",
+            "គ្រួសារ",
+            "ក្រសួង",
             // Medial clusters
-            "បន្ត", "បង្កើន", "កម្ពុជា", "កន្លែង", "សម្ដែង", "អង្គការ", "បញ្ជាក់", "បញ្ហា", "បណ្តុះ", "បន្ទាប់", "សង្គម", "សន្តិភាព", "កណ្តាល",
+            "បន្ត",
+            "បង្កើន",
+            "កម្ពុជា",
+            "កន្លែង",
+            "សម្ដែង",
+            "អង្គការ",
+            "បញ្ជាក់",
+            "បញ្ហា",
+            "បណ្តុះ",
+            "បន្ទាប់",
+            "សង្គម",
+            "សន្តិភាព",
+            "កណ្តាល",
             // Inherent vowel words
-            "ដង", "ដឹង", "រៀន", "យល់", "បាទ", "កាត់", "សព្វ", "គ្រប់", "ពិភព", "បទ", "ជន", "ពង", "សព", "កក",
+            "ដង",
+            "ដឹង",
+            "រៀន",
+            "យល់",
+            "បាទ",
+            "កាត់",
+            "សព្វ",
+            "គ្រប់",
+            "ពិភព",
+            "បទ",
+            "ជន",
+            "ពង",
+            "សព",
+            "កក",
             // Coda diacritics / Robat
-            "ព័ត៌មាន", "បរិស្ថាន", "ធម៌", "កតញ្ញូតាធម៌", "យោបល់", "ចប់", "កប់", "សិស្ស", "រដ្ឋ", "សត្វ", "ជាតិ", "ជីវិត",
+            "ព័ត៌មាន",
+            "បរិស្ថាន",
+            "ធម៌",
+            "កតញ្ញូតាធម៌",
+            "យោបល់",
+            "ចប់",
+            "កប់",
+            "សិស្ស",
+            "រដ្ឋ",
+            "សត្វ",
+            "ជាតិ",
+            "ជីវិត",
             // Independent vowels
-            "អភិរក្ស", "អភិវឌ្ឍ", "ឯកឧត្តម", "ឲ្យ", "ឪពុក", "ឥឡូវ", "អំណរគុណ",
+            "អភិរក្ស",
+            "អភិវឌ្ឍ",
+            "ឯកឧត្តម",
+            "ឲ្យ",
+            "ឪពុក",
+            "ឥឡូវ",
+            "អំណរគុណ",
             // Administrative terms
-            "លទ្ធផល", "សន្និបាត", "ការងារ", "ឆ្នាំ", "ដឹកនាំ", "ធនធាន", "ធម្មជាតិ", "ចីរភាព", "រដ្ឋមន្ត្រី", "លោក", "លោកស្រី", "មន្ត្រី",
+            "លទ្ធផល",
+            "សន្និបាត",
+            "ការងារ",
+            "ឆ្នាំ",
+            "ដឹកនាំ",
+            "ធនធាន",
+            "ធម្មជាតិ",
+            "ចីរភាព",
+            "រដ្ឋមន្ត្រី",
+            "លោក",
+            "លោកស្រី",
+            "មន្ត្រី",
         ];
 
         let mut total_tested = 0;
@@ -1109,15 +1145,14 @@ mod tests {
                 }
 
                 for tok in &tokens {
-                    if let Some(first_c) = tok.chars().next() {
-                        if is_khmer_coeng(first_c)
+                    if let Some(first_c) = tok.chars().next()
+                        && (is_khmer_coeng(first_c)
                             || is_khmer_dep_vowel(first_c)
                             || is_khmer_coda_diacritic(first_c)
-                            || is_khmer_vowel_modifier(first_c)
-                        {
-                            illegal_token_starts += 1;
-                            eprintln!("Illegal start in '{tok}' from '{phrase}'");
-                        }
+                            || is_khmer_vowel_modifier(first_c))
+                    {
+                        illegal_token_starts += 1;
+                        eprintln!("Illegal start in '{tok}' from '{phrase}'");
                     }
                     if tok.starts_with("ន្ត") || tok.starts_with("ម្ព") || tok.starts_with("ង្ក") {
                         severed_medials += 1;
@@ -1132,4 +1167,3 @@ mod tests {
         assert_eq!(illegal_token_starts, 0, "No token may start with combining mark or coeng");
     }
 }
-

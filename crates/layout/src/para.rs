@@ -1784,15 +1784,20 @@ pub fn layout_para(p: &Paragraph, env: &ParaEnv) -> ParaLayout {
         found.sort_unstable();
         found.dedup();
     }
-    // Khmer has no spaces between words: it wraps at word boundaries.
-    if text.chars().any(|c| matches!(u32::from(c), 0x1780..=0x17FF | 0x19E0..=0x19FF)) {
-        found.extend(wordcraft_proof::km::khmer_breaks(&text));
+    // Khmer has no spaces between words: it wraps at word boundaries, between a Khmer letter and
+    // the base of the next word (never before Khmer or Latin punctuation, which kinsoku keeps).
+    let is_khmer = |c: char| matches!(u32::from(c), 0x1780..=0x17FF | 0x19E0..=0x19FF);
+    if text.chars().any(is_khmer) {
+        let khmer_base = |c: char| matches!(u32::from(c), 0x1780..=0x17B3);
+        found.extend(script_breaks(&text, wordcraft_proof::km::khmer_breaks(&text), |a, b| is_khmer(a) && khmer_base(b)));
         found.sort_unstable();
         found.dedup();
     }
-    // Thai and Lao have no spaces between words: they wrap at word boundaries.
-    if text.chars().any(|c| matches!(u32::from(c), 0x0E00..=0x0EFF)) {
-        found.extend(wordcraft_proof::sea::thai_lao_breaks(&text));
+    // Thai and Lao have no spaces between words: they wrap at word boundaries inside Thai or Lao
+    // text (the boundaries ICU finds in the Latin text around it are left to UAX #14).
+    let is_thai_lao = |c: char| matches!(u32::from(c), 0x0E00..=0x0EFF);
+    if text.chars().any(is_thai_lao) {
+        found.extend(script_breaks(&text, wordcraft_proof::sea::thai_lao_breaks(&text), |a, b| is_thai_lao(a) && is_thai_lao(b)));
         found.sort_unstable();
         found.dedup();
     }
@@ -1944,6 +1949,15 @@ fn next_tab(x: f32, tabs: &[TabStop], default_tab: f32, hanging_at: Option<f32>)
 
 /// A positional tab's stop (column coordinates): the left edge, centre or right edge of the
 /// column (`margin`) or of the space between the indents (`indent`), whatever the tab stops.
+/// The script word breaks in `breaks` whose characters before and after pass `keep`.
+fn script_breaks(text: &str, breaks: Vec<usize>, keep: impl Fn(char, char) -> bool) -> impl Iterator<Item = usize> {
+    breaks.into_iter().filter(move |&b| {
+        let before = text.get(..b).and_then(|t| t.chars().next_back());
+        let after = text.get(b..).and_then(|t| t.chars().next());
+        before.zip(after).is_some_and(|(a, c)| keep(a, c))
+    })
+}
+
 fn ptab_stop(align: PTabAlign, base: PTabBase, leader: TabLeader, width: f32, indents: (f32, f32)) -> TabStop {
     let (lo, hi) = match base {
         PTabBase::Margin => (0.0, width),
@@ -1975,6 +1989,7 @@ fn break_lines(pl: &mut ParaLayout, env: &ParaEnv, mark_style: u32, level: Optio
     let hyph_limit = env.doc.settings.consecutive_hyphen_limit as usize;
     let n = pl.clusters.len();
     let is_sea_para = p_text.chars().any(wordcraft_proof::sea::is_sea);
+    let justified = matches!(rp.align, Align::Justify | Align::Distribute | Align::ThaiDistribute);
     // A right-to-left paragraph is laid out from its start edge, as if mirrored: indents, tabs,
     // the list label and alignment are measured from the right. Lines are mirrored back (and
     // bidirectional text reordered) once broken; floating objects are mirrored in.
@@ -2097,7 +2112,7 @@ fn break_lines(pl: &mut ParaLayout, env: &ParaEnv, mark_style: u32, level: Optio
         let mut pending_tab: Option<(usize, TabStop, f32)> = None; // tab cluster, stop, x where tab started
         let mut space_w = 0.0f32; // width of the spaces so far on this line
         let mut has_tab = false;
-        let mut last_tab_idx: Option<usize> = None;
+        let mut sea_clusters = 0usize; // Southeast Asian text clusters on this line since its last tab
         while j < n {
             let Some(c) = pl.clusters.get(j).cloned() else { break };
             match c.kind {
@@ -2114,7 +2129,7 @@ fn break_lines(pl: &mut ParaLayout, env: &ParaEnv, mark_style: u32, level: Optio
                 }
                 ClKind::Tab => {
                     has_tab = true;
-                    last_tab_idx = Some(j);
+                    sea_clusters = 0;
                     resolve_tab(pl, &mut pending_tab, &mut xs, c0, x, &mut x);
                     let ptab = pl.ptabs.iter().find(|t| t.0 == j).map(|&(_, a, b, l)| ptab_stop(a, b, l, width, (rp.indent_left, rp.indent_right)));
                     let stop = ptab.unwrap_or_else(|| next_tab(x, &rp.tabs, default_tab, hanging_at));
@@ -2174,12 +2189,9 @@ fn break_lines(pl: &mut ParaLayout, env: &ParaEnv, mark_style: u32, level: Optio
                     _ => false,
                 }
             });
-            let after_tab_cnt = j.saturating_sub(last_tab_idx.map(|t| t + 1).unwrap_or(c0));
-            let sea_shrink = if is_sea_para && (rp.align == Align::Justify || rp.align == Align::Distribute) && pending_tab.is_none() {
-                (after_tab_cnt as f32 * 0.55).min(28.0)
-            } else {
-                0.0
-            };
+            // Justified Southeast Asian text shrinks between its clusters too, so each one
+            // already on the line lends a little room; a line without any lends none.
+            let sea_shrink = if sea_clusters > 0 && justified && pending_tab.is_none() { (sea_clusters as f32 * 0.55).min(28.0) } else { 0.0 };
             let shrink = if shrink_spaces && !has_tab { space_w * MAX_SPACE_SHRINK + sea_shrink } else { sea_shrink };
             let fits =
                 absorbs || x + c.adv - pl.auto_space_after(j) <= right_edge + shrink + 0.01 || c.kind == ClKind::Space || c.kind == ClKind::Marker;
@@ -2244,6 +2256,9 @@ fn break_lines(pl: &mut ParaLayout, env: &ParaEnv, mark_style: u32, level: Optio
             x += c.adv;
             if c.kind == ClKind::Space {
                 space_w += c.adv;
+            }
+            if is_sea_para && c.kind == ClKind::Text && p_text.get(c.start..c.end).is_some_and(wordcraft_proof::sea::has_sea) {
+                sea_clusters += 1;
             }
             // Decimal/center/right tab: shift pending text as it grows.
             if let Some((tj, stop, tx)) = pending_tab {
@@ -2476,12 +2491,15 @@ fn break_lines(pl: &mut ParaLayout, env: &ParaEnv, mark_style: u32, level: Optio
         }
         let is_sea_line = is_sea_para
             && (align_from..c1).any(|k| pl.clusters.get(k).is_some_and(|c| p_text.get(c.start..c.end).is_some_and(wordcraft_proof::sea::has_sea)));
+        // Distributed stretches every line, the paragraph's last too; Thai distributed
+        // (`w:jc="thaiDistribute"`) leaves the last line as it is.
         let justify = display.is_none()
-            && ((rp.align == Align::Justify && end == LineEnd::Wrap) || (rp.align == Align::Distribute && (!is_sea_line || end == LineEnd::Wrap)));
-        let shrink = display.is_none()
-            && (shrink_spaces || (is_sea_line && (rp.align == Align::Justify || rp.align == Align::Distribute)))
-            && slack < 0.0
-            && (last_tab.is_none() || is_sea_line);
+            && match rp.align {
+                Align::Distribute => true,
+                Align::Justify | Align::ThaiDistribute => end == LineEnd::Wrap,
+                _ => false,
+            };
+        let shrink = display.is_none() && (shrink_spaces || (is_sea_line && justified)) && slack < 0.0 && (last_tab.is_none() || is_sea_line);
         if shrink {
             shrink_line_spaces(pl, &mut xs, c0, c1, content_end, slack, is_sea_line, align_from, p_text);
         } else if justify && slack > 0.0 {
@@ -2537,9 +2555,9 @@ fn break_lines(pl: &mut ParaLayout, env: &ParaEnv, mark_style: u32, level: Optio
                         *v += add;
                     }
                 }
-            } else if rp.align == Align::Distribute || spaces.is_empty() {
+            } else if matches!(rp.align, Align::Distribute | Align::ThaiDistribute) || spaces.is_empty() {
                 let cnt = (c1 - align_from).saturating_sub(1).max(1) as f32;
-                if rp.align == Align::Distribute {
+                if matches!(rp.align, Align::Distribute | Align::ThaiDistribute) {
                     let per = slack / cnt;
                     for (q, v) in xs.iter_mut().enumerate().skip(align_from - c0) {
                         let k = (q + c0 - align_from) as f32;
