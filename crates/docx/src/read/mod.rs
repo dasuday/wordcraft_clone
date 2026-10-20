@@ -586,7 +586,8 @@ impl Reader<'_> {
         }
     }
 
-    /// The fonts the font table classes as roman (`w:font/w:family w:val="roman"`).
+    /// The fonts the font table classes as roman (`w:font/w:family w:val="roman"`), and the
+    /// alternate names it gives for missing fonts (`w:font/w:altName`, ECMA-376 §17.8.3.1).
     fn read_font_families(&mut self, path: &str) {
         let Ok(Some(table)) = self.xml(path) else { return };
         self.doc.settings.roman_fonts = table
@@ -596,6 +597,15 @@ impl Reader<'_> {
             .filter(|n| !n.is_empty() && n.len() <= MAX_FONT_NAME)
             .take(MAX_TABLE_FONTS)
             .map(str::to_string)
+            .collect();
+        self.doc.settings.alt_fonts = table
+            .children("w:font")
+            .filter_map(|f| {
+                let name = f.attr("w:name").filter(|n| !n.is_empty() && n.len() <= MAX_FONT_NAME)?;
+                let alt = f.child("w:altName").and_then(|a| a.attr("w:val")).filter(|a| !a.is_empty() && a.len() <= MAX_FONT_NAME)?;
+                Some((name.to_string(), alt.to_string()))
+            })
+            .take(MAX_TABLE_FONTS)
             .collect();
     }
 

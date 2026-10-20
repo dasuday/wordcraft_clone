@@ -543,6 +543,11 @@ pub struct Settings {
     /// draws one that isn't installed in a serif face.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub roman_fonts: Vec<String>,
+    /// Alternate names the document's font table gives for its fonts (`w:font/w:altName`,
+    /// ECMA-376 §17.8.3.1), requested name → alternate: Word draws a font that isn't installed
+    /// in its alternate when that is available.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub alt_fonts: Vec<(String, String)>,
     /// `w:doNotUseHTMLParagraphAutoSpacing`: the space between two paragraphs is the first's space
     /// after plus the second's space before, not the larger of the two.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
@@ -683,6 +688,7 @@ impl Default for Settings {
             protect_hash: Vec::new(),
             compat_mode: COMPAT_MODE_CURRENT,
             roman_fonts: Vec::new(),
+            alt_fonts: Vec::new(),
             sum_paragraph_spacing: false,
             allow_space_of_same_style_in_table: false,
             grid_h: DEFAULT_GRID,

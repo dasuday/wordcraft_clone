@@ -24,7 +24,7 @@ pub struct Resolved {
 /// Substitutes to try, in order, for a family that isn't installed. Open fonts that are
 /// metric-compatible come first (Carlito ↔ Calibri, Caladea ↔ Cambria, Liberation ↔ Arial /
 /// Times New Roman / Courier New), then common system fonts, then our bundled families.
-fn substitutes(family: &str) -> &'static [&'static str] {
+fn substitutes_for(family: &str) -> (&'static [&'static str], bool) {
     const SANS: &[&str] = &["Carlito", "Helvetica Neue", "Arial", "Liberation Sans", "Noto Sans", "DejaVu Sans", "Source Sans 3"];
     const SERIF: &[&str] = &["Caladea", "Times New Roman", "Liberation Serif", "Georgia", "Noto Serif", "DejaVu Serif", "Source Serif 4"];
     const MONO: &[&str] = &["Courier New", "Liberation Mono", "Menlo", "Consolas", "DejaVu Sans Mono", "JetBrains Mono"];
@@ -88,27 +88,27 @@ fn substitutes(family: &str) -> &'static [&'static str] {
     ];
     let f = family.to_ascii_lowercase();
     if is_thai_serif(&f) {
-        return THAI_SERIF;
+        return (THAI_SERIF, true);
     }
     if is_thai(&f) {
-        return THAI;
+        return (THAI, true);
     }
     if is_hebrew(&f) {
-        return HEBREW;
+        return (HEBREW, true);
     }
     if is_persian_naskh(&f) {
-        return NASKH;
+        return (NASKH, true);
     }
     if is_persian_sans(&f) {
-        return ARABIC_SANS;
+        return (ARABIC_SANS, true);
     }
     match f.as_str() {
-        "palatino linotype" | "book antiqua" | "palatino" => PALATINO,
-        "arial" | "helvetica" | "arial nova" => ARIAL,
-        "arial unicode ms" => ARIAL_UNICODE,
-        "times new roman" | "times" => TIMES,
-        "courier new" | "courier" | "consolas" | "lucida console" | "cascadia code" | "cascadia mono" => MONO,
-        "symbol" | "wingdings" | "wingdings 2" | "wingdings 3" | "segoe ui symbol" | "webdings" => SYMBOL,
+        "palatino linotype" | "book antiqua" | "palatino" => (PALATINO, true),
+        "arial" | "helvetica" | "arial nova" => (ARIAL, true),
+        "arial unicode ms" => (ARIAL_UNICODE, true),
+        "times new roman" | "times" => (TIMES, true),
+        "courier new" | "courier" | "consolas" | "lucida console" | "cascadia code" | "cascadia mono" => (MONO, true),
+        "symbol" | "wingdings" | "wingdings 2" | "wingdings 3" | "segoe ui symbol" | "webdings" => (SYMBOL, true),
         "cambria"
         | "cambria math"
         | "georgia"
@@ -120,11 +120,15 @@ fn substitutes(family: &str) -> &'static [&'static str] {
         | "bookman old style"
         | "sitka text"
         | "sitka"
-        | "aptos serif" => SERIF,
-        _ if f.contains("mono") || f.contains("code") => MONO,
-        _ if f.contains("serif") && !f.contains("sans") => SERIF,
-        _ => SANS,
+        | "aptos serif" => (SERIF, true),
+        _ if f.contains("mono") || f.contains("code") => (MONO, true),
+        _ if f.contains("serif") && !f.contains("sans") => (SERIF, true),
+        _ => (SANS, false),
     }
+}
+
+fn substitutes(family: &str) -> &'static [&'static str] {
+    substitutes_for(family).0
 }
 
 /// The font a Windows 3.1-era charset name stands for: `Times New Roman Cyr`, `Arial CE`,
@@ -139,6 +143,30 @@ pub fn charset_base_family(family: &str) -> &str {
         .find(|s| lower.ends_with(*s) && lower.len() > s.len())
         .and_then(|s| family.trim_end().get(..lower.len() - s.len()))
         .map_or(family, str::trim_end)
+}
+
+/// Whether the family is installed as itself (a Windows charset alias naming an installed font
+/// counts). What a symbol font's run needs before it may draw its raw codes: a substitute face
+/// has other glyphs at those codes, so only the font itself may take them literally.
+pub fn installed_as_itself(family: &str) -> bool {
+    let db = FontDb::global();
+    let base = charset_base_family(family);
+    db.has_family(family) || (base != family && db.has_family(base))
+}
+
+/// Whether a document font can be drawn as `family`: installed as itself, or the substitutes
+/// table knows the family and one of its own substitutes is installed. The last is what lets a
+/// font-table alternate name (`w:altName`) count without being installed itself — a recognized
+/// family resolves through its own metric-compatible faces, which is how Courier New exists on
+/// the FreeBSD runner — while an unrecognized name stays unavailable: the generic sans fallback
+/// is not knowledge, and a bogus alternate would hijack the resolution from the requested font's
+/// own class (PR #2862 review).
+pub fn substitutes_available(family: &str) -> bool {
+    if installed_as_itself(family) {
+        return true;
+    }
+    let (subs, known) = substitutes_for(charset_base_family(family));
+    known && subs.iter().any(|s| FontDb::global().has_family(s))
 }
 
 /// Naskh-style Persian/Arabic document fonts (the "B …" family names come from the common
@@ -427,6 +455,24 @@ mod tests {
         assert!(!b.synth_bold);
         let (a, d) = line_metrics(&b.face);
         assert!(a > 0.0 && d >= 0.0);
+    }
+
+    #[test]
+    fn an_alternate_counts_when_it_is_installed_as_itself() {
+        // The family installed itself — the bundled faces count on every machine…
+        assert!(substitutes_available("Source Sans 3"));
+        // …or a Windows charset alias names an installed font.
+        assert!(substitutes_available("Source Sans 3 Baltic"));
+        // An unrecognized name is not available, however common the generic sans substitutes
+        // are: the altName gate judges the alternate itself, or a bogus name would hijack the
+        // resolution from the requested font's own substitute class.
+        assert!(!substitutes_available("No Such Brand Font"));
+        // A family the table knows but the machine lacks still counts: its own substitutes
+        // resolve it. On the FreeBSD runner Courier New exists only through its substitutes,
+        // and an installed-only gate killed the whole altName feature there (PR #2862's CI).
+        if !FontDb::global().has_family("Courier New") {
+            assert!(substitutes_available("Courier New"));
+        }
     }
 
     #[test]
