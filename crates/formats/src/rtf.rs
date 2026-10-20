@@ -2730,7 +2730,8 @@ fn column_grid(rows: &mut [Vec<Cell>], rights: &[Vec<i32>], left: i32) -> Vec<f3
     edges
         .iter()
         .map(|&e| {
-            let w = (e - prev) as f32 / 20.0;
+            // A file's \trleft and \cellx can be any i32: subtract without overflowing.
+            let w = (i64::from(e) - i64::from(prev)) as f32 / 20.0;
             prev = e;
             w
         })
@@ -3005,6 +3006,10 @@ mod tests {
         assert_eq!(t.props.cell_margins, Some([10.0, 5.4, 0.0, 5.4]));
         // The first column runs from \trleft, not from the margin: 2000 - 500 twips.
         assert_eq!(t.grid, [75.0, 350.0]);
+        // Edges at the ends of i32's range don't overflow the width.
+        let d = import(br"{\rtf1\ansi\trowd\trleft-2147483647\cellx2147483647 \pard\intbl a\cell\row}").unwrap();
+        let Some(wordcraft_doc::Block::Table(far)) = d.body.first().map(|b| &**b) else { panic!("a table first") };
+        assert_eq!(far.rows.len(), 1);
         use wordcraft_doc::props::VAlign;
         assert_eq!(t.rows[0].cells.iter().map(|c| c.props.valign).collect::<Vec<_>>(), [None, Some(VAlign::Center)]);
         assert_eq!(t.rows[1].cells[1].props.valign, Some(VAlign::Bottom));
