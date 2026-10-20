@@ -2160,3 +2160,105 @@ fn right_arrow_moves_through_a_ligature_one_letter_at_a_time() {
     assert_eq!(offs, [0, 1, 2, 3]);
     assert!(xs.windows(2).all(|w| w[0].1 < w[1].1), "caret x after each Right press: {xs:?}");
 }
+
+/// A Khmer paragraph long enough to wrap, and the first place a line wraps into the next with no
+/// space between (the offset after the line's last syllable, the next line's first).
+fn khmer_wrap() -> (Session, usize) {
+    let text = "សិស្សានុសិស្សត្រូវបានលើកទឹកចិត្តឱ្យអានសៀវភៅជារៀងរាល់ថ្ងៃដើម្បីពង្រីកចំណេះដឹងនិងបណ្តុះគំនិតច្នៃប្រឌិត".repeat(8);
+    let mut s = Session::new(wordcraft_doc::Document::from_text(&text));
+    let l = s.layout();
+    let wrap = (1..text.len()).find(|&off| l.caret_at_line_end(&Pos::body(0, off), 0).is_some()).expect("a line wraps without a space");
+    (s, wrap)
+}
+
+#[test]
+fn end_on_a_line_wrapped_without_a_space_goes_after_its_last_syllable() {
+    let (mut s, wrap) = khmer_wrap();
+    let l = s.layout();
+    let last = s.doc.para_at(&Pos::body(0, wrap)).map(|p| p.prev_boundary(wrap)).unwrap();
+    let line = l.caret_on(&Pos::body(0, last), 0).unwrap();
+    // End from the start of that line: after the last syllable, drawn on the same line.
+    run(&mut s, "caret.set", json!({"pos": {"block": 0, "off": last}}));
+    run(&mut s, "caret.home", json!({}));
+    run(&mut s, "caret.end", json!({}));
+    assert_eq!(s.sel.focus, Pos::body(0, wrap));
+    let c = s.caret_geometry(&l, &s.sel.focus).unwrap();
+    assert_eq!(c.top, line.top, "drawn on the line it ends");
+    assert!(c.x > line.x, "after the last syllable");
+    // Typing goes after that syllable, not inside the word.
+    typ(&mut s, "X");
+    assert_eq!(s.doc.para_at(&Pos::body(0, 0)).unwrap().text.get(last..wrap + 1).unwrap().chars().last(), Some('X'));
+    run(&mut s, "edit.undo", json!({}));
+    // Home from there goes to the start of that line, not the next one.
+    run(&mut s, "caret.set", json!({"pos": {"block": 0, "off": last}}));
+    run(&mut s, "caret.end", json!({}));
+    run(&mut s, "caret.home", json!({}));
+    assert!(s.sel.focus.off < last, "Home stays on the line: {:?}", s.sel.focus);
+    // Shift+End selects the last syllable too.
+    run(&mut s, "caret.set", json!({"pos": {"block": 0, "off": last}}));
+    run(&mut s, "caret.end", json!({"extend": true}));
+    assert_eq!((s.sel.anchor.off, s.sel.focus.off), (last, wrap));
+}
+
+#[test]
+fn right_stops_at_the_end_of_a_line_wrapped_without_a_space() {
+    let (mut s, wrap) = khmer_wrap();
+    let l = s.layout();
+    let para = s.doc.para_at(&Pos::body(0, wrap)).unwrap().clone();
+    let (last, after) = (para.prev_boundary(wrap), para.next_boundary(wrap));
+    let line = l.caret_on(&Pos::body(0, last), 0).unwrap();
+    run(&mut s, "caret.set", json!({"pos": {"block": 0, "off": last}}));
+    // Right: after the last syllable, still on that line.
+    run(&mut s, "caret.right", json!({}));
+    assert_eq!(s.sel.focus, Pos::body(0, wrap));
+    assert_eq!(s.caret_geometry(&l, &s.sel.focus).unwrap().top, line.top);
+    // Right again: the next line's start, the same place in the text drawn there.
+    run(&mut s, "caret.right", json!({}));
+    assert_eq!(s.sel.focus, Pos::body(0, wrap));
+    let next = l.caret_on(&Pos::body(0, wrap), 0).unwrap();
+    assert_eq!(s.caret_geometry(&l, &s.sel.focus), Some(next), "at the next line's start");
+    // Then after the next line's first syllable.
+    run(&mut s, "caret.right", json!({}));
+    assert_eq!(s.sel.focus, Pos::body(0, after));
+    // Left comes back the same way: the next line's start, the line's end, its last syllable.
+    run(&mut s, "caret.left", json!({}));
+    assert_eq!((s.sel.focus.off, s.caret_geometry(&l, &s.sel.focus)), (wrap, Some(next)));
+    run(&mut s, "caret.left", json!({}));
+    assert_eq!(s.sel.focus, Pos::body(0, wrap));
+    assert_eq!(s.caret_geometry(&l, &s.sel.focus).unwrap().top, line.top, "at the line's end");
+    run(&mut s, "caret.left", json!({}));
+    assert_eq!(s.sel.focus, Pos::body(0, last));
+    // Down from the end of the line goes to the next line, not the one after it.
+    run(&mut s, "caret.set", json!({"pos": {"block": 0, "off": last}}));
+    run(&mut s, "caret.right", json!({}));
+    run(&mut s, "caret.down", json!({}));
+    let below = s.caret_geometry(&l, &s.sel.focus).unwrap();
+    assert_eq!(below.top, next.top, "one line down: {:?}", s.sel.focus);
+}
+
+#[test]
+fn a_click_after_the_last_letter_of_a_line_wrapped_without_a_space_stays_on_that_line() {
+    let (mut s, wrap) = khmer_wrap();
+    let l = s.layout();
+    let end = l.caret_at_line_end(&Pos::body(0, wrap), 0).unwrap();
+    let start = l.caret_on(&Pos::body(0, wrap), 0).unwrap();
+    // The click lands on the place in the text both carets show; where it was decides which.
+    for (y, want) in [(end.top + end.height / 2.0, end), (start.top + start.height / 2.0, start)] {
+        run(&mut s, "caret.set", json!({"pos": {"block": 0, "off": wrap}, "page": end.page, "y": y}));
+        assert_eq!(s.caret_geometry(&l, &s.sel.focus), Some(want), "clicked at y {y}");
+    }
+    // Clicked past the line's end with the mouse's own hit test.
+    run(&mut s, "caret.set", json!({"page": end.page, "x": end.x + 30.0, "y": end.top + end.height / 2.0}));
+    assert_eq!(s.sel.focus, Pos::body(0, wrap));
+    assert_eq!(s.caret_geometry(&l, &s.sel.focus), Some(end));
+}
+
+#[test]
+fn end_and_right_on_spaced_text_are_unchanged() {
+    let mut s = typed(&"Typography is the art and technique of arranging type. ".repeat(6));
+    let l = s.layout();
+    assert!((1..s.doc.para_at(&Pos::body(0, 0)).unwrap().len()).all(|off| l.caret_at_line_end(&Pos::body(0, off), 0).is_none()));
+    run(&mut s, "caret.docStart", json!({}));
+    run(&mut s, "caret.end", json!({}));
+    assert_eq!(s.line_end, None);
+}

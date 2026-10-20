@@ -48,7 +48,7 @@ pub fn specs() -> Vec<CommandSpec> {
         CommandSpec::new("caret.pageUp", "Page Up", "Navigation", |s, v| page(s, v, -1)).key("PageUp").params(EXTEND).pure(),
         CommandSpec::new("caret.pageDown", "Page Down", "Navigation", |s, v| page(s, v, 1)).key("PageDown").params(EXTEND).pure(),
         CommandSpec::new("caret.set", "Set Caret", "Navigation", set)
-            .params(r#"{"pos": Pos, "extend"?: bool} | {"page": n, "x": pt, "y": pt}"#)
+            .params(r#"{"pos": Pos, "extend"?: bool} | {"page": n, "x": pt, "y": pt} (with `pos`, `page`/`y` say where it was clicked)"#)
             .pure(),
         CommandSpec::new("select.all", "Select All", "Home › Editing › Select", select_all).key("Mod+A").pure(),
         CommandSpec::new("select.range", "Select Range", "Navigation", select_range).params(r#"{"anchor": Pos, "focus": Pos}"#).pure(),
@@ -75,7 +75,9 @@ fn extend(v: &Value) -> bool {
     p::bool(v, "extend").unwrap_or(false)
 }
 
+/// Move the caret to `to`, or with `ext` the selection's focus, drawn at the next line's start.
 fn apply(s: &mut Session, to: Pos, ext: bool) {
+    s.line_end = None;
     if ext {
         s.sel.focus = to;
     } else {
@@ -116,6 +118,25 @@ fn lr(s: &mut Session, v: &Value, is_left: bool) -> CmdResult {
     }
     if bidi_para(s) {
         return visual_lr(s, v, is_left);
+    }
+    // Where a line wraps without a space (Khmer, Thai, Chinese…), its end and the next line's
+    // start are one place in the text drawn twice: Right steps from before the last letter to
+    // the line's end, then to the next line's start, then on; Left goes back the same way.
+    let from = s.sel.focus.clone();
+    let at_end = s.line_end.as_ref() == Some(&from);
+    if !extend(v) && at_end != is_left && (at_end || s.layout().caret_at_line_end(&from, s.page_hint).is_some()) {
+        s.goal_x = None;
+        s.line_end = (!at_end).then_some(from);
+        return sel_result(s);
+    }
+    if !is_left && !at_end {
+        let to = right(s, &from);
+        if s.layout().caret_at_line_end(&to, s.page_hint).is_some() {
+            s.goal_x = None;
+            apply(s, to.clone(), extend(v));
+            s.line_end = Some(to);
+            return sel_result(s);
+        }
     }
     mv(s, v, if is_left { left } else { right })
 }
@@ -212,11 +233,17 @@ fn para_down(s: &mut Session, p: &Pos) -> Pos {
     }
 }
 
+/// Up (`dir < 0`) or Down: the nearest place on the line above or below, keeping the column.
 fn vert(s: &mut Session, v: &Value, dir: i32) -> CmdResult {
     let ext = extend(v);
     let l = s.layout();
     let from = s.sel.focus.clone();
-    let to = match l.vertical(&from, s.goal_x, dir, s.page_hint) {
+    let moved = if s.line_end.as_ref() == Some(&from) {
+        l.vertical_from_line_end(&from, s.goal_x, dir, s.page_hint)
+    } else {
+        l.vertical(&from, s.goal_x, dir, s.page_hint)
+    };
+    let to = match moved {
         Some((p, gx)) => {
             s.goal_x = Some(gx);
             p
@@ -230,27 +257,47 @@ fn vert(s: &mut Session, v: &Value, dir: i32) -> CmdResult {
         s.page_hint = c.page;
     }
     let gx = s.goal_x;
+    // Landing past the last letter of a line that wraps without a space: the caret stays at that
+    // line's end (the nearer of the two carets for that place to the column kept).
+    let near = |c: &wordcraft_layout::hit::Caret| gx.map_or(f32::MAX, |g| (c.x - g).abs());
+    let line_end = l
+        .caret_at_line_end(&to, s.page_hint)
+        .filter(|end| l.caret_on(&to, s.page_hint).is_none_or(|start| near(end) < near(&start)))
+        .map(|_| to.clone());
     apply(s, to, ext);
+    s.line_end = line_end;
     s.goal_x = gx;
     sel_result(s)
 }
 
+/// Home (`home`) or End: the start or end of the caret's line on the screen.
 fn line(s: &mut Session, v: &Value, home: bool) -> CmdResult {
     let ext = extend(v);
     let l = s.layout();
     let from = s.sel.focus.clone();
-    let to = match l.line_bounds(&from, s.page_hint) {
-        Some((a, b)) => {
-            if home {
-                a
-            } else {
-                b
+    // A caret drawn at the end of a line is on that line, not the next one it is the start of.
+    let on_line = match s.doc.para_at(&from) {
+        Some(p) if s.line_end.as_ref() == Some(&from) => Pos { off: p.prev_boundary(from.off), ..from.clone() },
+        _ => from.clone(),
+    };
+    let mut line_end = None;
+    let to = match l.line_bounds(&on_line, s.page_hint) {
+        Some((a, _)) if home => a,
+        Some((_, b)) => {
+            // A line that wraps without a space ends after its last letter, not before it.
+            match s.doc.para_at(&b).map(|p| Pos { off: p.next_boundary(b.off), ..b.clone() }) {
+                Some(end) if end.off > b.off && l.caret_at_line_end(&end, s.page_hint).is_some() => {
+                    line_end = Some(end.clone());
+                    end
+                }
+                _ => b,
             }
         }
         None => from,
     };
     s.goal_x = None;
     apply(s, to, ext);
+    s.line_end = line_end;
     sel_result(s)
 }
 
@@ -266,6 +313,7 @@ fn page(s: &mut Session, v: &Value, dir: i32) -> CmdResult {
     sel_result(s)
 }
 
+/// `caret.set`: the caret at a position, or where a page point is clicked.
 fn set(s: &mut Session, v: &Value) -> CmdResult {
     let ext = extend(v);
     let to = if let Some(pv) = v.get("pos") {
@@ -280,7 +328,18 @@ fn set(s: &mut Session, v: &Value) -> CmdResult {
     };
     let to = s.doc.clamp(&to);
     s.goal_x = None;
-    apply(s, to, ext);
+    apply(s, to.clone(), ext);
+    // A click after the last letter of a line that wraps without a space puts the caret there,
+    // at the end of that line, not at the start of the next one (the same place in the text).
+    if let (Some(pg), Some(y)) = (p::u64(v, "page"), p::f32(v, "y")) {
+        let l = s.layout();
+        let mid = |c: &wordcraft_layout::hit::Caret| (c.top + c.height / 2.0 - y).abs();
+        if let Some(end) = l.caret_at_line_end(&to, pg as usize).filter(|c| c.page == pg as usize)
+            && l.caret_on(&to, pg as usize).is_none_or(|start| start.page != end.page || mid(&end) < mid(&start))
+        {
+            s.line_end = Some(to);
+        }
+    }
     sel_result(s)
 }
 

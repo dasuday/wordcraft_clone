@@ -17,9 +17,16 @@ pub fn is_rtl_script(c: char) -> bool {
 }
 
 /// A character Word formats with the complex-script properties (`w:cs` font, `w:szCs`, `w:bCs`,
-/// `w:iCs`): right-to-left scripts, the Indic scripts, Thai and Lao.
+/// `w:iCs`): right-to-left scripts, the Indic scripts, Thai, Lao, Myanmar and Khmer.
 pub fn is_complex_script(c: char) -> bool {
-    is_rtl_script(c) || matches!(u32::from(c), 0x0900..=0x0EFF)
+    is_rtl_script(c)
+        || matches!(u32::from(c),
+            0x0900..=0x109F
+            | 0x1780..=0x17FF
+            | 0x19E0..=0x19FF
+            | 0x1A20..=0x1AAF
+            | 0xAA60..=0xAA7F
+            | 0xA9E0..=0xA9FE)
 }
 
 /// A character that belongs to a word for word selection and Ctrl+arrow movement: letters,

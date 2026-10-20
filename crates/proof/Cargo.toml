@@ -11,6 +11,8 @@ workspace = true
 [dependencies]
 log = { workspace = true }
 miniz_oxide = "0.8"
+icu_segmenter = { workspace = true }
+unicode-bidi = { workspace = true }
 
 [dev-dependencies]
 proptest = { workspace = true }

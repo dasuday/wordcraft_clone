@@ -593,3 +593,16 @@ fn circle_checks_face_coverage() {
     let primary = db.face("Source Serif 4", "Regular");
     assert_eq!(db.fallback_for('●', primary.id()).unwrap().family, FALLBACK_FAMILY);
 }
+
+#[test]
+fn a_placeholder_font_never_hides_the_script_fonts_after_it() {
+    // macOS's LastResort font maps every code point to a box. The system search loaded it for a
+    // character no real font has (U+2067, a bidi isolate), and from then on it "covered" Khmer,
+    // so Khmer text laid out later drew as boxes instead of finding Khmer Sangam MN.
+    assert!(is_placeholder_font(Path::new("/System/Library/Fonts/LastResort.otf")));
+    assert!(!is_placeholder_font(Path::new("/System/Library/Fonts/Supplemental/Khmer Sangam MN.ttf")));
+    let db = FontDb::with_font_dirs(system_font_dirs());
+    let _ = db.fallback_for('\u{2067}', 0);
+    let khmer = db.fallback_for('\u{1780}', 0);
+    assert!(khmer.is_none_or(|f| !f.family.eq_ignore_ascii_case(".LastResort")), "Khmer falls back to LastResort");
+}

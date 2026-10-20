@@ -611,6 +611,8 @@ pub enum Align {
     Right,
     Justify,
     Distribute,
+    /// Thai distributed (`w:jc="thaiDistribute"`): distributed, except the paragraph's last line.
+    ThaiDistribute,
 }
 
 impl Align {
